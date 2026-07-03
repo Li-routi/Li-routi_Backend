@@ -18,10 +18,33 @@ repositories {
 }
 
 dependencies {
+    // jpa
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+
+	// redis
 	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+	implementation 'org.apache.commons:commons-pool2'
+
+    // security & jwt
 	implementation 'org.springframework.boot:spring-boot-starter-security'
+    implementation 'io.jsonwebtoken:jjwt-api:0.12.3'
+    implementation 'io.jsonwebtoken:jjwt-impl:0.12.6'
+    implementation 'io.jsonwebtoken:jjwt-jackson:0.12.3'
+    implementation 'org.springframework.boot:spring-boot-configuration-processor'
+
+    // springdoc
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.1")
+
+    // webmvc
 	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+
+	// QueryDSL : OpenFeign
+    implementation "io.github.openfeign.querydsl:querydsl-jpa:7.0"
+    implementation "io.github.openfeign.querydsl:querydsl-core:7.0"
+    annotationProcessor "io.github.openfeign.querydsl:querydsl-apt:7.0:jpa"
+    annotationProcessor "jakarta.persistence:jakarta.persistence-api"
+    annotationProcessor "jakarta.annotation:jakarta.annotation-api"
+
 	compileOnly 'org.projectlombok:lombok'
 	runtimeOnly 'com.mysql:mysql-connector-j'
 	annotationProcessor 'org.projectlombok:lombok'
@@ -36,4 +59,21 @@ dependencies {
 
 tasks.named('test') {
 	useJUnitPlatform()
+}
+
+def querydslDir = layout.buildDirectory.dir("generated/querydsl").get().asFile
+
+// 소스 세트에 생성 경로 추가
+sourceSets {
+    main.java.srcDirs += [querydslDir]
+}
+
+// 컴파일 시 생성 경로 지정
+tasks.withType(JavaCompile).configureEach {
+    options.generatedSourceOutputDirectory.set(querydslDir)
+}
+
+// clean 태스크에 생성 폴더 삭제 로직
+clean.doLast {
+    file(querydslDir).deleteDir()
 }
