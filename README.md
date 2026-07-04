@@ -149,8 +149,6 @@ lirouti/
 
 ## 📦 공통 응답 처리
 
-> 정답은 없고, 선호하는 스타일대로 진행합니다. (변경의 여지가 다분합니다)
-
 모든 API 응답은 [`ApiResponse<T>`](src/main/java/com/lirouti/global/apiPayload/ApiResponse.java)로 감싸서 반환합니다.
 
 ```json
@@ -171,7 +169,6 @@ lirouti/
 
 ## ⚠️ 공통 예외 처리
 
-> 정답은 없고, 선호하는 스타일대로 진행합니다. (변경의 여지가 다분합니다)
 
 - 모든 예외는 [`GeneralExceptionAdvice`](src/main/java/com/lirouti/global/apiPayload/handler/GeneralExceptionAdvice.java) (`@RestControllerAdvice`) 기반의 전역 예외 처리 클래스에서 처리
 - 컨트롤러/서비스에서는 예외를 직접 잡지 않고, [`GeneralException`](src/main/java/com/lirouti/global/apiPayload/exception/GeneralException.java)에 에러 코드를 실어 throw 하는 방식으로 통일
