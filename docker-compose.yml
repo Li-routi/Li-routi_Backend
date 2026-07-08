@@ -1,0 +1,45 @@
+# 로컬 개발용 MySQL · Redis
+# 사용:  task docker-up   (또는  docker compose up -d)
+# 접속 계정/DB는 application.yaml 기본값과 일치합니다. 개인 포트 변경이 필요하면
+# docker-compose.override.yml (git 미추적)로 덮어쓰세요.
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: lirouti-mysql
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root1234
+      MYSQL_DATABASE: lirouti
+      MYSQL_USER: lirouti
+      MYSQL_PASSWORD: lirouti1234
+      TZ: Asia/Seoul
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-proot1234"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: lirouti-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  mysql-data:
+  redis-data:
