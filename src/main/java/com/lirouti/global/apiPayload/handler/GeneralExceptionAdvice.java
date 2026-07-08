@@ -131,7 +131,7 @@ public class GeneralExceptionAdvice {
     private static boolean isForeignKeyViolation(Throwable throwable) {
         return matchesInCauseChain(throwable, GeneralExceptionAdvice::isForeignKeySignal);
     }
-    
+
     // 예외의 원인 체인을 따라가며 특정 조건을 만족하는 예외가 있는지 확인
     private static boolean matchesInCauseChain(Throwable throwable, Predicate<Throwable> matcher) {
         Throwable current = throwable;
@@ -181,7 +181,7 @@ public class GeneralExceptionAdvice {
                 return true;
             }
         }
-        
+
         String message = throwable.getMessage();
         if (message == null) {
             return false;
