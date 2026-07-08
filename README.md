@@ -21,7 +21,7 @@
 - **Backend**
   - Java 21
   - Spring Boot 4.1.0
-  - Gradle 8.14.2
+  - Gradle 9.5.1
 
 - **Database**
   - MySQL (mysql-connector-j)
@@ -40,6 +40,49 @@
 
 - **주요 라이브러리**
   - Lombok
+
+---
+
+## ⚙️ 로컬 개발 환경 설정
+
+> mac/Windows 모두 동일하게 동작합니다. **clone 후 최초 1회 `task setup`** 을 꼭 실행하세요.
+
+### 1. 필수 도구 설치
+
+| 도구 | 용도 | macOS | Windows |
+| --- | --- | --- | --- |
+| JDK 21 | 빌드/실행 (Gradle toolchain이 자동 인식) | `brew install temurin@21` | [Adoptium](https://adoptium.net/) 설치 |
+| [Task](https://taskfile.dev) | 태스크 러너 | `brew install go-task/tap/go-task` | `winget install Task.Task` |
+| [pre-commit](https://pre-commit.com) | 커밋 전 검사 훅 | `brew install pre-commit` | `pip install pre-commit` |
+
+### 2. 초기 세팅
+
+```bash
+git clone <repo-url>
+cd Li-routi_Backend
+task setup      # pre-commit git 훅 설치 (커밋 시 자동 검사 활성화)
+```
+
+> `gradle-wrapper.jar` 가 없어 `./gradlew` 실행이 실패하면 `task wrapper` 로 생성할 수 있습니다.
+
+### 3. 자주 쓰는 명령어
+
+```bash
+task              # 사용 가능한 태스크 목록
+task build        # 전체 빌드 (컴파일 + 테스트)
+task test         # 테스트
+task run          # 앱 실행 (MySQL·Redis 필요)
+task check        # 커밋/PR 전 검증 (pre-commit + build)
+```
+
+### 4. 커밋 시 자동 검사 (pre-commit)
+
+`task setup` 이후 `git commit` 하면 훅이 자동 실행되어 줄 끝 공백·개행 정리, 줄바꿈(LF) 통일, Java 컴파일 등을 검사합니다.
+
+- 훅이 파일을 자동 수정하면 커밋이 **한 번 중단**됩니다. 수정된 파일을 `git add` 후 **다시 커밋**하세요.
+- 커밋 전 미리 확인: `task precommit`
+
+> ⚠️ 새로 clone한 팀원이 `task setup` 을 실행하지 않으면 훅이 없어 자동 검사가 동작하지 않습니다.
 
 ---
 

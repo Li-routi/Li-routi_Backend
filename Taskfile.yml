@@ -1,0 +1,65 @@
+# https://taskfile.dev — 크로스플랫폼 태스크 러너
+# 설치:  macOS) brew install go-task/tap/go-task
+#        Windows) winget install Task.Task  또는  scoop install task
+# 사용:  task            # 태스크 목록
+#        task <이름>     # 실행
+version: '3'
+
+vars:
+  # OS에 따라 gradle wrapper 실행 파일 선택 (mac/linux: ./gradlew, windows: gradlew.bat)
+  GRADLEW: '{{if eq OS "windows"}}gradlew.bat{{else}}./gradlew{{end}}'
+
+tasks:
+  default:
+    desc: 사용 가능한 태스크 목록 출력
+    cmds:
+      - task --list
+    silent: true
+
+  setup:
+    desc: 개발 환경 초기화 (git hook 설치 등) — clone 후 최초 1회 실행
+    cmds:
+      - pre-commit install
+      - cmd: echo "✅ pre-commit git hook 설치 완료"
+        silent: true
+
+  build:
+    desc: 전체 빌드 (컴파일 + 테스트)
+    cmds:
+      - '{{.GRADLEW}} build'
+
+  compile:
+    desc: 메인 소스만 빠르게 컴파일 (커밋 전 검증용)
+    cmds:
+      - '{{.GRADLEW}} compileJava'
+
+  test:
+    desc: 테스트 실행
+    cmds:
+      - '{{.GRADLEW}} test'
+
+  run:
+    desc: 애플리케이션 실행 (MySQL·Redis 필요)
+    cmds:
+      - '{{.GRADLEW}} bootRun'
+
+  clean:
+    desc: build 산출물 및 QueryDSL 생성물 삭제
+    cmds:
+      - '{{.GRADLEW}} clean'
+
+  check:
+    desc: 커밋/PR 전 검증 (pre-commit 전체 + 빌드)
+    cmds:
+      - task: precommit
+      - task: build
+
+  precommit:
+    desc: pre-commit 훅을 전체 파일에 대해 수동 실행
+    cmds:
+      - pre-commit run --all-files
+
+  wrapper:
+    desc: gradle-wrapper.jar 이 없을 때 재생성 (시스템 gradle 필요)
+    cmds:
+      - gradle wrapper --gradle-version 9.5.1

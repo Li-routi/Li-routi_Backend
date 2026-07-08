@@ -1,0 +1,33 @@
+# https://pre-commit.com — 크로스플랫폼 git pre-commit 훅 관리
+# 설치:  macOS) brew install pre-commit
+#        Windows) pip install pre-commit  또는  winget install pre-commit
+# 활성화: task setup   (또는  pre-commit install)
+# 수동실행: task precommit  (또는  pre-commit run --all-files)
+default_install_hook_types: [pre-commit]
+fail_fast: false
+
+repos:
+  # 언어 무관 공통 위생 검사 (OS 독립적)
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace          # 줄 끝 공백 제거
+      - id: end-of-file-fixer            # 파일 끝 개행 보정
+      - id: check-yaml                   # YAML 문법 검사
+      - id: check-added-large-files      # 대용량 파일 커밋 방지
+        args: ['--maxkb=2048']
+      - id: check-merge-conflict         # 충돌 마커 검사
+      - id: mixed-line-ending            # 줄바꿈을 LF로 통일
+        args: ['--fix=lf']
+        exclude: '\.(bat|cmd)$'          # 윈도우 배치는 CRLF 유지 (.gitattributes 참고)
+
+  # Java 컴파일 검증 — Taskfile에 위임하여 OS별 gradlew 분기 처리
+  - repo: local
+    hooks:
+      - id: gradle-compile
+        name: gradle compileJava
+        entry: task compile
+        language: system
+        pass_filenames: false
+        files: '\.(java|gradle)$'
+        stages: [pre-commit]
