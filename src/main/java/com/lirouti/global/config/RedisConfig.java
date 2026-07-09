@@ -64,7 +64,7 @@ public class RedisConfig {
 		redisTemplate.setConnectionFactory(connectionFactory);
 
 		redisTemplate.setKeySerializer(new StringRedisSerializer());
-		redisTemplate.setValueSerializer(serializer); 
+		redisTemplate.setValueSerializer(serializer);
 		redisTemplate.setHashKeySerializer(new StringRedisSerializer());
 		redisTemplate.setHashValueSerializer(serializer);
 
@@ -97,7 +97,7 @@ public class RedisConfig {
 				.allowIfSubType("com.lirouti") // 허용된 패키지
 				.allowIfSubType("java.util")
 				.build();
-        
+
         // GenericJacksonJsonRedisSerializer를 사용하여 JSON 직렬화 및 역직렬화
 		return GenericJacksonJsonRedisSerializer.builder()
 				.enableDefaultTyping(ptv)
