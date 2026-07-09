@@ -7,7 +7,8 @@ services:
     image: mysql:8.4
     container_name: lirouti-mysql
     ports:
-      - "3306:3306"
+      # 로컬(loopback) 에서만 접근 가능하도록 바인딩 (외부 노출 방지)
+      - "127.0.0.1:3306:3306"
     environment:
       MYSQL_ROOT_PASSWORD: root1234
       MYSQL_DATABASE: lirouti
@@ -30,7 +31,8 @@ services:
     image: redis:7.4-alpine
     container_name: lirouti-redis
     ports:
-      - "6379:6379"
+      # 로컬(loopback) 에서만 접근 가능하도록 바인딩 (외부 노출 방지)
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis-data:/data
     healthcheck:
