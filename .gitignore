@@ -64,5 +64,9 @@ generated/
 # macos
 .DS_Store
 
+### Docker ###
+# 개인 로컬 오버라이드 (포트 등). 커밋하지 않음.
+docker-compose.override.yml
+
 ### Claude Code ###
 CLAUDE.md

@@ -1,3 +1,30 @@
 spring:
   application:
     name: lirouti
+
+  # 로컬 개발 기본 프로파일. 배포 시 SPRING_PROFILES_ACTIVE 환경변수로 override.
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:local}
+
+  # 모든 값은 ${환경변수:기본값} 으로 주입됩니다.
+  # - 기본값은 "로컬 docker 개발용 임시값" 이며, 운영 환경에서는 반드시 환경변수로 override 합니다.
+  # - 운영 DB 비밀번호·JWT 시크릿 등 실제 비밀값은 절대 커밋하지 말고 환경변수(또는 시크릿 매니저)로만 주입하세요.
+  datasource:
+    url: ${DB_URL:jdbc:mysql://localhost:3306/lirouti?serverTimezone=Asia/Seoul&characterEncoding=UTF-8&allowPublicKeyRetrieval=true&useSSL=false}
+    username: ${DB_USERNAME:lirouti}
+    password: ${DB_PASSWORD:lirouti1234}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: ${JPA_DDL_AUTO:update}
+    show-sql: ${JPA_SHOW_SQL:true}
+    properties:
+      hibernate:
+        format_sql: true
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}

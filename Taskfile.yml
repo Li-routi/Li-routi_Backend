@@ -43,6 +43,26 @@ tasks:
     cmds:
       - '{{.GRADLEW}} bootRun'
 
+  docker-up:
+    desc: MySQL·Redis 컨테이너 기동 (백그라운드)
+    cmds:
+      - docker compose up -d
+
+  docker-down:
+    desc: MySQL·Redis 컨테이너 중지 (데이터 보존)
+    cmds:
+      - docker compose down
+
+  docker-reset:
+    desc: 컨테이너 및 볼륨(데이터)까지 완전 삭제
+    cmds:
+      - docker compose down -v
+
+  docker-logs:
+    desc: 컨테이너 로그 실시간 확인
+    cmds:
+      - docker compose logs -f
+
   clean:
     desc: build 산출물 및 QueryDSL 생성물 삭제
     cmds:
