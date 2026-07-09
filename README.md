@@ -54,28 +54,63 @@
 | JDK 21 | 빌드/실행 (Gradle toolchain이 자동 인식) | `brew install temurin@21` | [Adoptium](https://adoptium.net/) 설치 |
 | [Task](https://taskfile.dev) | 태스크 러너 | `brew install go-task/tap/go-task` | `winget install Task.Task` |
 | [pre-commit](https://pre-commit.com) | 커밋 전 검사 훅 | `brew install pre-commit` | `pip install pre-commit` |
+| [Docker](https://www.docker.com/) | MySQL·Redis 로컬 실행 | Docker Desktop 설치 | Docker Desktop 설치 |
 
 ### 2. 초기 세팅
 
 ```bash
 git clone <repo-url>
 cd Li-routi_Backend
-task setup      # pre-commit git 훅 설치 (커밋 시 자동 검사 활성화)
+task setup        # pre-commit git 훅 설치 (커밋 시 자동 검사 활성화)
+task docker-up    # MySQL·Redis 컨테이너 기동
 ```
 
 > `gradle-wrapper.jar` 가 없어 `./gradlew` 실행이 실패하면 `task wrapper` 로 생성할 수 있습니다.
 
-### 3. 자주 쓰는 명령어
+### 3. DB · 캐시 (Docker)
+
+MySQL·Redis 는 `docker-compose.yml` 로 로컬에서 띄웁니다. 접속 정보는 `application.yaml` 의 기본값(localhost:3306, DB `lirouti`)을 그대로 사용하므로 **별도 설정 없이 바로 동작**합니다.
+
+```bash
+task docker-up      # 컨테이너 기동 (백그라운드)
+task docker-down    # 중지 (데이터 유지)
+task docker-reset   # 컨테이너 + 볼륨(데이터) 완전 삭제
+task docker-logs    # 로그 확인
+```
+
+애플리케이션은 **Spring 프로파일**로 설정을 관리합니다.
+
+- `application.yaml` — 공통/기본값(로컬 개발 기준, `active: local`)
+- `application-local.yaml` — **개인 로컬 오버라이드** (git 미추적). 필요할 때만 만들면 됩니다.
+
+> **로컬에 이미 MySQL(3306)이 떠 있어 포트를 바꿔야 하는 경우** 두 파일만 추가하면 됩니다 (둘 다 git 미추적):
+>
+> `docker-compose.override.yml` — 컨테이너 노출 포트 변경
+> ```yaml
+> services:
+>   mysql:
+>     ports: !override
+>       - "3307:3306"
+> ```
+>
+> `src/main/resources/application-local.yaml` — 앱 접속 포트 변경
+> ```yaml
+> spring:
+>   datasource:
+>     url: jdbc:mysql://localhost:3307/lirouti?serverTimezone=Asia/Seoul&characterEncoding=UTF-8&allowPublicKeyRetrieval=true&useSSL=false
+> ```
+
+### 4. 자주 쓰는 명령어
 
 ```bash
 task              # 사용 가능한 태스크 목록
-task build        # 전체 빌드 (컴파일 + 테스트)
+task build        # 전체 빌드 (컴파일 + 테스트)  ※ docker-up 선행 필요
 task test         # 테스트
 task run          # 앱 실행 (MySQL·Redis 필요)
 task check        # 커밋/PR 전 검증 (pre-commit + build)
 ```
 
-### 4. 커밋 시 자동 검사 (pre-commit)
+### 5. 커밋 시 자동 검사 (pre-commit)
 
 `task setup` 이후 `git commit` 하면 훅이 자동 실행되어 줄 끝 공백·개행 정리, 줄바꿈(LF) 통일, Java 컴파일 등을 검사합니다.
 
