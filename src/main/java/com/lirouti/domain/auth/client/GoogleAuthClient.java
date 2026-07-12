@@ -8,7 +8,8 @@ import com.lirouti.domain.auth.exception.code.error.AuthErrorCode;
 import com.lirouti.domain.auth.model.SocialUserInfo;
 import com.lirouti.domain.member.enums.SocialProvider;
 import com.lirouti.global.properties.GoogleOAuthProperties;
-import java.io.IOException;
+import java.util.concurrent.ExecutionException;
+import com.google.common.util.concurrent.UncheckedExecutionException;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -56,8 +57,9 @@ public class GoogleAuthClient implements SocialAuthClient {
                 JsonWebSignature idToken = verifier.verify(providerToken);
                 return idToken.getPayload();
             } catch (TokenVerifier.VerificationException e) {
-                // 공개키 조회 I/O 실패와 토큰 검증 실패 구분
-                if (isCausedBy(e, IOException.class)) {
+                // 공개키 조회 실패만 통신 오류로 분류하고, 파싱 실패는 토큰 오류로 남김
+                if (isCausedBy(e, ExecutionException.class)
+                        || isCausedBy(e, UncheckedExecutionException.class)) {
                     log.error("Google 공개키 조회 중 통신 오류가 발생했습니다.");
                     throw new AuthException(AuthErrorCode.SOCIAL_COMMUNICATION_ERROR);
                 }

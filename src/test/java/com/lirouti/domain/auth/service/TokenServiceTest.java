@@ -2,6 +2,7 @@ package com.lirouti.domain.auth.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -169,6 +170,35 @@ class TokenServiceTest {
                 .isInstanceOf(AuthException.class)
                 .extracting("code")
                 .isEqualTo(AuthErrorCode.REFRESH_TOKEN_INVALID);
+        verify(redisUtil).delete("auth:refresh:" + MEMBER_ID);
+    }
+
+    @Test
+    @DisplayName("compare-and-set에 성공하면 refresh 세션을 삭제하지 않는다")
+    void reissue_RedisCompareAndSetSucceeded_DoesNotDeleteSession() throws Exception {
+        // given
+        when(jwtUtil.getRefreshClaims(REFRESH_TOKEN)).thenReturn(claims);
+        when(claims.get("category", String.class)).thenReturn("refresh");
+        when(claims.getSubject()).thenReturn(String.valueOf(MEMBER_ID));
+        when(memberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
+        when(member.getId()).thenReturn(MEMBER_ID);
+        when(member.getRole()).thenReturn(Role.ROLE_USER);
+        when(member.getIsActive()).thenReturn(true);
+        when(member.getDeletedAt()).thenReturn(null);
+        when(jwtUtil.createAccessToken(MEMBER_ID, Role.ROLE_USER)).thenReturn("new-access-token");
+        when(jwtUtil.createRefreshToken(MEMBER_ID)).thenReturn("new-refresh-token");
+        when(redisUtil.compareAndSet(
+                "auth:refresh:" + MEMBER_ID,
+                sha256(REFRESH_TOKEN),
+                sha256("new-refresh-token"),
+                Duration.ofDays(14)
+        )).thenReturn(true);
+
+        // when
+        tokenService.reissue(REFRESH_TOKEN);
+
+        // then
+        verify(redisUtil, never()).delete("auth:refresh:" + MEMBER_ID);
     }
 
     @Test

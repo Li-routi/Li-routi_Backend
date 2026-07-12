@@ -87,6 +87,7 @@ public class TokenService {
         );
 
         if (!stored) {
+            redisUtil.delete(getRefreshTokenKey(member.getId()));
             throw new AuthException(AuthErrorCode.REFRESH_TOKEN_INVALID);
         }
 
