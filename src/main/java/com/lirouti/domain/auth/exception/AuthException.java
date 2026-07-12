@@ -1,4 +1,10 @@
 package com.lirouti.domain.auth.exception;
 
-public class AuthException {
+import com.lirouti.global.apiPayload.code.BaseErrorCode;
+import com.lirouti.global.apiPayload.exception.GeneralException;
+
+public class AuthException extends GeneralException {
+    public AuthException(BaseErrorCode errorCode) {
+        super(errorCode);
+    }
 }

@@ -44,7 +44,7 @@ public class SwaggerConfig {
         // 인증이 필요하지 않은 API들을 그룹핑
         return GroupedOpenApi.builder()
                 .group("1. 인증 불필요")
-                .pathsToMatch("/api/v1/auth/**") // 해당 경로로 시작하는 모든 API를 이 그룹에 포함
+                .pathsToMatch("/api/auth/**") // 해당 경로로 시작하는 모든 API를 이 그룹에 포함
                 .build();
     }
 
@@ -53,8 +53,8 @@ public class SwaggerConfig {
         // 인증이 필요한 API들을 그룹핑
         return GroupedOpenApi.builder()
                 .group("2. JWT 인증 필요")
-                .pathsToMatch("/api/v1/**")
-                .pathsToExclude("/api/v1/auth/**") // 해당 경로는 이 그룹에서 제외
+                .pathsToMatch("/api/**")
+                .pathsToExclude("/api/auth/**") // 해당 경로는 이 그룹에서 제외
                 .build();
     }
 }
