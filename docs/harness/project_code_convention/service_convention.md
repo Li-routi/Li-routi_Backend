@@ -66,7 +66,8 @@ Service가 담당하지 않는 항목:
 
 ## 의존성
 
-- Repository와 Converter를 주입받을 수 있다.
+- Repository는 주입받을 수 있다.
+- Converter는 static 유틸리티로 사용하고 주입하지 않는다.
 - QueryService와 CommandService가 서로 의존하지 않도록 한다.
 - Service 간 연쇄 호출은 최소화한다.
 - 복잡한 다중 도메인 흐름은 Facade 또는 Application Service를 검토한다.
@@ -89,13 +90,12 @@ Service가 담당하지 않는 항목:
 public class MemberQueryService {
 
     private final MemberRepository memberRepository;
-    private final MemberConverter memberConverter;
 
     @Transactional(readOnly = true)
     public MemberResDTO.Detail getMember(Long memberId) {
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new MemberException(MemberErrorCode.NOT_FOUND));
-        return memberConverter.toDetail(member);
+        return MemberConverter.toDetail(member);
     }
 }
 ```
@@ -106,11 +106,10 @@ public class MemberQueryService {
 public class MemberCommandService {
 
     private final MemberRepository memberRepository;
-    private final MemberConverter memberConverter;
 
     @Transactional
     public Long createMember(MemberReqDTO.Create request) {
-        return memberRepository.save(memberConverter.toEntity(request)).getId();
+        return memberRepository.save(MemberConverter.toEntity(request)).getId();
     }
 }
 ```
@@ -122,6 +121,7 @@ public class MemberCommandService {
 - CommandService의 조회 API 혼합
 - Service의 `ResponseEntity` 및 Swagger 사용
 - Service의 DTO 직접 조립 반복
+- Converter 인스턴스 주입
 - Repository 결과에 무조건 `.get()` 호출
 - 다른 Service의 무분별한 연쇄 호출
 
