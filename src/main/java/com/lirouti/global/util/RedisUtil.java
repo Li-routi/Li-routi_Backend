@@ -4,13 +4,11 @@ import java.time.Duration;
 import java.util.Collections;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.data.redis.core.script.RedisScript;
-import lombok.RequiredArgsConstructor;
-import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.core.types.Expiration;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 @Component
-@RequiredArgsConstructor
 public class RedisUtil {
     private static final RedisScript<Long> COMPARE_AND_SET_SCRIPT = new DefaultRedisScript<>(
             """
@@ -23,20 +21,25 @@ public class RedisUtil {
             Long.class
     );
 
-    private final RedisTemplate<String, Object> redisTemplate;
+    private final StringRedisTemplate redisTemplate;
+
+    // authRedisTemplate을 주입받아 초기화
+    public RedisUtil(@Qualifier("authRedisTemplate") StringRedisTemplate redisTemplate) {
+        this.redisTemplate = redisTemplate;
+    }
 
     // 데이터 저장
-    public void set(String key, Object value, Duration duration) {
+    public void set(String key, String value, Duration duration) {
         redisTemplate.opsForValue().set(key, value, duration);
     }
 
     // 데이터 조회
-    public Object get(String key) {
+    public String get(String key) {
         return redisTemplate.opsForValue().get(key);
     }
 
     // 데이터를 가져오면서 즉시 삭제 (동시성 방어용)
-    public Object getAndDelete(String key) {
+    public String getAndDelete(String key) {
         return redisTemplate.opsForValue().getAndDelete(key);
     }
 
@@ -58,7 +61,7 @@ public class RedisUtil {
     // 블랙리스트 등록 (key가 액세스 토큰, value가 "logout", ttl이 남은 유효 시간이 됨)
     public void setBlackList(String accessToken, Long remainingTime) {
         if (remainingTime > 0) {
-            redisTemplate.opsForValue().set(accessToken, "logout", Expiration.milliseconds(remainingTime));
+            redisTemplate.opsForValue().set(accessToken, "logout", Duration.ofMillis(remainingTime));
         }
     }
 
@@ -68,6 +71,7 @@ public class RedisUtil {
             String newValue,
             Duration duration
     ) {
+        // Redis Lua 스크립트를 사용하여 원자적으로 비교 후 설정
         Long result = redisTemplate.execute(
                 COMPARE_AND_SET_SCRIPT,
                 Collections.singletonList(key),

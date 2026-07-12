@@ -77,6 +77,8 @@ public class TokenService {
 
         String newAccessToken = jwtUtil.createAccessToken(member.getId(), member.getRole());
         String newRefreshToken = jwtUtil.createRefreshToken(member.getId());
+        
+        // Refresh Token 해시를 Redis에 저장하고, 기존 해시와 비교하여 일치하지 않으면 예외 발생
         boolean stored = redisUtil.compareAndSet(
                 getRefreshTokenKey(member.getId()),
                 hash(refreshToken),
@@ -88,7 +90,7 @@ public class TokenService {
             throw new AuthException(AuthErrorCode.REFRESH_TOKEN_INVALID);
         }
 
-        log.debug("서비스 토큰을 재발급했습니다. memberId={}", member.getId());
+        log.info("서비스 토큰을 재발급했습니다. memberId={}", member.getId());
 
         return AuthConverter.toToken(
                 newAccessToken,
@@ -121,6 +123,7 @@ public class TokenService {
         }
     }
 
+    // 탈퇴한 회원인지 확인
     private void validateActiveMember(Member member) {
         if (!Boolean.TRUE.equals(member.getIsActive()) || member.getDeletedAt() != null) {
             throw new MemberException(MemberErrorCode.WITHDRAWN_MEMBER);

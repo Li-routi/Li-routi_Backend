@@ -94,6 +94,7 @@ class JwtUtilTest {
         properties.getAccessToken().setExpirationTime(Duration.ofHours(1).toMillis());
         properties.getRefreshToken().setExpirationTime(refreshExpiration.toMillis());
         properties.getDevToken().setExpirationTime(Duration.ofHours(1).toMillis());
+        
         return new JwtUtil(properties);
     }
 }
