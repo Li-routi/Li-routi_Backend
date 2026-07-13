@@ -15,6 +15,7 @@ Controller, Repository, Converter의 책임을 침범하지 않는다.
 
 조회 기능이 없는 도메인은 CQRS를 강제하지 않는다.
 예: `AuthService`, `TokenService`.
+Controller는 기본적으로 HTTP 메서드에 따라 QueryService/CommandService를 호출하지만, CQRS 예외 도메인은 일반 Service를 호출한다.
 
 ## 명명 및 CQRS
 
@@ -22,6 +23,7 @@ Controller, Repository, Converter의 책임을 침범하지 않는다.
 - 변경 서비스: `{Domain}CommandService`
 - CQRS 예외 서비스: `{Domain}Service`
 - 불필요한 Service 인터페이스는 만들지 않는다.
+- CQRS 적용 여부는 도메인의 조회 유무, 트랜잭션 경계, 복잡도, 예외 흐름을 기준으로 판단한다.
 
 ### QueryService
 
@@ -55,6 +57,7 @@ Service가 담당하는 항목:
 - 트랜잭션 경계 설정
 - 비즈니스 예외 발생
 - 여러 도메인 객체의 작업 조합
+- Controller를 거치지 않거나 외부 연동으로 들어오는 필수 입력 null은 Service 진입 시점에서 명시적으로 검증한다.
 
 Service가 담당하지 않는 항목:
 

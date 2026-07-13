@@ -1,18 +1,20 @@
 package com.lirouti.domain.auth.client;
 
+import org.springframework.http.HttpHeaders;
+import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
+
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.lirouti.domain.auth.exception.AuthException;
 import com.lirouti.domain.auth.exception.code.error.AuthErrorCode;
 import com.lirouti.domain.auth.model.SocialUserInfo;
 import com.lirouti.domain.member.enums.SocialProvider;
 import com.lirouti.global.properties.KakaoOAuthProperties;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.HttpHeaders;
-import org.springframework.stereotype.Component;
-import org.springframework.web.client.RestClient;
-import org.springframework.web.client.RestClientException;
-import org.springframework.web.client.RestClientResponseException;
 
 @Slf4j
 @Component
@@ -48,35 +50,42 @@ public class KakaoAuthClient implements SocialAuthClient {
     }
 
     private KakaoTokenInfo getAccessTokenInfo(String providerToken) {
-        try {
-            // 토큰 유효성 검증 및 payload 추출
-            return restClient.get()
-                    .uri(ACCESS_TOKEN_INFO_URI)
-                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + providerToken)
-                    .retrieve()
-                    .body(KakaoTokenInfo.class);
-        } catch (RestClientResponseException e) { // 400, 401, 403, 404 등
-            throw mapResponseException(e);
-        } catch (RestClientException e) { // I/O 실패 등
-            log.error("Kakao token-info API 통신에 실패했습니다.", e);
-            throw new AuthException(AuthErrorCode.SOCIAL_COMMUNICATION_ERROR);
-        }
+        return callKakaoApi(
+                ACCESS_TOKEN_INFO_URI,
+                providerToken,
+                KakaoTokenInfo.class,
+                "Kakao access-token-info API 통신에 실패했습니다."
+        );
     }
 
     private KakaoUserInfo getUserInfo(String providerToken) {
+        return callKakaoApi(
+                USER_INFO_URI,
+                providerToken,
+                KakaoUserInfo.class,
+                "Kakao user-me API 통신에 실패했습니다."
+            );
+    }
+
+    private <T> T callKakaoApi(
+        String uri,
+         String providerToken,
+        Class<T> responseType,
+        String failureLogMsg
+    ) {
         try {
             return restClient.get()
-                    .uri(USER_INFO_URI)
+                    .uri(uri)
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + providerToken)
                     .retrieve()
-                    .body(KakaoUserInfo.class);
+                    .body(responseType);
         } catch (RestClientResponseException e) {
             throw mapResponseException(e);
         } catch (RestClientException e) {
-            log.error("Kakao user-me API 통신에 실패했습니다.", e);
+            log.error(failureLogMsg, e);
             throw new AuthException(AuthErrorCode.SOCIAL_COMMUNICATION_ERROR);
         }
-    }
+    } 
 
     private void validateTokenInfo(KakaoTokenInfo tokenInfo) {
         if (tokenInfo == null
@@ -84,7 +93,7 @@ public class KakaoAuthClient implements SocialAuthClient {
                 || tokenInfo.expiresIn() == null
                 || tokenInfo.expiresIn() <= 0
                 || tokenInfo.appId() == null
-                || !kakaoOAuthProperties.getAppId().equals(String.valueOf(tokenInfo.appId()))) {
+                || !kakaoOAuthProperties.getAppId().equals(tokenInfo.appId().longValue())) {
             log.warn("Kakao token-info 검증에 실패했습니다.");
             throw new AuthException(AuthErrorCode.INVALID_SOCIAL_TOKEN);
         }

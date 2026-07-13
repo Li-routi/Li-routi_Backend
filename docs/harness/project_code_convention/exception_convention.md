@@ -5,6 +5,7 @@
 - 예외와 성공 응답 코드는 도메인별로 관리한다.
 - 메시지, HTTP 상태, 애플리케이션 코드를 Controller나 Service에 직접 작성하지 않는다.
 - 비즈니스 예외는 도메인 전용 `XXXException`으로 발생시킨다.
+- 여러 도메인에서 공통으로 사용하는 요청 오류, 권한 오류, 충돌, 서버 오류는 전역 `GeneralErrorCode`로 관리한다.
 
 ## 2. 패키지 구조
 
@@ -69,16 +70,18 @@ public enum MemberErrorCode implements BaseErrorCode {
         "이미 가입된 이메일입니다.",
         "MEMBER409_1"
     ),
+    SOCIAL_EMAIL_REQUIRED(
+        HttpStatus.UNPROCESSABLE_CONTENT,
+        "소셜 회원가입에는 검증된 이메일이 필요합니다.",
+        "MEMBER422_1"
+    ),
     INVALID_SOCIAL_PROVIDER(
         HttpStatus.BAD_REQUEST,
         "해당 이메일은 다른 소셜 로그인으로 가입되어 있습니다.",
         "MEMBER400_1"
-    ),
-    CANNOT_RESET_SOCIAL_PASSWORD(
-        HttpStatus.BAD_REQUEST,
-        "소셜 로그인 사용자는 비밀번호 재설정이 불가능합니다. 해당 소셜 플랫폼에서 변경해주세요.",
-        "MEMBER400_2"
     );
+
+    // 실제 구현에서는 같은 상태 코드에 대해 더 세부적인 에러 코드를 추가할 수 있다.
 
     private final HttpStatus httpStatus;
     private final String message;
@@ -136,6 +139,7 @@ MEMBER200_1
 MEMBER400_1
 MEMBER404_1
 MEMBER409_1
+MEMBER422_1
 ```
 
 - 도메인명은 대문자로 작성한다.
@@ -150,6 +154,9 @@ MEMBER409_1
 - Controller는 정상 응답에 맞는 SuccessCode를 선택한다.
 - `GlobalExceptionHandler`가 예외를 공통 오류 응답으로 변환한다.
 - Converter와 DTO는 Exception 및 Code enum에 의존하지 않는다.
+- 공통 요청 오류, 권한 오류, 충돌, 서버 오류는 `GeneralErrorCode`를 사용한다.
+- 스프링 검증 예외(`BindException`)와 잘못된 인자 예외(`IllegalArgumentException`)는 전역 예외 처리기에서 `GeneralErrorCode.BAD_REQUEST`로 변환한다.
+- 필터 계층에서 발생한 인증 예외는 `JwtExceptionFilter`에서 별도로 처리한다.
 
 ```java
 Member member = memberRepository.findById(memberId)

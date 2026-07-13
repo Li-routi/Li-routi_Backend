@@ -37,9 +37,9 @@ Controller가 담당하지 않는 작업:
 - 도메인 예외 직접 처리
 
 ## Service 호출
-- GET 요청은 `{Domain}QueryService`를 호출한다.
-- POST, PUT, PATCH, DELETE 요청은 `{Domain}CommandService`를 호출한다.
-- CQRS를 적용하지 않는 도메인은 일반 Service를 호출할 수 있다.
+- GET 요청은 기본적으로 `{Domain}QueryService`를 호출한다.
+- POST, PUT, PATCH, DELETE 요청은 기본적으로 `{Domain}CommandService`를 호출한다.
+- CQRS를 적용하지 않는 도메인은 `{Domain}Service`를 호출할 수 있으며, 선택 기준은 `service_convention.md`를 따른다.
 - Service 결과를 추가 가공하지 않고 공통 응답으로 감싼다.
 
 ## 공통 응답
@@ -77,6 +77,8 @@ return ApiResponse.onSuccess(
 - PathVariable과 RequestParam 검증이 필요하면 `@Validated`를 사용한다.
 - 형식과 단순 제약은 Request DTO에서 검증한다.
 - DB 조회가 필요한 검증과 비즈니스 규칙은 Service에서 처리한다.
+- `@Valid`와 `@Validated`는 실제 Controller 메서드 파라미터에 작성하고, Docs 인터페이스에는 문서화 어노테이션만 둔다.
+- HTTP 요청의 필수 입력 null 방어는 Controller의 validation 단계에서 처리한다.
 
 ## Docs 인터페이스
 Docs 인터페이스에는 Swagger/OpenAPI 문서화만 작성한다.

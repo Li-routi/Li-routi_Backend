@@ -1,6 +1,6 @@
 package com.lirouti.global.properties;
 
-import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -13,6 +13,6 @@ import org.springframework.validation.annotation.Validated;
 @Configuration
 @ConfigurationProperties(prefix = "oauth.kakao")
 public class KakaoOAuthProperties {
-    @NotBlank(message = "Kakao App ID는 필수입니다.")
-    private String appId;
+    @NotNull(message = "Kakao App ID는 필수입니다.")
+    private Long appId;
 }

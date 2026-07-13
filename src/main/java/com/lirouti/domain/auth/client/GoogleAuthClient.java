@@ -1,18 +1,21 @@
 package com.lirouti.domain.auth.client;
 
+import java.util.List;
+import java.util.concurrent.ExecutionException;
+
+import org.springframework.stereotype.Component;
+
 import com.google.api.client.json.webtoken.JsonWebSignature;
 import com.google.api.client.json.webtoken.JsonWebToken;
 import com.google.auth.oauth2.TokenVerifier;
+import com.google.common.util.concurrent.UncheckedExecutionException;
 import com.lirouti.domain.auth.exception.AuthException;
 import com.lirouti.domain.auth.exception.code.error.AuthErrorCode;
 import com.lirouti.domain.auth.model.SocialUserInfo;
 import com.lirouti.domain.member.enums.SocialProvider;
 import com.lirouti.global.properties.GoogleOAuthProperties;
-import java.util.concurrent.ExecutionException;
-import com.google.common.util.concurrent.UncheckedExecutionException;
-import java.util.List;
+
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
 
 @Slf4j
 @Component
@@ -51,6 +54,8 @@ public class GoogleAuthClient implements SocialAuthClient {
     }
 
     private JsonWebToken.Payload verify(String providerToken) {
+        boolean hasCommunicationError = false; // 통신 오류 발생 여부 플래그
+
         // 각 verifier를 순회하며 검증 시도
         for (TokenVerifier verifier : verifiers) {
             try {
@@ -60,12 +65,19 @@ public class GoogleAuthClient implements SocialAuthClient {
                 // 공개키 조회 실패만 통신 오류로 분류하고, 파싱 실패는 토큰 오류로 남김
                 if (isCausedBy(e, ExecutionException.class)
                         || isCausedBy(e, UncheckedExecutionException.class)) {
-                    log.error("Google 공개키 조회 중 통신 오류가 발생했습니다.");
-                    throw new AuthException(AuthErrorCode.SOCIAL_COMMUNICATION_ERROR);
+                    hasCommunicationError = true;
+                    log.warn("Google 공개키 조회 중 통신 오류가 발생했습니다. 다음 verifier를 시도합니다.");
+                    continue;
                 }
             }
         }
-        // 모든 verifier에서 검증 실패 시 예외 발생
+
+        // 모든 verifier에서 통신 오류가 발생했을 경우, 통신 오류로 처리
+        if (hasCommunicationError) {
+            throw new AuthException(AuthErrorCode.SOCIAL_COMMUNICATION_ERROR);
+        }
+
+        // 모든 verifier에서 검증 실패 시 토큰 오류로 처리
         log.warn("Google ID Token 검증에 실패했습니다.");
         throw new AuthException(AuthErrorCode.INVALID_SOCIAL_TOKEN);
     }

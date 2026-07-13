@@ -1,8 +1,8 @@
 # Converter Convention
 
 ## 목적
-Converter는 DTO와 Entity 사이의 변환을 담당한다.
-DTO 내부에 변환 메서드를 두지 않고 객체 생성과 응답 조립 책임을 별도 계층으로 분리한다.
+Converter는 DTO와 Entity 사이의 변환과 응답 조립을 담당한다.
+DTO 내부에 변환 책임을 두지 않고, 객체 생성과 조합 책임을 별도 계층으로 분리한다.
 
 ## 패키지 구조
 ```text
@@ -57,9 +57,9 @@ Converter는 다음 작업을 담당하지 않는다.
 - 기존 Entity 상태 변경
 
 ## 변환 규칙
-- DTO 내부에 `from`, `of`, `toEntity`를 두지 않는다.
+- DTO 내부에 변환 책임을 두지 않는다.
 - Controller와 Service에서 DTO 조립 코드를 반복하지 않는다.
-- 연관 Entity는 Service에서 조회한 뒤 매개변수로 전달한다.
+- 연관 Entity나 외부 처리 결과가 필요한 경우 Service에서 조회하거나 계산한 뒤 매개변수로 전달한다.
 - 소셜 정보나 암호화된 비밀번호도 매개변수로 전달한다.
 - Converter는 전달받은 값을 Builder에 매핑하는 역할만 수행한다.
 - 컬렉션 결과는 null 대신 빈 컬렉션으로 반환한다.
@@ -92,6 +92,17 @@ public final class MemberConverter {
             .isActive(true)
             .build();
     }
+
+    public static MemberResDTO.Detail toDetail(
+        Member member,
+        List<Housework> houseworks
+    ) {
+        return MemberResDTO.Detail.builder()
+            .id(member.getId())
+            .nickname(member.getNickname())
+            .houseworks(HouseworkConverter.toSummaryList(houseworks))
+            .build();
+    }
 }
 ```
 
@@ -115,6 +126,7 @@ public static Page<MemberResDTO.Result> toPage(Page<Member> members) {
 - null을 기본 객체로 임의 변환하지 않는다.
 - 선택 필드는 프로젝트 정책에 따라 null을 유지할 수 있다.
 - null 여부로 비즈니스 결정을 내리지 않는다.
+- null 검증은 Controller의 요청 검증 또는 Service의 입력 검증에서 수행하고, Converter는 이미 검증된 값만 전달받는 것을 전제로 한다.
 
 ## 금지 사항
 - DTO 내부 변환 메서드

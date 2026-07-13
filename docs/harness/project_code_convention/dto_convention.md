@@ -77,28 +77,21 @@ public record Detail(
         Long id,
         String email,
         String name
-) {
-    public static Detail from(Member member) {
-        return new Detail(
-                member.getId(),
-                member.getEmail(),
-                member.getName()
-        );
-    }
-}
+) {}
 ```
 - Controller에서 Entity를 직접 반환하지 않는다.
-- 단순 변환은 응답 record의 `from`, `of` 메서드로 처리할 수 있다.
-- 복잡한 조합은 Service 또는 Mapper에서 변환한다.
+- 응답 DTO는 값만 담고, 실제 변환은 Converter에서 처리한다.
+- 복잡한 조합은 Service에서 필요한 값을 준비한 뒤 Converter에서 변환한다.
 - 민감 정보와 불필요한 연관관계를 노출하지 않는다.
 
 ## 6. Controller 사용
 ```java
 @PostMapping
-public MemberResDTO.Detail signUp(
+public ApiResponse<MemberResDTO.Detail> signUp(
         @Valid @RequestBody MemberReqDTO.SignUp request
 ) {
-    return memberService.signUp(request);
+    MemberResDTO.Detail result = memberService.signUp(request);
+    return ApiResponse.onSuccess(MemberSuccessCode.MEMBER_SIGNUP_SUCCESS, result);
 }
 ```
 요청 DTO에는 `@Valid`를 적용한다.
@@ -113,7 +106,7 @@ Entity를 API 요청 또는 응답 타입으로 직접 사용하지 않는다.
 - DTO에서 DB 조회나 비즈니스 처리를 수행하지 않는다.
 - Entity를 API 응답으로 직접 노출하지 않는다.
 
-## 8. Codex 체크리스트
+## 8. 체크리스트
 1. `dto/request`, `dto/response`가 분리되었는가?
 2. 파일명이 `{Domain}ReqDTO`, `{Domain}ResDTO` 형식인가?
 3. 세부 DTO가 내부 `public record`인가?
