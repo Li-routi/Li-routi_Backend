@@ -71,6 +71,8 @@
 
 `challenge`는 앱이 제공하는 마스터 데이터이고, 회원은 `member_challenge`로 참여한다. 인증하면 `challenge_verification`을 생성하고, 같은 트랜잭션에서 참여의 `current_streak`과 `last_verified_date`를 갱신한다.
 
+**인증 INSERT와 연속 참여일 갱신은 반드시 하나의 트랜잭션이어야 한다.** 이 조건이 지켜지면 연속 참여일 갱신에 별도의 락(`SELECT ... FOR UPDATE`, 낙관적 락)이 필요하지 않다. `UNIQUE(member_challenge_id, participation_round, verified_date)`가 같은 날 인증을 직렬화하기 때문이다. 같은 회원이 인증을 동시에 두 번 요청해도 한쪽은 유니크 제약 위반으로 실패하고, 그 트랜잭션의 연속 참여일 갱신도 함께 롤백된다. 따라서 갱신이 덮어써져 사라지는(lost update) 경로가 없다. **반대로 두 작업을 다른 트랜잭션으로 분리하면 이 보장이 깨지므로 그렇게 구현하지 않는다.**
+
 연속 참여일은 인증 시점에 다음 규칙으로 계산한다.
 
 - `last_verified_date`가 어제면 `current_streak`을 1 증가시킨다.
@@ -83,7 +85,9 @@
 
 인증은 당일 것만 다시 올릴 수 있다. 이때 행을 지우고 새로 만드는 것이 아니라 **기존 행을 덮어쓴다.** 하루에 한 행이라는 사실이 유지되므로 유니크 제약과 충돌하지 않고, 그 인증을 참조하는 신고 데이터도 그대로 남는다. 어제 이전의 인증은 수정할 수 없으므로 연속 참여일을 소급해 재계산하는 경우는 없다. 집안일의 `canceled_at`에 해당하는 컬럼을 두지 않는 이유다.
 
-챌린지를 그만두면 `member_challenge.active`를 `false`로 둔다. 다시 참여하면 같은 행을 재활성화하고 연속 참여일을 0으로 초기화한다. 참여 이력을 새 행으로 쌓지 않으므로 `(member_id, challenge_id)` 유니크 제약을 유지할 수 있다.
+챌린지를 그만두면 `member_challenge.active`를 `false`로 둔다. 다시 참여하면 같은 행을 재활성화하고, 연속 참여일을 0으로 초기화하며 **참여 회차(`participation_round`)를 1 증가시킨다.** 참여 이력을 새 행으로 쌓지 않으므로 `(member_id, challenge_id)` 유니크 제약을 유지할 수 있다.
+
+회차를 두는 이유는 **같은 날 이탈 후 재참여**하는 경우 때문이다. 오늘 인증한 뒤 그만두고 다시 참여하면, 회차가 없을 때는 이전 참여의 오늘 인증 행이 그대로 남아 새 인증이 유니크 제약에 걸린다. 연속 참여일은 0인데 화면에는 "오늘 완료"로 보이는 모순도 생긴다. 회차를 올리면 지난 회차의 인증과 분리되므로 두 문제가 모두 사라진다. **인증·연속 참여일·오늘 완료 여부는 모두 현재 회차를 기준으로 판단한다.**
 
 신고는 인증을 삭제하지 않는다. 피드를 조회할 때 **신고자 본인에게만** 해당 인증을 제외한다. 다른 회원에게는 그대로 노출된다.
 
@@ -306,32 +310,38 @@
 | id | BIGINT | N | 기본 키 |
 | member_id | BIGINT | N | 참여 회원, `member.id` FK |
 | challenge_id | BIGINT | N | 대상 챌린지, `challenge.id` FK |
+| participation_round | INT | N | 참여 회차. 재참여할 때마다 1 증가한다. 기본값 `1` |
 | current_streak | INT | N | 연속 참여일, 기본값 `0` |
 | last_verified_date | DATE | Y | 마지막 인증일. 참여 직후에는 값이 없다. |
 | joined_at | DATETIME(6) | N | 참여 시각 |
 | active | TINYINT(1) | N | 참여 중 여부, 기본값 `1` |
 | created_at / updated_at | DATETIME(6) | N / N | 생성·수정 시각 |
 
-- `UNIQUE(member_id, challenge_id)`. 재참여는 새 행을 만들지 않고 기존 행의 `active`를 `true`로 되돌리며 `current_streak`을 0으로 초기화한다.
+- `UNIQUE(member_id, challenge_id)`. 재참여는 새 행을 만들지 않고 기존 행의 `active`를 `true`로 되돌리며, `current_streak`을 0으로 초기화하고 **`participation_round`를 1 증가시킨다.**
+- **`participation_round`가 없으면 같은 날 이탈 후 재참여할 때 문제가 생긴다.** 오늘 인증한 뒤 그만두고 다시 참여하면, 이전 회차의 오늘 인증 행이 남아 있어 새 인증이 유니크 제약에 걸려 실패한다. 연속 참여일은 0인데 화면에는 "오늘 완료"로 표시되는 모순도 생긴다. 회차를 올리면 과거 회차의 인증과 분리되므로 두 문제가 모두 사라진다.
+- 인증·연속 참여일·"오늘 완료 여부"는 **현재 회차(`participation_round`)를 기준으로만 판단한다.** 지난 회차의 인증은 이력으로 남되 현재 참여 상태에 섞이지 않는다.
 - 참여 중인 챌린지 조회를 위해 `(member_id, active)` 인덱스가 필요하다.
 - 이탈은 `active = false`로 표현한다. 참여 이력을 보존하므로 소프트 삭제(`deleted_at`)를 쓰지 않는다.
 - `current_streak`은 저장된 값을 그대로 신뢰하지 않는다. 조회 시 `last_verified_date`가 어제보다 오래되었으면 0으로 판정한다.
 
 ### `challenge_verification`
 
-챌린지 참여의 일자별 인증 이력이다. 하루에 한 건만 존재한다.
+챌린지 참여의 일자별 인증 이력이다. 한 참여 회차 안에서 하루에 한 건만 존재한다.
 
 | 컬럼 | 타입 | NULL | 설명 |
 | --- | --- | --- | --- |
 | id | BIGINT | N | 기본 키 |
 | member_challenge_id | BIGINT | N | 대상 참여, `member_challenge.id` FK |
+| participation_round | INT | N | 인증 당시의 참여 회차. `member_challenge.participation_round`의 스냅샷 |
 | verified_date | DATE | N | 인증 기준일(KST) |
 | verified_at | DATETIME(6) | N | 인증 처리 시각 |
 | image_url | VARCHAR(2048) | N | 인증 사진. 사진 없는 인증은 허용하지 않는다. |
 | content | VARCHAR(255) | Y | 인증 코멘트 |
 | created_at / updated_at | DATETIME(6) | N / N | 생성·수정 시각 |
 
-- `UNIQUE(member_challenge_id, verified_date)`로 하루 1회 인증을 DB가 보장한다. 애플리케이션에서 "오늘 인증했는지" 조회한 뒤 저장하는 방식은 동시 요청 시 두 건이 들어갈 수 있다.
+- `UNIQUE(member_challenge_id, participation_round, verified_date)`로 하루 1회 인증을 DB가 보장한다. 애플리케이션에서 "오늘 인증했는지" 조회한 뒤 저장하는 방식은 동시 요청 시 두 건이 들어갈 수 있다.
+- 유니크 제약에 `participation_round`가 포함되는 이유는 **같은 날 이탈 후 재참여하는 경우** 때문이다. 회차가 없으면 이전 회차의 오늘 인증 행 때문에 새 인증이 실패한다. 회차가 올라가면 새 인증을 정상적으로 등록할 수 있고, 지난 회차의 인증과도 분리된다.
+- 현재 참여의 인증만 조회할 때는 `member_challenge.participation_round`와 일치하는 행만 본다. 회차가 다른 인증은 이력이다.
 - 피드 조회를 위해 `(member_challenge_id, verified_at)` 인덱스가 필요하다. 챌린지 단위 피드는 `member_challenge`를 경유하므로 조인 비용을 확인한다.
 - **이 테이블은 소프트 삭제하지 않는다.** `deleted_at`을 두지 않는 이유는 아래와 같다.
   - 당일 재인증은 삭제 후 재등록이 아니라 **기존 행의 `image_url`·`content`·`verified_at`을 덮어쓰는 방식(UPDATE)**으로 처리한다. 하루에 한 행이라는 사실이 변하지 않으므로 유니크 제약과 충돌하지 않는다.
@@ -411,9 +421,9 @@
 ## DDL 확인 필요 사항
 
 - 기본 키는 정의되어 있으나, `id`의 자동 생성 전략(`AUTO_INCREMENT` 등)은 DDL에 없다.
-- 유니크 제약조건과 일반 인덱스가 정의되어 있지 않다. 예를 들어 `member.email`, `member_order.order_number`, 조회에 자주 쓰이는 외래 키 및 `deleted_at`은 요구사항에 따라 인덱스 검토가 필요하다.
+- **기존 테이블에는** 유니크 제약조건과 일반 인덱스가 정의되어 있지 않다. 예를 들어 `member.email`, `member_order.order_number`, 조회에 자주 쓰이는 외래 키 및 `deleted_at`은 요구사항에 따라 인덱스 검토가 필요하다. (챌린지 테이블은 예외로, 해당 절에 제약과 인덱스를 명시했다.)
 - `payment.member_order_id`에는 유니크 제약조건이 없으므로, 현재 정의상 하나의 주문이 여러 결제 레코드를 가질 수 있다.
 - `member_routine`은 이름과 달리 회원 식별자가 없으며 다른 테이블과의 외래 키도 없다.
-- 챌린지 테이블은 위 표에 유니크 제약과 인덱스를 명시했다. 다른 테이블도 같은 수준으로 보완이 필요하다.
+- 챌린지 테이블은 위 표에 유니크 제약과 인덱스를 명시했다. 기존 테이블도 같은 수준으로 보완이 필요하다.
 - 소프트 삭제(`deleted_at`)와 유니크 제약은 함께 쓰면 충돌한다. 삭제된 행도 유니크 제약에 남기 때문이다. `challenge_verification`은 덮어쓰기 방식을 택해 이 문제를 피했으나, **기존 테이블 중 `deleted_at`과 유니크 제약을 함께 가진 것이 있다면 같은 문제가 있는지 점검이 필요하다.**
 - 챌린지 인증 사진은 외부 스토리지에 저장하고 DB에는 URL 또는 key만 둔다. 저장 방식은 이미지 업로드 인프라 작업에서 확정한다.
