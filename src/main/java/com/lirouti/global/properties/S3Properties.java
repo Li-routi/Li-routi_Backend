@@ -1,0 +1,43 @@
+package com.lirouti.global.properties;
+
+import java.time.Duration;
+
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.validation.annotation.Validated;
+
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Positive;
+import lombok.Getter;
+import lombok.Setter;
+
+@Getter
+@Setter
+@Validated
+@Configuration
+@ConfigurationProperties(prefix = "aws.s3")
+public class S3Properties {
+    /**
+     * 환경변수 미주입을 부팅 시점에 잡기 위해 형식까지 검증한다.
+     * 기본값 없이 ${AWS_S3_BUCKET}만 선언하면 부팅이 실패할 것 같지만, 실제로는
+     * 해석되지 못한 플레이스홀더가 "${AWS_S3_BUCKET}" 문자열 그대로 바인딩된다.
+     * @NotBlank만으로는 이를 통과시키므로, S3 버킷 명명 규칙으로 걸러낸다.
+     */
+    @NotBlank(message = "S3 버킷 이름은 필수입니다. AWS_S3_BUCKET 환경변수를 주입하세요.")
+    @Pattern(
+            regexp = "^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$",
+            message = "S3 버킷 이름 형식이 올바르지 않습니다. AWS_S3_BUCKET 환경변수가 주입되지 않았을 수 있습니다."
+    )
+    private String bucket;
+
+    @NotNull(message = "presigned URL 유효 시간은 필수입니다.")
+    private Duration presignedUrlExpiration;
+
+    @Positive(message = "최대 업로드 용량은 양수여야 합니다.")
+    private long maxFileSize;
+
+    // 이미지를 읽을 때 사용할 공개 주소(CloudFront 등). 비어 있으면 응답에 key만 담긴다.
+    private String publicBaseUrl;
+}
