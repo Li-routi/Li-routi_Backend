@@ -2,6 +2,8 @@ spring:
   application:
     name: lirouti
 
+  config:
+    import: optional:file:.env[.properties]
   # 로컬 개발 기본 프로파일. 배포 시 SPRING_PROFILES_ACTIVE 환경변수로 override.
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:local}
@@ -28,3 +30,23 @@ spring:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}
+
+# jwt 설정 관련
+jwt:
+  secret: ${JWT_SECRET}
+  access-token:
+    expiration-time: 300000 # 5분
+  temp-token:
+    expiration-time: 3600000
+  refresh-token:
+    expiration-time: 1209600000 # 14일
+  dev-token:
+    expiration-time: 1209600000
+  issuer: lirouti
+
+oauth:
+  kakao:
+    app-id: ${KAKAO_APP_ID}
+  google:
+    web-client-id: ${GOOGLE_WEB_CLIENT_ID}
+    allowed-issuers: ${GOOGLE_ALLOWED_ISSUERS}

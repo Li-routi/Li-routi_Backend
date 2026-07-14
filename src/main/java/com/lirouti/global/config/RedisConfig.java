@@ -13,6 +13,7 @@ import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.serializer.GenericJacksonJsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
 import org.springframework.data.redis.connection.lettuce.LettuceClientConfiguration;
@@ -67,6 +68,20 @@ public class RedisConfig {
 		redisTemplate.setValueSerializer(serializer);
 		redisTemplate.setHashKeySerializer(new StringRedisSerializer());
 		redisTemplate.setHashValueSerializer(serializer);
+
+		return redisTemplate;
+	}
+
+	// auth용 RedisTemplate를 별도로 생성하여 auth 관련 데이터만 관리하도록 설정
+	@Bean
+	public StringRedisTemplate authRedisTemplate(RedisConnectionFactory connectionFactory) {
+		// StringRedisTemplate를 사용하여 Redis에 문자열 데이터를 저장하고 조회할 수 있도록 설정
+		StringRedisTemplate redisTemplate = new StringRedisTemplate();
+		redisTemplate.setConnectionFactory(connectionFactory);
+		redisTemplate.setKeySerializer(new StringRedisSerializer());
+		redisTemplate.setValueSerializer(new StringRedisSerializer());
+		redisTemplate.setHashKeySerializer(new StringRedisSerializer());
+		redisTemplate.setHashValueSerializer(new StringRedisSerializer());
 
 		return redisTemplate;
 	}

@@ -70,3 +70,12 @@ docker-compose.override.yml
 
 ### Claude Code ###
 CLAUDE.md
+
+### Codex ###
+AGENTS.md
+
+# 개인 작업 핸드오프 파일
+docs/handoff/
+docs/harness/personal_convention/
+
+test.html

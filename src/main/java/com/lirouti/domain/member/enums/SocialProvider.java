@@ -1,4 +1,5 @@
 package com.lirouti.domain.member.enums;
 
-public class SocialProvider {
+public enum SocialProvider {
+    KAKAO, GOOGLE;
 }
