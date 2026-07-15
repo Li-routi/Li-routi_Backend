@@ -16,6 +16,8 @@ import lombok.RequiredArgsConstructor;
 @Getter
 @RequiredArgsConstructor
 public enum MediaPurpose {
+    // TODO(영상): 특정 용도에 영상을 허용하려면 그 용도의 Set에 MediaCategory.VIDEO 추가
+    //  예) CHALLENGE_VERIFICATION("challenge-verifications", Set.of(MediaCategory.IMAGE, MediaCategory.VIDEO))
     CHALLENGE_VERIFICATION("challenge-verifications", Set.of(MediaCategory.IMAGE)),
     PROFILE("profiles", Set.of(MediaCategory.IMAGE));
 

@@ -21,7 +21,7 @@ public enum MediaContentType {
     JPEG("image/jpeg", "jpg", MediaCategory.IMAGE),
     PNG("image/png", "png", MediaCategory.IMAGE),
     WEBP("image/webp", "webp", MediaCategory.IMAGE);
-    // 영상 확장 지점: MP4("video/mp4", "mp4", MediaCategory.VIDEO), ...
+    // TODO(영상): 영상 인증을 켤 때 여기에 형식 추가 → MP4("video/mp4", "mp4", MediaCategory.VIDEO), ...
 
     private final String mimeType;
     private final String extension;
