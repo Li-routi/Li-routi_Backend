@@ -16,12 +16,16 @@ public final class MediaConverter {
             String uploadUrl,
             String mediaKey,
             String publicBaseUrl,
+            String contentType,
+            long contentLength,
             Instant expiresAt
     ) {
         return MediaResDTO.PresignedUrl.builder()
                 .uploadUrl(uploadUrl)
                 .mediaKey(mediaKey)
                 .mediaUrl(toMediaUrl(publicBaseUrl, mediaKey))
+                .contentType(contentType)
+                .contentLength(contentLength)
                 .expiresAt(expiresAt)
                 .build();
     }

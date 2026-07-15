@@ -27,9 +27,9 @@ import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignReques
  * DB를 다루지 않아 조회/변경 구분이 무의미하므로 CQRS를 적용하지 않는다.
  * (service_convention.md의 CQRS 예외 도메인)
  *
- * <p>현재는 사진만 업로드한다. 영상은 형식·용도·용량 구조만 갖춰두었고 실제로 켜져 있지 않다.
- * 영상을 켜려면 {@link MediaContentType}에 영상 형식을 추가하고, 해당 {@link MediaPurpose}의
- * 허용 카테고리에 {@link MediaCategory#VIDEO}를 넣으면 이 검증 흐름이 그대로 적용된다.
+ * 현재는 사진만 업로드한다. 영상은 형식·용도·용량 구조만 갖춰두었고 실제로 켜져 있지 않다.
+ * 영상을 켜려면 MediaContentType에 영상 형식을 추가하고, 해당 MediaPurpose의 허용 카테고리에
+ * MediaCategory.VIDEO를 넣으면 이 검증 흐름이 그대로 적용된다.
  */
 @Slf4j
 @Service
@@ -46,13 +46,17 @@ public class MediaService {
         String mediaKey = generateMediaKey(request.purpose(), contentType);
         Duration expiration = s3Properties.getPresignedUrlExpiration();
 
+        // 서명에는 정규화된 MIME 값을 쓴다. 요청 원본(대소문자·공백)이 아니라 이 값이 서명에 들어가므로,
+        // 클라이언트는 응답으로 돌려주는 이 값을 그대로 PUT 헤더에 실어야 서명이 일치한다.
+        String signedContentType = contentType.getMimeType();
+
         // 서명에 Content-Type과 Content-Length를 포함시킨다.
         // 클라이언트가 다른 형식이나 크기로 업로드하면 S3가 거부하므로,
         // 서버가 파일 바이트를 보지 않고도 검증 결과를 강제할 수 있다.
         PutObjectRequest putObjectRequest = PutObjectRequest.builder()
                 .bucket(s3Properties.getBucket())
                 .key(mediaKey)
-                .contentType(contentType.getMimeType())
+                .contentType(signedContentType)
                 .contentLength(request.contentLength())
                 .build();
 
@@ -70,6 +74,8 @@ public class MediaService {
                 presigned.url().toString(),
                 mediaKey,
                 s3Properties.getPublicBaseUrl(),
+                signedContentType,
+                request.contentLength(),
                 presigned.expiration()
         );
     }

@@ -92,19 +92,43 @@ class MediaServiceTest {
     }
 
     @Test
-    @DisplayName("대문자 Content-Type도 허용한다 (Locale.ROOT 정규화)")
-    void issuePresignedUrl_UppercaseContentType_Accepted() {
+    @DisplayName("대소문자·공백이 섞인 Content-Type도 허용하고, 응답에는 서명에 쓴 정규화 값을 내려준다")
+    void issuePresignedUrl_MixedCaseContentType_ReturnsNormalizedValueToUse() {
         // given
         mockPresign();
         MediaReqDTO.PresignedUrl request = new MediaReqDTO.PresignedUrl(
-                MediaPurpose.CHALLENGE_VERIFICATION, "IMAGE/JPEG", 1024L
+                MediaPurpose.CHALLENGE_VERIFICATION, " iMAge/JPeG ", 1024L
         );
 
         // when
         MediaResDTO.PresignedUrl response = mediaService.issuePresignedUrl(request);
 
-        // then
+        // then — 클라이언트는 원본이 아니라 이 값을 PUT 헤더로 써야 서명이 일치한다
+        assertThat(response.contentType()).isEqualTo("image/jpeg");
+        assertThat(response.contentLength()).isEqualTo(1024L);
         assertThat(response.mediaKey()).endsWith(".jpg");
+    }
+
+    @Test
+    @DisplayName("서명에 사용한 Content-Type(정규화 값)을 서명 요청과 응답에 동일하게 싣는다")
+    void issuePresignedUrl_SignedContentTypeMatchesResponse() {
+        // given
+        mockPresign();
+        MediaReqDTO.PresignedUrl request = new MediaReqDTO.PresignedUrl(
+                MediaPurpose.PROFILE, "IMAGE/PNG", 2048L
+        );
+
+        // when
+        MediaResDTO.PresignedUrl response = mediaService.issuePresignedUrl(request);
+
+        // then — 서명에 들어간 값과 응답으로 안내하는 값이 같아야 한다
+        ArgumentCaptor<PutObjectPresignRequest> captor =
+                ArgumentCaptor.forClass(PutObjectPresignRequest.class);
+        verify(s3Presigner).presignPutObject(captor.capture());
+        String signed = captor.getValue().putObjectRequest().contentType();
+
+        assertThat(signed).isEqualTo("image/png");
+        assertThat(response.contentType()).isEqualTo(signed);
     }
 
     @Test

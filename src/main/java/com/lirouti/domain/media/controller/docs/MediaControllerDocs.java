@@ -17,8 +17,9 @@ public interface MediaControllerDocs {
                     S3에 직접 업로드할 수 있는 presigned URL을 발급합니다.
 
                     클라이언트는 발급받은 `uploadUrl`로 **PUT** 요청을 보내 파일을 업로드합니다.
-                    이때 요청에 사용한 `contentType`과 `contentLength`를 헤더에 그대로 실어야 합니다.
-                    값이 다르면 S3가 업로드를 거부합니다.
+                    이때 **응답으로 돌려준 `contentType`과 `contentLength`를** `Content-Type`·`Content-Length`
+                    헤더에 그대로 실어야 합니다. 서버가 값을 정규화(대소문자·공백 정리)해 서명하므로,
+                    요청에 보낸 원본이 아니라 **응답의 값**을 써야 서명이 일치합니다. 값이 다르면 S3가 업로드를 거부합니다.
 
                     업로드에 성공하면 `mediaKey`를 해당 도메인 API(예: 챌린지 인증)에 전달해 저장합니다.
                     발급된 URL은 만료 시간이 지나면 사용할 수 없습니다.
