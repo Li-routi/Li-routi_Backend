@@ -1,6 +1,7 @@
 package com.lirouti.domain.media.enums;
 
 import java.util.Arrays;
+import java.util.Locale;
 import java.util.Optional;
 
 import lombok.Getter;
@@ -31,7 +32,9 @@ public enum MediaContentType {
         if (mimeType == null) {
             return Optional.empty();
         }
-        String normalized = mimeType.trim().toLowerCase();
+        // Locale.ROOT로 고정한다. 기본 로케일(예: 터키어)에서는 "I"가 "ı"로 변환되어
+        // 대문자 MIME이 잘못 매칭될 수 있다.
+        String normalized = mimeType.trim().toLowerCase(Locale.ROOT);
         return Arrays.stream(values())
                 .filter(type -> type.mimeType.equals(normalized))
                 .findFirst();

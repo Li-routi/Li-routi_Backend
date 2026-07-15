@@ -1,7 +1,6 @@
 package com.lirouti.domain.media.service;
 
 import java.time.Duration;
-import java.time.LocalDateTime;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
@@ -20,6 +19,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+import software.amazon.awssdk.services.s3.presigner.model.PresignedPutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
 
 /**
@@ -61,20 +61,22 @@ public class MediaService {
                 .putObjectRequest(putObjectRequest)
                 .build();
 
-        String uploadUrl = presign(presignRequest, mediaKey);
+        PresignedPutObjectRequest presigned = presign(presignRequest, mediaKey);
         log.debug("미디어 업로드 URL을 발급했습니다. key={}", mediaKey);
 
+        // 만료 시각은 로컬에서 재계산하지 않고, SDK가 서명에 실제로 부여한 값을 그대로 쓴다.
+        // now().plus(...)는 서명 시점과 미세하게 어긋날 수 있다.
         return MediaConverter.toPresignedUrl(
-                uploadUrl,
+                presigned.url().toString(),
                 mediaKey,
                 s3Properties.getPublicBaseUrl(),
-                LocalDateTime.now().plus(expiration)
+                presigned.expiration()
         );
     }
 
-    private String presign(PutObjectPresignRequest presignRequest, String mediaKey) {
+    private PresignedPutObjectRequest presign(PutObjectPresignRequest presignRequest, String mediaKey) {
         try {
-            return s3Presigner.presignPutObject(presignRequest).url().toString();
+            return s3Presigner.presignPutObject(presignRequest);
         } catch (RuntimeException e) {
             log.error("S3 presigned URL 발급에 실패했습니다. key={}", mediaKey, e);
             throw new MediaException(MediaErrorCode.PRESIGNED_URL_ISSUE_FAILED);

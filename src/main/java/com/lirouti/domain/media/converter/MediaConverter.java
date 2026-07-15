@@ -1,6 +1,6 @@
 package com.lirouti.domain.media.converter;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 import com.lirouti.domain.media.dto.response.MediaResDTO;
 
@@ -16,7 +16,7 @@ public final class MediaConverter {
             String uploadUrl,
             String mediaKey,
             String publicBaseUrl,
-            LocalDateTime expiresAt
+            Instant expiresAt
     ) {
         return MediaResDTO.PresignedUrl.builder()
                 .uploadUrl(uploadUrl)

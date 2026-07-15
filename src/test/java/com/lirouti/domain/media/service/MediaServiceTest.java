@@ -10,7 +10,7 @@ import static org.mockito.Mockito.when;
 
 import java.net.URI;
 import java.time.Duration;
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -40,6 +40,7 @@ class MediaServiceTest {
     private static final long MAX_IMAGE_SIZE = 10 * 1024 * 1024L;
     private static final long MAX_VIDEO_SIZE = 50 * 1024 * 1024L;
     private static final String UPLOAD_URL = "https://lirouti-media.s3.amazonaws.com/signed";
+    private static final Instant EXPIRES_AT = Instant.parse("2026-07-15T12:00:00Z");
 
     @Mock
     private S3Presigner s3Presigner;
@@ -66,6 +67,7 @@ class MediaServiceTest {
         } catch (Exception e) {
             throw new IllegalStateException(e);
         }
+        when(presigned.expiration()).thenReturn(EXPIRES_AT);
         when(s3Presigner.presignPutObject(any(PutObjectPresignRequest.class))).thenReturn(presigned);
     }
 
@@ -85,7 +87,24 @@ class MediaServiceTest {
         assertThat(response.uploadUrl()).isEqualTo(UPLOAD_URL);
         assertThat(response.mediaKey()).startsWith("challenge-verifications/").endsWith(".jpg");
         assertThat(response.mediaUrl()).isEqualTo(PUBLIC_BASE_URL + "/" + response.mediaKey());
-        assertThat(response.expiresAt()).isAfter(LocalDateTime.now());
+        // 만료 시각은 로컬 재계산이 아니라 SDK가 서명에 부여한 값을 그대로 사용한다.
+        assertThat(response.expiresAt()).isEqualTo(EXPIRES_AT);
+    }
+
+    @Test
+    @DisplayName("대문자 Content-Type도 허용한다 (Locale.ROOT 정규화)")
+    void issuePresignedUrl_UppercaseContentType_Accepted() {
+        // given
+        mockPresign();
+        MediaReqDTO.PresignedUrl request = new MediaReqDTO.PresignedUrl(
+                MediaPurpose.CHALLENGE_VERIFICATION, "IMAGE/JPEG", 1024L
+        );
+
+        // when
+        MediaResDTO.PresignedUrl response = mediaService.issuePresignedUrl(request);
+
+        // then
+        assertThat(response.mediaKey()).endsWith(".jpg");
     }
 
     @Test
