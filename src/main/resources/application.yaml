@@ -51,7 +51,7 @@ oauth:
     web-client-id: ${GOOGLE_WEB_CLIENT_ID}
     allowed-issuers: ${GOOGLE_ALLOWED_ISSUERS}
 
-# 이미지 업로드(S3 presigned URL) 설정
+# 미디어 업로드(S3 presigned URL) 설정
 # 자격증명은 여기에 두지 않는다. 운영은 EC2 인스턴스 프로필(IAM Role),
 # 로컬은 AWS CLI 프로파일에서 SDK가 자동으로 가져간다.
 aws:
@@ -60,7 +60,9 @@ aws:
     bucket: ${AWS_S3_BUCKET}
     # 업로드용 서명 URL 유효 시간. 짧을수록 안전하다.
     presigned-url-expiration: ${AWS_S3_PRESIGNED_URL_EXPIRATION:PT5M}
-    # 업로드 허용 최대 용량(바이트). 기본 10MB
-    max-file-size: ${AWS_S3_MAX_FILE_SIZE:10485760}
-    # 저장된 이미지를 읽을 때 사용할 공개 주소(CloudFront 등). 없으면 key만 반환한다.
+    # 카테고리별 최대 업로드 용량(바이트). 사진 기본 10MB, 영상 기본 50MB.
+    # 영상은 아직 켜져 있지 않지만(영상 형식 미등록), 켜질 때 바로 쓰도록 값을 둔다.
+    max-image-size: ${AWS_S3_MAX_IMAGE_SIZE:10485760}
+    max-video-size: ${AWS_S3_MAX_VIDEO_SIZE:52428800}
+    # 저장된 미디어를 읽을 때 사용할 공개 주소(CloudFront 등). 없으면 key만 반환한다.
     public-base-url: ${AWS_S3_PUBLIC_BASE_URL:}

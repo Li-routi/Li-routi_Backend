@@ -1,4 +1,4 @@
-package com.lirouti.domain.image.exception.code.error;
+package com.lirouti.domain.media.exception.code.error;
 
 import org.springframework.http.HttpStatus;
 
@@ -9,22 +9,27 @@ import lombok.Getter;
 
 @Getter
 @AllArgsConstructor
-public enum ImageErrorCode implements BaseErrorCode {
+public enum MediaErrorCode implements BaseErrorCode {
 
     UNSUPPORTED_CONTENT_TYPE(
             HttpStatus.BAD_REQUEST,
-            "지원하지 않는 이미지 형식입니다. jpeg, png, webp만 업로드할 수 있습니다.",
-            "IMAGE400_1"
+            "지원하지 않는 미디어 형식입니다.",
+            "MEDIA400_1"
+    ),
+    CONTENT_TYPE_NOT_ALLOWED_FOR_PURPOSE(
+            HttpStatus.BAD_REQUEST,
+            "해당 용도에서 허용하지 않는 미디어 형식입니다.",
+            "MEDIA400_2"
     ),
     FILE_TOO_LARGE(
             HttpStatus.CONTENT_TOO_LARGE,
             "업로드 가능한 최대 용량을 초과했습니다.",
-            "IMAGE413_1"
+            "MEDIA413_1"
     ),
     PRESIGNED_URL_ISSUE_FAILED(
             HttpStatus.INTERNAL_SERVER_ERROR,
-            "이미지 업로드 URL 발급에 실패했습니다.",
-            "IMAGE500_1"
+            "미디어 업로드 URL 발급에 실패했습니다.",
+            "MEDIA500_1"
     );
 
     private final HttpStatus httpStatus;

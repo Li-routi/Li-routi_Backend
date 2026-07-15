@@ -36,10 +36,15 @@ public class S3Properties {
     @NotNull(message = "presigned URL 유효 시간은 필수입니다.")
     private Duration presignedUrlExpiration;
 
-    @Positive(message = "최대 업로드 용량은 양수여야 합니다.")
-    private long maxFileSize;
+    // 카테고리별 최대 업로드 용량(바이트). 사진과 영상은 파일 크기가 크게 달라 한도를 분리한다.
+    @Positive(message = "최대 이미지 업로드 용량은 양수여야 합니다.")
+    private long maxImageSize;
 
-    // 이미지를 읽을 때 사용할 공개 주소(CloudFront 등). 비어 있으면 응답에 key만 담긴다.
+    // 영상은 아직 사용하지 않지만, 켜질 때 바로 쓰도록 한도를 미리 둔다.
+    @Positive(message = "최대 영상 업로드 용량은 양수여야 합니다.")
+    private long maxVideoSize;
+
+    // 미디어를 읽을 때 사용할 공개 주소(CloudFront 등). 비어 있으면 응답에 key만 담긴다.
     private String publicBaseUrl;
 
     // S3 presigned URL은 최대 7일이다.

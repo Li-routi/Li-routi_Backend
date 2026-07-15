@@ -1,4 +1,4 @@
-package com.lirouti.domain.image.exception.code.success;
+package com.lirouti.domain.media.exception.code.success;
 
 import org.springframework.http.HttpStatus;
 
@@ -9,12 +9,12 @@ import lombok.Getter;
 
 @Getter
 @AllArgsConstructor
-public enum ImageSuccessCode implements BaseSuccessCode {
+public enum MediaSuccessCode implements BaseSuccessCode {
 
     PRESIGNED_URL_ISSUE_SUCCESS(
             HttpStatus.OK,
-            "이미지 업로드 URL 발급에 성공했습니다.",
-            "IMAGE200_1"
+            "미디어 업로드 URL 발급에 성공했습니다.",
+            "MEDIA200_1"
     );
 
     private final HttpStatus httpStatus;
