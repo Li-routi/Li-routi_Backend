@@ -42,6 +42,7 @@ public interface ChallengeControllerDocs {
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "상세 조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "challengeId 형식이 올바르지 않음(숫자 아님)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "존재하지 않거나 비활성 챌린지")
     })
     ApiResponse<ChallengeResDTO.Detail> getChallenge(
