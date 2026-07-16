@@ -55,6 +55,15 @@ public class ChallengeRepositoryImpl implements ChallengeRepositoryCustom {
                 .fetch();
     }
 
+    // 정렬 키가 동점일 때 순서가 흔들리지 않도록 항상 id 내림차순을 마지막에 둔다.
+    private OrderSpecifier<?>[] orderBy(ChallengeSortType sort) {
+        if (sort == ChallengeSortType.LATEST) {
+            return new OrderSpecifier<?>[]{challenge.createdAt.desc(), challenge.id.desc()};
+        }
+        // POPULAR(기본): 참여자 수 내림차순 → 동점 시 최신 id
+        return new OrderSpecifier<?>[]{member.id.count().desc(), challenge.id.desc()};
+    }
+
     @Override
     public long countActiveParticipants(Long challengeId) {
         Long count = queryFactory
@@ -96,13 +105,5 @@ public class ChallengeRepositoryImpl implements ChallengeRepositoryCustom {
 
     private BooleanExpression nameContains(String keyword) {
         return (keyword != null && !keyword.isBlank()) ? challenge.name.contains(keyword.trim()) : null;
-    }
-
-    private OrderSpecifier<?> orderBy(ChallengeSortType sort) {
-        if (sort == ChallengeSortType.LATEST) {
-            return challenge.createdAt.desc();
-        }
-        // POPULAR(기본): 참여자 수 내림차순
-        return member.id.count().desc();
     }
 }

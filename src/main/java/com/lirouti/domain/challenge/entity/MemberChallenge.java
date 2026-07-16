@@ -12,6 +12,7 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
@@ -37,6 +38,10 @@ import lombok.NoArgsConstructor;
                         name = "uk_member_challenge",
                         columnNames = {"member_id", "challenge_id"}
                 )
+        },
+        indexes = {
+                // 목록 조회의 챌린지별 참여자 수 집계 핫패스. (member_id, active) 등 다른 인덱스는 #13에서 추가.
+                @Index(name = "idx_member_challenge_challenge_active", columnList = "challenge_id, active")
         }
 )
 public class MemberChallenge extends BaseEntity {
