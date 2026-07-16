@@ -11,6 +11,7 @@ import org.springframework.validation.BindException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import com.lirouti.global.apiPayload.ApiResponse;
 import com.lirouti.global.apiPayload.code.BaseErrorCode;
@@ -70,6 +71,17 @@ public class GeneralExceptionAdvice {
                         GeneralErrorCode.BAD_REQUEST,
                         e.getMessage()
                 ));
+    }
+
+    // 쿼리 파라미터·경로 변수의 타입 변환 실패 — 잘못된 enum 값, 숫자여야 할 경로에 문자 등.
+    // @Valid 이전 바인딩 단계에서 발생하며, 핸들러가 없으면 catch-all(500)로 빠지므로 400으로 변환한다.
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<@NonNull ApiResponse<Void>> handleTypeMismatch(MethodArgumentTypeMismatchException e) {
+        log.warn("요청 파라미터 타입이 올바르지 않습니다. 파라미터: {}, 값: {}", e.getName(), e.getValue());
+
+        return ResponseEntity
+                .status(GeneralErrorCode.BAD_REQUEST.getHttpStatus())
+                .body(ApiResponse.onFailure(GeneralErrorCode.BAD_REQUEST));
     }
 
     // 요청 본문(JSON)을 해석할 수 없는 경우 — 잘못된 형식, 타입 불일치, 존재하지 않는 enum 값 등.
