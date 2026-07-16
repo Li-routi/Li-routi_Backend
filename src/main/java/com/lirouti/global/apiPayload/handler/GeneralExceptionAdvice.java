@@ -6,6 +6,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.BindException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -58,7 +59,7 @@ public class GeneralExceptionAdvice {
                 ));
     }
 
-    // 잘못된 인자 또는 존재하지 않는 Enum 값 요청 처리
+    // 잘못된 인자 예외 처리 (요청 본문 파싱 실패는 아래 HttpMessageNotReadableException에서 처리)
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<@NonNull ApiResponse<String>> handleIllegalArgumentException(IllegalArgumentException e) {
         log.warn("잘못된 요청 인자가 전달되었습니다. 메시지: {}", e.getMessage());
@@ -69,6 +70,18 @@ public class GeneralExceptionAdvice {
                         GeneralErrorCode.BAD_REQUEST,
                         e.getMessage()
                 ));
+    }
+
+    // 요청 본문(JSON)을 해석할 수 없는 경우 — 잘못된 형식, 타입 불일치, 존재하지 않는 enum 값 등.
+    // @RequestBody의 enum 역직렬화 실패는 @Valid 이전 단계에서 이 예외로 발생하므로 여기서 400으로 변환한다.
+    // 파싱 오류 메시지는 내부 필드·클래스명을 노출할 수 있어 응답에 담지 않는다.
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<@NonNull ApiResponse<Void>> handleHttpMessageNotReadable(HttpMessageNotReadableException e) {
+        log.warn("요청 본문을 해석할 수 없습니다. 메시지: {}", e.getMessage());
+
+        return ResponseEntity
+                .status(GeneralErrorCode.BAD_REQUEST.getHttpStatus())
+                .body(ApiResponse.onFailure(GeneralErrorCode.BAD_REQUEST));
     }
 
     // DB 락 충돌·데드락 (동시 수정 등)
