@@ -56,6 +56,13 @@ class ChallengeRepositoryTest {
         return m;
     }
 
+    // is_active=true지만 deleted_at이 설정된 소프트 삭제 회원
+    private Member softDeletedMember() {
+        Member m = member(true);
+        ReflectionTestUtils.setField(m, "deletedAt", LocalDateTime.now());
+        return m;
+    }
+
     private Challenge challenge(String name, ChallengeCategory category, boolean active) {
         Challenge c = Challenge.builder().name(name).category(category).active(active).build();
         em.persist(c);
@@ -101,12 +108,13 @@ class ChallengeRepositoryTest {
     }
 
     @Test
-    @DisplayName("참여자 수는 이탈(active=false)·탈퇴 회원을 제외한다")
+    @DisplayName("참여자 수는 이탈(active=false)·비활성 회원·소프트 삭제 회원을 제외한다")
     void participantCount_ExcludesInactiveParticipationAndWithdrawnMember() {
         Challenge c = challenge("cq물 마시기", ChallengeCategory.HEALTH, true);
-        join(member(true), c, true, 1);   // 유효
-        join(member(true), c, false, 1);  // 그만둠 → 제외
-        join(member(false), c, true, 1);  // 탈퇴 회원 → 제외
+        join(member(true), c, true, 1);            // 유효
+        join(member(true), c, false, 1);           // 그만둠 → 제외
+        join(member(false), c, true, 1);           // is_active=false → 제외
+        join(softDeletedMember(), c, true, 1);     // deleted_at 설정(is_active=true) → 제외
         em.flush();
         em.clear();
 
@@ -171,5 +179,17 @@ class ChallengeRepositoryTest {
         em.clear();
 
         assertThat(challengeRepository.countTodayCompletions(c.getId(), LocalDate.now())).isZero();
+    }
+
+    @Test
+    @DisplayName("오늘 완료자 수: 오늘 인증한 뒤 그만둔(active=false) 회원도 센다 (스키마 규칙)")
+    void countTodayCompletions_IncludesQuitterWhoVerifiedToday() {
+        Challenge c = challenge("cq플랭크", ChallengeCategory.EXERCISE, true);
+        MemberChallenge mc = join(member(true), c, false, 1);  // 그만둔 상태(active=false), 회차 1
+        verify(mc, 1, LocalDate.now());                        // 오늘 인증(현재 회차)
+        em.flush();
+        em.clear();
+
+        assertThat(challengeRepository.countTodayCompletions(c.getId(), LocalDate.now())).isEqualTo(1);
     }
 }

@@ -1,7 +1,5 @@
 package com.lirouti.domain.challenge.controller.docs;
 
-import java.util.List;
-
 import com.lirouti.domain.challenge.dto.response.ChallengeResDTO;
 import com.lirouti.domain.challenge.enums.ChallengeCategory;
 import com.lirouti.domain.challenge.enums.ChallengeSortType;
@@ -26,9 +24,10 @@ public interface ChallengeControllerDocs {
                     """
     )
     @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "목록 조회 성공")
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "목록 조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "잘못된 category 또는 sort 값")
     })
-    ApiResponse<List<ChallengeResDTO.Summary>> getChallenges(
+    ApiResponse<ChallengeResDTO.Listing> getChallenges(
             @Parameter(description = "분류 필터 (HEALTH, EXERCISE, STUDY, LIFE, HOBBY). 생략 시 전체")
             ChallengeCategory category,
             @Parameter(description = "이름 부분 검색어")

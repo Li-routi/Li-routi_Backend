@@ -21,10 +21,14 @@ public final class ChallengeConverter {
                 .build();
     }
 
-    public static List<ChallengeResDTO.Summary> toSummaryList(List<ChallengeSummaryProjection> projections) {
-        return projections.stream()
+    public static ChallengeResDTO.Listing toListing(List<ChallengeSummaryProjection> projections) {
+        List<ChallengeResDTO.Summary> summaries = projections.stream()
                 .map(ChallengeConverter::toSummary)
                 .toList();
+        return ChallengeResDTO.Listing.builder()
+                .challenges(summaries)
+                .totalCount(summaries.size())
+                .build();
     }
 
     // 참여자 수·오늘 완료자 수는 Service가 집계해 매개변수로 넘긴다.

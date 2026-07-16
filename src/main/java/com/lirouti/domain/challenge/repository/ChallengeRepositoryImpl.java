@@ -44,7 +44,7 @@ public class ChallengeRepositoryImpl implements ChallengeRepositoryCustom {
                 .on(memberChallenge.challenge.eq(challenge)
                         .and(memberChallenge.active.isTrue()))
                 .leftJoin(memberChallenge.member, member)
-                .on(member.isActive.isTrue())
+                .on(activeMember())
                 .where(
                         challenge.active.isTrue(),
                         categoryEq(category),
@@ -73,7 +73,7 @@ public class ChallengeRepositoryImpl implements ChallengeRepositoryCustom {
                 .where(
                         memberChallenge.challenge.id.eq(challengeId),
                         memberChallenge.active.isTrue(),
-                        member.isActive.isTrue()
+                        activeMember()
                 )
                 .fetchOne();
         return (count != null) ? count : 0L;
@@ -91,12 +91,19 @@ public class ChallengeRepositoryImpl implements ChallengeRepositoryCustom {
                 .where(
                         memberChallenge.challenge.id.eq(challengeId),
                         verification.verifiedDate.eq(today),
+                        // 현재 회차의 오늘 인증만. 스키마 규칙상 참여 중(active) 여부는 조건에 넣지 않는다
+                        // — 오늘 인증한 뒤 그만둔 사람도 '오늘 완료자'로 집계한다.
                         verification.participationRound.eq(memberChallenge.participationRound),
-                        memberChallenge.active.isTrue(),
-                        member.isActive.isTrue()
+                        activeMember()
                 )
                 .fetchOne();
         return (count != null) ? count : 0L;
+    }
+
+    // 집계에서 제외할 회원: 비활성(탈퇴)이거나 소프트 삭제된 회원.
+    // #18(회원 탈퇴)이 두 플래그를 어떻게 세팅하든 누수가 없도록 둘 다 확인한다.
+    private BooleanExpression activeMember() {
+        return member.isActive.isTrue().and(member.deletedAt.isNull());
     }
 
     private BooleanExpression categoryEq(ChallengeCategory category) {

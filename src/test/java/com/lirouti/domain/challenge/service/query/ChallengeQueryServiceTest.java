@@ -55,8 +55,8 @@ class ChallengeQueryServiceTest {
     }
 
     @Test
-    @DisplayName("목록 조회 결과를 Summary로 변환해 반환한다")
-    void getChallenges_ReturnsSummaries() {
+    @DisplayName("목록 조회 결과를 Listing(래퍼)으로 변환해 반환한다")
+    void getChallenges_ReturnsListing() {
         // given
         Challenge challenge = Challenge.builder()
                 .name("물 1L 마시기").description("설명").category(ChallengeCategory.HEALTH).active(true)
@@ -65,13 +65,14 @@ class ChallengeQueryServiceTest {
                 .thenReturn(List.of(new ChallengeSummaryProjection(challenge, 1234L)));
 
         // when
-        List<ChallengeResDTO.Summary> result =
+        ChallengeResDTO.Listing result =
                 challengeQueryService.getChallenges(ChallengeCategory.HEALTH, "물", ChallengeSortType.POPULAR);
 
         // then
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).name()).isEqualTo("물 1L 마시기");
-        assertThat(result.get(0).participantCount()).isEqualTo(1234L);
+        assertThat(result.totalCount()).isEqualTo(1);
+        assertThat(result.challenges()).hasSize(1);
+        assertThat(result.challenges().get(0).name()).isEqualTo("물 1L 마시기");
+        assertThat(result.challenges().get(0).participantCount()).isEqualTo(1234L);
     }
 
     @Test

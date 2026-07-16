@@ -1,7 +1,5 @@
 package com.lirouti.domain.challenge.controller;
 
-import java.util.List;
-
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -26,12 +24,12 @@ public class ChallengeController implements ChallengeControllerDocs {
 
     @Override
     @GetMapping
-    public ApiResponse<List<ChallengeResDTO.Summary>> getChallenges(
+    public ApiResponse<ChallengeResDTO.Listing> getChallenges(
             @RequestParam(required = false) ChallengeCategory category,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) ChallengeSortType sort
     ) {
-        List<ChallengeResDTO.Summary> result =
+        ChallengeResDTO.Listing result =
                 challengeQueryService.getChallenges(category, keyword, sort);
         return ApiResponse.onSuccess(ChallengeSuccessCode.CHALLENGE_LIST_FETCH_SUCCESS, result);
     }

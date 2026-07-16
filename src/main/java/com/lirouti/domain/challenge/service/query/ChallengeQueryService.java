@@ -2,7 +2,6 @@ package com.lirouti.domain.challenge.service.query;
 
 import java.time.LocalDate;
 import java.time.ZoneId;
-import java.util.List;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,13 +26,13 @@ public class ChallengeQueryService {
     private final ChallengeRepository challengeRepository;
 
     @Transactional(readOnly = true)
-    public List<ChallengeResDTO.Summary> getChallenges(
+    public ChallengeResDTO.Listing getChallenges(
             ChallengeCategory category,
             String keyword,
             ChallengeSortType sort
     ) {
         ChallengeSortType appliedSort = (sort != null) ? sort : ChallengeSortType.POPULAR;
-        return ChallengeConverter.toSummaryList(
+        return ChallengeConverter.toListing(
                 challengeRepository.findSummaries(category, keyword, appliedSort)
         );
     }
