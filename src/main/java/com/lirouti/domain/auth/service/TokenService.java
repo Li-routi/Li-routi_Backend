@@ -1,9 +1,18 @@
 package com.lirouti.domain.auth.service;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
+import java.util.Base64;
+
+import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
+
 import com.lirouti.domain.auth.converter.AuthConverter;
+import com.lirouti.domain.auth.dto.response.AuthResDTO;
 import com.lirouti.domain.auth.exception.AuthException;
 import com.lirouti.domain.auth.exception.code.error.AuthErrorCode;
-import com.lirouti.domain.auth.dto.response.AuthResDTO;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.exception.MemberException;
 import com.lirouti.domain.member.exception.code.error.MemberErrorCode;
@@ -11,15 +20,9 @@ import com.lirouti.domain.member.repository.MemberRepository;
 import com.lirouti.global.properties.JwtProperties;
 import com.lirouti.global.util.JwtUtil;
 import com.lirouti.global.util.RedisUtil;
+
 import io.jsonwebtoken.Claims;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.time.Duration;
-import java.util.Base64;
-import org.springframework.util.StringUtils;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
 
 @Slf4j
 @Service
@@ -101,6 +104,21 @@ public class TokenService {
         );
     }
 
+    public Long logout(String accessToken) {
+        Claims claims = jwtUtil.getClaimsForLogout(accessToken);
+        validateAccessCategory(claims);
+
+        Long memberId = parseMemberId(claims.getSubject());
+        
+        // Math.max를 사용하여 만료 시간을 0 이상으로 설정
+        long remainingTime = Math.max(jwtUtil.getExpirationTime(accessToken), 0L);
+
+        redisUtil.setBlackList(accessToken, remainingTime);
+        redisUtil.delete(getRefreshTokenKey(memberId));
+
+        return memberId;
+    }
+
     private String getRefreshTokenKey(Long memberId) {
         return REFRESH_TOKEN_KEY_PREFIX + memberId;
     }
@@ -108,6 +126,13 @@ public class TokenService {
     private void validateRefreshCategory(Claims claims) {
         String category = claims.get("category", String.class);
         if (!"refresh".equals(category)) {
+            throw new AuthException(AuthErrorCode.TOKEN_INVALID);
+        }
+    }
+
+    private void validateAccessCategory(Claims claims) {
+        String category = claims.get("category", String.class);
+        if (!"access".equals(category)) {
             throw new AuthException(AuthErrorCode.TOKEN_INVALID);
         }
     }
