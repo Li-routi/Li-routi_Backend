@@ -1,0 +1,27 @@
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:mysql://localhost:3306/lirouti?serverTimezone=Asia/Seoul&characterEncoding=UTF-8&allowPublicKeyRetrieval=true&useSSL=false}
+    username: ${DB_USERNAME:lirouti}
+    password: ${DB_PASSWORD:lirouti1234}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: ${JPA_DDL_AUTO:update}
+    show-sql: ${JPA_SHOW_SQL:false}
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+
+jwt:
+  secret: ${JWT_SECRET:test-only-jwt-secret-key-with-at-least-32-bytes}
+
+oauth:
+  kakao:
+    app-id: ${KAKAO_APP_ID:1}
+  google:
+    web-client-id: ${GOOGLE_WEB_CLIENT_ID:test-google-client-id}
+    allowed-issuers: ${GOOGLE_ALLOWED_ISSUERS:https://accounts.google.com,accounts.google.com}
