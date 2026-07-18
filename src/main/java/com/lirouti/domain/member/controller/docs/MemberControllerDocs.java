@@ -23,6 +23,10 @@ public interface MemberControllerDocs {
                 description = "유효하지 않은 토큰"
         ),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "인증되지 않은 요청"
+        ),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
                 responseCode = "500",
                 description = "서버 내부 오류"
         )
