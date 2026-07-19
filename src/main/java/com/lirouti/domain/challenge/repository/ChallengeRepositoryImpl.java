@@ -3,14 +3,12 @@ package com.lirouti.domain.challenge.repository;
 import java.time.LocalDate;
 import java.util.List;
 
+import com.lirouti.domain.challenge.entity.Challenge;
 import com.lirouti.domain.challenge.entity.QChallenge;
 import com.lirouti.domain.challenge.entity.QChallengeVerification;
 import com.lirouti.domain.challenge.entity.QMemberChallenge;
 import com.lirouti.domain.challenge.enums.ChallengeCategory;
-import com.lirouti.domain.challenge.enums.ChallengeSortType;
 import com.lirouti.domain.member.entity.QMember;
-import com.querydsl.core.types.OrderSpecifier;
-import com.querydsl.core.types.Projections;
 import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 
@@ -26,42 +24,25 @@ public class ChallengeRepositoryImpl implements ChallengeRepositoryCustom {
     private static final QMember member = QMember.member;
 
     @Override
-    public List<ChallengeSummaryProjection> findSummaries(
+    public List<Challenge> findByCursor(
             ChallengeCategory category,
             String keyword,
-            ChallengeSortType sort
+            Long cursor,
+            int limit
     ) {
-        // 참여자 수는 활성 참여(mc.active) + 활성 회원(m.isActive)만 센다.
-        // 두 조건을 JOIN ON에 둬야, 참여자가 0인 챌린지도 목록에서 빠지지 않는다(WHERE에 두면 사라짐).
+        // 최신순 커서 페이지네이션. id는 auto-increment라 최신일수록 크므로 id 내림차순이 곧 최신순이다.
+        // cursor(마지막으로 받은 challengeId)가 있으면 그보다 작은 id만 가져와 이어서 스크롤한다.
         return queryFactory
-                .select(Projections.constructor(
-                        ChallengeSummaryProjection.class,
-                        challenge,
-                        member.id.count()
-                ))
-                .from(challenge)
-                .leftJoin(memberChallenge)
-                .on(memberChallenge.challenge.eq(challenge)
-                        .and(memberChallenge.active.isTrue()))
-                .leftJoin(memberChallenge.member, member)
-                .on(activeMember())
+                .selectFrom(challenge)
                 .where(
                         challenge.active.isTrue(),
                         categoryEq(category),
-                        nameContains(keyword)
+                        nameContains(keyword),
+                        cursorLt(cursor)
                 )
-                .groupBy(challenge.id)
-                .orderBy(orderBy(sort))
+                .orderBy(challenge.id.desc())
+                .limit(limit)
                 .fetch();
-    }
-
-    // 정렬 키가 동점일 때 순서가 흔들리지 않도록 항상 id 내림차순을 마지막에 둔다.
-    private OrderSpecifier<?>[] orderBy(ChallengeSortType sort) {
-        if (sort == ChallengeSortType.LATEST) {
-            return new OrderSpecifier<?>[]{challenge.createdAt.desc(), challenge.id.desc()};
-        }
-        // POPULAR(기본): 참여자 수 내림차순 → 동점 시 최신 id
-        return new OrderSpecifier<?>[]{member.id.count().desc(), challenge.id.desc()};
     }
 
     @Override
@@ -91,8 +72,8 @@ public class ChallengeRepositoryImpl implements ChallengeRepositoryCustom {
                 .where(
                         memberChallenge.challenge.id.eq(challengeId),
                         verification.verifiedDate.eq(today),
-                        // 현재 회차의 오늘 인증만. 스키마 규칙상 참여 중(active) 여부는 조건에 넣지 않는다
-                        // — 오늘 인증한 뒤 그만둔 사람도 '오늘 완료자'로 집계한다.
+                        // 현재 회차의 오늘 인증만. 참여 중(active) 여부는 조건에 넣지 않는다
+                        // — 오늘 인증한 뒤 그만둔 사람도 '오늘 완료자'로 집계한다(스키마 규칙).
                         verification.participationRound.eq(memberChallenge.participationRound),
                         activeMember()
                 )
@@ -104,6 +85,10 @@ public class ChallengeRepositoryImpl implements ChallengeRepositoryCustom {
     // #18(회원 탈퇴)이 두 플래그를 어떻게 세팅하든 누수가 없도록 둘 다 확인한다.
     private BooleanExpression activeMember() {
         return member.isActive.isTrue().and(member.deletedAt.isNull());
+    }
+
+    private BooleanExpression cursorLt(Long cursor) {
+        return (cursor != null) ? challenge.id.lt(cursor) : null;
     }
 
     private BooleanExpression categoryEq(ChallengeCategory category) {

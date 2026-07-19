@@ -4,30 +4,34 @@ import java.util.List;
 
 import com.lirouti.domain.challenge.dto.response.ChallengeResDTO;
 import com.lirouti.domain.challenge.entity.Challenge;
-import com.lirouti.domain.challenge.repository.ChallengeSummaryProjection;
 
 public final class ChallengeConverter {
     private ChallengeConverter() {
     }
 
-    public static ChallengeResDTO.Summary toSummary(ChallengeSummaryProjection projection) {
-        Challenge challenge = projection.challenge();
+    public static ChallengeResDTO.Summary toSummary(Challenge challenge) {
         return ChallengeResDTO.Summary.builder()
                 .challengeId(challenge.getId())
                 .name(challenge.getName())
                 .description(challenge.getDescription())
+                .imageUrl(challenge.getImageUrl())
                 .category(challenge.getCategory())
-                .participantCount(projection.participantCount())
                 .build();
     }
 
-    public static ChallengeResDTO.Listing toListing(List<ChallengeSummaryProjection> projections) {
-        List<ChallengeResDTO.Summary> summaries = projections.stream()
+    // 무한 스크롤 커서 응답. nextCursor·hasNext는 Service가 계산해 넘긴다.
+    public static ChallengeResDTO.Listing toListing(
+            List<Challenge> challenges,
+            Long nextCursor,
+            boolean hasNext
+    ) {
+        List<ChallengeResDTO.Summary> summaries = challenges.stream()
                 .map(ChallengeConverter::toSummary)
                 .toList();
         return ChallengeResDTO.Listing.builder()
                 .challenges(summaries)
-                .totalCount(summaries.size())
+                .nextCursor(nextCursor)
+                .hasNext(hasNext)
                 .build();
     }
 
@@ -41,6 +45,7 @@ public final class ChallengeConverter {
                 .challengeId(challenge.getId())
                 .name(challenge.getName())
                 .description(challenge.getDescription())
+                .imageUrl(challenge.getImageUrl())
                 .category(challenge.getCategory())
                 .participantCount(participantCount)
                 .todayCompletionCount(todayCompletionCount)

@@ -9,7 +9,6 @@ import org.springframework.web.bind.annotation.RestController;
 import com.lirouti.domain.challenge.controller.docs.ChallengeControllerDocs;
 import com.lirouti.domain.challenge.dto.response.ChallengeResDTO;
 import com.lirouti.domain.challenge.enums.ChallengeCategory;
-import com.lirouti.domain.challenge.enums.ChallengeSortType;
 import com.lirouti.domain.challenge.exception.code.success.ChallengeSuccessCode;
 import com.lirouti.domain.challenge.service.query.ChallengeQueryService;
 import com.lirouti.global.apiPayload.ApiResponse;
@@ -27,10 +26,11 @@ public class ChallengeController implements ChallengeControllerDocs {
     public ApiResponse<ChallengeResDTO.Listing> getChallenges(
             @RequestParam(required = false) ChallengeCategory category,
             @RequestParam(required = false) String keyword,
-            @RequestParam(required = false) ChallengeSortType sort
+            @RequestParam(required = false) Long cursor,
+            @RequestParam(required = false) Integer size
     ) {
         ChallengeResDTO.Listing result =
-                challengeQueryService.getChallenges(category, keyword, sort);
+                challengeQueryService.getChallenges(category, keyword, cursor, size);
         return ApiResponse.onSuccess(ChallengeSuccessCode.CHALLENGE_LIST_FETCH_SUCCESS, result);
     }
 

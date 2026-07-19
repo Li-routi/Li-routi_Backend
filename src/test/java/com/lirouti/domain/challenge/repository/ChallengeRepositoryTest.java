@@ -18,7 +18,6 @@ import com.lirouti.domain.challenge.entity.Challenge;
 import com.lirouti.domain.challenge.entity.ChallengeVerification;
 import com.lirouti.domain.challenge.entity.MemberChallenge;
 import com.lirouti.domain.challenge.enums.ChallengeCategory;
-import com.lirouti.domain.challenge.enums.ChallengeSortType;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.enums.Role;
 import com.lirouti.domain.member.enums.SocialProvider;
@@ -39,6 +38,9 @@ class ChallengeRepositoryTest {
 
     private final AtomicInteger seq = new AtomicInteger(0);
 
+    // 큰 limit — 페이지네이션이 아니라 필터/정렬 로직을 볼 때
+    private static final int BIG = 100;
+
     // ── 헬퍼 ──
     private Member member(boolean active) {
         int n = seq.incrementAndGet();
@@ -56,7 +58,6 @@ class ChallengeRepositoryTest {
         return m;
     }
 
-    // is_active=true지만 deleted_at이 설정된 소프트 삭제 회원
     private Member softDeletedMember() {
         Member m = member(true);
         ReflectionTestUtils.setField(m, "deletedAt", LocalDateTime.now());
@@ -86,73 +87,48 @@ class ChallengeRepositoryTest {
                 .imageUrl("https://img/x.jpg").build());
     }
 
-    @Test
-    @DisplayName("인기순: 참여자 수 내림차순으로 정렬한다")
-    void findSummaries_PopularSort_OrdersByParticipantCountDesc() {
-        Challenge few = challenge("cq적은 챌린지", ChallengeCategory.HEALTH, true);
-        Challenge many = challenge("cq많은 챌린지", ChallengeCategory.HEALTH, true);
-        join(member(true), few, true, 1);
-        join(member(true), many, true, 1);
-        join(member(true), many, true, 1);
-        join(member(true), many, true, 1);
-        em.flush();
-        em.clear();
-
-        List<ChallengeSummaryProjection> result =
-                challengeRepository.findSummaries(null, "cq", ChallengeSortType.POPULAR);
-
-        assertThat(result).hasSize(2);
-        assertThat(result.get(0).challenge().getName()).isEqualTo("cq많은 챌린지");
-        assertThat(result.get(0).participantCount()).isEqualTo(3);
-        assertThat(result.get(1).participantCount()).isEqualTo(1);
+    // 커서 없이(첫 페이지) 큰 limit으로 조회 — 필터 로직을 볼 때
+    private List<Challenge> find(ChallengeCategory category, String keyword) {
+        return challengeRepository.findByCursor(category, keyword, null, BIG);
     }
 
     @Test
-    @DisplayName("참여자 수는 이탈(active=false)·비활성 회원·소프트 삭제 회원을 제외한다")
-    void participantCount_ExcludesInactiveParticipationAndWithdrawnMember() {
-        Challenge c = challenge("cq물 마시기", ChallengeCategory.HEALTH, true);
-        join(member(true), c, true, 1);            // 유효
-        join(member(true), c, false, 1);           // 그만둠 → 제외
-        join(member(false), c, true, 1);           // is_active=false → 제외
-        join(softDeletedMember(), c, true, 1);     // deleted_at 설정(is_active=true) → 제외
+    @DisplayName("최신순: id가 큰(나중에 만든) 챌린지가 앞에 온다")
+    void findByCursor_OrdersByLatest() {
+        Challenge older = challenge("cq먼저", ChallengeCategory.HEALTH, true);
+        Challenge newer = challenge("cq나중", ChallengeCategory.HEALTH, true);
         em.flush();
         em.clear();
 
-        assertThat(challengeRepository.countActiveParticipants(c.getId())).isEqualTo(1);
+        List<Challenge> result = find(null, "cq");
+
+        assertThat(result).extracting(Challenge::getName)
+                .containsExactly("cq나중", "cq먼저");
+        assertThat(newer.getId()).isGreaterThan(older.getId());
     }
 
     @Test
-    @DisplayName("참여자가 한 명도 없는 활성 챌린지도 목록에 participantCount=0으로 나온다")
-    void findSummaries_ZeroParticipantActiveChallenge_AppearsWithCountZero() {
-        challenge("cq아무도없음", ChallengeCategory.LIFE, true);  // 참여 없음
+    @DisplayName("참여자가 한 명도 없는 활성 챌린지도 목록에 나온다")
+    void findByCursor_ZeroParticipantActiveChallenge_Appears() {
+        challenge("cq아무도없음", ChallengeCategory.LIFE, true);
         em.flush();
         em.clear();
 
-        List<ChallengeSummaryProjection> result =
-                challengeRepository.findSummaries(null, "cq아무도없음", ChallengeSortType.LATEST);
-
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).participantCount()).isZero();
+        assertThat(find(null, "cq아무도없음")).hasSize(1);
     }
 
     @Test
     @DisplayName("카테고리 필터와 이름 검색이 동작한다")
-    void findSummaries_CategoryAndKeyword() {
+    void findByCursor_CategoryAndKeyword() {
         challenge("cq운동아침", ChallengeCategory.EXERCISE, true);
         challenge("cq운동저녁", ChallengeCategory.EXERCISE, true);
         challenge("cq독서모임", ChallengeCategory.STUDY, true);
         em.flush();
         em.clear();
 
-        // 카테고리 필터: EXERCISE 2건
-        assertThat(challengeRepository.findSummaries(ChallengeCategory.EXERCISE, "cq", ChallengeSortType.LATEST))
-                .hasSize(2);
-        // 이름 검색: "운동" 포함 2건
-        assertThat(challengeRepository.findSummaries(null, "운동", ChallengeSortType.LATEST))
-                .hasSize(2);
-        // 카테고리 + 검색 동시: STUDY이면서 "독서" 포함 1건
-        assertThat(challengeRepository.findSummaries(ChallengeCategory.STUDY, "독서", ChallengeSortType.LATEST))
-                .hasSize(1);
+        assertThat(find(ChallengeCategory.EXERCISE, "cq")).hasSize(2);
+        assertThat(find(null, "운동")).hasSize(2);
+        assertThat(find(ChallengeCategory.STUDY, "독서")).hasSize(1);
     }
 
     @Test
@@ -162,8 +138,45 @@ class ChallengeRepositoryTest {
         em.flush();
         em.clear();
 
-        assertThat(challengeRepository.findSummaries(null, "cq숨긴", ChallengeSortType.LATEST)).isEmpty();
+        assertThat(find(null, "cq숨긴")).isEmpty();
         assertThat(challengeRepository.findByIdAndActiveTrue(inactive.getId())).isEmpty();
+    }
+
+    @Test
+    @DisplayName("커서 페이지네이션: cursor보다 작은 id만, 최신순으로 limit만큼 가져온다")
+    void findByCursor_Pagination() {
+        // cqp0 ~ cqp4 (생성 순서 = id 오름차순). 최신순이면 id 큰 것이 앞.
+        List<Challenge> made = new java.util.ArrayList<>();
+        for (int i = 0; i < 5; i++) {
+            made.add(challenge("cqp" + i, ChallengeCategory.HOBBY, true));
+        }
+        em.flush();
+        em.clear();
+
+        // 첫 페이지: 커서 없이 2건 → 가장 최신 cqp4, cqp3
+        List<Challenge> first = challengeRepository.findByCursor(
+                ChallengeCategory.HOBBY, "cqp", null, 2);
+        assertThat(first).extracting(Challenge::getName).containsExactly("cqp4", "cqp3");
+
+        // 다음 페이지: 커서 = cqp3의 id → 그보다 이전(작은 id)인 cqp2, cqp1
+        Long cursor = first.get(1).getId();
+        List<Challenge> second = challengeRepository.findByCursor(
+                ChallengeCategory.HOBBY, "cqp", cursor, 2);
+        assertThat(second).extracting(Challenge::getName).containsExactly("cqp2", "cqp1");
+    }
+
+    @Test
+    @DisplayName("참여자 수는 이탈(active=false)·비활성 회원·소프트 삭제 회원을 제외한다")
+    void countActiveParticipants_ExcludesInactiveAndWithdrawn() {
+        Challenge c = challenge("cq물 마시기", ChallengeCategory.HEALTH, true);
+        join(member(true), c, true, 1);
+        join(member(true), c, false, 1);
+        join(member(false), c, true, 1);
+        join(softDeletedMember(), c, true, 1);
+        em.flush();
+        em.clear();
+
+        assertThat(challengeRepository.countActiveParticipants(c.getId())).isEqualTo(1);
     }
 
     @Test
@@ -171,9 +184,9 @@ class ChallengeRepositoryTest {
     void countTodayCompletions_DedupByMemberChallengeAndCurrentRound() {
         Challenge c = challenge("cq스쿼트", ChallengeCategory.EXERCISE, true);
         Member m = member(true);
-        MemberChallenge mc = join(m, c, true, 2);   // 현재 회차 2
-        verify(mc, 1, LocalDate.now());             // 지난 회차 인증(오늘자) — 현재 회차 아님
-        verify(mc, 2, LocalDate.now());             // 현재 회차 인증
+        MemberChallenge mc = join(m, c, true, 2);
+        verify(mc, 1, LocalDate.now());
+        verify(mc, 2, LocalDate.now());
 
         MemberChallenge mc2 = join(member(true), c, true, 1);
         verify(mc2, 1, LocalDate.now());
@@ -199,8 +212,8 @@ class ChallengeRepositoryTest {
     @DisplayName("오늘 완료자 수: 오늘 인증한 뒤 그만둔(active=false) 회원도 센다 (스키마 규칙)")
     void countTodayCompletions_IncludesQuitterWhoVerifiedToday() {
         Challenge c = challenge("cq플랭크", ChallengeCategory.EXERCISE, true);
-        MemberChallenge mc = join(member(true), c, false, 1);  // 그만둔 상태(active=false), 회차 1
-        verify(mc, 1, LocalDate.now());                        // 오늘 인증(현재 회차)
+        MemberChallenge mc = join(member(true), c, false, 1);
+        verify(mc, 1, LocalDate.now());
         em.flush();
         em.clear();
 

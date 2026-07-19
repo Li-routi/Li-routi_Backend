@@ -297,13 +297,14 @@
 | id | BIGINT | N | 기본 키 |
 | name | VARCHAR(100) | N | 챌린지명 |
 | description | VARCHAR(255) | Y | 설명 |
+| image_url | VARCHAR(2048) | Y | 목록·상세 카드 대표 이미지. 없으면 프론트가 기본 아이콘 표시 |
 | category | VARCHAR(50) | N | 분류. `HEALTH`, `EXERCISE`, `STUDY`, `LIFE`, `HOBBY` |
 | active | TINYINT(1) | N | 노출 여부, 기본값 `1` |
 | created_at / updated_at | DATETIME(6) | N / N | 생성·수정 시각 |
 
-- `category`는 화면의 필터 칩과 다르다. 칩에 있는 `전체`와 `인기`는 분류가 아니라 각각 **필터 없음**과 **참여자 수 내림차순 정렬**을 뜻한다. 실제 분류는 위 5개다.
+- `category`는 화면의 필터 칩과 다르다. 칩의 `전체`는 분류가 아니라 **필터 없음**을 뜻한다. 실제 분류는 위 5개다. 목록은 최신순(id 내림차순) 고정이며 정렬 옵션은 두지 않는다.
 - 상시 운영이므로 시작일·종료일 컬럼을 두지 않는다.
-- 참여자 수는 `member_challenge`를 집계해서 구한다. 캐시 컬럼(`participant_count`)을 두지 않는다. 인기순 정렬이 느려지면 그때 비정규화를 검토한다.
+- 참여자 수는 `member_challenge`를 집계해서 구한다(상세 화면에서만 노출하며 목록엔 담지 않는다). 캐시 컬럼(`participant_count`)을 두지 않는다.
 - 마스터 데이터이므로 소프트 삭제 대신 `active`로 노출을 제어한다.
 - 이름 부분 검색을 지원한다. `LIKE '%키워드%'`는 인덱스를 타지 못하므로, 데이터가 늘어나면 검색 방식을 재검토한다.
 

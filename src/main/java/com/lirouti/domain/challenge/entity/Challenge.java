@@ -35,6 +35,10 @@ public class Challenge extends BaseEntity {
     @Column(length = 255)
     private String description;
 
+    // 목록·상세 카드에 표시할 대표 이미지. 없을 수 있어 nullable(프론트가 기본 아이콘 표시).
+    @Column(name = "image_url", length = 2048)
+    private String imageUrl;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 50)
     private ChallengeCategory category;
@@ -43,9 +47,10 @@ public class Challenge extends BaseEntity {
     private Boolean active;
 
     @Builder
-    private Challenge(String name, String description, ChallengeCategory category, Boolean active) {
+    private Challenge(String name, String description, String imageUrl, ChallengeCategory category, Boolean active) {
         this.name = name;
         this.description = description;
+        this.imageUrl = imageUrl;
         this.category = category;
         this.active = (active != null) ? active : true;
     }

@@ -2,7 +2,6 @@ package com.lirouti.domain.challenge.controller.docs;
 
 import com.lirouti.domain.challenge.dto.response.ChallengeResDTO;
 import com.lirouti.domain.challenge.enums.ChallengeCategory;
-import com.lirouti.domain.challenge.enums.ChallengeSortType;
 import com.lirouti.global.apiPayload.ApiResponse;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -14,26 +13,35 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 public interface ChallengeControllerDocs {
 
     @Operation(
-            summary = "챌린지 목록 조회",
+            summary = "챌린지 목록 조회 (무한 스크롤)",
             description = """
-                    앱이 제공하는 활성 챌린지 목록을 조회합니다. 로그인 없이 사용할 수 있습니다.
+                    앱이 제공하는 활성 챌린지 목록을 최신순으로 조회합니다. 로그인 없이 사용할 수 있습니다.
+
+                    무한 스크롤(커서 방식): 첫 요청은 cursor 없이 보내고, 응답의 nextCursor를 다음 요청의 cursor로 넘깁니다.
+                    hasNext가 false(= nextCursor가 null)면 더 요청하지 않습니다.
 
                     - category: 분류 필터. 생략하면 전체(화면 칩의 '전체').
                     - keyword: 챌린지 이름 부분 검색.
-                    - sort: 정렬 기준. POPULAR(참여자 수 내림차순, 화면 칩의 '인기', 기본값) 또는 LATEST.
+                    - cursor: 직전 응답의 nextCursor(마지막으로 받은 challengeId). 첫 요청에는 생략합니다.
+                    - size: 한 번에 가져올 개수. 기본값 20, 최대 50.
+
+                    응답 result: challenges(카드 목록), nextCursor, hasNext.
+                    카드 한 건: challengeId, name, description, imageUrl, category. (참여자 수는 상세에서 제공)
                     """
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "목록 조회 성공"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "잘못된 category 또는 sort 값")
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "잘못된 category 값")
     })
     ApiResponse<ChallengeResDTO.Listing> getChallenges(
             @Parameter(description = "분류 필터 (HEALTH, EXERCISE, STUDY, LIFE, HOBBY). 생략 시 전체")
             ChallengeCategory category,
             @Parameter(description = "이름 부분 검색어")
             String keyword,
-            @Parameter(description = "정렬 기준 (POPULAR, LATEST). 기본값 POPULAR")
-            ChallengeSortType sort
+            @Parameter(description = "직전 응답의 nextCursor(마지막으로 받은 challengeId). 첫 요청에는 생략")
+            Long cursor,
+            @Parameter(description = "한 번에 가져올 개수. 기본값 20, 최대 50")
+            Integer size
     );
 
     @Operation(
