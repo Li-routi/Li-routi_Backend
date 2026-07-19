@@ -122,6 +122,20 @@ class ChallengeRepositoryTest {
     }
 
     @Test
+    @DisplayName("참여자가 한 명도 없는 활성 챌린지도 목록에 participantCount=0으로 나온다")
+    void findSummaries_ZeroParticipantActiveChallenge_AppearsWithCountZero() {
+        challenge("cq아무도없음", ChallengeCategory.LIFE, true);  // 참여 없음
+        em.flush();
+        em.clear();
+
+        List<ChallengeSummaryProjection> result =
+                challengeRepository.findSummaries(null, "cq아무도없음", ChallengeSortType.LATEST);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).participantCount()).isZero();
+    }
+
+    @Test
     @DisplayName("카테고리 필터와 이름 검색이 동작한다")
     void findSummaries_CategoryAndKeyword() {
         challenge("cq운동아침", ChallengeCategory.EXERCISE, true);
