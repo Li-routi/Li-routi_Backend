@@ -36,8 +36,7 @@ public class MemberController implements MemberControllerDocs {
 
     // Authorization 헤더에서 Bearer 토큰을 추출하고 유효성을 검사
     private String extractBearerToken(String authorization) {
-        if (authorization == null || !StringUtils.hasText(authorization)
-                || !authorization.startsWith("Bearer ")) {
+        if (!StringUtils.hasText(authorization) || !authorization.startsWith("Bearer ")) {
             throw new AuthException(AuthErrorCode.TOKEN_INVALID);
         }
 
