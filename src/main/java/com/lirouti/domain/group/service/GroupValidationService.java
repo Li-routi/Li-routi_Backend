@@ -10,9 +10,7 @@ import com.lirouti.domain.group.exception.code.error.GroupErrorCode;
 import com.lirouti.domain.group.repository.GroupMemberRepository;
 import com.lirouti.domain.group.repository.GroupRepository;
 import com.lirouti.domain.member.entity.Member;
-import com.lirouti.domain.member.exception.MemberException;
-import com.lirouti.domain.member.exception.code.error.MemberErrorCode;
-import com.lirouti.domain.member.repository.MemberRepository;
+import com.lirouti.domain.member.service.query.MemberQueryService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -32,7 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class GroupValidationService {
     private final GroupRepository groupRepository;
     private final GroupMemberRepository groupMemberRepository;
-    private final MemberRepository memberRepository;
+    private final MemberQueryService memberQueryService;
 
     /**
      * 로그인 회원이 요청 대상 그룹의 ACTIVE 구성원인지 검증한다.
@@ -62,7 +60,7 @@ public class GroupValidationService {
      * 실패 로그는 전역 예외 로그에 없는 groupId/memberId 맥락만 보완한다.
      */
     private GroupMember getValidatedGroupMember(Long groupId, Long memberId) {
-        Member member = getActiveMember(memberId);
+        Member member = memberQueryService.getActiveMember(memberId);
         Group group = getActiveGroup(groupId);
 
         GroupMember groupMember = groupMemberRepository
@@ -80,28 +78,6 @@ public class GroupValidationService {
             throw new GroupException(GroupErrorCode.GROUP_MEMBER_ACCESS_DENIED);
         }
         return groupMember;
-    }
-
-    /**
-     * JWT에 담긴 ID만 신뢰해 권한을 부여하지 않고 현재 DB의 회원 상태를 다시 확인한다.
-     */
-    private Member getActiveMember(Long memberId) {
-        if (memberId == null) {
-            log.warn("로그인 회원 검증에 실패했습니다. memberId가 없습니다.");
-            throw new MemberException(MemberErrorCode.MEMBER_NOT_FOUND);
-        }
-
-        Member member = memberRepository.findById(memberId)
-                .orElseThrow(() -> {
-                    log.warn("로그인 회원 조회에 실패했습니다. memberId={}", memberId);
-                    return new MemberException(MemberErrorCode.MEMBER_NOT_FOUND);
-                });
-
-        if (!Boolean.TRUE.equals(member.getIsActive()) || member.getDeletedAt() != null) {
-            log.warn("탈퇴하거나 비활성화된 회원의 그룹 접근을 차단했습니다. memberId={}", memberId);
-            throw new MemberException(MemberErrorCode.WITHDRAWN_MEMBER);
-        }
-        return member;
     }
 
     /**

@@ -18,7 +18,7 @@ import com.lirouti.domain.group.repository.GroupRepository;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.exception.MemberException;
 import com.lirouti.domain.member.exception.code.error.MemberErrorCode;
-import com.lirouti.domain.member.repository.MemberRepository;
+import com.lirouti.domain.member.service.query.MemberQueryService;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -39,7 +39,7 @@ class GroupValidationServiceTest {
     @Mock
     private GroupMemberRepository groupMemberRepository;
     @Mock
-    private MemberRepository memberRepository;
+    private MemberQueryService memberQueryService;
     @Mock
     private Member member;
     @Mock
@@ -191,7 +191,8 @@ class GroupValidationServiceTest {
     @DisplayName("존재하지 않는 로그인 회원이면 MEMBER_NOT_FOUND를 던진다")
     void validateActiveGroupMember_MemberNotFound_ThrowsMemberNotFound() {
         // given
-        when(memberRepository.findById(MEMBER_ID)).thenReturn(Optional.empty());
+        when(memberQueryService.getActiveMember(MEMBER_ID))
+                .thenThrow(new MemberException(MemberErrorCode.MEMBER_NOT_FOUND));
 
         // when & then
         assertThatThrownBy(() ->
@@ -206,8 +207,8 @@ class GroupValidationServiceTest {
     @DisplayName("비활성 로그인 회원이면 WITHDRAWN_MEMBER를 던진다")
     void validateActiveGroupMember_InactiveMember_ThrowsWithdrawnMember() {
         // given
-        when(memberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
-        when(member.getIsActive()).thenReturn(false);
+        when(memberQueryService.getActiveMember(MEMBER_ID))
+                .thenThrow(new MemberException(MemberErrorCode.WITHDRAWN_MEMBER));
 
         // when & then
         assertThatThrownBy(() ->
@@ -224,9 +225,7 @@ class GroupValidationServiceTest {
     }
 
     private void givenActiveMemberWithoutId() {
-        when(memberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
-        when(member.getIsActive()).thenReturn(true);
-        when(member.getDeletedAt()).thenReturn(null);
+        when(memberQueryService.getActiveMember(MEMBER_ID)).thenReturn(member);
     }
 
     private void givenActiveGroup(Long groupId, Group targetGroup) {
