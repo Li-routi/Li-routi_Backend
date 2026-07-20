@@ -20,13 +20,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 그룹 기능에서 공통으로 사용하는 구성원 및 방장 권한 검증 서비스다.
- *
- * <p>Controller는 인증 객체의 {@code CustomUserDetails.memberId}와 요청의 groupId를 전달하고,
- * 그룹 루틴 등 하위 기능은 이 서비스의 동일한 접근 제어 정책을 재사용한다.</p>
- *
- * <p>검증된 {@link GroupMember}를 반환하는 이유는 후속 서비스가 동일 참여 관계를 다시 조회하지 않고
+ * Controller는 인증 객체의 {@code CustomUserDetails.memberId}와 요청의 groupId를 전달하고,
+ * 그룹 루틴 등 하위 기능은 이 서비스의 동일한 접근 제어 정책을 재사용한다.
+ * 검증된 {@link GroupMember}를 반환하는 이유는 후속 서비스가 동일 참여 관계를 다시 조회하지 않고
  * 필요한 그룹별 role과 상태를 사용할 수 있게 하기 위함이다. Controller에 Entity를 직접 반환하는
- * 용도가 아니다.</p>
+ * 용도가 아니다.
  */
 @Slf4j
 @Service

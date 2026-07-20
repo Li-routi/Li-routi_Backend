@@ -17,9 +17,8 @@ import lombok.NoArgsConstructor;
 
 /**
  * 여러 회원이 함께 루틴을 수행하는 그룹이다.
- *
- * <p>방장은 이 엔티티에 별도 필드로 저장하지 않는다. 그룹별 권한의 단일 기준은
- * {@link GroupMember}의 role이며, OWNER 여부도 해당 참여 관계를 통해 판단한다.</p>
+ * 방장은 이 엔티티에 별도 필드로 저장하지 않는다. 그룹별 권한의 단일 기준은
+ * {@link GroupMember}의 role이며, OWNER 여부도 해당 참여 관계를 통해 판단한다.
  */
 @Entity
 @Getter
