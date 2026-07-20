@@ -52,4 +52,41 @@ class GroupMemberTest {
         assertThat(groupMember.getLeftAt()).isNotNull();
     }
 
+    @Test
+    @DisplayName("일반 구성원은 강제 탈퇴 시 상태와 퇴출 일시를 변경한다")
+    void kick_Member_ChangesStatusAndLeftAt() {
+        // given
+        GroupMember groupMember = GroupMember.builder()
+                .member(mock(Member.class))
+                .group(mock(Group.class))
+                .role(GroupMemberRole.MEMBER)
+                .build();
+
+        // when
+        groupMember.kick();
+
+        // then
+        assertThat(groupMember.getStatus()).isEqualTo(GroupMemberStatus.KICKED);
+        assertThat(groupMember.getLeftAt()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("방장은 강제 탈퇴시킬 수 없다")
+    void kick_Owner_ThrowsOwnerCannotKick() {
+        // given
+        GroupMember owner = GroupMember.builder()
+                .member(mock(Member.class))
+                .group(mock(Group.class))
+                .role(GroupMemberRole.OWNER)
+                .build();
+
+        // when & then
+        assertThatThrownBy(owner::kick)
+                .isInstanceOf(GroupException.class)
+                .extracting("code")
+                .isEqualTo(GroupErrorCode.OWNER_CANNOT_KICK);
+        assertThat(owner.getStatus()).isEqualTo(GroupMemberStatus.ACTIVE);
+        assertThat(owner.getLeftAt()).isNull();
+    }
+
 }

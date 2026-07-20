@@ -88,18 +88,29 @@ public class GroupMember extends BaseEntity {
      * 권한을 위임하거나 그룹을 삭제하기 전에는 상태를 변경하지 않는다.
      */
     public void leave() {
-        if (role == GroupMemberRole.OWNER) {
-            throw new GroupException(GroupErrorCode.OWNER_CANNOT_LEAVE);
-        }
+        validateNotOwner(GroupErrorCode.OWNER_CANNOT_LEAVE);
         this.status = GroupMemberStatus.LEFT;
         this.leftAt = LocalDateTime.now();
     }
 
     /**
      * 강제 탈퇴도 행을 삭제하지 않고 상태와 시각을 기록해 이력을 보존한다.
+     * 방장 대상인 유저가 강제 퇴장을 당하는 경우도 OWNER가 없어질 수 있으므로,
+     * 방장 권한의 유저는 강제퇴장 시키지 않는다.
      */
     public void kick() {
+        validateNotOwner(GroupErrorCode.OWNER_CANNOT_KICK);
         this.status = GroupMemberStatus.KICKED;
         this.leftAt = LocalDateTime.now();
+    }
+
+    /*
+     * leave와 kick 대상 유저가
+     * 방장 권한이 아닌지에 대해 검증하기 위한 공통 메소드
+     */
+    private void validateNotOwner(GroupErrorCode errorCode) {
+        if (role == GroupMemberRole.OWNER) {
+            throw new GroupException(errorCode);
+        }
     }
 }

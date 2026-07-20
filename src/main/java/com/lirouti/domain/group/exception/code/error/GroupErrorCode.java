@@ -32,6 +32,11 @@ public enum GroupErrorCode implements BaseErrorCode {
             HttpStatus.CONFLICT,
             "방장은 권한을 위임하거나 그룹을 삭제하기 전까지 탈퇴할 수 없습니다.",
             "GROUP409_1"
+    ),
+    OWNER_CANNOT_KICK(
+            HttpStatus.CONFLICT,
+            "방장 권한 유저는 강제 퇴장 시킬 수 없습니다.",
+            "GROUP409_2"
     );
 
     private final HttpStatus httpStatus;
