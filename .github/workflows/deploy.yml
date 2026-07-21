@@ -63,18 +63,28 @@ jobs:
           push: true
           tags: |
             ${{ steps.img.outputs.image }}:latest
+            ${{ steps.img.outputs.image }}:${{ github.ref_name }}
             ${{ steps.img.outputs.image }}:${{ github.sha }}
 
       # 서버는 새 이미지를 pull 해서 재기동만 한다(서버에서 빌드하지 않음).
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1
+        env:
+          IMAGE_TAG: ${{ github.ref_name }}
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ubuntu
           key: ${{ secrets.SERVER_SSH_KEY }}
+          envs: IMAGE_TAG
           script: |
             set -e
             cd /opt/app
+            # 이번에 push한 버전(예: v1.0.2)으로 고정한다. latest가 아니라 이 태그 이미지를 그대로 받는다.
+            if grep -q '^APP_IMAGE_TAG=' .env; then
+              sed -i "s/^APP_IMAGE_TAG=.*/APP_IMAGE_TAG=${IMAGE_TAG}/" .env
+            else
+              echo "APP_IMAGE_TAG=${IMAGE_TAG}" >> .env
+            fi
             docker compose pull
             docker compose up -d
             docker image prune -f

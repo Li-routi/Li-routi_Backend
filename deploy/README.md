@@ -59,16 +59,29 @@ docker compose logs -f app             # 부팅 로그 확인
 
 ## 배포 · 롤백
 
-```bash
-# 배포: 릴리스 태그를 push하면 Actions가 이미지 빌드→GHCR→서버 재기동까지 자동 수행
-git tag v1.0.0 && git push origin v1.0.0
+이미지는 push 시 **`:latest` + `:<버전>`(git 태그) + `:<커밋 sha>`** 세 태그로 GHCR에 올라간다.
+운영 compose는 `${APP_IMAGE_TAG:-latest}`를 참조하고, **배포 워크플로가 이번에 push한 버전을 서버 `.env`의 `APP_IMAGE_TAG`에 고정**한다.
+즉 서버는 항상 "latest"가 아니라 **정확히 그 버전 이미지**를 돌린다(결정적 배포).
 
-# 롤백: 서버에서 이전 커밋 sha 태그로 교체 (이미지에 latest + sha 태그가 함께 push됨)
-cd /opt/app
-docker compose pull                    # 또는 특정 sha로 image 태그를 바꿔 up
-# app 이미지 태그를 :latest 대신 :<이전sha>로 바꾼 뒤
-docker compose up -d
+```bash
+# 배포: 릴리스 태그를 push하면 Actions가 이미지 빌드→GHCR→서버가 그 버전으로 고정 배포
+git tag v1.0.2 && git push origin v1.0.2      # → 서버가 :v1.0.2 이미지로 구동
 ```
+
+**롤백** — 두 가지 방법:
+
+```bash
+# (A) 빠름: 서버에서 직접 이전 버전으로 (이미지가 이미 GHCR에 있으므로 재빌드 불필요)
+cd /opt/app
+sed -i 's/^APP_IMAGE_TAG=.*/APP_IMAGE_TAG=v1.0.1/' .env
+docker compose pull && docker compose up -d
+
+# (B) CI로: Actions 탭 → Deploy 워크플로 → Run workflow에서 이전 태그(v1.0.1) 선택
+#     → 서버 .env가 v1.0.1로 다시 고정되어 재배포됨
+```
+
+> 참고: 데이터(MySQL·Redis)는 named volume(`dbdata`·`redisdata`)에 있어 이미지 교체와 무관하게 보존된다.
+> `docker compose up -d`는 이미지가 바뀐 app 컨테이너만 재생성하며, db·redis는 그대로 유지된다.
 
 ## 메모리 예산 (t4g.small 2GB)
 
