@@ -24,35 +24,98 @@
 1. **Secrets** (repo → Settings → Secrets and variables → Actions):
    - `SERVER_HOST` — EC2 퍼블릭 IP(EIP)
    - `SERVER_SSH_KEY` — 접속용 pem 개인키 전문
-2. **GHCR 이미지 공개 범위**: 첫 배포 후 GHCR 패키지가 생기면 **public으로 전환**(repo → Packages → 해당 패키지 → Package settings → Change visibility → Public). public이면 서버에서 별도 로그인이 필요 없다.
-   - private로 두려면 서버에서 1회 로그인. **토큰을 명령행/히스토리에 남기지 않도록** 프롬프트로 입력받는다:
-     ```bash
-     read -rsp 'GHCR PAT(read:packages): ' PAT && echo "$PAT" | docker login ghcr.io -u <github사용자명> --password-stdin; unset PAT
-     ```
+2. **GHCR 이미지 공개 범위**: **기본은 private 유지 + 서버에서 1회 로그인**(팀 합의). 이미지를 공개하지 않고, 첫 배포부터 바로 pull된다. `read:packages` 권한 PAT를 하나 만들어, **토큰을 명령행/히스토리에 남기지 않도록** 프롬프트로 입력받아 로그인한다:
+   ```bash
+   read -rsp 'GHCR PAT(read:packages): ' PAT && echo "$PAT" | docker login ghcr.io -u <github사용자명> --password-stdin; unset PAT
+   ```
+   - (대안) 관리 편의를 원하면 패키지를 **public으로 전환**(repo → Packages → 해당 패키지 → Package settings → Change visibility → Public). 이 경우 서버 로그인은 필요 없지만, 컴파일된 이미지가 공개되고 패키지는 첫 배포 push 후에 생기므로 "첫 배포 → public 전환 → 재실행" 순서가 한 번 필요하다.
 
 ## 서버 최초 세팅 (1회, Ubuntu 24.04 arm64)
 
+> **전제**: EC2(t4g.small)가 떠 있고, 아래 [AWS / 네트워크] 절의 **IAM Role(instance profile)**·**보안그룹**을 먼저 맞춰둔다. 여기부터는 서버에 SSH로 접속(`ssh -i <pem> ubuntu@<서버IP>`)해서 하는 작업이다.
+
+### 1) Docker + compose 플러그인 설치
+
 ```bash
-# 1) Docker + compose 플러그인 설치
 sudo apt-get update
 sudo apt-get install -y docker.io docker-compose-v2
-sudo usermod -aG docker ubuntu    # 재로그인 후 sudo 없이 docker 사용
+sudo usermod -aG docker ubuntu     # 그룹 반영을 위해 로그아웃 후 재접속(또는 `newgrp docker`)
+docker compose version             # v2 플러그인 정상 확인
+```
 
-# 2) 앱 폴더 준비
+### 2) 앱 폴더 생성
+
+```bash
 sudo mkdir -p /opt/app && sudo chown ubuntu:ubuntu /opt/app
 cd /opt/app
-
-# 3) compose·백업 스크립트·env 배치 (로컬에서 scp로 올리거나 레포에서 받아 복사)
-#    - deploy/docker-compose.prod.yml → /opt/app/docker-compose.yml
-#    - deploy/backup.sh              → /opt/app/backup.sh   (chmod +x)
-#    - deploy/.env.example           → /opt/app/.env        (실제 값 입력!)
-cp .env.example .env && nano .env      # DB_PASSWORD·JWT_SECRET 등 실제 값 채우기
-chmod +x backup.sh
-
-# 4) 최초 기동 (이후는 GitHub Actions가 자동 배포)
-docker compose up -d
-docker compose logs -f app             # 부팅 로그 확인
 ```
+
+### 3) 배포 파일 3개를 서버로 올린다
+
+레포 `deploy/`의 템플릿을 `/opt/app`에 **아래 이름으로** 배치한다. 레포가 private이라 서버에서 직접 clone하면 인증이 필요하므로, **로컬 PC에서 scp**가 가장 간단하다.
+
+```bash
+# 로컬 PC의 레포 루트에서 실행 (<pem>·<서버IP>는 본인 값)
+scp -i <pem> deploy/docker-compose.prod.yml ubuntu@<서버IP>:/opt/app/docker-compose.yml
+scp -i <pem> deploy/backup.sh               ubuntu@<서버IP>:/opt/app/backup.sh
+scp -i <pem> deploy/.env.example            ubuntu@<서버IP>:/opt/app/.env
+```
+
+> 파일명 매핑 주의: `docker-compose.prod.yml` → 서버에선 **`docker-compose.yml`**, `.env.example` → **`.env`**. 배포 워크플로가 `cd /opt/app` 후 이 파일명 그대로를 쓴다.
+
+### 4) `.env` 실제 값 채우기 (런타임 비밀 — 서버에만 둔다)
+
+```bash
+cd /opt/app && nano .env && chmod +x backup.sh
+```
+
+채워야 하는 값(빈/기본값이면 부팅 실패 = fail-fast):
+
+| 키 | 설명 |
+| --- | --- |
+| `DB_ROOT_PASSWORD` · `DB_PASSWORD` | MySQL 초기화 비밀번호(임의 강문자열). 최초 기동 때 볼륨에 각인되므로 이후 변경하려면 볼륨 초기화 필요 |
+| `JWT_SECRET` | 32바이트 이상 랜덤 — `openssl rand -base64 48` |
+| `KAKAO_APP_ID` | 카카오 앱 ID |
+| `GOOGLE_WEB_CLIENT_ID` · `GOOGLE_ALLOWED_ISSUERS` | 구글 OAuth |
+| `AWS_S3_BUCKET` · `AWS_REGION` | S3 (자격증명은 IAM Role로 자동 획득 — 여기 두지 않는다) |
+| `APP_IMAGE_TAG` | `latest` 그대로 둔다. 배포 워크플로가 이번 릴리스 버전으로 덮어쓴다 |
+
+### 5) GHCR 로그인 (B안, 1회)
+
+위 [GitHub 설정] 2번과 동일하다. `read:packages` PAT로 한 번 로그인해두면 이후 `docker compose pull`이 계속 동작한다(자격은 `~/.docker/config.json`에 저장 → 재부팅해도 유지).
+
+```bash
+read -rsp 'GHCR PAT(read:packages): ' PAT && echo "$PAT" | docker login ghcr.io -u <github사용자명> --password-stdin; unset PAT
+```
+
+### 6) DB·Redis만 먼저 기동
+
+앱 이미지는 **첫 릴리스 태그를 push해야 GHCR에 생긴다.** 그래서 최초에는 앱(`app`)을 빼고 데이터 컨테이너만 올린다 — 여기서 `docker compose up -d`(전체)를 돌리면 존재하지 않는 앱 이미지 pull로 실패한다.
+
+```bash
+cd /opt/app
+docker compose up -d mysql redis
+docker compose ps        # mysql·redis 가 healthy 인지 확인
+```
+
+### 7) 첫 배포는 태그 push로 (서버에서 `up app` 수동 실행 안 함)
+
+**로컬에서 릴리스 태그를 push**하면 Actions가 이미지 빌드 → GHCR push → 서버 SSH 접속 → `.env`의 `APP_IMAGE_TAG` 고정 → `docker compose pull && up -d`까지 자동으로 한다.
+
+```bash
+# 로컬 PC(레포)에서
+git tag v0.0.1 && git push origin v0.0.1
+```
+
+워크플로가 배포 후 `http://localhost:8080/api/challenges` 응답을 최대 ~90초 확인하고, 안 뜨면 배포 실패로 처리한다. 서버에서 직접 로그를 보려면:
+
+```bash
+cd /opt/app && docker compose logs -f app
+```
+
+### 8) 백업 cron 등록
+
+아래 [AWS / 네트워크] 절의 cron 항목 참고 (매일 04:00 KST).
 
 ## AWS / 네트워크
 
