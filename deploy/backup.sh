@@ -19,13 +19,16 @@ source .env
 
 BUCKET="s3://lirouti-db-backup"      # TODO: 실제 버킷명으로 수정
 STAMP="$(date +%F)"
-FILE="/tmp/lirouti-${STAMP}.sql.gz"
+
+# 덤프 파일은 DB 전체가 담긴 민감 파일이다.
+# mktemp는 600 권한으로 생성하고, trap으로 성공·실패 무관하게 반드시 지운다.
+FILE="$(mktemp)"
+trap 'rm -f "${FILE}"' EXIT
 
 docker compose exec -T db \
   mysqldump -u root -p"${DB_ROOT_PASSWORD}" --single-transaction --routines lirouti \
   | gzip > "${FILE}"
 
 aws s3 cp "${FILE}" "${BUCKET}/${STAMP}.sql.gz"
-rm -f "${FILE}"
 
 echo "[$(date '+%F %T')] backup ok: ${STAMP}.sql.gz"
