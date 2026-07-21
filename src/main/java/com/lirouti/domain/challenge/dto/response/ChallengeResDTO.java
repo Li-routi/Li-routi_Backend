@@ -3,6 +3,7 @@ package com.lirouti.domain.challenge.dto.response;
 import java.util.List;
 
 import com.lirouti.domain.challenge.enums.ChallengeCategory;
+import com.lirouti.domain.challenge.enums.RoutineCycle;
 
 import lombok.Builder;
 
@@ -21,14 +22,45 @@ public final class ChallengeResDTO {
     ) {
     }
 
-    // 목록 카드 한 건. 참여자 수는 이 화면에 표시하지 않으므로 담지 않는다(상세에서 제공).
+    // 전체(찾아보기) 목록 카드 한 건.
+    // category·routineCycle은 enum으로 내려주고 프론트가 한글(건강·매일 등)로 변환한다.
     @Builder
     public record Summary(
             Long challengeId,
             String name,
             String description,
             String imageUrl,
+            ChallengeCategory category,
+            RoutineCycle routineCycle,
+            long participantCount,
+            long verificationPostCount
+    ) {
+    }
+
+    // 내 챌린지 목록 래퍼. 참여 중인 것만 모아 보여주는 화면이라 페이지네이션이 없다.
+    @Builder
+    public record MyListing(
+            List<MySummary> challenges
+    ) {
+    }
+
+    // 내 챌린지 목록 카드 한 건. 전부 참여 중이므로 통계 없이 심플하게 낸다.
+    @Builder
+    public record MySummary(
+            Long challengeId,
+            String name,
+            String description,
+            String imageUrl,
             ChallengeCategory category
+    ) {
+    }
+
+    // 참여/이탈 결과. participating=true면 참여 중, false면 이탈. 재참여 시 회차가 올라간다.
+    @Builder
+    public record Participation(
+            Long challengeId,
+            boolean participating,
+            int participationRound
     ) {
     }
 
@@ -40,6 +72,7 @@ public final class ChallengeResDTO {
             String description,
             String imageUrl,
             ChallengeCategory category,
+            RoutineCycle routineCycle,
             long participantCount,
             long todayCompletionCount
     ) {

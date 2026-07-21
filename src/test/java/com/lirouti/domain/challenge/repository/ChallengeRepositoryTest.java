@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.DisplayName;
@@ -218,5 +219,49 @@ class ChallengeRepositoryTest {
         em.clear();
 
         assertThat(challengeRepository.countTodayCompletions(c.getId(), LocalDate.now())).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("배치 참여자 수: 챌린지별로 활성 참여자를 세고 이탈·탈퇴 회원은 제외한다")
+    void countActiveParticipantsByChallengeIds_PerChallenge() {
+        Challenge a = challenge("cq배치A", ChallengeCategory.HEALTH, true);
+        Challenge b = challenge("cq배치B", ChallengeCategory.HEALTH, true);
+        join(member(true), a, true, 1);
+        join(member(true), a, true, 1);
+        join(member(true), a, false, 1);        // 이탈 제외
+        join(softDeletedMember(), a, true, 1);  // 탈퇴 제외
+        join(member(true), b, true, 1);
+        em.flush();
+        em.clear();
+
+        Map<Long, Long> counts = challengeRepository
+                .countActiveParticipantsByChallengeIds(List.of(a.getId(), b.getId()));
+
+        assertThat(counts).containsEntry(a.getId(), 2L).containsEntry(b.getId(), 1L);
+    }
+
+    @Test
+    @DisplayName("배치 인증 게시글 수: 회차 중복을 제거하지 않고(게시글 단위) 세되 탈퇴 회원 인증은 제외한다")
+    void countVerificationPostsByChallengeIds_CountsPostsNotPeople() {
+        Challenge a = challenge("cq게시글수", ChallengeCategory.EXERCISE, true);
+        MemberChallenge mc = join(member(true), a, true, 2);
+        verify(mc, 1, LocalDate.now());  // 같은 사람의 회차 다른 인증 2건 → 게시글은 2로 센다
+        verify(mc, 2, LocalDate.now());
+        MemberChallenge withdrawn = join(softDeletedMember(), a, true, 1);
+        verify(withdrawn, 1, LocalDate.now());  // 탈퇴 회원 인증 제외
+        em.flush();
+        em.clear();
+
+        Map<Long, Long> counts = challengeRepository
+                .countVerificationPostsByChallengeIds(List.of(a.getId()));
+
+        assertThat(counts).containsEntry(a.getId(), 2L);
+    }
+
+    @Test
+    @DisplayName("배치 집계: 빈 id 목록이면 빈 맵을 돌려준다")
+    void batchCounts_EmptyIds() {
+        assertThat(challengeRepository.countActiveParticipantsByChallengeIds(List.of())).isEmpty();
+        assertThat(challengeRepository.countVerificationPostsByChallengeIds(List.of())).isEmpty();
     }
 }

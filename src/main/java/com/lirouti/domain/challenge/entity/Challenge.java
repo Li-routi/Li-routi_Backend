@@ -1,6 +1,7 @@
 package com.lirouti.domain.challenge.entity;
 
 import com.lirouti.domain.challenge.enums.ChallengeCategory;
+import com.lirouti.domain.challenge.enums.RoutineCycle;
 import com.lirouti.global.entity.BaseEntity;
 
 import jakarta.persistence.Column;
@@ -43,15 +44,36 @@ public class Challenge extends BaseEntity {
     @Column(nullable = false, length = 50)
     private ChallengeCategory category;
 
+    // 인증 주기. 현재 데이터는 전부 DAILY. 스트릭 셈법도 DAILY 기준으로만 구현한다.
+    // columnDefinition의 default는 ddl-auto=update가 기존 챌린지 행에 이 컬럼을 추가할 때
+    // 유효한 값(DAILY)으로 채우기 위함이다(default 없으면 ''로 채워져 enum 매핑이 깨진다).
+    @Enumerated(EnumType.STRING)
+    @Column(name = "routine_cycle", nullable = false, columnDefinition = "varchar(20) default 'DAILY'")
+    private RoutineCycle routineCycle;
+
+    // 챌린지 성공 시 지급할 무료 재화 수량. 지금은 보관만 하며 실제 적립·성공 정의는 미구현.
+    @Column(nullable = false, columnDefinition = "integer default 0")
+    private Integer reward;
+
     @Column(nullable = false)
     private Boolean active;
 
     @Builder
-    private Challenge(String name, String description, String imageUrl, ChallengeCategory category, Boolean active) {
+    private Challenge(
+            String name,
+            String description,
+            String imageUrl,
+            ChallengeCategory category,
+            RoutineCycle routineCycle,
+            Integer reward,
+            Boolean active
+    ) {
         this.name = name;
         this.description = description;
         this.imageUrl = imageUrl;
         this.category = category;
+        this.routineCycle = (routineCycle != null) ? routineCycle : RoutineCycle.DAILY;
+        this.reward = (reward != null) ? reward : 0;
         this.active = (active != null) ? active : true;
     }
 }

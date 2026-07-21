@@ -3,17 +3,21 @@ package com.lirouti.domain.challenge.service.query;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.IntStream;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -29,6 +33,7 @@ import com.lirouti.domain.challenge.enums.ChallengeCategory;
 import com.lirouti.domain.challenge.exception.ChallengeException;
 import com.lirouti.domain.challenge.exception.code.error.ChallengeErrorCode;
 import com.lirouti.domain.challenge.repository.ChallengeRepository;
+import com.lirouti.domain.challenge.repository.MemberChallengeRepository;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("ChallengeQueryService 테스트")
@@ -37,8 +42,18 @@ class ChallengeQueryServiceTest {
     @Mock
     private ChallengeRepository challengeRepository;
 
+    @Mock
+    private MemberChallengeRepository memberChallengeRepository;
+
     @InjectMocks
     private ChallengeQueryService challengeQueryService;
+
+    @BeforeEach
+    void stubBatchCounts() {
+        // 전체 목록은 카드 통계를 배치 집계한다. 대부분의 테스트는 통계 값 자체를 검증하지 않으므로 빈 맵으로 둔다.
+        lenient().when(challengeRepository.countActiveParticipantsByChallengeIds(anyList())).thenReturn(Map.of());
+        lenient().when(challengeRepository.countVerificationPostsByChallengeIds(anyList())).thenReturn(Map.of());
+    }
 
     private Challenge challenge(String name) {
         return Challenge.builder()
@@ -117,6 +132,48 @@ class ChallengeQueryServiceTest {
 
         assertThat(cursorCap.getValue()).isEqualTo(42L);  // 커서 그대로
         assertThat(limitCap.getValue()).isEqualTo(51);    // size 999 → 50, +1
+    }
+
+    @Test
+    @DisplayName("전체 목록 카드에 배치 집계한 참여자 수·인증 게시글 수가 채워진다")
+    void getChallenges_FillsCardCounts() {
+        when(challengeRepository.findByCursor(any(), any(), any(), anyInt()))
+                .thenReturn(List.of(challengeWithId(10L)));
+        when(challengeRepository.countActiveParticipantsByChallengeIds(anyList()))
+                .thenReturn(Map.of(10L, 7L));
+        when(challengeRepository.countVerificationPostsByChallengeIds(anyList()))
+                .thenReturn(Map.of(10L, 42L));
+
+        ChallengeResDTO.Listing result = challengeQueryService.getChallenges(null, null, null, 20);
+
+        assertThat(result.challenges()).hasSize(1);
+        assertThat(result.challenges().get(0).participantCount()).isEqualTo(7L);
+        assertThat(result.challenges().get(0).verificationPostCount()).isEqualTo(42L);
+    }
+
+    @Test
+    @DisplayName("집계에 없는 챌린지는 참여자 수·인증 게시글 수가 0이다")
+    void getChallenges_ZeroWhenNotAggregated() {
+        when(challengeRepository.findByCursor(any(), any(), any(), anyInt()))
+                .thenReturn(List.of(challengeWithId(10L)));
+        // 배치 집계 맵이 비어 있음(참여·인증 없음) → 0으로 채워져야 한다.
+
+        ChallengeResDTO.Listing result = challengeQueryService.getChallenges(null, null, null, 20);
+
+        assertThat(result.challenges().get(0).participantCount()).isZero();
+        assertThat(result.challenges().get(0).verificationPostCount()).isZero();
+    }
+
+    @Test
+    @DisplayName("내 참여 목록은 회원의 활성 참여 챌린지를 심플 카드로 돌려준다")
+    void getMyChallenges_ReturnsSimpleCards() {
+        when(memberChallengeRepository.findMyActiveChallenges(eq(1L), isNull(), isNull()))
+                .thenReturn(List.of(challenge("내 챌린지")));
+
+        ChallengeResDTO.MyListing result = challengeQueryService.getMyChallenges(1L, null, null);
+
+        assertThat(result.challenges()).hasSize(1);
+        assertThat(result.challenges().get(0).name()).isEqualTo("내 챌린지");
     }
 
     @Test

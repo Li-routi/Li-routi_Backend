@@ -26,7 +26,9 @@ public interface ChallengeControllerDocs {
                     - size: 한 번에 가져올 개수. 기본값 20, 최대 50.
 
                     응답 result: challenges(카드 목록), nextCursor, hasNext.
-                    카드 한 건: challengeId, name, description, imageUrl, category. (참여자 수는 상세에서 제공)
+                    카드 한 건: challengeId, name, description, imageUrl, category, routineCycle(DAILY/WEEKLY/MONTHLY),
+                    participantCount(참여자 수), verificationPostCount(인증 게시글 수).
+                    category·routineCycle은 enum으로 내려가며 프론트가 한글로 변환합니다.
                     """
     )
     @ApiResponses({
@@ -46,7 +48,7 @@ public interface ChallengeControllerDocs {
 
     @Operation(
             summary = "챌린지 상세 조회",
-            description = "챌린지 상세와 전체 참여자 수, 오늘 완료자 수를 조회합니다. 로그인 없이 사용할 수 있습니다."
+            description = "챌린지 상세와 루틴 주기, 전체 참여자 수, 오늘 완료자 수를 조회합니다. 로그인 없이 사용할 수 있습니다."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "상세 조회 성공"),
