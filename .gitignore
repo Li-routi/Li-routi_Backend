@@ -46,6 +46,8 @@ src/main/resources/application-dev.yaml
 # Environment variables
 .env
 .env.*
+# deploy/ 아래 example 템플릿은 커밋한다(실제 .env 는 계속 무시)
+!deploy/.env.example
 
 ### OS ###
 .DS_Store
@@ -67,6 +69,9 @@ generated/
 ### Docker ###
 # 개인 로컬 오버라이드 (포트 등). 커밋하지 않음.
 docker-compose.override.yml
+docker-compose.local.override.yml
+# 운영 compose는 서버(/opt/app) 전용. 루트에 실수로 두어도 커밋되지 않게 무시.
+/docker-compose.yml
 
 ### Claude Code ###
 CLAUDE.md
