@@ -9,8 +9,9 @@ Controller, Repository, Converter의 책임을 침범하지 않는다.
 
 ```text
 {domain}/service/
-├── {Domain}QueryService.java
-└── {Domain}CommandService.java
+├── query/{Domain}QueryService.java
+├── command/{Domain}CommandService.java
+└── {Domain}Service.java          # CQRS 예외 도메인
 ```
 
 조회 기능이 없는 도메인은 CQRS를 강제하지 않는다.
@@ -37,7 +38,8 @@ Controller는 기본적으로 HTTP 메서드에 따라 QueryService/CommandServi
 
 - 생성, 수정, 삭제, 상태 변경을 담당한다.
 - `@Transactional`을 사용한다.
-- 조회 전용 API를 제공하지 않는다.
+- 변경 유스케이스 수행에 필요한 조회는 담당할 수 있다.
+- 조회 전용 유스케이스(API)는 제공하지 않는다.
 - 엔티티는 의미 있는 도메인 메서드로 변경한다.
 
 ## 트랜잭션
@@ -121,7 +123,7 @@ public class MemberCommandService {
 
 - 클래스 레벨 `@Transactional`
 - QueryService의 상태 변경
-- CommandService의 조회 API 혼합
+- CommandService에서 조회 전용 유스케이스(API) 제공
 - Service의 `ResponseEntity` 및 Swagger 사용
 - Service의 DTO 직접 조립 반복
 - Converter 인스턴스 주입
