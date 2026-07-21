@@ -62,8 +62,24 @@ dependencies {
 	testAnnotationProcessor 'org.projectlombok:lombok'
 }
 
+// 배포는 bootJar(실행 jar)만 사용한다. 기본 jar 태스크가 만드는 -plain.jar를 꺼서
+// build/libs에 실행 jar 하나만 남게 한다(Dockerfile의 COPY build/libs/*.jar가 단일 파일이 되도록).
+tasks.named('jar') {
+	enabled = false
+}
+
 tasks.named('test') {
 	useJUnitPlatform()
+	// application.yaml에서 fail-fast로(기본값 없이) 선언된 필수 값에 테스트용 더미값을 주입한다.
+	// systemProperty는 ${JWT_SECRET} 같은 플레이스홀더를 그대로 채우므로, 로컬·IDE·CI 어디서든
+	// env 주입 없이 @SpringBootTest 컨텍스트가 뜬다. 프로파일은 건드리지 않아(local 유지)
+	// 개인별 DB 오버라이드(application-local.yaml, 예: 포트 3307)도 그대로 적용된다.
+	// 실제 비밀값이 아니라 테스트 컨텍스트 부팅용 값일 뿐이다.
+	systemProperty 'JWT_SECRET', 'test-only-jwt-secret-please-do-not-use-in-production'
+	systemProperty 'KAKAO_APP_ID', '1234567890'  // app-id는 Long 타입이라 숫자여야 한다
+	systemProperty 'GOOGLE_WEB_CLIENT_ID', 'test-google-web-client-id'
+	systemProperty 'GOOGLE_ALLOWED_ISSUERS', 'https://accounts.google.com'
+	systemProperty 'AWS_S3_BUCKET', 'lirouti-test'
 }
 
 def querydslDir = layout.buildDirectory.dir("generated/querydsl").get().asFile

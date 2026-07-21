@@ -1,55 +1,26 @@
 name: Deploy to EC2
 
-# git 태그(v*) push 시에만 실행됩니다. (예: v1.0.0)
-#   git tag v1.0.0 && git push origin v1.0.0
-# 필요 시 Actions 탭에서 수동 실행(workflow_dispatch)도 가능합니다.
+# 릴리스 태그(v*) push 시에만 배포한다. (예: git tag v1.0.0 && git push origin v1.0.0)
+# 테스트는 별도 test.yml(PR·push)에서 돌리고, 여기서는 이미 테스트된 커밋을 이미지로 만들어 배포만 한다.
 on:
   push:
     tags:
       - "v*"
   workflow_dispatch:
 
-# 동시에 여러 배포가 겹치지 않도록 직렬화
 concurrency:
   group: deploy-ec2
   cancel-in-progress: false
 
-permissions:
-  contents: read
-
 jobs:
-  # 1단계) 테스트 + 빌드 — 여기서 컴파일/테스트/jar 생성을 한 번에 끝내고 산출물을 넘김
-  test:
-    name: Test & Build
+  build-and-deploy:
+    name: Build image & deploy
     runs-on: ubuntu-latest
-    # @SpringBootTest 가 붙을 MySQL·Redis 를 CI 안에서 컨테이너로 기동
-    services:
-      mysql:
-        image: mysql:8.4
-        env:
-          MYSQL_ROOT_PASSWORD: root1234
-          MYSQL_DATABASE: lirouti
-          MYSQL_USER: lirouti
-          MYSQL_PASSWORD: lirouti1234
-        ports:
-          - 3306:3306
-        options: >-
-          --health-cmd "mysqladmin ping -h 127.0.0.1 -proot1234"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
-      redis:
-        image: redis:7.4-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
+    permissions:
+      contents: read
+      packages: write
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
@@ -60,63 +31,75 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      # build = 컴파일 + 테스트 + bootJar 까지 한 번에 (컴파일은 여기서 딱 1회)
-      - name: Test & build
-        run: ./gradlew clean build
-        env:
-          SPRING_PROFILES_ACTIVE: test
-          DB_URL: jdbc:mysql://127.0.0.1:3306/lirouti?serverTimezone=Asia/Seoul&characterEncoding=UTF-8&allowPublicKeyRetrieval=true&useSSL=false
-          DB_USERNAME: lirouti
-          DB_PASSWORD: lirouti1234
-          REDIS_HOST: 127.0.0.1
-          REDIS_PORT: 6379
-          REDIS_PASSWORD: ""
+      # 실행 jar만 만든다(테스트는 test.yml 담당). plain jar는 build.gradle에서 비활성화됨.
+      - name: Build jar
+        run: ./gradlew bootJar --no-daemon
 
-      # 빌드된 jar 를 deploy 잡으로 전달 (재컴파일 방지)
-      - name: Upload jar artifact
-        uses: actions/upload-artifact@v4
+      # GHCR 이미지 경로는 소문자만 허용 — 레포명(Li-routi/...)을 소문자로 변환한다.
+      - name: Resolve lowercase image name
+        id: img
+        run: echo "image=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU (arm64 크로스 빌드)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
         with:
-          name: app-jar
-          path: build/libs/*.jar
-          retention-days: 1
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-  # 2단계) 배포 — test 통과 시에만 실행. 재빌드 없이 산출물만 EC2 로 전송
-  deploy:
-    name: Deploy to EC2
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download jar artifact
-        uses: actions/download-artifact@v4
+      # t4g(Graviton)는 ARM이므로 반드시 linux/arm64로 빌드한다. amd64 이미지는 서버에서 실행 불가.
+      # 롤백 경로를 위해 latest와 커밋 sha 태그를 함께 push한다.
+      - name: Build and push (linux/arm64)
+        uses: docker/build-push-action@v6
         with:
-          name: app-jar
-          path: build/libs
+          context: .
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ steps.img.outputs.image }}:latest
+            ${{ steps.img.outputs.image }}:${{ github.sha }}
 
-      - name: Prepare jar
-        run: |
-          JAR=$(ls build/libs/*.jar | grep -v plain | head -1)
-          cp "$JAR" app.jar
-          echo "배포 대상: $JAR  (tag=${GITHUB_REF_NAME})"
-
-      - name: Copy jar to EC2
-        uses: appleboy/scp-action@v0.1.7
+      # 서버는 새 이미지를 pull 해서 재기동만 한다(서버에서 빌드하지 않음).
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1
         with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USERNAME }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          port: ${{ secrets.EC2_SSH_PORT || 22 }}
-          source: app.jar
-          target: /home/${{ secrets.EC2_USERNAME }}/app
-
-      - name: Restart service on EC2
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USERNAME }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          port: ${{ secrets.EC2_SSH_PORT || 22 }}
+          host: ${{ secrets.SERVER_HOST }}
+          username: ubuntu
+          key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
             set -e
-            sudo systemctl restart lirouti
-            sleep 3
-            sudo systemctl --no-pager status lirouti | head -n 15
+            cd /opt/app
+            docker compose pull
+            docker compose up -d
+            docker image prune -f
+
+      # 배포 결과를 Discord로 알림. DISCORD_WEBHOOK 시크릿이 없으면 조용히 건너뛴다.
+      - name: Notify Discord (성공)
+        if: success()
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          REF: ${{ github.ref_name }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          [ -z "$DISCORD_WEBHOOK" ] && exit 0
+          curl -sf -H "Content-Type: application/json" \
+            -d "$(printf '{"content":"✅ **배포 성공** — `%s` — %s"}' "$REF" "$RUN_URL")" \
+            "$DISCORD_WEBHOOK" || true
+
+      - name: Notify Discord (실패)
+        if: failure()
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          REF: ${{ github.ref_name }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          [ -z "$DISCORD_WEBHOOK" ] && exit 0
+          curl -sf -H "Content-Type: application/json" \
+            -d "$(printf '{"content":"❌ **배포 실패** — `%s` — %s"}' "$REF" "$RUN_URL")" \
+            "$DISCORD_WEBHOOK" || true

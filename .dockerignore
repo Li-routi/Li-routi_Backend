@@ -1,0 +1,18 @@
+# Docker 빌드 컨텍스트 최소화 — 이미지엔 build/libs/*.jar만 필요하다.
+.git
+.github
+.gradle
+.idea
+.vscode
+src
+docs
+deploy
+gradle
+*.md
+# build 하위에서 libs만 남기고 무거운 산출물 제외
+build/classes
+build/generated
+build/reports
+build/resources
+build/tmp
+build/test-results

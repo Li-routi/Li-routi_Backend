@@ -1,0 +1,68 @@
+name: Test
+
+# PR과 통합 브랜치 push마다 테스트를 돌려 머지 전에 게이팅한다.
+# 배포(deploy.yml, 태그)는 여기서 검증된 커밋만 이미지로 만든다.
+on:
+  pull_request:
+  push:
+    branches: [main, develop]
+
+jobs:
+  test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    # @SpringBootTest가 붙을 MySQL·Redis를 CI 안에서 컨테이너로 기동(localhost 기본값으로 접속)
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root1234
+          MYSQL_DATABASE: lirouti
+          MYSQL_USER: lirouti
+          MYSQL_PASSWORD: lirouti1234
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -proot1234"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7.4-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # fail-fast 필수 값(JWT_SECRET 등)은 build.gradle의 test 태스크가 더미로 주입하므로 env 불필요.
+      # DB/Redis는 application.yaml 기본값(localhost:3306 / 6379)이 위 서비스 컨테이너에 붙는다.
+      - name: Build & test
+        run: ./gradlew build --no-daemon
+
+      # 테스트 실패 시에만 Discord로 알림. DISCORD_WEBHOOK 시크릿이 없으면 조용히 건너뛴다.
+      - name: Notify Discord on failure
+        if: failure()
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          REF: ${{ github.ref_name }}
+          ACTOR: ${{ github.actor }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          [ -z "$DISCORD_WEBHOOK" ] && exit 0
+          curl -sf -H "Content-Type: application/json" \
+            -d "$(printf '{"content":"❌ **테스트 실패** — `%s` by %s — %s"}' "$REF" "$ACTOR" "$RUN_URL")" \
+            "$DISCORD_WEBHOOK" || true

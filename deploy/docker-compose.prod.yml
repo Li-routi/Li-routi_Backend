@@ -1,0 +1,82 @@
+# 서버 운영용 compose (레퍼런스). 서버에서는 이 파일을 /opt/app/docker-compose.yml 로 복사해 쓴다.
+# 비밀값은 같은 폴더의 .env 에서 주입한다(.env.example 참고, 실제 .env 는 레포에 커밋 금지).
+#
+#   scp deploy/docker-compose.prod.yml  ubuntu@<서버>:/opt/app/docker-compose.yml
+#   (서버에서) cp .env.example .env  → 실제 값 입력  → docker compose up -d
+#
+# 메모리 예산(t4g.small 2GB): JVM(힙768m+메타192m) + MySQL(buffer 256m) + Redis(≤200m).
+# 빠듯하므로 아래 상한들을 임의로 늘리지 말 것.
+services:
+  db:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: lirouti
+      MYSQL_USER: lirouti
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      TZ: Asia/Seoul
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --innodb-buffer-pool-size=256M
+    volumes:
+      - dbdata:/var/lib/mysql
+    # ports 매핑 없음 — MySQL은 compose 내부 네트워크(db:3306)에서만 접근. 호스트 미노출.
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    # auth(refresh 토큰) 저장소. 2GB 예산을 지키려 maxmemory 상한. 토큰 유실 방지 위해 noeviction.
+    command: ["redis-server", "--maxmemory", "200mb", "--maxmemory-policy", "noeviction", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    # ports 매핑 없음 — redis:6379 내부 전용
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  app:
+    image: ghcr.io/li-routi/li-routi_backend:latest
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # DB·Redis는 compose 내부 네트워크 이름으로 접속
+      DB_URL: jdbc:mysql://db:3306/lirouti?serverTimezone=Asia/Seoul&characterEncoding=UTF-8&allowPublicKeyRetrieval=true&useSSL=false
+      DB_USERNAME: lirouti
+      DB_PASSWORD: ${DB_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ""
+      # fail-fast 필수 비밀값 — 없으면 부팅 실패한다
+      JWT_SECRET: ${JWT_SECRET}
+      KAKAO_APP_ID: ${KAKAO_APP_ID}
+      GOOGLE_WEB_CLIENT_ID: ${GOOGLE_WEB_CLIENT_ID}
+      GOOGLE_ALLOWED_ISSUERS: ${GOOGLE_ALLOWED_ISSUERS}
+      AWS_S3_BUCKET: ${AWS_S3_BUCKET}
+      AWS_REGION: ${AWS_REGION:-ap-northeast-2}
+      # 운영 설정
+      SPRING_PROFILES_ACTIVE: prod
+      JPA_DDL_AUTO: update            # throwaway 베타 — 마이그레이션 도구 없이 스키마 자동 관리
+      JPA_SHOW_SQL: "false"
+      TZ: Asia/Seoul
+      # 2GB 인스턴스에서 힙 상한 필수 — 미설정 시 OOM
+      JAVA_TOOL_OPTIONS: "-Xmx768m -XX:MaxMetaspaceSize=192m"
+    ports:
+      - "8080:8080"           # 베타: HTTP 직접 노출. 도메인 확보 시 Caddy 앞단 추가 예정
+
+volumes:
+  dbdata:
+  redisdata:
