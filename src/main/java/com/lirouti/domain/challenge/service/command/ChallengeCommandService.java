@@ -35,8 +35,9 @@ public class ChallengeCommandService {
         Challenge challenge = challengeRepository.findByIdAndActiveTrue(challengeId)
                 .orElseThrow(() -> new ChallengeException(ChallengeErrorCode.CHALLENGE_NOT_FOUND));
 
+        // 재참여 경합 방지를 위해 기존 행을 락 걸고 조회한다(행이 없으면 잠글 것도 없음 → 신규 참여로).
         MemberChallenge memberChallenge = memberChallengeRepository
-                .findByMemberIdAndChallengeId(memberId, challengeId)
+                .findByMemberIdAndChallengeIdForUpdate(memberId, challengeId)
                 .map(this::rejoinOrReject)
                 .orElseGet(() -> createParticipation(memberId, challenge));
 
