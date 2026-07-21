@@ -35,7 +35,7 @@ public class MemberCommandService {
     }
 
     private Member getActiveMember(Member member) {
-        if (!Boolean.TRUE.equals(member.getIsActive()) || member.getDeletedAt() != null) {
+        if (!member.isActiveMember()) {
             log.warn("탈퇴하거나 비활성화된 회원의 소셜 로그인 시도를 차단했습니다. memberId={}", member.getId());
             throw new MemberException(MemberErrorCode.WITHDRAWN_MEMBER);
         }

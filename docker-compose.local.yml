@@ -1,7 +1,7 @@
-# 로컬 개발용 MySQL · Redis
-# 사용:  task docker-up   (또는  docker compose up -d)
-# 접속 계정/DB는 application.yaml 기본값과 일치합니다. 개인 포트 변경이 필요하면
-# docker-compose.override.yml (git 미추적)로 덮어쓰세요.
+# 로컬 개발용 MySQL · Redis (로컬 전용 — 서버는 /opt/app/docker-compose.yml 사용)
+# 사용:  task docker-up   (내부적으로 docker compose -f docker-compose.local.yml ... 실행)
+# 접속 계정/DB는 application.yaml 기본값(lirouti)과 일치합니다. 개인 포트 변경이 필요하면
+# docker-compose.local.override.yml (git 미추적)로 덮어쓰면 Taskfile이 자동 병합합니다.
 services:
   mysql:
     image: mysql:8.4

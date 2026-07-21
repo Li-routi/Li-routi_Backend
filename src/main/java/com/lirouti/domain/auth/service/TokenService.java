@@ -153,7 +153,7 @@ public class TokenService {
 
     // 탈퇴한 회원인지 확인
     private void validateActiveMember(Member member) {
-        if (!Boolean.TRUE.equals(member.getIsActive()) || member.getDeletedAt() != null) {
+        if (!member.isActiveMember()) {
             throw new MemberException(MemberErrorCode.WITHDRAWN_MEMBER);
         }
     }
