@@ -73,7 +73,6 @@ Service가 담당하지 않는 항목:
 
 - Repository는 주입받을 수 있다.
 - Converter는 static 유틸리티로 사용하고 주입하지 않는다.
-- QueryService와 CommandService가 서로 의존하지 않도록 한다.
 - Service 간 연쇄 호출은 최소화한다.
 - 복잡한 다중 도메인 흐름은 Facade 또는 Application Service를 검토한다.
 - 순환 의존을 만들지 않는다.
