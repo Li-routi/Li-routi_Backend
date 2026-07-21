@@ -13,7 +13,6 @@ import com.lirouti.domain.member.enums.SocialProvider;
 import com.lirouti.domain.member.exception.MemberException;
 import com.lirouti.domain.member.exception.code.error.MemberErrorCode;
 import com.lirouti.domain.member.repository.MemberRepository;
-import java.time.LocalDateTime;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -41,8 +40,7 @@ class MemberCommandServiceTest {
     void findOrCreateSocialMember_ExistingActiveMember_ReturnsMember() {
         // given
         Member member = mock(Member.class);
-        when(member.getIsActive()).thenReturn(true);
-        when(member.getDeletedAt()).thenReturn(null);
+        when(member.isActiveMember()).thenReturn(true);
         when(memberRepository.findBySocialProviderAndSocialId(PROVIDER, SOCIAL_ID))
                 .thenReturn(Optional.of(member));
 
@@ -60,8 +58,7 @@ class MemberCommandServiceTest {
     void findOrCreateSocialMember_WithdrawnMember_ThrowsException() {
         // given
         Member member = mock(Member.class);
-        when(member.getIsActive()).thenReturn(true);
-        when(member.getDeletedAt()).thenReturn(LocalDateTime.now());
+        when(member.isActiveMember()).thenReturn(false);
         when(memberRepository.findBySocialProviderAndSocialId(PROVIDER, SOCIAL_ID))
                 .thenReturn(Optional.of(member));
 

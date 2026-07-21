@@ -1,5 +1,7 @@
 package com.lirouti.domain.member.entity;
 
+import java.time.LocalDateTime;
+
 import com.lirouti.domain.member.enums.Role;
 import com.lirouti.domain.member.enums.SocialProvider;
 import com.lirouti.global.entity.BaseEntity;
@@ -13,7 +15,6 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
-import java.time.LocalDateTime;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -78,5 +79,10 @@ public class Member extends BaseEntity {
         this.onboardingCompleted = false;
         this.isActive = true;
         this.deletedAt = null;
+    }
+
+    // 회원이 서비스에 접근할 수 있는 활성 상태인지 확인
+    public boolean isActiveMember() {
+        return Boolean.TRUE.equals(isActive) && deletedAt == null;
     }
 }

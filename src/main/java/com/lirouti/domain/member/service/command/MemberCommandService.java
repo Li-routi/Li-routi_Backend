@@ -1,15 +1,17 @@
 package com.lirouti.domain.member.service.command;
 
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.lirouti.domain.member.converter.MemberConverter;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.enums.SocialProvider;
 import com.lirouti.domain.member.exception.MemberException;
 import com.lirouti.domain.member.exception.code.error.MemberErrorCode;
 import com.lirouti.domain.member.repository.MemberRepository;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Slf4j
 @Service
@@ -31,7 +33,7 @@ public class MemberCommandService {
     }
 
     private Member getActiveMember(Member member) {
-        if (!Boolean.TRUE.equals(member.getIsActive()) || member.getDeletedAt() != null) {
+        if (!member.isActiveMember()) {
             log.warn("탈퇴하거나 비활성화된 회원의 소셜 로그인 시도를 차단했습니다. memberId={}", member.getId());
             throw new MemberException(MemberErrorCode.WITHDRAWN_MEMBER);
         }
