@@ -1,9 +1,18 @@
 package com.lirouti.domain.auth.service;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
+import java.util.Base64;
+
+import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
+
 import com.lirouti.domain.auth.converter.AuthConverter;
+import com.lirouti.domain.auth.dto.response.AuthResDTO;
 import com.lirouti.domain.auth.exception.AuthException;
 import com.lirouti.domain.auth.exception.code.error.AuthErrorCode;
-import com.lirouti.domain.auth.dto.response.AuthResDTO;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.exception.MemberException;
 import com.lirouti.domain.member.exception.code.error.MemberErrorCode;
@@ -11,15 +20,9 @@ import com.lirouti.domain.member.repository.MemberRepository;
 import com.lirouti.global.properties.JwtProperties;
 import com.lirouti.global.util.JwtUtil;
 import com.lirouti.global.util.RedisUtil;
+
 import io.jsonwebtoken.Claims;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.time.Duration;
-import java.util.Base64;
-import org.springframework.util.StringUtils;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
 
 @Slf4j
 @Service
@@ -126,7 +129,7 @@ public class TokenService {
 
     // 탈퇴한 회원인지 확인
     private void validateActiveMember(Member member) {
-        if (!Boolean.TRUE.equals(member.getIsActive()) || member.getDeletedAt() != null) {
+        if (!member.isActiveMember()) {
             throw new MemberException(MemberErrorCode.WITHDRAWN_MEMBER);
         }
     }

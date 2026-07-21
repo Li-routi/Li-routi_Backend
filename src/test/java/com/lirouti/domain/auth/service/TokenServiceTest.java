@@ -93,8 +93,7 @@ class TokenServiceTest {
         when(memberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
         when(member.getId()).thenReturn(MEMBER_ID);
         when(member.getRole()).thenReturn(Role.ROLE_ADMIN);
-        when(member.getIsActive()).thenReturn(true);
-        when(member.getDeletedAt()).thenReturn(null);
+        when(member.isActiveMember()).thenReturn(true);
         when(member.isOnboardingCompleted()).thenReturn(true);
         when(jwtUtil.createAccessToken(MEMBER_ID, Role.ROLE_ADMIN)).thenReturn("new-access-token");
         when(jwtUtil.createRefreshToken(MEMBER_ID)).thenReturn("new-refresh-token");
@@ -154,8 +153,7 @@ class TokenServiceTest {
         when(memberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
         when(member.getId()).thenReturn(MEMBER_ID);
         when(member.getRole()).thenReturn(Role.ROLE_USER);
-        when(member.getIsActive()).thenReturn(true);
-        when(member.getDeletedAt()).thenReturn(null);
+        when(member.isActiveMember()).thenReturn(true);
         when(jwtUtil.createAccessToken(MEMBER_ID, Role.ROLE_USER)).thenReturn("new-access-token");
         when(jwtUtil.createRefreshToken(MEMBER_ID)).thenReturn("new-refresh-token");
         when(redisUtil.compareAndSet(
@@ -183,8 +181,7 @@ class TokenServiceTest {
         when(memberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
         when(member.getId()).thenReturn(MEMBER_ID);
         when(member.getRole()).thenReturn(Role.ROLE_USER);
-        when(member.getIsActive()).thenReturn(true);
-        when(member.getDeletedAt()).thenReturn(null);
+        when(member.isActiveMember()).thenReturn(true);
         when(jwtUtil.createAccessToken(MEMBER_ID, Role.ROLE_USER)).thenReturn("new-access-token");
         when(jwtUtil.createRefreshToken(MEMBER_ID)).thenReturn("new-refresh-token");
         when(redisUtil.compareAndSet(
@@ -225,7 +222,7 @@ class TokenServiceTest {
         when(claims.get("category", String.class)).thenReturn("refresh");
         when(claims.getSubject()).thenReturn(String.valueOf(MEMBER_ID));
         when(memberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
-        when(member.getIsActive()).thenReturn(false);
+        when(member.isActiveMember()).thenReturn(false);
 
         // when & then
         assertThatThrownBy(() -> tokenService.reissue(REFRESH_TOKEN))
