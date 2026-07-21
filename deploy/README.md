@@ -35,13 +35,18 @@
 
 > **전제**: EC2(t4g.small)가 떠 있고, 아래 [AWS / 네트워크] 절의 **IAM Role(instance profile)**·**보안그룹**을 먼저 맞춰둔다. 여기부터는 서버에 SSH로 접속(`ssh -i <pem> ubuntu@<서버IP>`)해서 하는 작업이다.
 
-### 1) Docker + compose 플러그인 설치
+### 1) Docker + compose 플러그인 설치 · swap 2GB
 
 ```bash
 sudo apt-get update
 sudo apt-get install -y docker.io docker-compose-v2
 sudo usermod -aG docker ubuntu     # 그룹 반영을 위해 로그아웃 후 재접속(또는 `newgrp docker`)
 docker compose version             # v2 플러그인 정상 확인
+
+# swap 2GB — 메모리 예산(≈1.6GB+OS)이 빠듯해 피크 시 OOM killer가 컨테이너를 죽이는 것 방지(완충재).
+sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile
+sudo mkswap /swapfile && sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab   # 재부팅에도 유지
 ```
 
 ### 2) 앱 폴더 생성
@@ -96,8 +101,8 @@ read -rsp 'GHCR PAT(read:packages): ' PAT && echo "$PAT" | docker login ghcr.io 
 
 ```bash
 cd /opt/app
-docker compose up -d mysql redis
-docker compose ps        # mysql·redis 가 healthy 인지 확인
+docker compose up -d db redis
+docker compose ps        # db·redis 가 healthy 인지 확인
 ```
 
 ### 7) 첫 배포는 태그 push로 (서버에서 `up app` 수동 실행 안 함)
@@ -122,10 +127,16 @@ cd /opt/app && docker compose logs -f app
 ## AWS / 네트워크
 
 - **EC2 instance profile(IAM Role)** 부착: S3 `PutObject`(백업) + 앱 미디어 업로드용 `PutObject/GetObject`. access key를 서버에 두지 않는다.
-- **보안그룹 인바운드**: `8080`(베타 HTTP), `22`(SSH, 내 IP만). **`3306`은 열지 않는다**(MySQL은 compose 내부 전용).
+- **보안그룹 인바운드**:
+  - `8080` — 베타 HTTP 직접 노출.
+  - `22`(SSH) — **`0.0.0.0/0` 개방 + 키 인증 전용(비밀번호 로그인 비활성 확인)**. 배포가 GitHub Actions 러너에서 SSH로 접속하는데 러너 IP가 유동적이라 대역 제한이 어렵다. ED25519 키 인증만 허용하는 전제로 1개월 한시 운영에 한해 전체 개방한다.
+  - `3306`(MySQL)·`6379`(Redis) — **열지 않는다**(compose 내부 네트워크 전용).
+- **S3 버킷**: `lirouti-prod-bucket`(미디어)·`lirouti-db-backup`(백업) 이름으로 생성(비공개). 서버 `.env`의 `AWS_S3_BUCKET`·`backup.sh`의 `BUCKET`을 이 이름과 일치시킨다.
 - **백업 cron** (매일 04:00 KST): `crontab -e` → `0 4 * * * /opt/app/backup.sh >> /opt/app/backup.log 2>&1`
 
 ## 배포 · 롤백
+
+> **머지만으로는 배포되지 않는다.** develop/main에 머지한 뒤, 릴리스 시점에 **`v*` 태그를 push**(또는 Actions → Deploy 워크플로 수동 실행)해야 배포된다. 태그는 semver(`vMAJOR.MINOR.PATCH`, 예: `v0.0.1`)를 따른다. 팀은 "머지=통합, 태그 push=릴리스"로 구분한다.
 
 이미지는 push 시 **`:latest` + `:<버전>`(git 태그) + `:<커밋 sha>`** 세 태그로 GHCR에 올라간다.
 운영 compose는 `${APP_IMAGE_TAG:-latest}`를 참조하고, **배포 워크플로가 이번에 push한 버전을 서버 `.env`의 `APP_IMAGE_TAG`에 고정**한다.
