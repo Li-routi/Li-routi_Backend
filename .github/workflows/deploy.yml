@@ -71,10 +71,11 @@ jobs:
 
       # 서버는 새 이미지를 pull 해서 재기동만 한다(서버에서 빌드하지 않음).
       # ssh-action은 v1.2.3에 고정한다. v1.2.4부터 번들 drone-ssh가 1.8.2로 올라가면서
-      # 입력(host/key)을 못 읽고 "no configuration file provided"로 죽는 회귀가 있어(#20),
+      # 입력(host/key)을 못 읽고 "no configuration file provided"로 죽는 회귀가 있어,
       # 1.8.2 직전 버전인 v1.2.3으로 내려 우회한다.
+      # 서드파티 액션이라 태그가 옮겨질 수 있어 v1.2.3 커밋 SHA로 고정한다.
       - name: Deploy over SSH
-        uses: appleboy/ssh-action@v1.2.3
+        uses: appleboy/ssh-action@91f3272fc5907f4699dcf59761eb622a07342f5a # v1.2.3
         env:
           IMAGE_TAG: ${{ github.ref_name }}
         with:
