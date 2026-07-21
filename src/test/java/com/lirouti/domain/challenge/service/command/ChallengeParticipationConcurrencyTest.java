@@ -77,6 +77,7 @@ class ChallengeParticipationConcurrencyTest {
     @DisplayName("동시에 재참여하면 하나만 성공하고 다른 하나는 409(ALREADY_PARTICIPATING)")
     void concurrentRejoin_OnlyOneSucceeds() throws InterruptedException {
         ExecutorService pool = Executors.newFixedThreadPool(2);
+        CountDownLatch ready = new CountDownLatch(2);
         CountDownLatch start = new CountDownLatch(1);
         CountDownLatch done = new CountDownLatch(2);
         AtomicInteger success = new AtomicInteger();
@@ -85,6 +86,7 @@ class ChallengeParticipationConcurrencyTest {
 
         Runnable task = () -> {
             try {
+                ready.countDown();       // 게이트 앞 도착 알림
                 start.await();
                 challengeCommandService.participate(memberId, challengeId);
                 success.incrementAndGet();
@@ -105,10 +107,13 @@ class ChallengeParticipationConcurrencyTest {
 
         pool.submit(task);
         pool.submit(task);
+        // 두 스레드가 모두 게이트 앞에 도착한 뒤에 출발시킨다(직렬 실행으로 새는 것 방지).
+        boolean workersReady = ready.await(5, TimeUnit.SECONDS);
         start.countDown();                       // 두 스레드 동시 출발
         boolean finished = done.await(15, TimeUnit.SECONDS);
         pool.shutdownNow();
 
+        assertThat(workersReady).isTrue();
         assertThat(finished).isTrue();
         assertThat(success.get()).isEqualTo(1);              // 정확히 하나만 성공
         assertThat(alreadyParticipating.get()).isEqualTo(1); // 다른 하나는 409
