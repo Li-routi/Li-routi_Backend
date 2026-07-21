@@ -28,6 +28,7 @@
    ```bash
    read -rsp 'GHCR PAT(read:packages): ' PAT && echo "$PAT" | docker login ghcr.io -u <github사용자명> --password-stdin; unset PAT
    ```
+   > ⚠️ 로그인하면 PAT가 서버 `~/.docker/config.json`에 **평문(base64)으로 저장**된다(EC2엔 credential store가 없음). **`read:packages` 최소권한**으로만 만들고 **만료를 짧게(예: 90일) 두어 주기적으로 교체**할 것. 유출돼도 이미지 읽기 권한뿐이다.
    - (대안) 관리 편의를 원하면 패키지를 **public으로 전환**(repo → Packages → 해당 패키지 → Package settings → Change visibility → Public). 이 경우 서버 로그인은 필요 없지만, 컴파일된 이미지가 공개되고 패키지는 첫 배포 push 후에 생기므로 "첫 배포 → public 전환 → 재실행" 순서가 한 번 필요하다.
 
 ## 서버 최초 세팅 (1회, Ubuntu 24.04 arm64)
@@ -82,7 +83,7 @@ cd /opt/app && nano .env && chmod +x backup.sh
 
 ### 5) GHCR 로그인 (B안, 1회)
 
-위 [GitHub 설정] 2번과 동일하다. `read:packages` PAT로 한 번 로그인해두면 이후 `docker compose pull`이 계속 동작한다(자격은 `~/.docker/config.json`에 저장 → 재부팅해도 유지).
+위 [GitHub 설정] 2번과 동일하다. `read:packages` PAT로 한 번 로그인해두면 이후 `docker compose pull`이 계속 동작한다. 자격은 `~/.docker/config.json`에 **평문(base64)으로 저장**되므로(→ 재부팅해도 유지되지만 at-rest 위험 존재), **최소권한·짧은 만료로 만들고 주기적으로 교체**한다.
 
 ```bash
 read -rsp 'GHCR PAT(read:packages): ' PAT && echo "$PAT" | docker login ghcr.io -u <github사용자명> --password-stdin; unset PAT
