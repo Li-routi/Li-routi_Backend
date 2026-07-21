@@ -67,7 +67,8 @@ scp -i <pem> deploy/.env.example            ubuntu@<서버IP>:/opt/app/.env
 ### 4) `.env` 실제 값 채우기 (런타임 비밀 — 서버에만 둔다)
 
 ```bash
-cd /opt/app && nano .env && chmod +x backup.sh
+# .env엔 DB 비번·JWT·OAuth 시크릿이 들어있다. scp 직후 보통 0644이므로 편집 전에 소유자만 읽게 잠근다.
+cd /opt/app && chmod 600 .env && nano .env && chmod +x backup.sh
 ```
 
 채워야 하는 값(빈/기본값이면 부팅 실패 = fail-fast):
