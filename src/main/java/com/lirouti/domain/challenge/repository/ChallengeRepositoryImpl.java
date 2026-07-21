@@ -1,7 +1,10 @@
 package com.lirouti.domain.challenge.repository;
 
+import static com.querydsl.core.group.GroupBy.groupBy;
+
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 import com.lirouti.domain.challenge.entity.Challenge;
 import com.lirouti.domain.challenge.entity.QChallenge;
@@ -43,6 +46,45 @@ public class ChallengeRepositoryImpl implements ChallengeRepositoryCustom {
                 .orderBy(challenge.id.desc())
                 .limit(limit)
                 .fetch();
+    }
+
+    @Override
+    public Map<Long, Long> countActiveParticipantsByChallengeIds(List<Long> challengeIds) {
+        if (challengeIds.isEmpty()) {
+            return Map.of();
+        }
+        // challenge_id별 활성 참여자 수. 탈퇴 회원 제외. 참여자 0인 챌린지는 결과에 안 나온다.
+        return queryFactory
+                .select(memberChallenge.challenge.id, member.id.count())
+                .from(memberChallenge)
+                .join(memberChallenge.member, member)
+                .where(
+                        memberChallenge.challenge.id.in(challengeIds),
+                        memberChallenge.active.isTrue(),
+                        activeMember()
+                )
+                .groupBy(memberChallenge.challenge.id)
+                .transform(groupBy(memberChallenge.challenge.id).as(member.id.count()));
+    }
+
+    @Override
+    public Map<Long, Long> countVerificationPostsByChallengeIds(List<Long> challengeIds) {
+        if (challengeIds.isEmpty()) {
+            return Map.of();
+        }
+        // challenge_id별 인증 게시글 수. 인증(게시글) 단위이므로 회차 중복 제거를 하지 않는다.
+        // 탈퇴 회원의 인증은 제외한다.
+        return queryFactory
+                .select(memberChallenge.challenge.id, verification.id.count())
+                .from(verification)
+                .join(verification.memberChallenge, memberChallenge)
+                .join(memberChallenge.member, member)
+                .where(
+                        memberChallenge.challenge.id.in(challengeIds),
+                        activeMember()
+                )
+                .groupBy(memberChallenge.challenge.id)
+                .transform(groupBy(memberChallenge.challenge.id).as(verification.id.count()));
     }
 
     @Override

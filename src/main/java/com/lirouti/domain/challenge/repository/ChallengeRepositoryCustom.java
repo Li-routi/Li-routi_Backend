@@ -2,6 +2,7 @@ package com.lirouti.domain.challenge.repository;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 import com.lirouti.domain.challenge.entity.Challenge;
 import com.lirouti.domain.challenge.enums.ChallengeCategory;
@@ -19,6 +20,18 @@ public interface ChallengeRepositoryCustom {
             Long cursor,
             int limit
     );
+
+    /**
+     * 여러 챌린지의 현재 참여자 수를 한 번에 집계한다(전체 목록 카드용, N+1 회피).
+     * 탈퇴 회원은 제외한다. 참여자 0인 챌린지는 맵에 없다(호출부가 0으로 처리).
+     */
+    Map<Long, Long> countActiveParticipantsByChallengeIds(List<Long> challengeIds);
+
+    /**
+     * 여러 챌린지의 인증 게시글 수를 한 번에 집계한다(전체 목록 카드용, N+1 회피).
+     * 인증(게시글) 단위 집계이므로 회차 중복 제거를 하지 않는다. 탈퇴 회원의 인증은 제외한다.
+     */
+    Map<Long, Long> countVerificationPostsByChallengeIds(List<Long> challengeIds);
 
     /**
      * 한 챌린지의 현재 참여자 수. 탈퇴 회원은 제외한다. (상세 조회용)

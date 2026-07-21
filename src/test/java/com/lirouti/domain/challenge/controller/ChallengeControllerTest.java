@@ -95,11 +95,14 @@ class ChallengeControllerTest {
         em.persist(newer);
         em.flush();
 
-        // 첫 페이지: 최신(newer)이 먼저, hasNext=true, nextCursor=newer.id
+        // 첫 페이지: 최신(newer)이 먼저, hasNext=true, nextCursor=newer.id, 카드에 통계·루틴 주기 포함
         mockMvc.perform(get("/api/challenges").param("keyword", "mvctag").param("size", "1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.challenges.length()").value(1))
                 .andExpect(jsonPath("$.result.challenges[0].challengeId").value(newer.getId()))
+                .andExpect(jsonPath("$.result.challenges[0].routineCycle").value("DAILY"))
+                .andExpect(jsonPath("$.result.challenges[0].participantCount").value(0))
+                .andExpect(jsonPath("$.result.challenges[0].verificationPostCount").value(0))
                 .andExpect(jsonPath("$.result.hasNext").value(true))
                 .andExpect(jsonPath("$.result.nextCursor").value(newer.getId()));
 
@@ -132,6 +135,7 @@ class ChallengeControllerTest {
                 .andExpect(jsonPath("$.result.challengeId").value(c.getId()))
                 .andExpect(jsonPath("$.result.name").value("물 1L 마시기"))
                 .andExpect(jsonPath("$.result.imageUrl").value("https://img/water.png"))
+                .andExpect(jsonPath("$.result.routineCycle").value("DAILY"))
                 .andExpect(jsonPath("$.result.participantCount").value(1))
                 .andExpect(jsonPath("$.result.todayCompletionCount").value(1));
     }

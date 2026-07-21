@@ -3,6 +3,7 @@ package com.lirouti.domain.challenge.service.query;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,6 +15,7 @@ import com.lirouti.domain.challenge.enums.ChallengeCategory;
 import com.lirouti.domain.challenge.exception.ChallengeException;
 import com.lirouti.domain.challenge.exception.code.error.ChallengeErrorCode;
 import com.lirouti.domain.challenge.repository.ChallengeRepository;
+import com.lirouti.domain.challenge.repository.MemberChallengeRepository;
 
 import lombok.RequiredArgsConstructor;
 
@@ -26,6 +28,7 @@ public class ChallengeQueryService {
     private static final int MAX_SIZE = 50;
 
     private final ChallengeRepository challengeRepository;
+    private final MemberChallengeRepository memberChallengeRepository;
 
     @Transactional(readOnly = true)
     public ChallengeResDTO.Listing getChallenges(
@@ -48,7 +51,24 @@ public class ChallengeQueryService {
                 ? pageRows.get(pageRows.size() - 1).getId()
                 : null;
 
-        return ChallengeConverter.toListing(pageRows, nextCursor, hasNext);
+        // 카드 통계는 이번 페이지의 챌린지들만 한 번에 배치 집계한다(챌린지별 개별 조회 = N+1 회피).
+        List<Long> ids = pageRows.stream().map(Challenge::getId).toList();
+        Map<Long, Long> participantCounts = challengeRepository.countActiveParticipantsByChallengeIds(ids);
+        Map<Long, Long> verificationCounts = challengeRepository.countVerificationPostsByChallengeIds(ids);
+
+        return ChallengeConverter.toListing(pageRows, participantCounts, verificationCounts, nextCursor, hasNext);
+    }
+
+    // 내가 참여 중인 챌린지 목록(홈 화면). 참여 중인 것만이라 페이지네이션 없이 전부 내려준다.
+    @Transactional(readOnly = true)
+    public ChallengeResDTO.MyListing getMyChallenges(
+            Long memberId,
+            ChallengeCategory category,
+            String keyword
+    ) {
+        List<Challenge> challenges =
+                memberChallengeRepository.findMyActiveChallenges(memberId, category, keyword);
+        return ChallengeConverter.toMyListing(challenges);
     }
 
     @Transactional(readOnly = true)
