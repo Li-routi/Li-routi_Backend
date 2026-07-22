@@ -23,9 +23,10 @@ import lombok.NoArgsConstructor;
 /**
  * 챌린지 참여의 일자별 인증 이력. 한 참여 회차 안에서 하루에 한 건만 존재한다.
  *
- * 이 엔티티는 #12(조회)에서 오늘 완료자 수 집계를 위해 정의했다.
- * 인증 등록/덮어쓰기 같은 쓰기 로직은 #14에서 이 클래스에 추가한다.
- * 소프트 삭제는 쓰지 않는다(당일 재인증은 덮어쓰기로 처리).
+ * 소프트 삭제는 쓰지 않는다 — 당일 재인증은 삭제 후 재등록이 아니라 {@link #reverify}로 덮어쓴다.
+ *
+ * 피드 조회용 별도 인덱스는 두지 않는다. 아래 유니크 제약의 선두 컬럼이 member_challenge_id라,
+ * 그 인덱스가 피드 조인과 "오늘 인증 행 찾기"를 모두 커버한다.
  */
 @Entity
 @Getter
@@ -58,7 +59,7 @@ public class ChallengeVerification extends BaseEntity {
     @Column(name = "verified_at", nullable = false)
     private LocalDateTime verifiedAt;
 
-    // 인증 사진은 필수다.
+    // 인증 사진은 필수다. 전체 URL이 아니라 S3 오브젝트 key를 담는다(읽기 URL은 조회 시 조립).
     @Column(name = "image_url", nullable = false, length = 2048)
     private String imageUrl;
 
@@ -80,5 +81,18 @@ public class ChallengeVerification extends BaseEntity {
         this.verifiedAt = verifiedAt;
         this.imageUrl = imageUrl;
         this.content = content;
+    }
+
+    /**
+     * 당일 재인증. 행을 지우고 새로 만들지 않고 사진·코멘트·인증 시각을 덮어쓴다.
+     *
+     * 하루에 한 행이라는 사실이 변하지 않으므로 유니크 제약과 충돌하지 않고,
+     * 이 인증을 참조하는 신고(#15) 데이터의 외래 키도 깨지지 않는다.
+     * 인증 기준일(verifiedDate)과 회차는 바뀌지 않으므로 건드리지 않는다.
+     */
+    public void reverify(String imageUrl, String content, LocalDateTime verifiedAt) {
+        this.imageUrl = imageUrl;
+        this.content = content;
+        this.verifiedAt = verifiedAt;
     }
 }

@@ -1,5 +1,6 @@
 package com.lirouti.domain.challenge.repository;
 
+import static com.lirouti.domain.challenge.repository.ChallengeQuerySupport.activeMember;
 import static com.querydsl.core.group.GroupBy.groupBy;
 
 import java.time.LocalDate;
@@ -61,7 +62,7 @@ public class ChallengeRepositoryImpl implements ChallengeRepositoryCustom {
                 .where(
                         memberChallenge.challenge.id.in(challengeIds),
                         memberChallenge.active.isTrue(),
-                        activeMember()
+                        activeMember(member)
                 )
                 .groupBy(memberChallenge.challenge.id)
                 .transform(groupBy(memberChallenge.challenge.id).as(member.id.count()));
@@ -81,7 +82,7 @@ public class ChallengeRepositoryImpl implements ChallengeRepositoryCustom {
                 .join(memberChallenge.member, member)
                 .where(
                         memberChallenge.challenge.id.in(challengeIds),
-                        activeMember()
+                        activeMember(member)
                 )
                 .groupBy(memberChallenge.challenge.id)
                 .transform(groupBy(memberChallenge.challenge.id).as(verification.id.count()));
@@ -96,7 +97,7 @@ public class ChallengeRepositoryImpl implements ChallengeRepositoryCustom {
                 .where(
                         memberChallenge.challenge.id.eq(challengeId),
                         memberChallenge.active.isTrue(),
-                        activeMember()
+                        activeMember(member)
                 )
                 .fetchOne();
         return (count != null) ? count : 0L;
@@ -117,16 +118,10 @@ public class ChallengeRepositoryImpl implements ChallengeRepositoryCustom {
                         // 현재 회차의 오늘 인증만. 참여 중(active) 여부는 조건에 넣지 않는다
                         // — 오늘 인증한 뒤 그만둔 사람도 '오늘 완료자'로 집계한다(스키마 규칙).
                         verification.participationRound.eq(memberChallenge.participationRound),
-                        activeMember()
+                        activeMember(member)
                 )
                 .fetchOne();
         return (count != null) ? count : 0L;
-    }
-
-    // 집계에서 제외할 회원: 비활성(탈퇴)이거나 소프트 삭제된 회원.
-    // #18(회원 탈퇴)이 두 플래그를 어떻게 세팅하든 누수가 없도록 둘 다 확인한다.
-    private BooleanExpression activeMember() {
-        return member.isActive.isTrue().and(member.deletedAt.isNull());
     }
 
     private BooleanExpression cursorLt(Long cursor) {
