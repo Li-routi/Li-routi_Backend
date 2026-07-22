@@ -1,11 +1,10 @@
 name: Test
 
-# PR과 통합 브랜치 push마다 테스트를 돌려 머지 전에 게이팅한다.
-# 배포(deploy.yml, 태그)는 여기서 검증된 커밋만 이미지로 만든다.
+# 모든 브랜치의 push와 PR마다 테스트를 돌린다.
+# 배포(deploy.yml)는 develop 머지 시 돌므로, 머지 전에 PR에서 여기를 통과시키는 것이 게이트다.
 on:
   pull_request:
   push:
-    branches: [main, develop]
 
 jobs:
   test:

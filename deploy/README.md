@@ -7,23 +7,30 @@
 | 위치 | 파일 | 커밋 | 역할 |
 | --- | --- | --- | --- |
 | 레포 | `Dockerfile` | O | 실행 jar를 담는 이미지 정의(빌드 스테이지 없음) |
-| 레포 | `.github/workflows/test.yml` | O | PR·push 테스트 게이팅 |
-| 레포 | `.github/workflows/deploy.yml` | O | 태그(v*) push 시 이미지 빌드·배포 |
+| 레포 | `.github/workflows/test.yml` | O | 모든 push·PR 테스트 게이팅 |
+| 레포 | `.github/workflows/deploy.yml` | O | develop 머지 시 이미지 빌드·배포 |
 | 레포 | `docker-compose.local.yml` | O | 로컬 개발용 DB·Redis (앱은 IDE/bootRun) |
 | 레포 | `deploy/docker-compose.prod.yml` | O(레퍼런스) | 서버 운영 compose 템플릿 |
 | 레포 | `deploy/.env.example` | O | 서버 `.env` 키 템플릿(실값 없음) |
 | 레포 | `deploy/backup.sh` | O(레퍼런스) | DB 백업 스크립트 |
 | **서버** | `/opt/app/docker-compose.yml` | **X** | 위 prod 템플릿을 복사한 실제 파일 |
-| **서버** | `/opt/app/.env` | **X** | 실제 비밀값 (DB 비번·JWT_SECRET 등) |
+| **서버** | `/opt/app/.env` | **X** | **배포 때 자동 생성됨** — GitHub Secret `ENV_FILE` 내용 + `APP_IMAGE_TAG` |
 | **서버** | `/opt/app/backup.sh` | **X** | 위 스크립트 복사 |
 
-> 비밀 분리 원칙: **파이프라인 비밀 = GitHub Secrets**, **런타임 비밀 = 서버 `.env`**. DB 비밀번호는 GitHub 어디에도 두지 않는다.
+> **런타임 설정의 단일 진실 공급원은 GitHub Secret `ENV_FILE`이다.** 배포할 때마다 워크플로가 서버 `/opt/app/.env`를 이 내용으로 새로 쓴다.
+> 따라서 **서버에서 `.env`를 직접 고쳐도 다음 배포에서 원복된다.** 값을 바꾸려면 `ENV_FILE` 시크릿을 수정하고 재배포한다.
+> :warning: 시크릿 변경은 자동 배포 트리거가 아니다(GitHub은 시크릿 변경 이벤트를 제공하지 않는다). 수정 후 develop에 머지하거나 Actions에서 Deploy를 수동 실행해야 반영된다.
 
 ## GitHub 설정 (1회)
 
 1. **Secrets** (repo → Settings → Secrets and variables → Actions):
    - `SERVER_HOST` — EC2 퍼블릭 IP(EIP)
    - `SERVER_SSH_KEY` — 접속용 pem 개인키 전문
+   - `ENV_FILE` — **서버 `.env` 내용 전체**(`deploy/.env.example` 참고). 배포 때 서버에 그대로 기록된다.
+     - `APP_IMAGE_TAG` 줄은 **넣지 않는다** — 워크플로가 배포 커밋 sha로 덧붙인다.
+     - `DB_ROOT_PASSWORD`·`DB_PASSWORD`는 **현재 서버에서 쓰고 있는 값 그대로** 넣어야 한다. MySQL은 볼륨 최초 초기화 때의 비밀번호를 유지하므로, 다른 값을 넣으면 앱만 새 비밀번호로 접속하다 실패한다.
+     - 여러 줄 값이 전달 과정에서 깨지면 base64로 우회한다: `base64 -i .env | pbcopy`로 인코딩해 등록하고, 워크플로의 `printf` 줄을 `echo "$ENV_FILE" | base64 -d > .env`로 바꾼다.
+   - `DISCORD_WEBHOOK` — (선택) 배포 결과 알림. 없으면 알림만 건너뛴다.
 2. **GHCR 이미지 공개 범위**: **기본은 private 유지 + 서버에서 1회 로그인**(팀 합의). 이미지를 공개하지 않고, 첫 배포부터 바로 pull된다. `read:packages` 권한 PAT를 하나 만들어, **토큰을 명령행/히스토리에 남기지 않도록** 프롬프트로 입력받아 로그인한다:
    ```bash
    read -rsp 'GHCR PAT(read:packages): ' PAT && echo "$PAT" | docker login ghcr.io -u <github사용자명> --password-stdin; unset PAT
@@ -64,28 +71,30 @@ cd /opt/app
 # 로컬 PC의 레포 루트에서 실행 (<pem>·<서버IP>는 본인 값)
 scp -i <pem> deploy/docker-compose.prod.yml ubuntu@<서버IP>:/opt/app/docker-compose.yml
 scp -i <pem> deploy/backup.sh               ubuntu@<서버IP>:/opt/app/backup.sh
-scp -i <pem> deploy/.env.example            ubuntu@<서버IP>:/opt/app/.env
 ```
 
-> 파일명 매핑 주의: `docker-compose.prod.yml` → 서버에선 **`docker-compose.yml`**, `.env.example` → **`.env`**. 배포 워크플로가 `cd /opt/app` 후 이 파일명 그대로를 쓴다.
+> 파일명 매핑 주의: `docker-compose.prod.yml` → 서버에선 **`docker-compose.yml`**. 배포 워크플로가 `cd /opt/app` 후 이 파일명 그대로를 쓴다.
+> `.env`는 올리지 않는다 — 배포 때 `ENV_FILE` 시크릿 내용으로 자동 생성된다(4번 참고).
 
-### 4) `.env` 실제 값 채우기 (런타임 비밀 — 서버에만 둔다)
+### 4) `ENV_FILE` 시크릿 작성 (런타임 설정)
 
-```bash
-# .env엔 DB 비번·JWT·OAuth 시크릿이 들어있다. scp 직후 보통 0644이므로 편집 전에 소유자만 읽게 잠근다.
-cd /opt/app && chmod 600 .env && nano .env && chmod +x backup.sh
-```
+서버 `.env`는 **배포가 만들어 준다.** 손으로 만들지 말고, 아래 내용을 GitHub Secret `ENV_FILE`에 등록한다(repo → Settings → Secrets and variables → Actions).
 
-채워야 하는 값(빈/기본값이면 부팅 실패 = fail-fast):
+`deploy/.env.example`을 기준으로 값을 채우되, **`APP_IMAGE_TAG` 줄은 넣지 않는다**(워크플로가 배포 커밋 sha로 덧붙인다).
 
 | 키 | 설명 |
 | --- | --- |
-| `DB_ROOT_PASSWORD` · `DB_PASSWORD` | MySQL 초기화 비밀번호(임의 강문자열). 최초 기동 때 볼륨에 각인되므로 이후 변경하려면 볼륨 초기화 필요 |
+| `DB_ROOT_PASSWORD` · `DB_PASSWORD` | MySQL 비밀번호(임의 강문자열). **볼륨 최초 초기화 때 각인**되므로, 이미 DB를 띄운 뒤라면 그때 쓴 값과 반드시 같아야 한다 |
 | `JWT_SECRET` | 32바이트 이상 랜덤 — `openssl rand -base64 48` |
 | `KAKAO_APP_ID` | 카카오 앱 ID |
 | `GOOGLE_WEB_CLIENT_ID` · `GOOGLE_ALLOWED_ISSUERS` | 구글 OAuth |
 | `AWS_S3_BUCKET` · `AWS_REGION` | S3 (자격증명은 IAM Role로 자동 획득 — 여기 두지 않는다) |
-| `APP_IMAGE_TAG` | `latest` 그대로 둔다. 배포 워크플로가 이번 릴리스 버전으로 덮어쓴다 |
+
+서버 쪽에서는 백업 스크립트 실행 권한만 준다:
+
+```bash
+cd /opt/app && chmod +x backup.sh
+```
 
 ### 5) GHCR 로그인 (B안, 1회)
 
@@ -95,9 +104,11 @@ cd /opt/app && chmod 600 .env && nano .env && chmod +x backup.sh
 read -rsp 'GHCR PAT(read:packages): ' PAT && echo "$PAT" | docker login ghcr.io -u <github사용자명> --password-stdin; unset PAT
 ```
 
-### 6) DB·Redis만 먼저 기동
+### 6) (선택) DB·Redis 미리 기동
 
-앱 이미지는 **첫 릴리스 태그를 push해야 GHCR에 생긴다.** 그래서 최초에는 앱(`app`)을 빼고 데이터 컨테이너만 올린다 — 여기서 `docker compose up -d`(전체)를 돌리면 존재하지 않는 앱 이미지 pull로 실패한다.
+첫 배포가 `db`·`redis`·`app`을 한 번에 올리므로 이 단계는 건너뛰어도 된다. MySQL 최초 초기화(수십 초)를 미리 끝내 배포 시간을 줄이고 싶을 때만 한다.
+
+`.env`가 아직 없으므로, 배포를 한 번 돌린 뒤(= `.env` 생성 후)에만 의미가 있다:
 
 ```bash
 cd /opt/app
@@ -105,14 +116,11 @@ docker compose up -d db redis
 docker compose ps        # db·redis 가 healthy 인지 확인
 ```
 
-### 7) 첫 배포는 태그 push로 (서버에서 `up app` 수동 실행 안 함)
+### 7) 첫 배포는 develop 머지로 (서버에서 `up app` 수동 실행 안 함)
 
-**로컬에서 릴리스 태그를 push**하면 Actions가 이미지 빌드 → GHCR push → 서버 SSH 접속 → `.env`의 `APP_IMAGE_TAG` 고정 → `docker compose pull && up -d`까지 자동으로 한다.
+**develop에 머지**되면 Actions가 이미지 빌드 → GHCR push → 서버 SSH 접속 → `.env` 생성(`ENV_FILE` 시크릿) → `APP_IMAGE_TAG`를 그 커밋 sha로 고정 → `docker compose pull && up -d`까지 자동으로 한다.
 
-```bash
-# 로컬 PC(레포)에서
-git tag v0.0.1 && git push origin v0.0.1
-```
+서버를 준비만 해두고 develop에 머지하면 첫 배포가 진행된다. 즉시 한 번 돌리고 싶으면 Actions → Deploy to EC2 → Run workflow(develop)로 수동 실행해도 된다.
 
 워크플로가 배포 후 `http://localhost:8080/api/challenges` 응답을 최대 ~90초 확인하고, 안 뜨면 배포 실패로 처리한다. 서버에서 직접 로그를 보려면:
 
@@ -137,34 +145,45 @@ cd /opt/app && docker compose logs -f app
 
 ## 배포 · 롤백
 
-> **머지만으로는 배포되지 않는다.** develop/main에 머지한 뒤, 릴리스 시점에 **`v*` 태그를 push**해야 배포된다. 수동 실행(Actions → Deploy → Run workflow)도 가능하지만 **ref 드롭다운에서 `v*` 태그를 선택**해야 한다 — 브랜치를 고르면 `Validate release tag` 스텝에서 실패한다(브랜치명이 이미지 태그·`APP_IMAGE_TAG`로 박혀 롤백 기준이 깨지는 것을 막기 위함). 태그는 semver(`vMAJOR.MINOR.PATCH`, 예: `v0.0.1`)를 따른다. 팀은 "머지=통합, 태그 push=릴리스"로 구분한다.
+> **develop에 머지되면 배포된다.** 별도 릴리스 절차(태그)는 없다. 테스트는 `test.yml`이 모든 push·PR에서 돌므로, **PR에서 테스트를 통과시킨 뒤 머지하는 것이 배포 게이트**다.
+> 수동 배포가 필요하면 Actions → Deploy to EC2 → Run workflow(develop)로 실행한다.
 
-이미지는 push 시 **`:latest` + `:<버전>`(git 태그) + `:<커밋 sha>`** 세 태그로 GHCR에 올라간다.
-운영 compose는 `${APP_IMAGE_TAG:-latest}`를 참조하고, **배포 워크플로가 이번에 push한 버전을 서버 `.env`의 `APP_IMAGE_TAG`에 고정**한다.
-즉 서버는 항상 "latest"가 아니라 **정확히 그 버전 이미지**를 돌린다(결정적 배포).
+이미지는 빌드 시 **`:latest` + `:develop` + `:<커밋 sha>`** 세 태그로 GHCR에 올라간다.
+운영 compose는 `${APP_IMAGE_TAG:-latest}`를 참조하고, **배포 워크플로가 그 배포의 커밋 sha를 서버 `.env`의 `APP_IMAGE_TAG`에 고정**한다.
+`latest`·`develop`은 사람이 보기 위한 이동형 태그이고, 서버가 실제로 받는 것은 **커밋 sha 이미지**다 — 그래야 "정확히 그 커밋으로 되돌리기"가 성립한다(결정적 배포).
+
+**롤백**
+
+되돌릴 커밋 sha는 Actions의 Deploy 실행 이력에서 찾는다(각 실행에 커밋이 표시된다).
 
 ```bash
-# 배포: 릴리스 태그를 push하면 Actions가 이미지 빌드→GHCR→서버가 그 버전으로 고정 배포
-git tag v1.0.2 && git push origin v1.0.2      # → 서버가 :v1.0.2 이미지로 구동
+# (A) 빠름: 서버에서 직접 이전 커밋으로 (이미지가 이미 GHCR에 있으므로 재빌드 불필요)
+cd /opt/app
+grep -q '^APP_IMAGE_TAG=' .env \
+  && sed -i 's/^APP_IMAGE_TAG=.*/APP_IMAGE_TAG=<이전_커밋sha>/' .env \
+  || echo 'APP_IMAGE_TAG=<이전_커밋sha>' >> .env
+docker compose pull && docker compose up -d
 ```
 
-**롤백** — 두 가지 방법:
+> :warning: (A)는 **다음 배포까지만 유효하다.** 배포할 때마다 `.env`가 `ENV_FILE` 시크릿 기준으로 새로 쓰이고 `APP_IMAGE_TAG`도 그 배포의 커밋으로 덮어써진다. 되돌린 상태를 유지하려면 develop에서 문제 커밋을 revert하고 다시 머지한다(= 정석 경로).
 
 ```bash
-# (A) 빠름: 서버에서 직접 이전 버전으로 (이미지가 이미 GHCR에 있으므로 재빌드 불필요)
-cd /opt/app
-# APP_IMAGE_TAG가 없으면 latest로 새므로, 없으면 추가하고 있으면 교체한다(fail-closed)
-grep -q '^APP_IMAGE_TAG=' .env \
-  && sed -i 's/^APP_IMAGE_TAG=.*/APP_IMAGE_TAG=v1.0.1/' .env \
-  || echo 'APP_IMAGE_TAG=v1.0.1' >> .env
-docker compose pull && docker compose up -d
-
-# (B) CI로: Actions 탭 → Deploy 워크플로 → Run workflow에서 이전 태그(v1.0.1) 선택
-#     → 서버 .env가 v1.0.1로 다시 고정되어 재배포됨
+# (B) 정석: 문제 커밋을 revert 해서 develop에 머지 → 자동 재배포
+git revert <문제_커밋> && git push
 ```
 
 > 참고: 데이터(MySQL·Redis)는 named volume(`dbdata`·`redisdata`)에 있어 이미지 교체와 무관하게 보존된다.
 > `docker compose up -d`는 이미지가 바뀐 app 컨테이너만 재생성하며, db·redis는 그대로 유지된다.
+
+## 런타임 설정 변경(`.env`)
+
+`.env`는 배포 때 GitHub Secret `ENV_FILE`을 기준으로 새로 생성된다. 값을 바꾸려면:
+
+1. repo → Settings → Secrets and variables → Actions → `ENV_FILE` 수정
+2. develop에 머지하거나 Actions에서 Deploy를 수동 실행 (시크릿 변경만으로는 배포가 트리거되지 않는다)
+
+> :warning: 서버에서 `.env`를 직접 고치는 것은 **긴급 임시 조치로만** 쓴다. 다음 배포에서 시크릿 내용으로 원복되므로, 반드시 `ENV_FILE`에도 반영해 둘 것.
+> 서버에서 임시로 고쳤을 때 반영하려면 `docker compose up -d`(재생성)를 쓴다. `docker compose restart`는 **기존 컨테이너를 그대로 재시작해 환경변수가 갱신되지 않는다.**
 
 ## 메모리 예산 (t4g.small 2GB)
 
