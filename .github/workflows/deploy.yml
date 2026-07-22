@@ -1,7 +1,7 @@
 name: Deploy to EC2
 
 # develop에 머지될 때만 배포한다. (리뷰를 거쳐 develop에 들어온 코드 = 배포 대상)
-# 테스트는 test.yml(모든 push)이 담당하고, 여기서는 이미지로 만들어 배포만 한다.
+# 테스트(test.yml)를 workflow_call로 먼저 돌려 통과한 커밋만 이미지로 만들어 배포한다.
 #
 # 이미지 태그는 커밋 sha로 고정한다. :develop 같은 이동형 태그를 서버 .env에 박으면
 # "정확히 그 버전으로 되돌리는" 롤백 기준이 사라지기 때문이다.
@@ -15,9 +15,21 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # 1단계) 이미지 빌드·push — 실패하면 "빌드 실패"로 한눈에 구분된다.
+  # 1단계) 테스트 — 배포될 바로 그 커밋을 검증한다. 실패하면 빌드조차 시작하지 않는다.
+  # test.yml을 workflow_call로 재사용하므로 테스트 정의는 한 곳에만 있다.
+  # (브랜치 보호만으로는 부족하다. squash 머지는 develop에 새 sha를 만들어 PR에서
+  #  테스트한 커밋과 배포되는 커밋이 달라지고, enforce_admins가 꺼져 있어 관리자는
+  #  보호를 우회해 develop에 직접 push할 수 있다.)
+  #
+  # secrets를 넘기지 않는 것은 의도적이다. 넘기면 test.yml 안의 Discord 알림까지 함께 발동해
+  # 테스트 실패 시 알림이 두 번 간다(아래 notify 잡이 이미 "테스트 실패"를 알린다).
+  test:
+    uses: ./.github/workflows/test.yml
+
+  # 2단계) 이미지 빌드·push — 실패하면 "빌드 실패"로 한눈에 구분된다.
   build:
     name: Build & push image
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -85,7 +97,7 @@ jobs:
             ${{ steps.img.outputs.image }}:latest
             ${{ steps.img.outputs.image }}:${{ github.sha }}
 
-  # 2단계) 배포 — 빌드 성공 시에만 실행. 서버는 이미지를 pull 해서 재기동만 한다.
+  # 3단계) 배포 — 빌드 성공 시에만 실행. 서버는 이미지를 pull 해서 재기동만 한다.
   deploy:
     name: Deploy to EC2
     needs: build
@@ -143,10 +155,10 @@ jobs:
             # 옛 버전으로 롤백할 때는 GHCR에서 다시 pull된다.
             docker image prune -af
 
-  # 3단계) 알림 — 빌드에서 죽든 배포에서 죽든 결과가 나가도록 always()로 돌린다.
+  # 4단계) 알림 — 어느 단계에서 죽어도 결과가 나가도록 always()로 돌린다.
   notify:
     name: Notify Discord
-    needs: [build, deploy]
+    needs: [test, build, deploy]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -154,16 +166,19 @@ jobs:
       - name: Notify result
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          TEST_RESULT: ${{ needs.test.result }}
           BUILD_RESULT: ${{ needs.build.result }}
           DEPLOY_RESULT: ${{ needs.deploy.result }}
           REF: ${{ github.sha }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           [ -z "$DISCORD_WEBHOOK" ] && exit 0
-          if [ "$BUILD_RESULT" != "success" ]; then
-            MSG="❌ **빌드 실패**"
+          if [ "$TEST_RESULT" != "success" ]; then
+            MSG="❌ **테스트 실패**"
+          elif [ "$BUILD_RESULT" != "success" ]; then
+            MSG="❌ **빌드 실패** (테스트는 성공)"
           elif [ "$DEPLOY_RESULT" != "success" ]; then
-            MSG="❌ **배포 실패** (빌드는 성공)"
+            MSG="❌ **배포 실패** (빌드까지 성공)"
           else
             MSG="✅ **배포 성공**"
           fi

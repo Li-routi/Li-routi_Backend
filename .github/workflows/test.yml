@@ -1,14 +1,17 @@
 name: Test
 
-# 모든 브랜치의 push마다 테스트를 돌린다.
-# 배포(deploy.yml)는 develop 머지 시 돌므로, 머지 전에 여기를 통과시키는 것이 게이트다.
+# 모든 브랜치의 push마다 테스트를 돌린다. develop만 제외하는데, develop은
+# deploy.yml이 이 워크플로를 workflow_call로 호출해 배포 전에 돌리기 때문이다
+# (제외하지 않으면 develop push마다 같은 커밋을 두 번 테스트한다).
 #
-# pull_request 트리거는 일부러 두지 않는다. 두면 PR이 열린 브랜치에 push할 때
+# pull_request 트리거도 일부러 두지 않는다. 두면 PR이 열린 브랜치에 push할 때
 # push·pull_request가 모두 발동해 같은 커밋을 두 번 테스트한다(조직 Actions 분은
 # free 플랜 월 2,000분을 레포끼리 공유한다). 상태 체크는 커밋 sha 기준이라,
 # push로 생성된 이 체크가 PR의 required status check를 그대로 만족시킨다.
 on:
   push:
+    branches-ignore: [develop]
+  workflow_call:
 
 jobs:
   test:
