@@ -102,10 +102,15 @@ jobs:
               echo "::error::ENV_FILE 시크릿이 비어 있습니다. 정상 .env를 덮어쓰지 않도록 중단합니다."
               exit 1
             fi
-            umask 077
-            printf '%s\n' "$ENV_FILE" > .env
+            # 임시 파일에 완성한 뒤 mv로 교체한다. 곧바로 .env에 리다이렉트하면
+            #  (1) 기존 파일의 권한이 그대로 남고(umask는 새로 만드는 파일에만 적용된다)
+            #  (2) 쓰는 도중 실패하면 정상 .env가 반쯤 덮인 채 남는다.
+            tmp="$(mktemp .env.XXXXXX)"
+            chmod 600 "$tmp"
+            printf '%s\n' "$ENV_FILE" > "$tmp"
             # 배포할 이미지는 커밋 sha로 고정한다(이동형 태그가 아니라 이 커밋 그대로).
-            echo "APP_IMAGE_TAG=${IMAGE_TAG}" >> .env
+            printf 'APP_IMAGE_TAG=%s\n' "$IMAGE_TAG" >> "$tmp"
+            mv "$tmp" .env
             docker compose pull
             docker compose up -d
             # 앱이 실제로 응답할 때까지 대기(최대 ~90s). 안 뜨면 배포 실패로 처리해 실패 알림이 나가게 한다.

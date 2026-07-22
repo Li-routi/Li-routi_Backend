@@ -29,7 +29,10 @@
    - `ENV_FILE` — **서버 `.env` 내용 전체**(`deploy/.env.example` 참고). 배포 때 서버에 그대로 기록된다.
      - `APP_IMAGE_TAG` 줄은 **넣지 않는다** — 워크플로가 배포 커밋 sha로 덧붙인다.
      - `DB_ROOT_PASSWORD`·`DB_PASSWORD`는 **현재 서버에서 쓰고 있는 값 그대로** 넣어야 한다. MySQL은 볼륨 최초 초기화 때의 비밀번호를 유지하므로, 다른 값을 넣으면 앱만 새 비밀번호로 접속하다 실패한다.
-     - 여러 줄 값이 전달 과정에서 깨지면 base64로 우회한다: `base64 -i .env | pbcopy`로 인코딩해 등록하고, 워크플로의 `printf` 줄을 `echo "$ENV_FILE" | base64 -d > .env`로 바꾼다.
+     - 여러 줄 값이 전달 과정에서 깨지면 base64로 우회한다. `base64 -i .env | pbcopy`로 인코딩해 등록하고, 워크플로의 `printf '%s\n' "$ENV_FILE" > "$tmp"` 줄을 아래로 바꾼다(디코딩 실패 시 기존 `.env`가 남도록 임시 파일에 먼저 쓴다):
+       ```bash
+       printf '%s' "$ENV_FILE" | base64 --decode > "$tmp"
+       ```
    - `DISCORD_WEBHOOK` — (선택) 배포 결과 알림. 없으면 알림만 건너뛴다.
 2. **GHCR 이미지 공개 범위**: **기본은 private 유지 + 서버에서 1회 로그인**(팀 합의). 이미지를 공개하지 않고, 첫 배포부터 바로 pull된다. `read:packages` 권한 PAT를 하나 만들어, **토큰을 명령행/히스토리에 남기지 않도록** 프롬프트로 입력받아 로그인한다:
    ```bash
@@ -63,7 +66,7 @@ sudo mkdir -p /opt/app && sudo chown ubuntu:ubuntu /opt/app
 cd /opt/app
 ```
 
-### 3) 배포 파일 3개를 서버로 올린다
+### 3) 배포 파일 2개를 서버로 올린다
 
 레포 `deploy/`의 템플릿을 `/opt/app`에 **아래 이름으로** 배치한다. 레포가 private이라 서버에서 직접 clone하면 인증이 필요하므로, **로컬 PC에서 scp**가 가장 간단하다.
 
@@ -104,19 +107,7 @@ cd /opt/app && chmod +x backup.sh
 read -rsp 'GHCR PAT(read:packages): ' PAT && echo "$PAT" | docker login ghcr.io -u <github사용자명> --password-stdin; unset PAT
 ```
 
-### 6) (선택) DB·Redis 미리 기동
-
-첫 배포가 `db`·`redis`·`app`을 한 번에 올리므로 이 단계는 건너뛰어도 된다. MySQL 최초 초기화(수십 초)를 미리 끝내 배포 시간을 줄이고 싶을 때만 한다.
-
-`.env`가 아직 없으므로, 배포를 한 번 돌린 뒤(= `.env` 생성 후)에만 의미가 있다:
-
-```bash
-cd /opt/app
-docker compose up -d db redis
-docker compose ps        # db·redis 가 healthy 인지 확인
-```
-
-### 7) 첫 배포는 develop 머지로 (서버에서 `up app` 수동 실행 안 함)
+### 6) 첫 배포는 develop 머지로 (서버에서 `up app` 수동 실행 안 함)
 
 **develop에 머지**되면 Actions가 이미지 빌드 → GHCR push → 서버 SSH 접속 → `.env` 생성(`ENV_FILE` 시크릿) → `APP_IMAGE_TAG`를 그 커밋 sha로 고정 → `docker compose pull && up -d`까지 자동으로 한다.
 
@@ -128,7 +119,7 @@ docker compose ps        # db·redis 가 healthy 인지 확인
 cd /opt/app && docker compose logs -f app
 ```
 
-### 8) 백업 cron 등록
+### 7) 백업 cron 등록
 
 아래 [AWS / 네트워크] 절의 cron 항목 참고 (매일 04:00 KST).
 
