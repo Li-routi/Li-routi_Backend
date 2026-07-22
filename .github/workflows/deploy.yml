@@ -1,7 +1,7 @@
 name: Deploy to EC2
 
 # develop에 머지될 때만 배포한다. (리뷰를 거쳐 develop에 들어온 코드 = 배포 대상)
-# 테스트는 test.yml(push·PR)이 담당하고, 여기서는 이미지로 만들어 배포만 한다.
+# 테스트는 test.yml(모든 push)이 담당하고, 여기서는 이미지로 만들어 배포만 한다.
 #
 # 이미지 태그는 커밋 sha로 고정한다. :develop 같은 이동형 태그를 서버 .env에 박으면
 # "정확히 그 버전으로 되돌리는" 롤백 기준이 사라지기 때문이다.
@@ -23,6 +23,15 @@ jobs:
       contents: read
       packages: write
     steps:
+      # workflow_dispatch는 아무 브랜치에서나 실행할 수 있다. 그대로 두면 피처 브랜치가
+      # 운영에 배포되고 :develop 태그도 그 빌드를 가리키게 되므로, develop으로 제한한다.
+      - name: Validate deploy ref
+        run: |
+          if [[ "${{ github.ref_name }}" != "develop" ]]; then
+            echo "::error::배포는 develop에서만 실행할 수 있습니다. 현재 ref: ${{ github.ref_name }}"
+            exit 1
+          fi
+
       # 이 잡은 GITHUB_TOKEN을 git config에 남길 필요가 없다(bootJar가 서드파티 코드를 돌리므로 유출면 축소).
       - uses: actions/checkout@v4
         with:
@@ -60,7 +69,8 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       # t4g(Graviton)는 ARM이므로 반드시 linux/arm64로 빌드한다. amd64 이미지는 서버에서 실행 불가.
-      # 서버가 실제로 받는 것은 :<커밋sha>다. latest·develop은 사람이 보기 위한 이동형 태그.
+      # 서버가 실제로 받는 것은 :<커밋sha>다. :latest는 사람이 최신 배포본을 가리킬 때 쓰는 이동형 태그.
+      # (배포가 develop에서만 도므로 :develop 태그는 :latest와 항상 같아 두지 않는다.)
       - name: Build and push (linux/arm64)
         uses: docker/build-push-action@v6
         with:
@@ -69,7 +79,6 @@ jobs:
           push: true
           tags: |
             ${{ steps.img.outputs.image }}:latest
-            ${{ steps.img.outputs.image }}:develop
             ${{ steps.img.outputs.image }}:${{ github.sha }}
 
   # 2단계) 배포 — 빌드 성공 시에만 실행. 서버는 이미지를 pull 해서 재기동만 한다.
@@ -123,7 +132,11 @@ jobs:
               fi
               sleep 3
             done
-            docker image prune -f
+            # 배포마다 새 :<커밋sha> 이미지가 쌓이는데, prune -f는 태그가 붙은 이미지를 지우지 않아
+            # 디스크(30GB)가 계속 찬다. -a로 사용 중이 아닌 이미지까지 정리한다.
+            # 실행 중인 컨테이너가 쓰는 이미지(app 현재 버전·db·redis)는 대상이 아니라 안전하고,
+            # 옛 버전으로 롤백할 때는 GHCR에서 다시 pull된다.
+            docker image prune -af
 
   # 3단계) 알림 — 빌드에서 죽든 배포에서 죽든 결과가 나가도록 always()로 돌린다.
   notify:

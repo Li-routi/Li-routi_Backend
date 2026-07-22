@@ -7,7 +7,7 @@
 | 위치 | 파일 | 커밋 | 역할 |
 | --- | --- | --- | --- |
 | 레포 | `Dockerfile` | O | 실행 jar를 담는 이미지 정의(빌드 스테이지 없음) |
-| 레포 | `.github/workflows/test.yml` | O | 모든 push·PR 테스트 게이팅 |
+| 레포 | `.github/workflows/test.yml` | O | 모든 브랜치 push 테스트 게이팅 |
 | 레포 | `.github/workflows/deploy.yml` | O | develop 머지 시 이미지 빌드·배포 |
 | 레포 | `docker-compose.local.yml` | O | 로컬 개발용 DB·Redis (앱은 IDE/bootRun) |
 | 레포 | `deploy/docker-compose.prod.yml` | O(레퍼런스) | 서버 운영 compose 템플릿 |
@@ -136,7 +136,7 @@ cd /opt/app && docker compose logs -f app
 
 ## 배포 · 롤백
 
-> **develop에 머지되면 배포된다.** 별도 릴리스 절차(태그)는 없다. 테스트는 `test.yml`이 모든 push·PR에서 돌므로, **PR에서 테스트를 통과시킨 뒤 머지하는 것이 배포 게이트**다.
+> **develop에 머지되면 배포된다.** 별도 릴리스 절차(태그)는 없다. 테스트는 `test.yml`이 모든 브랜치 push에서 돌므로, **PR에서 그 결과(`Build & Test`)를 통과시킨 뒤 머지하는 것이 배포 게이트**다(develop 브랜치 보호에 required status check로 걸려 있다).
 > 수동 배포가 필요하면 Actions → Deploy to EC2 → Run workflow(develop)로 실행한다.
 
 이미지는 빌드 시 **`:latest` + `:develop` + `:<커밋 sha>`** 세 태그로 GHCR에 올라간다.
