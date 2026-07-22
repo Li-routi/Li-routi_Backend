@@ -25,10 +25,14 @@ jobs:
     steps:
       # workflow_dispatch는 아무 브랜치에서나 실행할 수 있다. 그대로 두면 피처 브랜치가
       # 운영에 배포되고 :develop 태그도 그 빌드를 가리키게 되므로, develop으로 제한한다.
+      # 브랜치명은 사용자가 정하는 값이라 ${{ }}로 스크립트에 직접 펼치면 셸 주입이 된다.
+      # (예: `$(...)`를 포함한 브랜치명) 반드시 env로 넘겨 셸 변수로만 참조한다.
       - name: Validate deploy ref
+        env:
+          DEPLOY_REF: ${{ github.ref_name }}
         run: |
-          if [[ "${{ github.ref_name }}" != "develop" ]]; then
-            echo "::error::배포는 develop에서만 실행할 수 있습니다. 현재 ref: ${{ github.ref_name }}"
+          if [[ "$DEPLOY_REF" != "develop" ]]; then
+            echo "::error::배포는 develop에서만 실행할 수 있습니다. 현재 ref: $DEPLOY_REF"
             exit 1
           fi
 
@@ -115,6 +119,7 @@ jobs:
             #  (1) 기존 파일의 권한이 그대로 남고(umask는 새로 만드는 파일에만 적용된다)
             #  (2) 쓰는 도중 실패하면 정상 .env가 반쯤 덮인 채 남는다.
             tmp="$(mktemp .env.XXXXXX)"
+            trap 'rm -f "$tmp"' EXIT   # 중간에 실패해도 비밀값이 든 임시 파일을 남기지 않는다
             chmod 600 "$tmp"
             printf '%s\n' "$ENV_FILE" > "$tmp"
             # 배포할 이미지는 커밋 sha로 고정한다(이동형 태그가 아니라 이 커밋 그대로).
