@@ -17,7 +17,7 @@ set -euo pipefail
 cd /opt/app
 source .env
 
-BUCKET="s3://lirouti-db-backup"      # TODO: 실제 버킷명으로 수정
+BUCKET="s3://lirouti-db-backup"      # 확정 버킷명. AWS에 이 이름으로 비공개 버킷을 생성해 둘 것.
 STAMP="$(date +%F)"
 
 # 덤프 파일은 DB 전체가 담긴 민감 파일이다.

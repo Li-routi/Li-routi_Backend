@@ -20,6 +20,17 @@ jobs:
       contents: read
       packages: write
     steps:
+      # workflow_dispatch는 아무 브랜치에서나 실행할 수 있다. 그대로 두면 github.ref_name이
+      # 브랜치명(develop 등)이 되어 :develop 이미지가 배포되고, 서버 .env의 APP_IMAGE_TAG도
+      # 브랜치명으로 고정된다 — 릴리스 버전으로 되돌리는 롤백 경로가 깨진다.
+      # 그래서 배포는 v* 태그에서 실행된 경우로만 한정한다(태그 push 트리거는 이미 v*로 제한됨).
+      - name: Validate release tag
+        run: |
+          if [[ "${{ github.ref_type }}" != "tag" || "${{ github.ref_name }}" != v* ]]; then
+            echo "::error::배포는 v* 릴리스 태그에서만 실행할 수 있습니다. 현재 ref: ${{ github.ref_type }}/${{ github.ref_name }}"
+            exit 1
+          fi
+
       # 이 잡은 GITHUB_TOKEN을 git config에 남길 필요가 없다(bootJar가 서드파티 코드를 돌리므로 유출면 축소).
       - uses: actions/checkout@v4
         with:
@@ -70,8 +81,12 @@ jobs:
             ${{ steps.img.outputs.image }}:${{ github.sha }}
 
       # 서버는 새 이미지를 pull 해서 재기동만 한다(서버에서 빌드하지 않음).
+      # ssh-action은 v1.2.3에 고정한다. v1.2.4부터 번들 drone-ssh가 1.8.2로 올라가면서
+      # 입력(host/key)을 못 읽고 "no configuration file provided"로 죽는 회귀가 있어,
+      # 1.8.2 직전 버전인 v1.2.3으로 내려 우회한다.
+      # 서드파티 액션이라 태그가 옮겨질 수 있어 v1.2.3 커밋 SHA로 고정한다.
       - name: Deploy over SSH
-        uses: appleboy/ssh-action@v1
+        uses: appleboy/ssh-action@91f3272fc5907f4699dcf59761eb622a07342f5a # v1.2.3
         env:
           IMAGE_TAG: ${{ github.ref_name }}
         with:
