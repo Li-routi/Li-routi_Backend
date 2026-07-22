@@ -130,13 +130,14 @@ cd /opt/app && docker compose logs -f app
 - **보안그룹 인바운드**:
   - `8080` — 베타 HTTP 직접 노출.
   - `22`(SSH) — **`0.0.0.0/0` 개방 + 키 인증 전용(비밀번호 로그인 비활성 확인)**. 배포가 GitHub Actions 러너에서 SSH로 접속하는데 러너 IP가 유동적이라 대역 제한이 어렵다. ED25519 키 인증만 허용하는 전제로 1개월 한시 운영에 한해 전체 개방한다.
+    > ⚠️ **한시 조치다.** 데모데이 이후 유지보수를 이어가 실 운영으로 전환하는 시점에 **IP 화이트리스트 정책을 도입**한다(배포 시 러너의 현재 IP만 보안그룹에 임시 허용 → 배포 종료 후 회수하는 동적 화이트리스트). 그때까지는 개방 종료일을 트래킹하고, 철거 시 인스턴스와 함께 정리한다.
   - `3306`(MySQL)·`6379`(Redis) — **열지 않는다**(compose 내부 네트워크 전용).
 - **S3 버킷**: `lirouti-prod-bucket`(미디어)·`lirouti-db-backup`(백업) 이름으로 생성(비공개). 서버 `.env`의 `AWS_S3_BUCKET`·`backup.sh`의 `BUCKET`을 이 이름과 일치시킨다.
 - **백업 cron** (매일 04:00 KST): `crontab -e` → `0 4 * * * /opt/app/backup.sh >> /opt/app/backup.log 2>&1`
 
 ## 배포 · 롤백
 
-> **머지만으로는 배포되지 않는다.** develop/main에 머지한 뒤, 릴리스 시점에 **`v*` 태그를 push**(또는 Actions → Deploy 워크플로 수동 실행)해야 배포된다. 태그는 semver(`vMAJOR.MINOR.PATCH`, 예: `v0.0.1`)를 따른다. 팀은 "머지=통합, 태그 push=릴리스"로 구분한다.
+> **머지만으로는 배포되지 않는다.** develop/main에 머지한 뒤, 릴리스 시점에 **`v*` 태그를 push**해야 배포된다. 수동 실행(Actions → Deploy → Run workflow)도 가능하지만 **ref 드롭다운에서 `v*` 태그를 선택**해야 한다 — 브랜치를 고르면 `Validate release tag` 스텝에서 실패한다(브랜치명이 이미지 태그·`APP_IMAGE_TAG`로 박혀 롤백 기준이 깨지는 것을 막기 위함). 태그는 semver(`vMAJOR.MINOR.PATCH`, 예: `v0.0.1`)를 따른다. 팀은 "머지=통합, 태그 push=릴리스"로 구분한다.
 
 이미지는 push 시 **`:latest` + `:<버전>`(git 태그) + `:<커밋 sha>`** 세 태그로 GHCR에 올라간다.
 운영 compose는 `${APP_IMAGE_TAG:-latest}`를 참조하고, **배포 워크플로가 이번에 push한 버전을 서버 `.env`의 `APP_IMAGE_TAG`에 고정**한다.
