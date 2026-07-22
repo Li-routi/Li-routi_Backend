@@ -10,12 +10,12 @@ public final class MediaConverter {
 
     /**
      * 서명 URL 발급 결과를 응답으로 조립한다.
-     * publicBaseUrl이 비어 있으면 mediaUrl은 null로 두고 key만 내려준다.
+     * mediaUrl은 MediaService가 공개 주소로 조립해 넘겨준다.
      */
     public static MediaResDTO.PresignedUrl toPresignedUrl(
             String uploadUrl,
             String mediaKey,
-            String publicBaseUrl,
+            String mediaUrl,
             String contentType,
             long contentLength,
             Instant expiresAt
@@ -23,20 +23,10 @@ public final class MediaConverter {
         return MediaResDTO.PresignedUrl.builder()
                 .uploadUrl(uploadUrl)
                 .mediaKey(mediaKey)
-                .mediaUrl(toMediaUrl(publicBaseUrl, mediaKey))
+                .mediaUrl(mediaUrl)
                 .contentType(contentType)
                 .contentLength(contentLength)
                 .expiresAt(expiresAt)
                 .build();
-    }
-
-    private static String toMediaUrl(String publicBaseUrl, String mediaKey) {
-        if (publicBaseUrl == null || publicBaseUrl.isBlank()) {
-            return null;
-        }
-        String base = publicBaseUrl.endsWith("/")
-                ? publicBaseUrl.substring(0, publicBaseUrl.length() - 1)
-                : publicBaseUrl;
-        return base + "/" + mediaKey;
     }
 }

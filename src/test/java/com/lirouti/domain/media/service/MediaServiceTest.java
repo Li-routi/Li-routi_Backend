@@ -1,6 +1,7 @@
 package com.lirouti.domain.media.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -16,6 +17,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -221,21 +224,57 @@ class MediaServiceTest {
     }
 
     @Test
-    @DisplayName("공개 주소가 설정되지 않으면 mediaUrl은 null이고 key만 내려준다")
-    void issuePresignedUrl_NoPublicBaseUrl_ReturnsNullMediaUrl() {
+    @DisplayName("공개 주소 끝의 슬래시는 중복되지 않게 정리한다")
+    void resolvePublicUrl_TrailingSlashBase_DoesNotDuplicateSeparator() {
         // given
-        s3Properties.setPublicBaseUrl("");
-        mockPresign();
-        MediaReqDTO.PresignedUrl request = new MediaReqDTO.PresignedUrl(
-                MediaPurpose.CHALLENGE_VERIFICATION, "image/jpeg", 1024L
-        );
+        s3Properties.setPublicBaseUrl(PUBLIC_BASE_URL + "/");
 
         // when
-        MediaResDTO.PresignedUrl response = mediaService.issuePresignedUrl(request);
+        String url = mediaService.resolvePublicUrl("challenge-verifications/abc.jpg");
 
         // then
-        assertThat(response.mediaUrl()).isNull();
-        assertThat(response.mediaKey()).isNotBlank();
+        assertThat(url).isEqualTo(PUBLIC_BASE_URL + "/challenge-verifications/abc.jpg");
+    }
+
+    @Test
+    @DisplayName("발급한 key는 그대로 검증을 통과한다")
+    void validateMediaKey_IssuedKey_Passes() {
+        // given — 실제 발급 경로로 만든 key를 그대로 검증에 넣는다(발급 규칙과 검증 규칙의 불일치 방지)
+        mockPresign();
+        String issuedKey = mediaService.issuePresignedUrl(new MediaReqDTO.PresignedUrl(
+                MediaPurpose.CHALLENGE_VERIFICATION, "image/jpeg", 1024L
+        )).mediaKey();
+
+        // when & then
+        assertThatCode(() ->
+                mediaService.validateMediaKey(issuedKey, MediaPurpose.CHALLENGE_VERIFICATION))
+                .doesNotThrowAnyException();
+    }
+
+    @ParameterizedTest
+    @DisplayName("발급 규칙에 맞지 않는 key는 거부한다")
+    @ValueSource(strings = {
+            "profiles/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg",   // 다른 용도의 경로
+            "challenge-verifications/../../etc/passwd",             // 경로 조작 시도
+            "challenge-verifications/not-a-uuid.jpg",               // UUID가 아님
+            "challenge-verifications/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.mp4", // 사진 전용 용도인데 영상 확장자
+            "challenge-verifications/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f",     // 확장자 없음
+            "6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg"              // 용도 경로 없음
+    })
+    void validateMediaKey_NotIssuedFormat_ThrowsInvalidMediaKey(String mediaKey) {
+        assertThatThrownBy(() ->
+                mediaService.validateMediaKey(mediaKey, MediaPurpose.CHALLENGE_VERIFICATION))
+                .isInstanceOf(MediaException.class)
+                .hasFieldOrPropertyWithValue("code", MediaErrorCode.INVALID_MEDIA_KEY);
+    }
+
+    @Test
+    @DisplayName("key가 null이면 거부한다")
+    void validateMediaKey_Null_ThrowsInvalidMediaKey() {
+        assertThatThrownBy(() ->
+                mediaService.validateMediaKey(null, MediaPurpose.CHALLENGE_VERIFICATION))
+                .isInstanceOf(MediaException.class)
+                .hasFieldOrPropertyWithValue("code", MediaErrorCode.INVALID_MEDIA_KEY);
     }
 
     @Test
