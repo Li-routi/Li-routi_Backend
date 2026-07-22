@@ -44,7 +44,17 @@ public class S3Properties {
     @Positive(message = "최대 영상 업로드 용량은 양수여야 합니다.")
     private long maxVideoSize;
 
-    // 미디어를 읽을 때 사용할 공개 주소(CloudFront 등). 비어 있으면 응답에 key만 담긴다.
+    /**
+     * 미디어를 읽을 때 사용할 공개 주소(CloudFront 등).
+     * DB에는 오브젝트 key만 저장하고 읽기 URL은 이 값 + key로 조립하므로, 없으면 저장된 미디어를
+     * 읽을 수 없다. bucket과 마찬가지로 해석되지 못한 플레이스홀더가 문자열로 바인딩되는 것을
+     * 막기 위해 형식(스킴)까지 검증한다.
+     */
+    @NotBlank(message = "미디어 공개 주소는 필수입니다. AWS_S3_PUBLIC_BASE_URL 환경변수를 주입하세요.")
+    @Pattern(
+            regexp = "^https?://[^\\s${}]+$",
+            message = "미디어 공개 주소 형식이 올바르지 않습니다. AWS_S3_PUBLIC_BASE_URL 환경변수가 주입되지 않았을 수 있습니다."
+    )
     private String publicBaseUrl;
 
     // S3 presigned URL은 최대 7일이다.

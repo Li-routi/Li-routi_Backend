@@ -80,6 +80,7 @@ tasks.named('test') {
 	systemProperty 'GOOGLE_WEB_CLIENT_ID', 'test-google-web-client-id'
 	systemProperty 'GOOGLE_ALLOWED_ISSUERS', 'https://accounts.google.com'
 	systemProperty 'AWS_S3_BUCKET', 'lirouti-test'
+	systemProperty 'AWS_S3_PUBLIC_BASE_URL', 'https://media.test.lirouti.com'
 }
 
 def querydslDir = layout.buildDirectory.dir("generated/querydsl").get().asFile
