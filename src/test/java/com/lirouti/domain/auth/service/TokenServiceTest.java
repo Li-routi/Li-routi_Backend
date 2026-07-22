@@ -231,6 +231,37 @@ class TokenServiceTest {
                 .isEqualTo(MemberErrorCode.WITHDRAWN_MEMBER);
     }
 
+    @Test
+    @DisplayName("유효한 access token이면 블랙리스트 등록 후 refresh 세션을 삭제한다")
+    void logout_ValidAccessToken_BlacklistsTokenAndDeletesRefreshSession() {
+        // given
+        when(jwtUtil.getClaimsForLogout(ACCESS_TOKEN)).thenReturn(claims);
+        when(claims.get("category", String.class)).thenReturn("access");
+        when(claims.getSubject()).thenReturn(String.valueOf(MEMBER_ID));
+        when(jwtUtil.getExpirationTime(ACCESS_TOKEN)).thenReturn(3600_000L);
+
+        // when
+        tokenService.logout(ACCESS_TOKEN);
+
+        // then
+        verify(redisUtil).setBlackList(ACCESS_TOKEN, 3600_000L);
+        verify(redisUtil).delete("auth:refresh:" + MEMBER_ID);
+    }
+
+    @Test
+    @DisplayName("access token이 아니면 TOKEN_INVALID를 던진다")
+    void logout_InvalidCategory_ThrowsTokenInvalid() {
+        // given
+        when(jwtUtil.getClaimsForLogout(ACCESS_TOKEN)).thenReturn(claims);
+        when(claims.get("category", String.class)).thenReturn("refresh");
+
+        // when & then
+        assertThatThrownBy(() -> tokenService.logout(ACCESS_TOKEN))
+                .isInstanceOf(AuthException.class)
+                .extracting("code")
+                .isEqualTo(AuthErrorCode.TOKEN_INVALID);
+    }
+
     private String sha256(String value) throws Exception {
         byte[] digest = MessageDigest.getInstance("SHA-256")
                 .digest(value.getBytes(StandardCharsets.UTF_8));

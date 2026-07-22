@@ -1,10 +1,7 @@
 package com.lirouti.domain.auth.service;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
-import java.util.Base64;
+import java.util.Date;
 
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -20,6 +17,7 @@ import com.lirouti.domain.member.repository.MemberRepository;
 import com.lirouti.global.properties.JwtProperties;
 import com.lirouti.global.util.JwtUtil;
 import com.lirouti.global.util.RedisUtil;
+import com.lirouti.global.util.TokenHashUtil;
 
 import io.jsonwebtoken.Claims;
 import lombok.extern.slf4j.Slf4j;
@@ -56,7 +54,7 @@ public class TokenService {
 
         redisUtil.set(
                 getRefreshTokenKey(member.getId()),
-                hash(refreshToken),
+                TokenHashUtil.hash(refreshToken),
                 refreshTokenExpiration
         );
         log.debug("서비스 토큰을 발급하고 Refresh Token 해시를 저장했습니다. memberId={}", member.getId());
@@ -84,8 +82,8 @@ public class TokenService {
         // Refresh Token 해시를 Redis에 저장하고, 기존 해시와 비교하여 일치하지 않으면 예외 발생
         boolean stored = redisUtil.compareAndSet(
                 getRefreshTokenKey(member.getId()),
-                hash(refreshToken),
-                hash(newRefreshToken),
+                TokenHashUtil.hash(refreshToken),
+                TokenHashUtil.hash(newRefreshToken),
                 refreshTokenExpiration
         );
 
@@ -104,6 +102,25 @@ public class TokenService {
         );
     }
 
+    public Long logout(String accessToken) {
+        Claims claims = jwtUtil.getClaimsForLogout(accessToken);
+        validateAccessCategory(claims);
+
+        Long memberId = parseMemberId(claims.getSubject());
+
+        Date expiration = claims.getExpiration();
+
+        // Redis에 블랙리스트 토큰으로 등록하고, 남은 유효 시간 동안 유지
+        long remainingTime = expiration == null
+                ? Math.max(jwtUtil.getExpirationTime(accessToken), 0L)
+                : Math.max(expiration.getTime() - System.currentTimeMillis(), 0L);
+
+        redisUtil.setBlackList(accessToken, remainingTime);
+        redisUtil.delete(getRefreshTokenKey(memberId));
+
+        return memberId;
+    }
+
     private String getRefreshTokenKey(Long memberId) {
         return REFRESH_TOKEN_KEY_PREFIX + memberId;
     }
@@ -111,6 +128,13 @@ public class TokenService {
     private void validateRefreshCategory(Claims claims) {
         String category = claims.get("category", String.class);
         if (!"refresh".equals(category)) {
+            throw new AuthException(AuthErrorCode.TOKEN_INVALID);
+        }
+    }
+
+    private void validateAccessCategory(Claims claims) {
+        String category = claims.get("category", String.class);
+        if (!"access".equals(category)) {
             throw new AuthException(AuthErrorCode.TOKEN_INVALID);
         }
     }
@@ -134,13 +158,4 @@ public class TokenService {
         }
     }
 
-    private String hash(String value) {
-        try {
-            byte[] digest = MessageDigest.getInstance("SHA-256")
-                    .digest(value.getBytes(StandardCharsets.UTF_8));
-            return Base64.getUrlEncoder().withoutPadding().encodeToString(digest);
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 algorithm is unavailable", e);
-        }
-    }
 }

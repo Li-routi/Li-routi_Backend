@@ -1,9 +1,7 @@
 package com.lirouti.domain.auth.service;
 
 import com.lirouti.global.util.RedisUtil;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
+import com.lirouti.global.util.TokenHashUtil;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.util.Base64;
@@ -53,17 +51,6 @@ public class GoogleNonceService {
     }
 
     private String getNonceKey(String nonce) {
-        return NONCE_KEY_PREFIX + hash(nonce);
-    }
-
-    // SHA-256 해시를 사용하여 nonce를 안전하게 저장하려는 용도
-    private String hash(String value) {
-        try {
-            byte[] digest = MessageDigest.getInstance("SHA-256")
-                    .digest(value.getBytes(StandardCharsets.UTF_8));
-            return Base64.getUrlEncoder().withoutPadding().encodeToString(digest);
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 algorithm is unavailable", e);
-        }
+        return NONCE_KEY_PREFIX + TokenHashUtil.hash(nonce);
     }
 }
