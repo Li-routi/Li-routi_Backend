@@ -85,6 +85,9 @@ public class ChallengeCommandService {
      *
      * 비활성 챌린지라도 참여 중이면 인증할 수 있다. 운영이 챌린지를 내려도 진행 중인 스트릭이
      * 끊기지 않게 하기 위해서이며, 이탈(leave)이 챌린지 active를 보지 않는 것과 같은 기준이다.
+     *
+     * 현재는 자가인증이다 — 사진을 등록하면 그대로 통과한다. 사진이 챌린지 의도(이름·설명)에
+     * 맞는지 심사하는 로직은 아직 없으며, #40에서 이 메서드에 추가한다(아래 TODO 참고).
      */
     @Transactional
     public ChallengeResDTO.Verification verify(
@@ -94,6 +97,14 @@ public class ChallengeCommandService {
     ) {
         // key는 서버가 발급하지만 요청으로 되돌아오므로, 저장 전에 발급 규칙과 대조한다.
         mediaService.validateMediaKey(request.mediaKey(), MediaPurpose.CHALLENGE_VERIFICATION);
+
+        // TODO(#40): 사진이 챌린지 의도(challenge.name + description)에 맞는지 AI 심사.
+        //  통과해야 아래 저장·스트릭 갱신으로 진행하고, 반려면 여기서 예외를 던져 막는다.
+        //  ⚠️ 외부 AI 호출은 이 @Transactional 트랜잭션 안에서 하면 안 된다(service_convention:
+        //     트랜잭션 내 장시간 외부 API 호출 금지). 심사는 트랜잭션을 열기 전에 끝내야 하므로,
+        //     이 메서드를 "심사(트랜잭션 밖) → 저장·스트릭(트랜잭션 안)" 두 단계로 쪼개야 한다.
+        //  심사가 사진을 실제로 읽으므로 S3 존재 확인도 이 단계에서 겸한다.
+        //  방식·제공자·임계값·반려 UX·판정결과 저장(스키마 영향)은 #40에서 확정한다.
 
         MemberChallenge memberChallenge = memberChallengeRepository
                 .findByMemberIdAndChallengeId(memberId, challengeId)
