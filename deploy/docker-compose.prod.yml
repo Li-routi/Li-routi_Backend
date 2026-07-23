@@ -45,7 +45,9 @@ services:
       retries: 10
 
   app:
-    # 평소엔 latest(최신 배포). 롤백 시 .env의 APP_IMAGE_TAG를 이전 버전(예: v0.9.0)으로 바꾼다.
+    # 정상 배포에서는 워크플로가 .env에 커밋 sha로 덧붙인다(사람이 관리하지 않는다).
+    # 임시 롤백은 이 값을 이전 커밋 sha로 바꾼 뒤 `docker compose pull && docker compose up -d`.
+    # (배포가 prune -af로 옛 이미지를 정리하므로 로컬에 없을 수 있어 pull이 필요하다. 다음 배포에서 원복됨)
     image: ghcr.io/li-routi/li-routi_backend:${APP_IMAGE_TAG:-latest}
     restart: unless-stopped
     depends_on:

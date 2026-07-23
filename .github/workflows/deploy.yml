@@ -1,11 +1,13 @@
 name: Deploy to EC2
 
-# 릴리스 태그(v*) push 시에만 배포한다. (예: git tag v1.0.0 && git push origin v1.0.0)
-# 테스트는 별도 test.yml(PR·push)에서 돌리고, 여기서는 이미 테스트된 커밋을 이미지로 만들어 배포만 한다.
+# develop에 머지될 때만 배포한다. (리뷰를 거쳐 develop에 들어온 코드 = 배포 대상)
+# 테스트(test.yml)를 workflow_call로 먼저 돌려 통과한 커밋만 이미지로 만들어 배포한다.
+#
+# 이미지 태그는 커밋 sha로 고정한다. :develop 같은 이동형 태그를 서버 .env에 박으면
+# "정확히 그 버전으로 되돌리는" 롤백 기준이 사라지기 때문이다.
 on:
   push:
-    tags:
-      - "v*"
+    branches: [develop]
   workflow_dispatch:
 
 concurrency:
@@ -13,21 +15,36 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build-and-deploy:
-    name: Build image & deploy
+  # 1단계) 테스트 — 배포될 바로 그 커밋을 검증한다. 실패하면 빌드조차 시작하지 않는다.
+  # test.yml을 workflow_call로 재사용하므로 테스트 정의는 한 곳에만 있다.
+  # (브랜치 보호만으로는 부족하다. squash 머지는 develop에 새 sha를 만들어 PR에서
+  #  테스트한 커밋과 배포되는 커밋이 달라지고, enforce_admins가 꺼져 있어 관리자는
+  #  보호를 우회해 develop에 직접 push할 수 있다.)
+  #
+  # secrets를 넘기지 않는 것은 의도적이다. 넘기면 test.yml 안의 Discord 알림까지 함께 발동해
+  # 테스트 실패 시 알림이 두 번 간다(아래 notify 잡이 이미 "테스트 실패"를 알린다).
+  test:
+    uses: ./.github/workflows/test.yml
+
+  # 2단계) 이미지 빌드·push — 실패하면 "빌드 실패"로 한눈에 구분된다.
+  build:
+    name: Build & push image
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     steps:
-      # workflow_dispatch는 아무 브랜치에서나 실행할 수 있다. 그대로 두면 github.ref_name이
-      # 브랜치명(develop 등)이 되어 :develop 이미지가 배포되고, 서버 .env의 APP_IMAGE_TAG도
-      # 브랜치명으로 고정된다 — 릴리스 버전으로 되돌리는 롤백 경로가 깨진다.
-      # 그래서 배포는 v* 태그에서 실행된 경우로만 한정한다(태그 push 트리거는 이미 v*로 제한됨).
-      - name: Validate release tag
+      # workflow_dispatch는 아무 브랜치에서나 실행할 수 있다. 그대로 두면 피처 브랜치가
+      # 운영에 배포되고 :develop 태그도 그 빌드를 가리키게 되므로, develop으로 제한한다.
+      # 브랜치명은 사용자가 정하는 값이라 ${{ }}로 스크립트에 직접 펼치면 셸 주입이 된다.
+      # (예: `$(...)`를 포함한 브랜치명) 반드시 env로 넘겨 셸 변수로만 참조한다.
+      - name: Validate deploy ref
+        env:
+          DEPLOY_REF: ${{ github.ref_name }}
         run: |
-          if [[ "${{ github.ref_type }}" != "tag" || "${{ github.ref_name }}" != v* ]]; then
-            echo "::error::배포는 v* 릴리스 태그에서만 실행할 수 있습니다. 현재 ref: ${{ github.ref_type }}/${{ github.ref_name }}"
+          if [[ "$DEPLOY_REF" != "develop" ]]; then
+            echo "::error::배포는 develop에서만 실행할 수 있습니다. 현재 ref: $DEPLOY_REF"
             exit 1
           fi
 
@@ -68,7 +85,8 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       # t4g(Graviton)는 ARM이므로 반드시 linux/arm64로 빌드한다. amd64 이미지는 서버에서 실행 불가.
-      # 롤백 경로를 위해 latest와 커밋 sha 태그를 함께 push한다.
+      # 서버가 실제로 받는 것은 :<커밋sha>다. :latest는 사람이 최신 배포본을 가리킬 때 쓰는 이동형 태그.
+      # (배포가 develop에서만 도므로 :develop 태그는 :latest와 항상 같아 두지 않는다.)
       - name: Build and push (linux/arm64)
         uses: docker/build-push-action@v6
         with:
@@ -77,10 +95,14 @@ jobs:
           push: true
           tags: |
             ${{ steps.img.outputs.image }}:latest
-            ${{ steps.img.outputs.image }}:${{ github.ref_name }}
             ${{ steps.img.outputs.image }}:${{ github.sha }}
 
-      # 서버는 새 이미지를 pull 해서 재기동만 한다(서버에서 빌드하지 않음).
+  # 3단계) 배포 — 빌드 성공 시에만 실행. 서버는 이미지를 pull 해서 재기동만 한다.
+  deploy:
+    name: Deploy to EC2
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
       # ssh-action은 v1.2.3에 고정한다. v1.2.4부터 번들 drone-ssh가 1.8.2로 올라가면서
       # 입력(host/key)을 못 읽고 "no configuration file provided"로 죽는 회귀가 있어,
       # 1.8.2 직전 버전인 v1.2.3으로 내려 우회한다.
@@ -88,24 +110,36 @@ jobs:
       - name: Deploy over SSH
         uses: appleboy/ssh-action@91f3272fc5907f4699dcf59761eb622a07342f5a # v1.2.3
         env:
-          IMAGE_TAG: ${{ github.ref_name }}
+          IMAGE_TAG: ${{ github.sha }}
+          ENV_FILE: ${{ secrets.ENV_FILE }}
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ubuntu
           key: ${{ secrets.SERVER_SSH_KEY }}
-          envs: IMAGE_TAG
+          envs: IMAGE_TAG,ENV_FILE
           script: |
             set -e
             cd /opt/app
-            # 이번에 push한 버전(예: v1.0.2)으로 고정한다. latest가 아니라 이 태그 이미지를 그대로 받는다.
-            if grep -q '^APP_IMAGE_TAG=' .env; then
-              sed -i "s/^APP_IMAGE_TAG=.*/APP_IMAGE_TAG=${IMAGE_TAG}/" .env
-            else
-              echo "APP_IMAGE_TAG=${IMAGE_TAG}" >> .env
+            # 런타임 설정은 GitHub Secret(ENV_FILE)이 단일 진실 공급원이다.
+            # 매 배포마다 .env를 새로 쓰므로, 서버에서 직접 고친 값은 여기서 원복된다.
+            # printf '%s'는 백슬래시를 해석하지 않아 값이 그대로 보존된다(echo는 변형 위험).
+            if [ -z "$ENV_FILE" ]; then
+              echo "::error::ENV_FILE 시크릿이 비어 있습니다. 정상 .env를 덮어쓰지 않도록 중단합니다."
+              exit 1
             fi
+            # 임시 파일에 완성한 뒤 mv로 교체한다. 곧바로 .env에 리다이렉트하면
+            #  (1) 기존 파일의 권한이 그대로 남고(umask는 새로 만드는 파일에만 적용된다)
+            #  (2) 쓰는 도중 실패하면 정상 .env가 반쯤 덮인 채 남는다.
+            tmp="$(mktemp .env.XXXXXX)"
+            trap 'rm -f "$tmp"' EXIT   # 중간에 실패해도 비밀값이 든 임시 파일을 남기지 않는다
+            chmod 600 "$tmp"
+            printf '%s\n' "$ENV_FILE" > "$tmp"
+            # 배포할 이미지는 커밋 sha로 고정한다(이동형 태그가 아니라 이 커밋 그대로).
+            printf 'APP_IMAGE_TAG=%s\n' "$IMAGE_TAG" >> "$tmp"
+            mv "$tmp" .env
             docker compose pull
             docker compose up -d
-            # 앱이 실제로 응답할 때까지 대기(최대 ~90s). 안 뜨면 배포 실패로 처리해 Discord 실패 알림이 나가게 한다.
+            # 앱이 실제로 응답할 때까지 대기(최대 ~90s). 안 뜨면 배포 실패로 처리해 실패 알림이 나가게 한다.
             for i in $(seq 1 30); do
               if curl -fsS -o /dev/null http://localhost:8080/api/challenges; then
                 echo "app is ready"; break
@@ -115,29 +149,39 @@ jobs:
               fi
               sleep 3
             done
-            docker image prune -f
+            # 배포마다 새 :<커밋sha> 이미지가 쌓이는데, prune -f는 태그가 붙은 이미지를 지우지 않아
+            # 디스크(30GB)가 계속 찬다. -a로 사용 중이 아닌 이미지까지 정리한다.
+            # 실행 중인 컨테이너가 쓰는 이미지(app 현재 버전·db·redis)는 대상이 아니라 안전하고,
+            # 옛 버전으로 롤백할 때는 GHCR에서 다시 pull된다.
+            docker image prune -af
 
-      # 배포 결과를 Discord로 알림. DISCORD_WEBHOOK 시크릿이 없으면 조용히 건너뛴다.
-      - name: Notify Discord (성공)
-        if: success()
+  # 4단계) 알림 — 어느 단계에서 죽어도 결과가 나가도록 always()로 돌린다.
+  notify:
+    name: Notify Discord
+    needs: [test, build, deploy]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      # DISCORD_WEBHOOK 시크릿이 없으면 조용히 건너뛴다.
+      - name: Notify result
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
-          REF: ${{ github.ref_name }}
+          TEST_RESULT: ${{ needs.test.result }}
+          BUILD_RESULT: ${{ needs.build.result }}
+          DEPLOY_RESULT: ${{ needs.deploy.result }}
+          REF: ${{ github.sha }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           [ -z "$DISCORD_WEBHOOK" ] && exit 0
+          if [ "$TEST_RESULT" != "success" ]; then
+            MSG="❌ **테스트 실패**"
+          elif [ "$BUILD_RESULT" != "success" ]; then
+            MSG="❌ **빌드 실패** (테스트는 성공)"
+          elif [ "$DEPLOY_RESULT" != "success" ]; then
+            MSG="❌ **배포 실패** (빌드까지 성공)"
+          else
+            MSG="✅ **배포 성공**"
+          fi
           curl -sf -H "Content-Type: application/json" \
-            -d "$(printf '{"content":"✅ **배포 성공** — `%s` — %s"}' "$REF" "$RUN_URL")" \
-            "$DISCORD_WEBHOOK" || true
-
-      - name: Notify Discord (실패)
-        if: failure()
-        env:
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
-          REF: ${{ github.ref_name }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          [ -z "$DISCORD_WEBHOOK" ] && exit 0
-          curl -sf -H "Content-Type: application/json" \
-            -d "$(printf '{"content":"❌ **배포 실패** — `%s` — %s"}' "$REF" "$RUN_URL")" \
+            -d "$(printf '{"content":"%s — `%s` — %s"}' "$MSG" "$REF" "$RUN_URL")" \
             "$DISCORD_WEBHOOK" || true
