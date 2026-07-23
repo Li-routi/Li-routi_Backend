@@ -138,8 +138,10 @@ cd /opt/app && docker compose logs -f app
 
 > **develop에 머지되면 배포된다.** 별도 릴리스 절차(태그)는 없다. **배포 워크플로가 `test.yml`을 첫 잡으로 호출해, 배포될 그 커밋의 테스트가 통과해야 빌드·배포가 진행된다.** PR 단계에서도 브랜치 push로 같은 테스트가 돌고, 그 결과(`Build & Test`)가 develop 브랜치 보호의 required status check로 걸려 있다.
 > 수동 배포가 필요하면 Actions → Deploy to EC2 → Run workflow(develop)로 실행한다.
+>
+> :information_source: **develop의 테스트는 "Test" 워크플로에 단독으로 뜨지 않는다.** `test.yml`은 develop push를 무시하고(`branches-ignore: [develop]`), 대신 배포 워크플로가 이를 호출한다. 그래서 **develop의 테스트 결과는 Actions의 "Deploy to EC2" 실행 안 `test` 잡에서 확인**한다. 같은 커밋을 두 번 테스트하지 않기 위한 것이다(피처 브랜치·PR은 "Test"에 그대로 단독으로 뜬다).
 
-이미지는 빌드 시 **`:latest` + `:develop` + `:<커밋 sha>`** 세 태그로 GHCR에 올라간다.
+이미지는 빌드 시 **`:latest` + `:<커밋 sha>`** 두 태그로 GHCR에 올라간다.
 운영 compose는 `${APP_IMAGE_TAG:-latest}`를 참조하고, **배포 워크플로가 그 배포의 커밋 sha를 서버 `.env`의 `APP_IMAGE_TAG`에 고정**한다.
 `latest`·`develop`은 사람이 보기 위한 이동형 태그이고, 서버가 실제로 받는 것은 **커밋 sha 이미지**다 — 그래야 "정확히 그 커밋으로 되돌리기"가 성립한다(결정적 배포).
 
