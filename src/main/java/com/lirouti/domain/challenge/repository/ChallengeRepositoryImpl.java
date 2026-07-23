@@ -104,6 +104,23 @@ public class ChallengeRepositoryImpl implements ChallengeRepositoryCustom {
     }
 
     @Override
+    public long countVerificationPosts(Long challengeId) {
+        // 인증(게시글) 단위 집계. 회차 중복 제거를 하지 않는다. 탈퇴 회원의 인증은 제외한다.
+        // 목록의 배치 집계(countVerificationPostsByChallengeIds)와 같은 기준을 단건으로 센 것이다.
+        Long count = queryFactory
+                .select(verification.id.count())
+                .from(verification)
+                .join(verification.memberChallenge, memberChallenge)
+                .join(memberChallenge.member, member)
+                .where(
+                        memberChallenge.challenge.id.eq(challengeId),
+                        activeMember(member)
+                )
+                .fetchOne();
+        return (count != null) ? count : 0L;
+    }
+
+    @Override
     public long countTodayCompletions(Long challengeId, LocalDate today) {
         // 오늘 인증을 회원 단위로 센다. 회차가 다른 오늘자 인증이 두 건 생길 수 있으므로
         // member_challenge_id 기준으로 중복을 제거하고, 현재 회차의 인증만 포함한다.

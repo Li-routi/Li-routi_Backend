@@ -105,6 +105,8 @@ public final class ChallengeResDTO {
     }
 
     // 상세 화면
+    // participating: 조회자가 현재 참여 중인지. 비로그인이면 false('참여하기' 버튼 노출).
+    // verificationPostCount: 인증 게시글 수(상단 통계). participantCount와 함께 카드 상단에 쓰인다.
     @Builder
     public record Detail(
             Long challengeId,
@@ -113,7 +115,9 @@ public final class ChallengeResDTO {
             String imageUrl,
             ChallengeCategory category,
             RoutineCycle routineCycle,
+            boolean participating,
             long participantCount,
+            long verificationPostCount,
             long todayCompletionCount
     ) {
     }

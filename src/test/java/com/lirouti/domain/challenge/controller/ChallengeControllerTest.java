@@ -1,5 +1,6 @@
 package com.lirouti.domain.challenge.controller;
 
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -24,6 +25,7 @@ import com.lirouti.domain.challenge.enums.ChallengeCategory;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.enums.Role;
 import com.lirouti.domain.member.enums.SocialProvider;
+import com.lirouti.global.auth.CustomUserDetails;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -125,7 +127,7 @@ class ChallengeControllerTest {
     }
 
     @Test
-    @DisplayName("존재하는 챌린지 상세는 200과 참여자 수·오늘 완료자 수(비-0)를 끝까지 태워 반환한다")
+    @DisplayName("비로그인 상세는 200과 참여자 수·인증 게시글 수·오늘 완료자 수를 태워 반환하고 participating=false")
     void getChallenge_Existing_Returns200() throws Exception {
         Challenge c = persistChallenge();
         persistParticipantWithTodayVerification(c);
@@ -137,7 +139,31 @@ class ChallengeControllerTest {
                 .andExpect(jsonPath("$.result.imageUrl").value("https://img/water.png"))
                 .andExpect(jsonPath("$.result.routineCycle").value("DAILY"))
                 .andExpect(jsonPath("$.result.participantCount").value(1))
-                .andExpect(jsonPath("$.result.todayCompletionCount").value(1));
+                .andExpect(jsonPath("$.result.verificationPostCount").value(1))
+                .andExpect(jsonPath("$.result.todayCompletionCount").value(1))
+                // 비로그인이므로 참여 여부는 false다.
+                .andExpect(jsonPath("$.result.participating").value(false));
+    }
+
+    @Test
+    @DisplayName("로그인한 참여자가 상세를 보면 participating=true")
+    void getChallenge_LoggedInParticipant_ReturnsParticipatingTrue() throws Exception {
+        Challenge c = persistChallenge();
+        Member me = Member.builder()
+                .email("mvc-part@ex.com").nickname("mvcPart")
+                .socialProvider(SocialProvider.GOOGLE).role(Role.ROLE_USER)
+                .socialId("mvc-part-sid").build();
+        em.persist(me);
+        em.persist(MemberChallenge.builder()
+                .member(me).challenge(c)
+                .participationRound(1).currentStreak(0)
+                .joinedAt(LocalDateTime.now()).active(true).build());
+        em.flush();
+
+        mockMvc.perform(get("/api/challenges/{id}", c.getId())
+                        .with(user(new CustomUserDetails(me.getId(), Role.ROLE_USER))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.participating").value(true));
     }
 
     @Test

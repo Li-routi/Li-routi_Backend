@@ -134,10 +134,12 @@ public final class ChallengeConverter {
                 .build();
     }
 
-    // 참여자 수·오늘 완료자 수는 Service가 집계해 매개변수로 넘긴다.
+    // 참여 여부·집계 수치는 Service가 조회해 매개변수로 넘긴다.
     public static ChallengeResDTO.Detail toDetail(
             Challenge challenge,
+            boolean participating,
             long participantCount,
+            long verificationPostCount,
             long todayCompletionCount
     ) {
         return ChallengeResDTO.Detail.builder()
@@ -147,7 +149,9 @@ public final class ChallengeConverter {
                 .imageUrl(challenge.getImageUrl())
                 .category(challenge.getCategory())
                 .routineCycle(challenge.getRoutineCycle())
+                .participating(participating)
                 .participantCount(participantCount)
+                .verificationPostCount(verificationPostCount)
                 .todayCompletionCount(todayCompletionCount)
                 .build();
     }

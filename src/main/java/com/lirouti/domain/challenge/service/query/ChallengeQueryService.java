@@ -13,6 +13,7 @@ import com.lirouti.domain.challenge.converter.ChallengeConverter;
 import com.lirouti.domain.challenge.dto.response.ChallengeResDTO;
 import com.lirouti.domain.challenge.entity.Challenge;
 import com.lirouti.domain.challenge.entity.ChallengeVerification;
+import com.lirouti.domain.challenge.entity.MemberChallenge;
 import com.lirouti.domain.challenge.enums.ChallengeCategory;
 import com.lirouti.domain.challenge.exception.ChallengeException;
 import com.lirouti.domain.challenge.exception.code.error.ChallengeErrorCode;
@@ -115,16 +116,30 @@ public class ChallengeQueryService {
         return ChallengeConverter.toMyListing(challenges);
     }
 
+    // memberId는 조회자. 상세는 비로그인도 볼 수 있으므로 null일 수 있고, 그때 participating은 false다.
     @Transactional(readOnly = true)
-    public ChallengeResDTO.Detail getChallenge(Long challengeId) {
+    public ChallengeResDTO.Detail getChallenge(Long challengeId, Long memberId) {
         Challenge challenge = challengeRepository.findByIdAndActiveTrue(challengeId)
                 .orElseThrow(() -> new ChallengeException(ChallengeErrorCode.CHALLENGE_NOT_FOUND));
 
+        boolean participating = isParticipating(memberId, challengeId);
         long participantCount = challengeRepository.countActiveParticipants(challengeId);
+        long verificationPostCount = challengeRepository.countVerificationPosts(challengeId);
         long todayCompletionCount =
                 challengeRepository.countTodayCompletions(challengeId, LocalDate.now(TimeUtil.KST));
 
-        return ChallengeConverter.toDetail(challenge, participantCount, todayCompletionCount);
+        return ChallengeConverter.toDetail(
+                challenge, participating, participantCount, verificationPostCount, todayCompletionCount);
+    }
+
+    // 비로그인(memberId == null)이면 참여 중이 아니다. 로그인 시에는 현재 참여 상태를 본다.
+    private boolean isParticipating(Long memberId, Long challengeId) {
+        if (memberId == null) {
+            return false;
+        }
+        return memberChallengeRepository.findByMemberIdAndChallengeId(memberId, challengeId)
+                .filter(MemberChallenge::isParticipating)
+                .isPresent();
     }
 
     private int clampSize(Integer size) {
