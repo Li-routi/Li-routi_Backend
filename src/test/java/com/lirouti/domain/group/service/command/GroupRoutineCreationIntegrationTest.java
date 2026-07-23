@@ -3,7 +3,7 @@ package com.lirouti.domain.group.service.command;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.doThrow;
 
 import com.lirouti.domain.group.dto.request.GroupReqDTO;
 import com.lirouti.domain.group.entity.Group;
@@ -19,8 +19,9 @@ import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.enums.Role;
 import com.lirouti.domain.member.enums.SocialProvider;
 import com.lirouti.domain.member.repository.MemberRepository;
-import java.time.DayOfWeek;
+import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -57,14 +58,15 @@ class GroupRoutineCreationIntegrationTest {
         // given
         TransactionTemplate transaction = new TransactionTemplate(transactionManager);
         Seed seed = transaction.execute(status -> createSeed());
-        when(groupRoutineAssignmentRepository.saveAllAndFlush(any()))
-                .thenThrow(new IllegalStateException("assignment failure"));
+        doThrow(new IllegalStateException("assignment failure"))
+                .when(groupRoutineAssignmentRepository)
+                .insertIfAbsent(any(), any(), any(), any(), any(), any());
         GroupReqDTO.CreateRoutine request = new GroupReqDTO.CreateRoutine(
                 seed.categoryId(),
                 "롤백 루틴",
                 "할당 실패 시 모두 롤백합니다.",
                 List.of(new GroupReqDTO.RoutineSchedule(
-                        DayOfWeek.MONDAY,
+                        LocalDate.now(ZoneId.of("Asia/Seoul")).getDayOfWeek(),
                         LocalTime.of(9, 0),
                         LocalTime.of(10, 0)
                 ))

@@ -6,18 +6,13 @@ import com.lirouti.domain.group.dto.response.GroupResDTO;
 import com.lirouti.domain.group.entity.Group;
 import com.lirouti.domain.group.entity.GroupMember;
 import com.lirouti.domain.group.entity.GroupRoutine;
-import com.lirouti.domain.group.entity.GroupRoutineAssignment;
 import com.lirouti.domain.group.entity.RoutineCategory;
-import com.lirouti.domain.group.enums.GroupMemberStatus;
 import com.lirouti.domain.group.exception.GroupException;
 import com.lirouti.domain.group.exception.code.error.GroupErrorCode;
-import com.lirouti.domain.group.repository.GroupMemberRepository;
-import com.lirouti.domain.group.repository.GroupRoutineAssignmentRepository;
 import com.lirouti.domain.group.repository.GroupRoutineRepository;
 import com.lirouti.domain.group.repository.RoutineCategoryRepository;
 import com.lirouti.domain.group.service.GroupValidationService;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -30,8 +25,7 @@ public class GroupCommandService {
     private final GroupValidationService groupValidationService;
     private final RoutineCategoryRepository routineCategoryRepository;
     private final GroupRoutineRepository groupRoutineRepository;
-    private final GroupMemberRepository groupMemberRepository;
-    private final GroupRoutineAssignmentRepository groupRoutineAssignmentRepository;
+    private final GroupRoutineAssignmentCommandService assignmentCommandService;
 
     @Transactional
     public GroupResDTO.RoutineCreateResult createRoutine(
@@ -50,21 +44,13 @@ public class GroupCommandService {
 
         validateRoutineTitleNotDuplicated(groupId, request.title());
 
-        List<GroupMember> activeMembers = groupMemberRepository
-                .findAllByGroupIdAndStatus(groupId, GroupMemberStatus.ACTIVE);
-
         GroupRoutine groupRoutine = GroupConverter.toGroupRoutine(request, group, category);
         saveGroupRoutine(groupRoutine);
 
-        List<GroupRoutineAssignment> assignments = activeMembers.stream()
-                .map(groupMember -> GroupRoutineAssignment.builder()
-                        .groupRoutine(groupRoutine)
-                        .member(groupMember.getMember())
-                        .build())
-                .toList();
-        groupRoutineAssignmentRepository.saveAllAndFlush(assignments);
+        int assignmentCount = assignmentCommandService
+                .assignRoutineToActiveMembersToday(groupRoutine);
 
-        return GroupConverter.toRoutineCreateResult(groupRoutine, assignments.size());
+        return GroupConverter.toRoutineCreateResult(groupRoutine, assignmentCount);
     }
 
     private void validateRequest(GroupReqDTO.CreateRoutine request) {

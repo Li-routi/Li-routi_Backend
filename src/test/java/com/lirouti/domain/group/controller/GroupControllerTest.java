@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.lirouti.domain.group.entity.Group;
 import com.lirouti.domain.group.entity.GroupMember;
+import com.lirouti.domain.group.entity.GroupRoutineAssignment;
 import com.lirouti.domain.group.entity.RoutineCategory;
 import com.lirouti.domain.group.enums.GroupMemberRole;
 import com.lirouti.domain.member.entity.Member;
@@ -18,6 +19,10 @@ import com.lirouti.domain.member.enums.SocialProvider;
 import com.lirouti.global.auth.CustomUserDetails;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.ZoneId;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -66,9 +71,8 @@ class GroupControllerTest {
                 .andExpect(jsonPath("$.result.categoryName").value(category.getName()))
                 .andExpect(jsonPath("$.result.title").value("공동 정리"))
                 .andExpect(jsonPath("$.result.assignmentCount").value(2))
-                .andExpect(jsonPath("$.result.schedules[0].repeatDay").value("MONDAY"))
-                .andExpect(jsonPath("$.result.schedules[0].startTime").value("09:00"))
-                .andExpect(jsonPath("$.result.schedules[1].repeatDay").value("FRIDAY"));
+                .andExpect(jsonPath("$.result.schedules[0].repeatDay").value(today().getDayOfWeek().name()))
+                .andExpect(jsonPath("$.result.schedules[0].startTime").value("09:00"));
 
         em.flush();
         em.clear();
@@ -85,6 +89,19 @@ class GroupControllerTest {
                 .getSingleResult();
         org.assertj.core.api.Assertions.assertThat(routineCount).isEqualTo(1L);
         org.assertj.core.api.Assertions.assertThat(assignmentCount).isEqualTo(2L);
+        List<GroupRoutineAssignment> assignments = em.createQuery(
+                        "select a from GroupRoutineAssignment a "
+                                + "where a.groupRoutine.group.id = :groupId",
+                        GroupRoutineAssignment.class
+                ).setParameter("groupId", group.getId())
+                .getResultList();
+        org.assertj.core.api.Assertions.assertThat(assignments).allSatisfy(assignment -> {
+            org.assertj.core.api.Assertions.assertThat(assignment.getAssignedDate()).isEqualTo(today());
+            org.assertj.core.api.Assertions.assertThat(assignment.getScheduledStartTime())
+                    .isEqualTo(LocalTime.of(9, 0));
+            org.assertj.core.api.Assertions.assertThat(assignment.getScheduledEndTime())
+                    .isEqualTo(LocalTime.of(10, 0));
+        });
     }
 
     @Test
@@ -206,11 +223,14 @@ class GroupControllerTest {
                   "title": "%s",
                   "description": "그룹 루틴 설명입니다.",
                   "schedules": [
-                    {"repeatDay": "FRIDAY", "startTime": "20:00", "endTime": "21:00"},
-                    {"repeatDay": "MONDAY", "startTime": "09:00", "endTime": "10:00"}
+                    {"repeatDay": "%s", "startTime": "09:00", "endTime": "10:00"}
                   ]
                 }
-                """.formatted(categoryId, title);
+                """.formatted(categoryId, title, today().getDayOfWeek().name());
+    }
+
+    private LocalDate today() {
+        return LocalDate.now(ZoneId.of("Asia/Seoul"));
     }
 
     private Group group(String inviteCode) {

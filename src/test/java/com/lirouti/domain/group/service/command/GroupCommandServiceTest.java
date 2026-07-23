@@ -12,17 +12,12 @@ import com.lirouti.domain.group.dto.response.GroupResDTO;
 import com.lirouti.domain.group.entity.Group;
 import com.lirouti.domain.group.entity.GroupMember;
 import com.lirouti.domain.group.entity.GroupRoutine;
-import com.lirouti.domain.group.entity.GroupRoutineAssignment;
 import com.lirouti.domain.group.entity.RoutineCategory;
-import com.lirouti.domain.group.enums.GroupMemberStatus;
 import com.lirouti.domain.group.exception.GroupException;
 import com.lirouti.domain.group.exception.code.error.GroupErrorCode;
-import com.lirouti.domain.group.repository.GroupMemberRepository;
-import com.lirouti.domain.group.repository.GroupRoutineAssignmentRepository;
 import com.lirouti.domain.group.repository.GroupRoutineRepository;
 import com.lirouti.domain.group.repository.RoutineCategoryRepository;
 import com.lirouti.domain.group.service.GroupValidationService;
-import com.lirouti.domain.member.entity.Member;
 import java.time.DayOfWeek;
 import java.time.LocalTime;
 import java.util.List;
@@ -30,7 +25,6 @@ import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -48,21 +42,13 @@ class GroupCommandServiceTest {
     @Mock
     private GroupRoutineRepository groupRoutineRepository;
     @Mock
-    private GroupMemberRepository groupMemberRepository;
-    @Mock
-    private GroupRoutineAssignmentRepository groupRoutineAssignmentRepository;
+    private GroupRoutineAssignmentCommandService assignmentCommandService;
     @Mock
     private Group group;
     @Mock
     private RoutineCategory category;
     @Mock
     private GroupMember ownerMembership;
-    @Mock
-    private GroupMember memberMembership;
-    @Mock
-    private Member owner;
-    @Mock
-    private Member member;
 
     @InjectMocks
     private GroupCommandService groupCommandService;
@@ -88,17 +74,15 @@ class GroupCommandServiceTest {
     }
 
     @Test
-    @DisplayName("ACTIVE OWNER와 MEMBER 모두에게 할당을 생성한다")
-    void createRoutine_ActiveMembers_CreatesAssignmentsForAll() {
+    @DisplayName("생성 당일 할당 결과 수를 응답에 반환한다")
+    void createRoutine_TodaySchedule_ReturnsAssignmentCount() {
         // given
         givenValidatedOwner();
         givenActiveCategory();
         givenNoDuplicateTitle();
         givenResponseReferences();
-        when(ownerMembership.getMember()).thenReturn(owner);
-        when(memberMembership.getMember()).thenReturn(member);
-        when(groupMemberRepository.findAllByGroupIdAndStatus(GROUP_ID, GroupMemberStatus.ACTIVE))
-                .thenReturn(List.of(ownerMembership, memberMembership));
+        when(assignmentCommandService.assignRoutineToActiveMembersToday(any(GroupRoutine.class)))
+                .thenReturn(2);
 
         // when
         GroupResDTO.RoutineCreateResult result =
@@ -106,12 +90,7 @@ class GroupCommandServiceTest {
 
         // then
         assertThat(result.assignmentCount()).isEqualTo(2);
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<List<GroupRoutineAssignment>> captor = ArgumentCaptor.forClass(List.class);
-        verify(groupRoutineAssignmentRepository).saveAllAndFlush(captor.capture());
-        assertThat(captor.getValue())
-                .extracting(GroupRoutineAssignment::getMember)
-                .containsExactlyInAnyOrder(owner, member);
+        verify(assignmentCommandService).assignRoutineToActiveMembersToday(any(GroupRoutine.class));
     }
 
     @Test
@@ -122,9 +101,8 @@ class GroupCommandServiceTest {
         givenActiveCategory();
         givenNoDuplicateTitle();
         givenResponseReferences();
-        when(ownerMembership.getMember()).thenReturn(owner);
-        when(groupMemberRepository.findAllByGroupIdAndStatus(GROUP_ID, GroupMemberStatus.ACTIVE))
-                .thenReturn(List.of(ownerMembership));
+        when(assignmentCommandService.assignRoutineToActiveMembersToday(any(GroupRoutine.class)))
+                .thenReturn(1);
 
         // when
         GroupResDTO.RoutineCreateResult result =
@@ -163,8 +141,8 @@ class GroupCommandServiceTest {
                 .isInstanceOf(GroupException.class)
                 .extracting("code")
                 .isEqualTo(GroupErrorCode.DUPLICATE_GROUP_ROUTINE_TITLE);
-        verify(groupMemberRepository, never())
-                .findAllByGroupIdAndStatus(any(), any());
+        verify(assignmentCommandService, never())
+                .assignRoutineToActiveMembersToday(any(GroupRoutine.class));
     }
 
     @Test
@@ -190,10 +168,7 @@ class GroupCommandServiceTest {
         givenValidatedOwner();
         givenActiveCategory();
         givenNoDuplicateTitle();
-        when(ownerMembership.getMember()).thenReturn(owner);
-        when(groupMemberRepository.findAllByGroupIdAndStatus(GROUP_ID, GroupMemberStatus.ACTIVE))
-                .thenReturn(List.of(ownerMembership));
-        when(groupRoutineAssignmentRepository.saveAllAndFlush(any()))
+        when(assignmentCommandService.assignRoutineToActiveMembersToday(any(GroupRoutine.class)))
                 .thenThrow(new IllegalStateException("assignment failure"));
 
         // when & then
