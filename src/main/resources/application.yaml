@@ -65,7 +65,9 @@ aws:
     max-image-size: ${AWS_S3_MAX_IMAGE_SIZE:10485760}
     max-video-size: ${AWS_S3_MAX_VIDEO_SIZE:52428800}
     # 저장된 미디어를 읽을 때 사용할 공개 주소. DB에는 오브젝트 key만 저장하고 읽기 URL을 이 값 + key로
-    # 조립한다. 미주입 시 버킷·리전으로 S3 가상 호스팅 주소를 계산해 기본값으로 쓴다 —
+    # 조립한다. 미주입 시 버킷·리전으로 S3 주소를 계산해 기본값으로 쓴다 —
     # 그래야 설정 없이도 앱이 부팅되어 배포가 깨지지 않는다(버킷이 공개면 이미지도 그대로 동작).
+    # path-style(s3.리전/버킷)을 쓴다. 가상호스팅(버킷.s3.리전)은 버킷명에 '.'이 있으면
+    # 와일드카드 TLS 인증서(*.s3.리전...)와 안 맞아 조회가 깨지므로, 버킷명에 무관하게 안전한 형식을 택한다.
     # CloudFront 등을 붙이면 AWS_S3_PUBLIC_BASE_URL로 이 값을 덮어써 오리진을 바꾼다.
-    public-base-url: ${AWS_S3_PUBLIC_BASE_URL:https://${AWS_S3_BUCKET}.s3.${AWS_REGION:ap-northeast-2}.amazonaws.com}
+    public-base-url: ${AWS_S3_PUBLIC_BASE_URL:https://s3.${AWS_REGION:ap-northeast-2}.amazonaws.com/${AWS_S3_BUCKET}}
