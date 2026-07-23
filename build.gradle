@@ -80,7 +80,9 @@ tasks.named('test') {
 	systemProperty 'GOOGLE_WEB_CLIENT_ID', 'test-google-web-client-id'
 	systemProperty 'GOOGLE_ALLOWED_ISSUERS', 'https://accounts.google.com'
 	systemProperty 'AWS_S3_BUCKET', 'lirouti-test'
-	systemProperty 'AWS_S3_PUBLIC_BASE_URL', 'https://media.test.lirouti.com'
+	// AWS_S3_PUBLIC_BASE_URL은 일부러 주입하지 않는다. application.yaml이 버킷·리전으로
+	// 계산하는 기본값(https://lirouti-test.s3.ap-northeast-2.amazonaws.com)이 정상 동작하는지
+	// — 즉 설정 없이도 컨텍스트가 부팅되는지 — 를 테스트가 그대로 검증하게 한다.
 }
 
 def querydslDir = layout.buildDirectory.dir("generated/querydsl").get().asFile

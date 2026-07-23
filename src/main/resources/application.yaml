@@ -64,7 +64,8 @@ aws:
     # 영상은 아직 켜져 있지 않지만(영상 형식 미등록), 켜질 때 바로 쓰도록 값을 둔다.
     max-image-size: ${AWS_S3_MAX_IMAGE_SIZE:10485760}
     max-video-size: ${AWS_S3_MAX_VIDEO_SIZE:52428800}
-    # 저장된 미디어를 읽을 때 사용할 공개 주소(CloudFront 등).
-    # DB에는 오브젝트 key만 저장하므로, 이 값이 없으면 저장된 미디어를 읽을 방법이 없다
-    # (챌린지 인증 피드의 사진이 통째로 비어버린다). 그래서 기본값 없이 fail-fast로 둔다.
-    public-base-url: ${AWS_S3_PUBLIC_BASE_URL}
+    # 저장된 미디어를 읽을 때 사용할 공개 주소. DB에는 오브젝트 key만 저장하고 읽기 URL을 이 값 + key로
+    # 조립한다. 미주입 시 버킷·리전으로 S3 가상 호스팅 주소를 계산해 기본값으로 쓴다 —
+    # 그래야 설정 없이도 앱이 부팅되어 배포가 깨지지 않는다(버킷이 공개면 이미지도 그대로 동작).
+    # CloudFront 등을 붙이면 AWS_S3_PUBLIC_BASE_URL로 이 값을 덮어써 오리진을 바꾼다.
+    public-base-url: ${AWS_S3_PUBLIC_BASE_URL:https://${AWS_S3_BUCKET}.s3.${AWS_REGION:ap-northeast-2}.amazonaws.com}

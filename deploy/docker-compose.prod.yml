@@ -67,7 +67,9 @@ services:
       GOOGLE_WEB_CLIENT_ID: ${GOOGLE_WEB_CLIENT_ID}
       GOOGLE_ALLOWED_ISSUERS: ${GOOGLE_ALLOWED_ISSUERS}
       AWS_S3_BUCKET: ${AWS_S3_BUCKET}
-      AWS_S3_PUBLIC_BASE_URL: ${AWS_S3_PUBLIC_BASE_URL}
+      # 미설정/빈 값이면 버킷·리전으로 S3 가상 호스팅 주소를 계산해 넣는다(앱이 무조건 부팅되게).
+      # CloudFront 등을 붙이면 .env에 AWS_S3_PUBLIC_BASE_URL을 넣어 이 오리진을 덮어쓴다.
+      AWS_S3_PUBLIC_BASE_URL: ${AWS_S3_PUBLIC_BASE_URL:-https://${AWS_S3_BUCKET}.s3.${AWS_REGION:-ap-northeast-2}.amazonaws.com}
       AWS_REGION: ${AWS_REGION:-ap-northeast-2}
       # 운영 설정
       SPRING_PROFILES_ACTIVE: prod
