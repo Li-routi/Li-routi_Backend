@@ -13,6 +13,7 @@ import java.time.DayOfWeek;
 import java.time.LocalTime;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 
 public final class GroupReqDTO {
     private GroupReqDTO() {
@@ -42,8 +43,9 @@ public final class GroupReqDTO {
                 return true;
             }
             return schedules.stream()
+                    .filter(Objects::nonNull)
                     .map(RoutineSchedule::repeatDay)
-                    .filter(day -> day != null)
+                    .filter(Objects::nonNull)
                     .allMatch(new HashSet<>()::add);
         }
     }

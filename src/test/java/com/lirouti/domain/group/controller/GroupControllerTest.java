@@ -198,6 +198,33 @@ class GroupControllerTest {
     }
 
     @Test
+    @DisplayName("반복 일정에 null 요소가 포함되면 400을 반환한다")
+    void createRoutine_NullSchedule_ReturnsBadRequest() throws Exception {
+        // given
+        Group group = group("GC00006");
+        Member owner = member();
+        membership(owner, group, GroupMemberRole.OWNER);
+        RoutineCategory category = category(true);
+        em.flush();
+        String request = """
+                {
+                  "categoryId": %d,
+                  "title": "null 일정",
+                  "description": "null 일정 요소 검증",
+                  "schedules": [null]
+                }
+                """.formatted(category.getId());
+
+        // when & then
+        mockMvc.perform(post("/api/groups/{groupId}/routines", group.getId())
+                        .with(user(principal(owner)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(request))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("COMMON400_1"));
+    }
+
+    @Test
     @DisplayName("인증 없이 그룹 루틴 생성 요청을 하면 거부된다")
     void createRoutine_Unauthenticated_ReturnsForbidden() throws Exception {
         mockMvc.perform(post("/api/groups/{groupId}/routines", 1L)
