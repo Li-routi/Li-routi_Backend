@@ -1,5 +1,7 @@
 package com.lirouti.domain.challenge.dto.response;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import com.lirouti.domain.challenge.enums.ChallengeCategory;
@@ -64,7 +66,47 @@ public final class ChallengeResDTO {
     ) {
     }
 
+    /**
+     * 인증하기 결과.
+     * reverified가 true면 오늘 이미 인증한 건을 덮어쓴 것(사진 교체)이라 스트릭이 오르지 않는다.
+     * imageUrl은 저장된 key가 아니라 조립된 공개 URL이다.
+     */
+    @Builder
+    public record Verification(
+            Long verificationId,
+            Long challengeId,
+            LocalDate verifiedDate,
+            LocalDateTime verifiedAt,
+            String imageUrl,
+            String content,
+            int currentStreak,
+            boolean reverified
+    ) {
+    }
+
+    // 최신 인증 피드 래퍼. 목록과 같은 커서 방식이되 커서 값은 verificationId다.
+    @Builder
+    public record Feed(
+            List<FeedItem> verifications,
+            Long nextCursor,
+            boolean hasNext
+    ) {
+    }
+
+    // 피드 카드 한 건. 닉네임·사진·코멘트를 보여준다.
+    @Builder
+    public record FeedItem(
+            Long verificationId,
+            String nickname,
+            String imageUrl,
+            String content,
+            LocalDateTime verifiedAt
+    ) {
+    }
+
     // 상세 화면
+    // participating: 조회자가 현재 참여 중인지. 비로그인이면 false('참여하기' 버튼 노출).
+    // verificationPostCount: 인증 게시글 수(상단 통계). participantCount와 함께 카드 상단에 쓰인다.
     @Builder
     public record Detail(
             Long challengeId,
@@ -73,7 +115,9 @@ public final class ChallengeResDTO {
             String imageUrl,
             ChallengeCategory category,
             RoutineCycle routineCycle,
+            boolean participating,
             long participantCount,
+            long verificationPostCount,
             long todayCompletionCount
     ) {
     }

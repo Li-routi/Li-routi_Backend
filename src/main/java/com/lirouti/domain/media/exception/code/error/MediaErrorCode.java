@@ -21,6 +21,11 @@ public enum MediaErrorCode implements BaseErrorCode {
             "해당 용도에서 허용하지 않는 미디어 형식입니다.",
             "MEDIA400_2"
     ),
+    INVALID_MEDIA_KEY(
+            HttpStatus.BAD_REQUEST,
+            "올바르지 않은 미디어 key입니다.",
+            "MEDIA400_3"
+    ),
     FILE_TOO_LARGE(
             HttpStatus.CONTENT_TOO_LARGE,
             "업로드 가능한 최대 용량을 초과했습니다.",

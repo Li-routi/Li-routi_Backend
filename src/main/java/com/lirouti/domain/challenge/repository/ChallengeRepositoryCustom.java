@@ -39,6 +39,12 @@ public interface ChallengeRepositoryCustom {
     long countActiveParticipants(Long challengeId);
 
     /**
+     * 한 챌린지의 인증 게시글 수. 인증(게시글) 단위 집계이므로 회차 중복 제거를 하지 않는다.
+     * 탈퇴 회원의 인증은 제외한다. (상세 조회용)
+     */
+    long countVerificationPosts(Long challengeId);
+
+    /**
      * 한 챌린지의 오늘 완료자 수. 회원 단위로 중복 제거하고(현재 회차 기준), 탈퇴 회원은 제외한다. (상세 조회용)
      */
     long countTodayCompletions(Long challengeId, LocalDate today);

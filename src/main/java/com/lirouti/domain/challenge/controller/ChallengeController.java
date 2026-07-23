@@ -1,5 +1,6 @@
 package com.lirouti.domain.challenge.controller;
 
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -12,6 +13,7 @@ import com.lirouti.domain.challenge.enums.ChallengeCategory;
 import com.lirouti.domain.challenge.exception.code.success.ChallengeSuccessCode;
 import com.lirouti.domain.challenge.service.query.ChallengeQueryService;
 import com.lirouti.global.apiPayload.ApiResponse;
+import com.lirouti.global.auth.CustomUserDetails;
 
 import lombok.RequiredArgsConstructor;
 
@@ -37,9 +39,12 @@ public class ChallengeController implements ChallengeControllerDocs {
     @Override
     @GetMapping("/{challengeId}")
     public ApiResponse<ChallengeResDTO.Detail> getChallenge(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
             @PathVariable Long challengeId
     ) {
-        ChallengeResDTO.Detail result = challengeQueryService.getChallenge(challengeId);
+        // 상세는 비로그인도 볼 수 있어 principal이 null일 수 있다. 그때 memberId는 null → participating=false.
+        Long memberId = (userDetails != null) ? userDetails.getMemberId() : null;
+        ChallengeResDTO.Detail result = challengeQueryService.getChallenge(challengeId, memberId);
         return ApiResponse.onSuccess(ChallengeSuccessCode.CHALLENGE_DETAIL_FETCH_SUCCESS, result);
     }
 }
