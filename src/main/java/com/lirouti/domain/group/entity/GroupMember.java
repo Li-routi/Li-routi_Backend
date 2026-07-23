@@ -14,6 +14,7 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
@@ -40,6 +41,9 @@ import lombok.NoArgsConstructor;
                     name = "uk_group_member_member_group",
                     columnNames = {"member_id", "group_id"}
             )
+        },
+        indexes = {
+            @Index(name = "idx_group_member_group_status", columnList = "group_id, status")
         }
 )
 public class GroupMember extends BaseEntity {
