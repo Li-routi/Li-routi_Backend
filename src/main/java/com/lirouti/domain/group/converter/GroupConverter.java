@@ -6,6 +6,7 @@ import com.lirouti.domain.group.entity.Group;
 import com.lirouti.domain.group.entity.GroupRoutine;
 import com.lirouti.domain.group.entity.GroupRoutineSchedule;
 import com.lirouti.domain.group.entity.RoutineCategory;
+import com.lirouti.domain.group.repository.GroupRoutineAssignmentRepositoryCustom.TodayAssignmentProjection;
 import java.util.Comparator;
 import java.util.List;
 
@@ -80,6 +81,42 @@ public final class GroupConverter {
                 .repeatDay(schedule.getRepeatDay())
                 .startTime(schedule.getStartTime())
                 .endTime(schedule.getEndTime())
+                .build();
+    }
+
+    /**
+     * 오늘의 그룹 루틴 조회 Projection 목록을 API 응답으로 변환한다.
+     *
+     * @param projections Repository가 조회한 오늘의 할당 목록
+     * @return 오늘의 그룹 루틴 목록 응답
+     */
+    public static GroupResDTO.TodayRoutineList toTodayRoutineList(
+            List<TodayAssignmentProjection> projections
+    ) {
+        List<GroupResDTO.TodayRoutine> routines = projections.stream()
+                .map(GroupConverter::toTodayRoutine)
+                .toList();
+
+        return GroupResDTO.TodayRoutineList.builder()
+                .routines(routines)
+                .build();
+    }
+
+    /** Repository 조회 Projection 한 건을 오늘의 그룹 루틴 응답으로 변환한다. */
+    private static GroupResDTO.TodayRoutine toTodayRoutine(TodayAssignmentProjection projection) {
+        return GroupResDTO.TodayRoutine.builder()
+                .assignmentId(projection.assignmentId())
+                .routineId(projection.routineId())
+                .groupId(projection.groupId())
+                .groupName(projection.groupName())
+                .categoryId(projection.categoryId())
+                .categoryName(projection.categoryName())
+                .title(projection.title())
+                .description(projection.description())
+                .assignedDate(projection.assignedDate())
+                .scheduledStartTime(projection.scheduledStartTime())
+                .scheduledEndTime(projection.scheduledEndTime())
+                .status(projection.status())
                 .build();
     }
 }

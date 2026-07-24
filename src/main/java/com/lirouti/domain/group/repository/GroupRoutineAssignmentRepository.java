@@ -11,7 +11,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface GroupRoutineAssignmentRepository
-        extends JpaRepository<GroupRoutineAssignment, Long> {
+        extends JpaRepository<GroupRoutineAssignment, Long>,
+                GroupRoutineAssignmentRepositoryCustom {
 
     /**
      * 동일 루틴·회원·날짜의 할당을 멱등하게 생성한다.
