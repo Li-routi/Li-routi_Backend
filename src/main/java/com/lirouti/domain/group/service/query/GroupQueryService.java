@@ -10,9 +10,11 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class GroupQueryService {
@@ -35,6 +37,9 @@ public class GroupQueryService {
 
         List<TodayAssignmentProjection> assignments = groupRoutineAssignmentRepository
                 .findTodayAssignmentsByMemberId(member.getId(), today);
+
+        log.debug("오늘의 그룹 루틴 조회를 완료했습니다. memberId={}, assignedDate={}, assignmentCount={}",
+                member.getId(), today, assignments.size());
 
         return GroupConverter.toTodayRoutineList(assignments);
     }
