@@ -19,9 +19,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class GroupRoutineAssignmentCommandService {
@@ -39,7 +41,12 @@ public class GroupRoutineAssignmentCommandService {
      */
     @Transactional
     public int assignRoutineToActiveMembersToday(GroupRoutine groupRoutine) {
-        return assignRoutineToActiveMembers(groupRoutine, LocalDate.now(clock));
+        LocalDate today = LocalDate.now(clock);
+        int assignmentCount = assignRoutineToActiveMembers(groupRoutine, today);
+        log.debug("그룹 루틴 생성일 할당 처리를 완료했습니다. "
+                        + "routineId={}, assignedDate={}, assignmentCount={}",
+                groupRoutine.getId(), today, assignmentCount);
+        return assignmentCount;
     }
 
     /**
@@ -66,6 +73,13 @@ public class GroupRoutineAssignmentCommandService {
             );
             assignmentCount += assign(schedule, activeMembers, assignedDate);
         }
+        if (assignmentCount > 0) {
+            log.info("일일 그룹 루틴 할당 처리를 완료했습니다. "
+                            + "assignedDate={}, scheduleCount={}, groupCount={}, assignmentCount={}",
+                    assignedDate, schedules.size(), activeMembersByGroup.size(), assignmentCount);
+        } else {
+            log.debug("생성할 일일 그룹 루틴 할당이 없습니다. assignedDate={}", assignedDate);
+        }
         return assignmentCount;
     }
 
@@ -84,9 +98,13 @@ public class GroupRoutineAssignmentCommandService {
         List<GroupRoutineSchedule> schedules = groupRoutineScheduleRepository
                 .findAllWithRoutineByGroupIdAndRepeatDay(groupId, today.getDayOfWeek());
 
-        return schedules.stream()
+        int assignmentCount = schedules.stream()
                 .mapToInt(schedule -> insertAssignment(schedule, groupMember, today))
                 .sum();
+        log.debug("그룹 가입 회원의 당일 루틴 할당 처리를 완료했습니다. "
+                        + "groupId={}, memberId={}, assignedDate={}, assignmentCount={}",
+                groupId, memberId, today, assignmentCount);
+        return assignmentCount;
     }
 
     /**
@@ -100,6 +118,9 @@ public class GroupRoutineAssignmentCommandService {
     @Transactional
     public void completeAssignment(Long assignmentId, LocalDateTime verifiedAt) {
         if (assignmentId == null || verifiedAt == null) {
+            log.warn("그룹 루틴 할당 완료 요청에 필수값이 없습니다. "
+                            + "assignmentId={}, verifiedAtPresent={}",
+                    assignmentId, verifiedAt != null);
             throw new IllegalArgumentException("할당 ID와 인증 시각은 필수입니다.");
         }
 
@@ -114,16 +135,24 @@ public class GroupRoutineAssignmentCommandService {
                 GroupRoutineAssignmentStatus.COMPLETED
         );
         if (updated == 1) {
+            log.info("그룹 루틴 할당 완료 처리를 완료했습니다. assignmentId={}, verifiedAt={}",
+                    assignmentId, verifiedAt);
             return;
         }
 
         GroupRoutineAssignment assignment = groupRoutineAssignmentRepository.findById(assignmentId)
-                .orElseThrow(() -> new GroupException(
-                        GroupErrorCode.GROUP_ROUTINE_ASSIGNMENT_NOT_FOUND
-                ));
+                .orElseThrow(() -> {
+                    log.warn("완료할 그룹 루틴 할당을 찾을 수 없습니다. assignmentId={}", assignmentId);
+                    return new GroupException(GroupErrorCode.GROUP_ROUTINE_ASSIGNMENT_NOT_FOUND);
+                });
         if (assignment.getStatus() == GroupRoutineAssignmentStatus.COMPLETED) {
+            log.warn("이미 완료된 그룹 루틴 할당의 재완료 요청을 차단했습니다. assignmentId={}",
+                    assignmentId);
             throw new GroupException(GroupErrorCode.GROUP_ROUTINE_ASSIGNMENT_ALREADY_COMPLETED);
         }
+        log.warn("수행 가능 시간이 아닌 그룹 루틴 할당의 완료 요청을 차단했습니다. "
+                        + "assignmentId={}, status={}",
+                assignmentId, assignment.getStatus());
         throw new GroupException(GroupErrorCode.GROUP_ROUTINE_ASSIGNMENT_NOT_IN_PROGRESS);
     }
 
@@ -135,7 +164,7 @@ public class GroupRoutineAssignmentCommandService {
     @Transactional
     public void refreshAssignmentStatuses(LocalDateTime currentDateTime) {
         LocalDate today = currentDateTime.toLocalDate();
-        groupRoutineAssignmentRepository.markExpiredAssignmentsMissed(
+        int missedCount = groupRoutineAssignmentRepository.markExpiredAssignmentsMissed(
                 today,
                 currentDateTime.toLocalTime(),
                 List.of(
@@ -144,12 +173,17 @@ public class GroupRoutineAssignmentCommandService {
                 ),
                 GroupRoutineAssignmentStatus.MISSED
         );
-        groupRoutineAssignmentRepository.markStartedAssignmentsInProgress(
+        int inProgressCount = groupRoutineAssignmentRepository.markStartedAssignmentsInProgress(
                 today,
                 currentDateTime.toLocalTime(),
                 GroupRoutineAssignmentStatus.PENDING,
                 GroupRoutineAssignmentStatus.IN_PROGRESS
         );
+        if (missedCount > 0 || inProgressCount > 0) {
+            log.info("그룹 루틴 할당 상태 갱신을 완료했습니다. "
+                            + "currentDateTime={}, missedCount={}, inProgressCount={}",
+                    currentDateTime, missedCount, inProgressCount);
+        }
     }
 
     /**
@@ -165,6 +199,9 @@ public class GroupRoutineAssignmentCommandService {
                 .findFirst()
                 .orElse(null);
         if (schedule == null) {
+            log.debug("생성일에 해당하는 그룹 루틴 일정이 없어 할당을 생략합니다. "
+                            + "routineId={}, assignedDate={}",
+                    groupRoutine.getId(), assignedDate);
             return 0;
         }
 

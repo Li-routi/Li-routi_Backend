@@ -15,10 +15,12 @@ import com.lirouti.domain.group.service.GroupValidationService;
 import java.util.HashSet;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class GroupCommandService {
@@ -28,7 +30,7 @@ public class GroupCommandService {
     private final GroupRoutineAssignmentCommandService assignmentCommandService;
 
     /**
-     * ACTIVE OWNER 권한과 카테고리·제목을 검증한 뒤 루틴, 일정, 당일 할당을 생성한다.
+     * ACTIVE OWNER 권한과 카테고리·제목을 검증한 뒤 루틴, ㅋㅋ일정, 당일 할당을 생성한다.
      * 전체 과정은 하나의 트랜잭션으로 처리되어 할당 실패 시 루틴과 일정도 롤백된다.
      *
      * @param groupId 루틴을 생성할 그룹 ID
@@ -49,7 +51,12 @@ public class GroupCommandService {
 
         RoutineCategory category = routineCategoryRepository
                 .findByIdAndActiveTrue(request.categoryId())
-                .orElseThrow(() -> new GroupException(GroupErrorCode.ROUTINE_CATEGORY_NOT_FOUND));
+                .orElseThrow(() -> {
+                    log.warn("활성 그룹 루틴 카테고리 조회에 실패했습니다. "
+                                    + "groupId={}, memberId={}, categoryId={}",
+                            groupId, memberId, request.categoryId());
+                    return new GroupException(GroupErrorCode.ROUTINE_CATEGORY_NOT_FOUND);
+                });
 
         validateRoutineTitleNotDuplicated(groupId, request.title());
 
@@ -58,6 +65,9 @@ public class GroupCommandService {
 
         int assignmentCount = assignmentCommandService
                 .assignRoutineToActiveMembersToday(groupRoutine);
+
+        log.info("그룹 루틴 생성을 완료했습니다. groupId={}, routineId={}, memberId={}, assignmentCount={}",
+                groupId, groupRoutine.getId(), memberId, assignmentCount);
 
         return GroupConverter.toRoutineCreateResult(groupRoutine, assignmentCount);
     }
@@ -80,6 +90,7 @@ public class GroupCommandService {
                 || request.schedules() == null
                 || request.schedules().isEmpty()
                 || request.schedules().size() > 7) {
+            log.warn("그룹 루틴 생성 요청 검증에 실패했습니다.");
             throw new IllegalArgumentException("유효하지 않은 그룹 루틴 생성 요청입니다.");
         }
 
@@ -93,6 +104,7 @@ public class GroupCommandService {
                         || !repeatDays.add(schedule.repeatDay())
         );
         if (invalidSchedule) {
+            log.warn("그룹 루틴 일정 검증에 실패했습니다.");
             throw new IllegalArgumentException("유효하지 않은 그룹 루틴 일정입니다.");
         }
     }
@@ -106,6 +118,8 @@ public class GroupCommandService {
      */
     private void validateRoutineTitleNotDuplicated(Long groupId, String title) {
         if (groupRoutineRepository.existsByGroupIdAndTitle(groupId, title)) {
+            log.warn("동일한 제목의 그룹 루틴 생성을 차단했습니다. groupId={}, title={}",
+                    groupId, title);
             throw new GroupException(GroupErrorCode.DUPLICATE_GROUP_ROUTINE_TITLE);
         }
     }
@@ -120,6 +134,8 @@ public class GroupCommandService {
         try {
             groupRoutineRepository.saveAndFlush(groupRoutine);
         } catch (DataIntegrityViolationException e) {
+            log.warn("그룹 루틴 저장 중 무결성 제약을 위반했습니다. groupId={}, title={}",
+                    groupRoutine.getGroup().getId(), groupRoutine.getTitle());
             throw new GroupException(GroupErrorCode.DUPLICATE_GROUP_ROUTINE_TITLE);
         }
     }
