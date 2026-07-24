@@ -13,6 +13,16 @@ public enum GroupErrorCode implements BaseErrorCode {
             "그룹을 찾을 수 없습니다.",
             "GROUP404_1"
     ),
+    ROUTINE_CATEGORY_NOT_FOUND(
+            HttpStatus.NOT_FOUND,
+            "사용 가능한 루틴 카테고리를 찾을 수 없습니다.",
+            "GROUP404_2"
+    ),
+    GROUP_ROUTINE_ASSIGNMENT_NOT_FOUND(
+            HttpStatus.NOT_FOUND,
+            "그룹 루틴 할당 내역을 찾을 수 없습니다.",
+            "GROUP404_3"
+    ),
     GROUP_INACTIVE(
             HttpStatus.FORBIDDEN,
             "사용할 수 없는 그룹입니다.",
@@ -37,6 +47,21 @@ public enum GroupErrorCode implements BaseErrorCode {
             HttpStatus.CONFLICT,
             "방장 권한 유저는 강제 퇴장 시킬 수 없습니다.",
             "GROUP409_2"
+    ),
+    DUPLICATE_GROUP_ROUTINE_TITLE(
+            HttpStatus.CONFLICT,
+            "같은 그룹에 동일한 제목의 루틴이 이미 존재합니다.",
+            "GROUP409_3"
+    ),
+    GROUP_ROUTINE_ASSIGNMENT_NOT_IN_PROGRESS(
+            HttpStatus.CONFLICT,
+            "현재 인증할 수 있는 그룹 루틴 할당이 아닙니다.",
+            "GROUP409_4"
+    ),
+    GROUP_ROUTINE_ASSIGNMENT_ALREADY_COMPLETED(
+            HttpStatus.CONFLICT,
+            "이미 이행한 그룹 루틴 할당입니다.",
+            "GROUP409_5"
     );
 
     private final HttpStatus httpStatus;
