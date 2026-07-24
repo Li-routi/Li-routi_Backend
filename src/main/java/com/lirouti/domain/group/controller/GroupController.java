@@ -24,6 +24,14 @@ import org.springframework.web.bind.annotation.RestController;
 public class GroupController implements GroupControllerDocs {
     private final GroupCommandService groupCommandService;
 
+    /**
+     * 인증 회원이 소유한 그룹에 반복 일정이 포함된 공동 루틴을 생성한다.
+     *
+     * @param userDetails 인증 회원 정보
+     * @param groupId 루틴을 생성할 그룹 ID
+     * @param request 카테고리, 제목, 설명 및 반복 일정
+     * @return 생성된 루틴과 당일 할당 결과
+     */
     @Override
     @PostMapping("/{groupId}/routines")
     @ResponseStatus(HttpStatus.CREATED)

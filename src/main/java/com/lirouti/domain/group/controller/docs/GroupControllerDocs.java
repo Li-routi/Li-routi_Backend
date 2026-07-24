@@ -12,6 +12,14 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 @Tag(name = "Group", description = "그룹 및 그룹 루틴 API")
 public interface GroupControllerDocs {
 
+    /**
+     * ACTIVE OWNER 권한을 검증한 뒤 그룹 루틴을 생성하는 API 명세다.
+     *
+     * @param userDetails 인증 회원 정보
+     * @param groupId 루틴을 생성할 그룹 ID
+     * @param request 그룹 루틴 생성 요청
+     * @return 생성된 그룹 루틴 정보
+     */
     @Operation(
             summary = "그룹 루틴 생성",
             description = """

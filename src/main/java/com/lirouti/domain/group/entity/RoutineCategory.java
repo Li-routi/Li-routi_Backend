@@ -37,6 +37,12 @@ public class RoutineCategory extends BaseEntity {
     @Column(nullable = false)
     private Boolean active;
 
+    /**
+     * 앱에서 관리할 루틴 카테고리를 생성한다.
+     *
+     * @param name 중복되지 않는 카테고리 이름
+     * @param active 신규 루틴에서 사용할 수 있는지 여부
+     */
     @Builder
     private RoutineCategory(String name, Boolean active) {
         this.name = name;

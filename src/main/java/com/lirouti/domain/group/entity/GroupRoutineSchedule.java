@@ -59,6 +59,15 @@ public class GroupRoutineSchedule extends BaseEntity {
     @Column(name = "end_time", nullable = false)
     private LocalTime endTime;
 
+    /**
+     * 그룹 루틴에 속하는 한 요일의 수행 시간 범위를 생성한다.
+     *
+     * @param groupRoutine 일정이 속한 그룹 루틴
+     * @param repeatDay 반복 요일
+     * @param startTime 수행 시작 시각
+     * @param endTime 수행 마감 시각
+     * @throws IllegalArgumentException 필수값이 없거나 시작 시각이 마감 시각보다 빠르지 않은 경우
+     */
     @Builder
     private GroupRoutineSchedule(
             GroupRoutine groupRoutine,

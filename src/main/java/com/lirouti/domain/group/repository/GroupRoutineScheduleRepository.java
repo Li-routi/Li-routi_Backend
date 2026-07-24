@@ -9,6 +9,12 @@ import org.springframework.data.repository.query.Param;
 
 public interface GroupRoutineScheduleRepository extends JpaRepository<GroupRoutineSchedule, Long> {
 
+    /**
+     * 특정 요일의 모든 일정을 루틴과 그룹까지 함께 조회한다.
+     *
+     * @param repeatDay 반복 요일
+     * @return 해당 요일의 그룹 루틴 일정 목록
+     */
     @Query("""
             select schedule
             from GroupRoutineSchedule schedule
@@ -20,6 +26,13 @@ public interface GroupRoutineScheduleRepository extends JpaRepository<GroupRouti
             @Param("repeatDay") DayOfWeek repeatDay
     );
 
+    /**
+     * 특정 그룹과 요일에 해당하는 일정을 루틴과 함께 조회한다.
+     *
+     * @param groupId 대상 그룹 ID
+     * @param repeatDay 반복 요일
+     * @return 그룹과 요일에 해당하는 일정 목록
+     */
     @Query("""
             select schedule
             from GroupRoutineSchedule schedule

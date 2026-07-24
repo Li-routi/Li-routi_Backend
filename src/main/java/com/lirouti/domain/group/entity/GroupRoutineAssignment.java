@@ -81,6 +81,16 @@ public class GroupRoutineAssignment extends BaseEntity {
     @Column(nullable = false)
     private Long version;
 
+    /**
+     * 회원에게 특정 날짜의 그룹 루틴을 시간 스냅샷과 함께 할당한다.
+     *
+     * @param groupRoutine 할당할 그룹 루틴
+     * @param member 할당 대상 회원
+     * @param assignedDate 할당 날짜
+     * @param scheduledStartTime 할당 당시 시작 시각
+     * @param scheduledEndTime 할당 당시 마감 시각
+     * @param status 할당 시점의 수행 상태
+     */
     @Builder
     private GroupRoutineAssignment(
             GroupRoutine groupRoutine,
