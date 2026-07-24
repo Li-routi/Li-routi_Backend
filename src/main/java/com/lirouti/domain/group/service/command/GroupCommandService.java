@@ -30,7 +30,7 @@ public class GroupCommandService {
     private final GroupRoutineAssignmentCommandService assignmentCommandService;
 
     /**
-     * ACTIVE OWNER 권한과 카테고리·제목을 검증한 뒤 루틴, ㅋㅋ일정, 당일 할당을 생성한다.
+     * ACTIVE OWNER 권한과 카테고리·제목을 검증한 뒤 루틴, 일정, 당일 할당을 생성한다.
      * 전체 과정은 하나의 트랜잭션으로 처리되어 할당 실패 시 루틴과 일정도 롤백된다.
      *
      * @param groupId 루틴을 생성할 그룹 ID
