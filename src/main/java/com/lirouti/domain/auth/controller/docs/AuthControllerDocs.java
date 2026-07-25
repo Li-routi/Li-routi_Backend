@@ -60,7 +60,7 @@ public interface AuthControllerDocs {
 
     @Operation(
             summary = "소셜 로그인",
-            description = "Kakao Access Token 또는 Google ID Token을 검증하고 서비스 토큰을 발급합니다."
+            description = "Kakao Access Token 또는 Google ID Token을 검증하고 서비스 토큰을 발급합니다. Kakao 로그인 시에는 nonce 값을 null로 전달하면 됩니다."
     )
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(
