@@ -116,9 +116,14 @@ public class TokenService {
                 : Math.max(expiration.getTime() - System.currentTimeMillis(), 0L);
 
         redisUtil.setBlackList(accessToken, remainingTime);
-        redisUtil.delete(getRefreshTokenKey(memberId));
+        invalidateRefreshToken(memberId);
 
         return memberId;
+    }
+
+    // Refresh Token 무효화
+    public void invalidateRefreshToken(Long memberId) {
+        redisUtil.delete(getRefreshTokenKey(memberId));
     }
 
     private String getRefreshTokenKey(Long memberId) {

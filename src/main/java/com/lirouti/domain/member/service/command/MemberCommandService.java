@@ -1,10 +1,14 @@
 package com.lirouti.domain.member.service.command;
 
+import java.time.LocalDateTime;
+import java.util.UUID;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.lirouti.domain.auth.service.TokenService;
 import com.lirouti.domain.member.converter.MemberConverter;
+import com.lirouti.domain.member.dto.request.MemberReqDTO;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.enums.SocialProvider;
 import com.lirouti.domain.member.exception.MemberException;
@@ -18,6 +22,10 @@ import lombok.extern.slf4j.Slf4j;
 @Service
 @RequiredArgsConstructor
 public class MemberCommandService {
+    // 탈퇴 확인 문구
+    private static final String WITHDRAWAL_CONFIRMATION = "리루티를 탈퇴합니다";
+    private static final String WITHDRAWN_EMAIL_DOMAIN = "@deleted.invalid";
+
     private final MemberRepository memberRepository;
     private final TokenService tokenService;
 
@@ -32,6 +40,40 @@ public class MemberCommandService {
         return memberRepository.findBySocialProviderAndSocialId(socialProvider, socialId)
                 .map(this::getActiveMember)
                 .orElseGet(() -> createSocialMember(socialProvider, socialId, email, nickname));
+    }
+
+    // 회원 탈퇴 처리
+    @Transactional
+    public void withdraw(Long memberId, MemberReqDTO.Withdraw request) {
+        log.info("회원 탈퇴 처리를 시작합니다. memberId={}", memberId);
+        validateWithdrawalConfirmation(request);
+
+        Member member = memberRepository.findByIdForUpdate(memberId)
+                .orElseThrow(() -> {
+                    log.warn("존재하지 않는 회원의 탈퇴를 시도했습니다. memberId={}", memberId);
+                    return new MemberException(MemberErrorCode.MEMBER_NOT_FOUND);
+                });
+
+        if (!member.isActiveMember()) {
+            log.warn("이미 탈퇴하거나 비활성화된 회원의 탈퇴를 시도했습니다. memberId={}", memberId);
+            throw new MemberException(MemberErrorCode.WITHDRAWN_MEMBER);
+        }
+
+        String tombstoneId = UUID.randomUUID().toString();
+
+        member.withdraw(
+                "withdrawn-" + tombstoneId + WITHDRAWN_EMAIL_DOMAIN,
+                "withdrawn-" + tombstoneId,
+                LocalDateTime.now()
+        );
+        memberRepository.save(member);
+        tokenService.invalidateRefreshToken(memberId);
+        log.info("회원 탈퇴 처리를 완료했습니다. memberId={}", memberId);
+    }
+
+    public void logout(String accessToken) {
+        Long memberId = tokenService.logout(accessToken);
+        log.info("회원 로그아웃 처리를 완료했습니다. memberId={}", memberId);
     }
 
     private Member getActiveMember(Member member) {
@@ -74,8 +116,12 @@ public class MemberCommandService {
         }
     }
 
-    public void logout(String accessToken) {
-        Long memberId = tokenService.logout(accessToken);
-        log.info("회원 로그아웃 처리를 완료했습니다. memberId={}", memberId);
+    // 회원 탈퇴 확인 문구 검증
+    private void validateWithdrawalConfirmation(MemberReqDTO.Withdraw request) {
+        if (request == null
+                || request.confirmation() == null
+                || !WITHDRAWAL_CONFIRMATION.equals(request.confirmation().strip())) {
+            throw new MemberException(MemberErrorCode.INVALID_WITHDRAWAL_CONFIRMATION);
+        }
     }
 }

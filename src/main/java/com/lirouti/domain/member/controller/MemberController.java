@@ -2,7 +2,9 @@ package com.lirouti.domain.member.controller;
 
 import org.springframework.http.HttpHeaders;
 import org.springframework.util.StringUtils;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -10,12 +12,16 @@ import org.springframework.web.bind.annotation.RestController;
 import com.lirouti.domain.auth.exception.AuthException;
 import com.lirouti.domain.auth.exception.code.error.AuthErrorCode;
 import com.lirouti.domain.member.controller.docs.MemberControllerDocs;
+import com.lirouti.domain.member.dto.request.MemberReqDTO;
 import com.lirouti.domain.member.exception.code.success.MemberSuccessCode;
 import com.lirouti.domain.member.service.command.MemberCommandService;
+import com.lirouti.global.auth.CustomUserDetails;
 import com.lirouti.global.apiPayload.ApiResponse;
 
 import io.swagger.v3.oas.annotations.Parameter;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 
 @RestController
 @RequiredArgsConstructor
@@ -32,6 +38,16 @@ public class MemberController implements MemberControllerDocs {
     ) {
         memberCommandService.logout(extractBearerToken(authorization));
         return ApiResponse.onSuccess(MemberSuccessCode.MEMBER_LOGOUT_SUCCESS, null);
+    }
+
+    @Override
+    @DeleteMapping("/me")
+    public ApiResponse<Void> withdraw(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @Valid @RequestBody MemberReqDTO.Withdraw request
+    ) {
+        memberCommandService.withdraw(userDetails.getMemberId(), request);
+        return ApiResponse.onSuccess(MemberSuccessCode.MEMBER_WITHDRAWAL_SUCCESS, null);
     }
 
     // Authorization 헤더에서 Bearer 토큰을 추출하고 유효성을 검사

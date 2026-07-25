@@ -2,12 +2,17 @@ package com.lirouti.domain.member.service.command;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
+import com.lirouti.domain.auth.service.TokenService;
+import com.lirouti.domain.member.dto.request.MemberReqDTO;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.enums.SocialProvider;
 import com.lirouti.domain.member.exception.MemberException;
@@ -24,6 +29,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 @DisplayName("MemberCommandService 테스트")
 class MemberCommandServiceTest {
+    private static final Long MEMBER_ID = 1L;
     private static final SocialProvider PROVIDER = SocialProvider.GOOGLE;
     private static final String SOCIAL_ID = "google-subject";
     private static final String EMAIL = "member@example.com";
@@ -31,6 +37,9 @@ class MemberCommandServiceTest {
 
     @Mock
     private MemberRepository memberRepository;
+
+    @Mock
+    private TokenService tokenService;
 
     @InjectMocks
     private MemberCommandService memberCommandService;
@@ -123,5 +132,73 @@ class MemberCommandServiceTest {
         assertThat(result.getIsActive()).isTrue();
         assertThat(result.isOnboardingCompleted()).isFalse();
         verify(memberRepository).save(result);
+    }
+
+    @Test
+    @DisplayName("정확한 탈퇴 확인 문구면 회원 탈퇴를 진행한다")
+    void withdraw_ExactText_DoesNotThrow() {
+        // given
+        Member member = mock(Member.class);
+        when(member.isActiveMember()).thenReturn(true);
+        when(memberRepository.findByIdForUpdate(MEMBER_ID))
+                .thenReturn(Optional.of(member));
+        MemberReqDTO.Withdraw request =
+                new MemberReqDTO.Withdraw("리루티를 탈퇴합니다");
+
+        // when
+        assertDoesNotThrow(() -> memberCommandService.withdraw(MEMBER_ID, request));
+
+        // then
+        verify(tokenService).invalidateRefreshToken(MEMBER_ID);
+    }
+
+    @Test
+    @DisplayName("탈퇴 확인 문구의 앞뒤 공백은 제거 후 검증한다")
+    void withdraw_OuterWhitespace_DoesNotThrow() {
+        // given
+        Member member = mock(Member.class);
+        when(member.isActiveMember()).thenReturn(true);
+        when(memberRepository.findByIdForUpdate(MEMBER_ID))
+                .thenReturn(Optional.of(member));
+        MemberReqDTO.Withdraw request =
+                new MemberReqDTO.Withdraw(" \t리루티를 탈퇴합니다 \n");
+
+        // when
+        assertDoesNotThrow(() -> memberCommandService.withdraw(MEMBER_ID, request));
+
+        // then
+        verify(tokenService).invalidateRefreshToken(MEMBER_ID);
+    }
+
+    @Test
+    @DisplayName("탈퇴 확인 문구의 중간 공백이 다르면 예외를 던진다")
+    void withdraw_InnerWhitespaceMismatch_ThrowsException() {
+        // given
+        MemberReqDTO.Withdraw request =
+                new MemberReqDTO.Withdraw("리루티를  탈퇴합니다");
+
+        // when
+        Throwable thrown = catchThrowable(
+                () -> memberCommandService.withdraw(MEMBER_ID, request));
+
+        // then
+        assertThat(thrown).isInstanceOf(MemberException.class);
+        assertThat(((MemberException) thrown).getCode())
+                .isEqualTo(MemberErrorCode.INVALID_WITHDRAWAL_CONFIRMATION);
+        verifyNoInteractions(memberRepository, tokenService);
+    }
+
+    @Test
+    @DisplayName("탈퇴 확인 요청이 null이면 예외를 던진다")
+    void withdraw_NullRequest_ThrowsException() {
+        // when
+        Throwable thrown = catchThrowable(
+                () -> memberCommandService.withdraw(MEMBER_ID, null));
+
+        // then
+        assertThat(thrown).isInstanceOf(MemberException.class);
+        assertThat(((MemberException) thrown).getCode())
+                .isEqualTo(MemberErrorCode.INVALID_WITHDRAWAL_CONFIRMATION);
+        verifyNoInteractions(memberRepository, tokenService);
     }
 }

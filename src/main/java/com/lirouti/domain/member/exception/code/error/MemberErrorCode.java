@@ -48,6 +48,11 @@ public enum MemberErrorCode implements BaseErrorCode {
         "소셜 로그인 사용자는 비밀번호 재설정이 불가능합니다. 해당 소셜 플랫폼에서 변경해주세요.",
         "MEMBER400_2"
     ),
+    INVALID_WITHDRAWAL_CONFIRMATION(
+        HttpStatus.BAD_REQUEST,
+        "탈퇴 확인 문구가 일치하지 않습니다.",
+        "MEMBER400_3"
+    ),
     ;
 
     private final HttpStatus httpStatus;
