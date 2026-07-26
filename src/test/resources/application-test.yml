@@ -7,8 +7,14 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: ${JPA_DDL_AUTO:update}
+      # 운영과 같은 경로로 검증한다. 스키마는 Flyway(db/migration)가 만들고 Hibernate는 대조만 한다.
+      # 그래야 "마이그레이션이 엔티티와 맞는가"를 CI가 매번 확인해 준다.
+      ddl-auto: ${JPA_DDL_AUTO:validate}
     show-sql: ${JPA_SHOW_SQL:false}
+
+  # 테스트에는 로컬 더미(db/dummy)를 넣지 않는다. 테스트는 각자 필요한 데이터를 직접 만들고,
+  # 고정 id를 가진 더미 행이 섞이면 건수 검증 같은 단언이 흔들린다.
+  # (locations를 명시하지 않으면 application.yaml의 db/migration만 적용된다.)
 
   data:
     redis:
