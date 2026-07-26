@@ -21,6 +21,14 @@ dependencies {
     // jpa
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
 
+	// db migration (스키마 버전 관리 + 마스터/더미 데이터 시드)
+	// spring-boot-flyway : Spring Boot 4는 자동설정이 기술별 모듈로 쪼개져 있어, 이게 없으면
+	//                      flyway-core를 넣어도 마이그레이션이 아예 실행되지 않는다(조용히 넘어간다).
+	// flyway-mysql       : MySQL 전용 모듈. 없으면 "No database found to handle jdbc:mysql://..."로 죽는다.
+	implementation 'org.springframework.boot:spring-boot-flyway'
+	implementation 'org.flywaydb:flyway-core'
+	implementation 'org.flywaydb:flyway-mysql'
+
 	// redis
 	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
 	implementation 'org.apache.commons:commons-pool2'

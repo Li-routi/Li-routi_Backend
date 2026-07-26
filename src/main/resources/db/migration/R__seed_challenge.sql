@@ -1,0 +1,34 @@
+-- 운영 마스터 데이터: 앱이 제공하는 챌린지 목록.
+--
+-- 이 파일이 challenge 테이블의 단일 진실 공급원이다. 운영 DB에서 값을 직접 고쳐도
+-- 다음 배포에 여기 적힌 값으로 되돌아간다.
+--
+-- R__(repeatable) 마이그레이션이라 "파일 내용이 바뀔 때마다" 다시 실행된다.
+-- 항상 V__ 마이그레이션이 모두 끝난 뒤에 돌기 때문에, 구조를 바꾸면서(V2 추가) 이 파일을
+-- 같이 고치면 구조 → 데이터 순서로 알아서 재적용된다.
+--
+-- 규칙 두 가지를 반드시 지킨다.
+--  1) id를 고정한다. auto increment에 맡기면 재적용 때 다른 id가 생겨서,
+--     member_challenge가 참조하던 챌린지가 바뀌어 버린다.
+--  2) INSERT ... ON DUPLICATE KEY UPDATE(upsert)로 쓴다. 매 배포마다 실행되므로
+--     멱등해야 한다. INSERT IGNORE는 첫 삽입만 하고 이후 값 변경이 반영되지 않아 쓰지 않는다.
+--
+-- image_url은 넣지 않는다. 미디어 서빙 주소가 #39에서 확정된 뒤에 채운다.
+-- created_at/updated_at은 NOT NULL이라 함께 넣되, updated_at만 재적용 때 갱신한다.
+
+-- TODO(#46): 기획 확정 목록이 나오면 아래 형식으로 채운다. 확정 전까지는 비워 둔다
+--            (운영에 임의의 챌린지가 노출되지 않도록). 로컬 개발용 챌린지는
+--            db/dummy/R__dummy_local_data.sql 에 따로 있다.
+--
+-- INSERT INTO challenge (id, name, description, category, routine_cycle, reward, active, created_at, updated_at)
+-- VALUES
+--   (1, '물 2L 마시기', '하루 2L 이상 물 마시기', 'HEALTH',   'DAILY', 10, TRUE, NOW(), NOW()),
+--   (2, '30분 걷기',    '하루 30분 이상 걷기',    'EXERCISE', 'DAILY', 10, TRUE, NOW(), NOW())
+-- ON DUPLICATE KEY UPDATE
+--   name          = VALUES(name),
+--   description   = VALUES(description),
+--   category      = VALUES(category),
+--   routine_cycle = VALUES(routine_cycle),
+--   reward        = VALUES(reward),
+--   active        = VALUES(active),
+--   updated_at    = NOW();

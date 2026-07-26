@@ -19,11 +19,30 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: ${JPA_DDL_AUTO:update}
+      # 스키마는 Flyway가 만든다. Hibernate는 "엔티티와 실제 스키마가 맞는지" 검사만 한다.
+      # update로 두면 컬럼 추가만 조용히 반영하고 삭제·타입 변경은 무시해, 엔티티와 운영 스키마가
+      # 아무 에러 없이 어긋난다. validate는 그 불일치를 부팅 시점에 실패로 드러낸다.
+      # (마이그레이션 도입 중 급히 우회해야 하면 JPA_DDL_AUTO 환경변수로 덮어쓸 수 있다.)
+      ddl-auto: ${JPA_DDL_AUTO:validate}
     show-sql: ${JPA_SHOW_SQL:true}
     properties:
       hibernate:
         format_sql: true
+
+  # DB 스키마 버전 관리 + 마스터 데이터 시드
+  # - V__ : 구조 변경. 순서대로 한 번만 실행되고 flyway_schema_history에 기록된다.
+  # - R__ : 반복 실행. 파일 내용이 바뀌면 다시 돈다. 항상 V__ 가 모두 끝난 뒤에 실행된다.
+  #         마스터 데이터를 여기에 두는 이유다(구조를 바꾸면 데이터도 함께 재적용된다).
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    # Flyway 도입 전부터 굴러온 DB(기존 로컬·운영)에는 flyway_schema_history가 없다.
+    # 그대로 두면 "빈 DB가 아닌데 이력이 없다"며 실패하므로 baseline 기록을 만들어 준다.
+    baseline-on-migrate: true
+    # 0으로 두는 것이 핵심이다. 기본값(1)이면 V1이 "이미 적용됨"으로 처리돼 건너뛰는데,
+    # 앱을 한동안 안 띄워 스키마가 낡은 로컬 DB는 없는 테이블이 영영 안 생겨 validate에서 깨진다.
+    # 0이면 기존 DB에서도 V1이 실행되고, V1은 IF NOT EXISTS라 이미 있는 테이블은 건드리지 않는다.
+    baseline-version: 0
 
   data:
     redis:
@@ -71,3 +90,17 @@ aws:
     # 와일드카드 TLS 인증서(*.s3.리전...)와 안 맞아 조회가 깨지므로, 버킷명에 무관하게 안전한 형식을 택한다.
     # CloudFront 등을 붙이면 AWS_S3_PUBLIC_BASE_URL로 이 값을 덮어써 오리진을 바꾼다.
     public-base-url: ${AWS_S3_PUBLIC_BASE_URL:https://s3.${AWS_REGION:ap-northeast-2}.amazonaws.com/${AWS_S3_BUCKET}}
+
+---
+# 로컬 개발 전용 오버라이드.
+# 이 블록이 application-local.yaml이 아니라 여기 있는 이유: application-local.yaml은
+# .gitignore 대상(개인 머신 오버라이드)이라 팀 공용 설정을 둘 수 없다.
+spring:
+  config:
+    activate:
+      on-profile: local
+
+  # 운영 마스터(db/migration)에 더해 로컬 더미(db/dummy)까지 적용한다.
+  # 더미는 회원·참여·인증처럼 원래 사용자가 만드는 데이터라 운영에는 들어가면 안 된다.
+  flyway:
+    locations: classpath:db/migration,classpath:db/dummy

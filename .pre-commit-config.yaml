@@ -14,6 +14,9 @@ repos:
       - id: trailing-whitespace          # 줄 끝 공백 제거
       - id: end-of-file-fixer            # 파일 끝 개행 보정
       - id: check-yaml                   # YAML 문법 검사
+        # Spring은 한 파일 안에서 '---'로 문서를 나눠 프로파일별 설정을 둔다
+        # (application.yaml의 on-profile: local). 기본값은 단일 문서만 허용해 이를 오류로 본다.
+        args: ['--allow-multiple-documents']
       - id: check-added-large-files      # 대용량 파일 커밋 방지
         args: ['--maxkb=2048']
       - id: check-merge-conflict         # 충돌 마커 검사
