@@ -26,6 +26,8 @@ public final class ChallengeResDTO {
 
     // 전체(찾아보기) 목록 카드 한 건.
     // category·routineCycle은 enum으로 내려주고 프론트가 한글(건강·매일 등)로 변환한다.
+    // reward는 챌린지 달성 시 부여되는 재화 수량이다. 컬럼이 NOT NULL DEFAULT 0이고
+    // 엔티티 빌더도 null이면 0으로 채우므로 null이 내려가지 않는다(그래서 int).
     @Builder
     public record Summary(
             Long challengeId,
@@ -34,6 +36,7 @@ public final class ChallengeResDTO {
             String imageUrl,
             ChallengeCategory category,
             RoutineCycle routineCycle,
+            int reward,
             long participantCount,
             long verificationPostCount
     ) {
@@ -106,6 +109,7 @@ public final class ChallengeResDTO {
 
     // 상세 화면
     // participating: 조회자가 현재 참여 중인지. 비로그인이면 false('참여하기' 버튼 노출).
+    // reward: 챌린지 달성 시 부여되는 재화 수량. 목록 카드와 같은 값이다.
     // verificationPostCount: 인증 게시글 수(상단 통계). participantCount와 함께 카드 상단에 쓰인다.
     @Builder
     public record Detail(
@@ -115,6 +119,7 @@ public final class ChallengeResDTO {
             String imageUrl,
             ChallengeCategory category,
             RoutineCycle routineCycle,
+            int reward,
             boolean participating,
             long participantCount,
             long verificationPostCount,
