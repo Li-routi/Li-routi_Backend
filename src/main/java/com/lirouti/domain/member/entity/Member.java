@@ -33,6 +33,8 @@ import lombok.NoArgsConstructor;
     }
 )
 public class Member extends BaseEntity {
+    private static final String WITHDRAWN_NICKNAME = "탈퇴한 사용자";
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -84,5 +86,20 @@ public class Member extends BaseEntity {
     // 회원이 서비스에 접근할 수 있는 활성 상태인지 확인
     public boolean isActiveMember() {
         return Boolean.TRUE.equals(isActive) && deletedAt == null;
+    }
+
+    // 회원 탈퇴 처리
+    public void withdraw(
+            String anonymizedEmail,
+            String anonymizedSocialId,
+            LocalDateTime withdrawnAt
+    ) {
+        this.email = anonymizedEmail;
+        this.nickname = WITHDRAWN_NICKNAME;
+        this.socialId = anonymizedSocialId;
+        this.role = Role.ROLE_USER;
+        this.onboardingCompleted = false;
+        this.isActive = false;
+        this.deletedAt = withdrawnAt;
     }
 }

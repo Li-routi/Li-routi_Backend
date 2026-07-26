@@ -1,8 +1,11 @@
 package com.lirouti.domain.member.controller.docs;
 
+import com.lirouti.domain.member.dto.request.MemberReqDTO;
+import com.lirouti.global.auth.CustomUserDetails;
 import com.lirouti.global.apiPayload.ApiResponse;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
@@ -32,4 +35,31 @@ public interface MemberControllerDocs {
         )
     })
     ApiResponse<Void> logout(String authorization);
+
+    @Operation(
+            summary = "회원 탈퇴",
+            description = "회원 정보와 개인 데이터를 탈퇴 처리하고 공동 콘텐츠의 작성자를 익명화합니다."
+    )
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "200",
+                description = "회원 탈퇴 성공"
+        ),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "400",
+                description = "탈퇴 확인 문구 불일치"
+        ),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "403",
+                description = "탈퇴했거나 비활성화된 회원"
+        ),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                responseCode = "500",
+                description = "서버 내부 오류"
+        )
+    })
+    ApiResponse<Void> withdraw(
+            @Parameter(hidden = true) CustomUserDetails userDetails,
+            MemberReqDTO.Withdraw request
+    );
 }
