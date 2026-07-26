@@ -12,6 +12,11 @@
 --     member_challenge가 참조하던 챌린지가 바뀌어 버린다.
 --  2) INSERT ... ON DUPLICATE KEY UPDATE(upsert)로 쓴다. 매 배포마다 실행되므로
 --     멱등해야 한다. INSERT IGNORE는 첫 삽입만 하고 이후 값 변경이 반영되지 않아 쓰지 않는다.
+--  3) 챌린지를 내릴 때는 아래 목록에서 줄을 지우지 말고 active를 FALSE로 바꾼다.
+--     upsert는 추가·수정만 하므로 여기서 줄을 지워도 DB에서는 사라지지 않는다. 지운 채로 두면
+--     그 행만 아무도 관리하지 않는 상태로 운영에 계속 노출된다. 마스터 데이터는 원래
+--     소프트 삭제 대신 active로 노출을 제어하고(database-schema.md), member_challenge가
+--     참조 중인 챌린지는 물리 삭제도 불가능하다.
 --
 -- image_url은 넣지 않는다. 미디어 서빙 주소가 #39에서 확정된 뒤에 채운다.
 -- created_at/updated_at은 NOT NULL이라 함께 넣되, updated_at만 재적용 때 갱신한다.

@@ -76,6 +76,16 @@ tasks.named('jar') {
 	enabled = false
 }
 
+tasks.named('bootJar') {
+	// 로컬 더미 데이터(db/dummy)는 배포 산출물에 넣지 않는다.
+	// 운영에 더미가 들어가지 않는 근거를 "프로파일이 prod로 주어진다"에만 두면, 설정 하나가
+	// 잘못됐을 때(SPRING_PROFILES_ACTIVE=local) 그대로 운영 DB에 들어간다.
+	// 파일 자체를 이미지에서 빼면 프로파일을 잘못 줘도 넣을 것이 없다.
+	// Flyway는 존재하지 않는 location을 경고만 하고 넘어간다(fail-on-missing-locations 기본 false).
+	// bootRun은 jar가 아니라 build/resources/main을 직접 쓰므로 로컬 개발에는 영향이 없다.
+	exclude 'db/dummy/**'
+}
+
 tasks.named('test') {
 	useJUnitPlatform()
 	systemProperty 'spring.profiles.active', 'test'
