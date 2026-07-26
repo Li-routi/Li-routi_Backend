@@ -15,7 +15,7 @@
 
 스키마와 마스터 데이터는 **Flyway로 코드에서 관리한다**(#46). 운영 DB에 직접 `ALTER`나 `INSERT`를 치지 않는다.
 
-```
+```text
 src/main/resources/db/
 ├── migration/                     # 모든 환경에 적용
 │   ├── V1__baseline.sql           # 구조 — 순서대로 한 번만 실행, 이력이 남는다

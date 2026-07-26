@@ -48,11 +48,14 @@ VALUES
   (10, '자기 전 책상 정리', '하루를 마치며 책상 위 비우기',          'LIFE',     'DAILY', 10, TRUE, NOW(), NOW()),
   (11, '하루 한 장 사진',   '오늘의 순간을 사진 한 장으로 남기기',    'HOBBY',    'DAILY', 10, TRUE, NOW(), NOW()),
   (12, '감사일기 쓰기',     '하루 한 줄, 감사한 일 기록하기',        'HOBBY',    'DAILY', 10, TRUE, NOW(), NOW())
+-- 새 행은 VALUES(컬럼)이 아니라 별칭으로 참조한다. VALUES() 함수는 MySQL 8.0.19에서
+-- deprecated 되어 부팅마다 경고가 찍히고 향후 제거 예정이다(운영도 MySQL 8.4).
+AS new_row
 ON DUPLICATE KEY UPDATE
-  name          = VALUES(name),
-  description   = VALUES(description),
-  category      = VALUES(category),
-  routine_cycle = VALUES(routine_cycle),
-  reward        = VALUES(reward),
-  active        = VALUES(active),
+  name          = new_row.name,
+  description   = new_row.description,
+  category      = new_row.category,
+  routine_cycle = new_row.routine_cycle,
+  reward        = new_row.reward,
+  active        = new_row.active,
   updated_at    = NOW();
