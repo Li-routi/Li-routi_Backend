@@ -37,7 +37,10 @@ public class GroupValidationService {
      */
     @Transactional(readOnly = true)
     public GroupMember validateActiveGroupMember(Long groupId, Long memberId) {
-        return getValidatedGroupMember(groupId, memberId);
+        GroupMember groupMember = getValidatedGroupMember(groupId, memberId);
+        log.debug("활성 그룹 구성원 검증을 완료했습니다. groupId={}, memberId={}",
+                groupId, memberId);
+        return groupMember;
     }
 
     /**
@@ -52,6 +55,8 @@ public class GroupValidationService {
                     groupId, memberId, groupMember.getRole());
             throw new GroupException(GroupErrorCode.GROUP_OWNER_ACCESS_DENIED);
         }
+        log.debug("그룹 방장 권한 검증을 완료했습니다. groupId={}, memberId={}",
+                groupId, memberId);
         return groupMember;
     }
 

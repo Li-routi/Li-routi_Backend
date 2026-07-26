@@ -10,9 +10,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.lirouti.domain.group.entity.Group;
 import com.lirouti.domain.group.entity.GroupMember;
+import com.lirouti.domain.group.entity.GroupRoutine;
 import com.lirouti.domain.group.entity.GroupRoutineAssignment;
 import com.lirouti.domain.group.entity.RoutineCategory;
 import com.lirouti.domain.group.enums.GroupMemberRole;
+import com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.enums.Role;
 import com.lirouti.domain.member.enums.SocialProvider;
@@ -36,7 +38,7 @@ import org.springframework.transaction.annotation.Transactional;
 @SpringBootTest
 @AutoConfigureMockMvc
 @Transactional
-@DisplayName("GroupController 그룹 루틴 생성 통합 테스트")
+@DisplayName("GroupController 그룹 루틴 통합 테스트")
 class GroupControllerTest {
     private final AtomicInteger sequence = new AtomicInteger();
 
@@ -45,6 +47,117 @@ class GroupControllerTest {
 
     @PersistenceContext
     private EntityManager em;
+
+    @Test
+    @DisplayName("인증 회원의 오늘 그룹 루틴을 공통 응답 형식으로 반환한다")
+    void getTodayRoutines_AuthenticatedMember_ReturnsAssignments() throws Exception {
+        // given
+        Group group = group("GQ00001");
+        Member member = member();
+        membership(member, group, GroupMemberRole.MEMBER);
+        RoutineCategory category = category(true);
+        GroupRoutine routine = routine(group, category, "오늘 정리");
+        GroupRoutineAssignment assignment = assignment(
+                routine,
+                member,
+                LocalTime.of(9, 0),
+                LocalTime.of(10, 0),
+                GroupRoutineAssignmentStatus.IN_PROGRESS
+        );
+        em.flush();
+        em.clear();
+
+        // when & then
+        mockMvc.perform(get("/api/groups/routines/today")
+                        .with(user(principal(member))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.isSuccess").value(true))
+                .andExpect(jsonPath("$.code").value("GROUP200_1"))
+                .andExpect(jsonPath("$.result.routines.length()").value(1))
+                .andExpect(jsonPath("$.result.routines[0].assignmentId").value(assignment.getId()))
+                .andExpect(jsonPath("$.result.routines[0].routineId").value(routine.getId()))
+                .andExpect(jsonPath("$.result.routines[0].groupId").value(group.getId()))
+                .andExpect(jsonPath("$.result.routines[0].groupName").value(group.getName()))
+                .andExpect(jsonPath("$.result.routines[0].categoryId").value(category.getId()))
+                .andExpect(jsonPath("$.result.routines[0].categoryName").value(category.getName()))
+                .andExpect(jsonPath("$.result.routines[0].title").value("오늘 정리"))
+                .andExpect(jsonPath("$.result.routines[0].assignedDate").value(today().toString()))
+                .andExpect(jsonPath("$.result.routines[0].scheduledStartTime").value("09:00"))
+                .andExpect(jsonPath("$.result.routines[0].scheduledEndTime").value("10:00"))
+                .andExpect(jsonPath("$.result.routines[0].status").value("IN_PROGRESS"));
+    }
+
+    @Test
+    @DisplayName("오늘 할당이 없으면 빈 목록을 반환한다")
+    void getTodayRoutines_NoAssignments_ReturnsEmptyList() throws Exception {
+        // given
+        Member member = member();
+        em.flush();
+
+        // when & then
+        mockMvc.perform(get("/api/groups/routines/today")
+                        .with(user(principal(member))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("GROUP200_1"))
+                .andExpect(jsonPath("$.result.routines").isArray())
+                .andExpect(jsonPath("$.result.routines").isEmpty());
+    }
+
+    @Test
+    @DisplayName("그룹에서 탈퇴한 회원의 기존 오늘 할당은 반환하지 않는다")
+    void getTodayRoutines_LeftGroup_ExcludesExistingAssignment() throws Exception {
+        // given
+        Group group = group("GQ00002");
+        Member member = member();
+        GroupMember membership = membership(member, group, GroupMemberRole.MEMBER);
+        RoutineCategory category = category(true);
+        GroupRoutine routine = routine(group, category, "탈퇴 전 루틴");
+        assignment(
+                routine,
+                member,
+                LocalTime.of(11, 0),
+                LocalTime.of(12, 0),
+                GroupRoutineAssignmentStatus.PENDING
+        );
+        membership.leave();
+        em.flush();
+        em.clear();
+
+        // when & then
+        mockMvc.perform(get("/api/groups/routines/today")
+                        .with(user(principal(member))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.routines").isEmpty());
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 회원 인증 정보로 조회하면 회원 도메인 오류를 반환한다")
+    void getTodayRoutines_MemberNotFound_ReturnsMemberError() throws Exception {
+        CustomUserDetails unknownMember = new CustomUserDetails(Long.MAX_VALUE, Role.ROLE_USER);
+
+        mockMvc.perform(get("/api/groups/routines/today")
+                        .with(user(unknownMember)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.isSuccess").value(false))
+                .andExpect(jsonPath("$.code").value("MEMBER404_1"));
+    }
+
+    @Test
+    @DisplayName("인증 없이 오늘 그룹 루틴을 조회하면 거부된다")
+    void getTodayRoutines_Unauthenticated_ReturnsForbidden() throws Exception {
+        mockMvc.perform(get("/api/groups/routines/today"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("OpenAPI 문서에 오늘 그룹 루틴 조회 경로와 200 응답이 노출된다")
+    void openApi_TodayGroupRoutineQuery_IsDocumented() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("/api/groups/routines/today")))
+                .andExpect(content().string(containsString("오늘의 그룹 루틴 조회")))
+                .andExpect(content().string(containsString("200")));
+    }
 
     @Test
     @DisplayName("OWNER가 생성하면 201과 저장 결과 및 전체 구성원 할당 수를 반환한다")
@@ -297,6 +410,36 @@ class GroupControllerTest {
                 .build();
         em.persist(category);
         return category;
+    }
+
+    private GroupRoutine routine(Group group, RoutineCategory category, String title) {
+        GroupRoutine routine = GroupRoutine.builder()
+                .group(group)
+                .category(category)
+                .title(title)
+                .description("그룹 루틴 설명입니다.")
+                .build();
+        em.persist(routine);
+        return routine;
+    }
+
+    private GroupRoutineAssignment assignment(
+            GroupRoutine routine,
+            Member member,
+            LocalTime startTime,
+            LocalTime endTime,
+            GroupRoutineAssignmentStatus status
+    ) {
+        GroupRoutineAssignment assignment = GroupRoutineAssignment.builder()
+                .groupRoutine(routine)
+                .member(member)
+                .assignedDate(today())
+                .scheduledStartTime(startTime)
+                .scheduledEndTime(endTime)
+                .status(status)
+                .build();
+        em.persist(assignment);
+        return assignment;
     }
 
     private CustomUserDetails principal(Member member) {

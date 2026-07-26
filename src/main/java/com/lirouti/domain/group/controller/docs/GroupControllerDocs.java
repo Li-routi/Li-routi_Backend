@@ -13,6 +13,42 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 public interface GroupControllerDocs {
 
     /**
+     * 로그인 회원에게 오늘 할당된 활성 그룹의 루틴 목록 조회 API 명세다.
+     *
+     * @param userDetails 인증 회원 정보
+     * @return 오늘의 그룹 루틴 할당 목록
+     */
+    @Operation(
+            summary = "오늘의 그룹 루틴 조회",
+            description = """
+                    로그인 회원에게 오늘 할당된 그룹 루틴을 시작 시각 순으로 조회합니다.
+                    인증 객체의 회원 ID를 사용하며, 현재 ACTIVE 상태로 참여 중인 그룹의 할당만 반환합니다.
+                    그룹에서 탈퇴하거나 강제 퇴장된 경우 기존 할당은 제외하며, 할당이 없으면 빈 목록을 반환합니다.
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "오늘의 그룹 루틴 조회 성공"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401",
+                    description = "유효하지 않거나 만료된 인증 토큰"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "403",
+                    description = "미인증 요청 또는 탈퇴·비활성 회원"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404",
+                    description = "인증 토큰이 참조하는 회원을 찾을 수 없음"
+            )
+    })
+    ApiResponse<GroupResDTO.TodayRoutineList> getTodayRoutines(
+            @Parameter(hidden = true) CustomUserDetails userDetails
+    );
+
+    /**
      * ACTIVE OWNER 권한을 검증한 뒤 그룹 루틴을 생성하는 API 명세다.
      *
      * @param userDetails 인증 회원 정보
