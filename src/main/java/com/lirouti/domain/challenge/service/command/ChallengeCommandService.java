@@ -63,8 +63,10 @@ public class ChallengeCommandService {
      */
     @Transactional
     public ChallengeResDTO.Participation leave(Long memberId, Long challengeId) {
+        // 참여·인증과 같은 행을 바꾸므로 같은 방식으로 잠근다. 락 없이 읽으면 읽은 뒤 커밋된
+        // 다른 명령의 결과를 이 트랜잭션의 오래된 스냅샷이 덮어쓴다(#53).
         MemberChallenge memberChallenge = memberChallengeRepository
-                .findByMemberIdAndChallengeId(memberId, challengeId)
+                .findByMemberIdAndChallengeIdForUpdate(memberId, challengeId)
                 .orElseThrow(() -> new ChallengeException(ChallengeErrorCode.NOT_PARTICIPATING));
 
         if (!memberChallenge.isParticipating()) {
@@ -106,8 +108,12 @@ public class ChallengeCommandService {
         //  심사가 사진을 실제로 읽으므로 S3 존재 확인도 이 단계에서 겸한다.
         //  방식·제공자·임계값·반려 UX·판정결과 저장(스키마 영향)은 #40에서 확정한다.
 
+        // 이탈·재참여와 같은 행을 바꾸므로 잠그고 읽는다. 락 없이 읽으면 이 트랜잭션이 커밋할 때
+        // 그 사이 커밋된 이탈·재참여 결과를 오래된 스냅샷으로 되돌린다(#53).
+        // 회차(participation_round)를 읽어 인증 행에 심으므로, 잠그지 않으면 이미 바뀐 회차를
+        // 모르고 옛 회차로 인증을 저장한다 — 유니크 제약에도 걸리지 않아 조용히 어긋난다.
         MemberChallenge memberChallenge = memberChallengeRepository
-                .findByMemberIdAndChallengeId(memberId, challengeId)
+                .findByMemberIdAndChallengeIdForUpdate(memberId, challengeId)
                 .filter(MemberChallenge::isParticipating)
                 .orElseThrow(() -> new ChallengeException(ChallengeErrorCode.NOT_PARTICIPATING));
 
