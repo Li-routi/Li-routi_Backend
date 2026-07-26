@@ -3,6 +3,7 @@ package com.lirouti.domain.challenge.service.command;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -63,10 +64,14 @@ class ChallengeCommandMixedConcurrencyTest {
 
     @BeforeEach
     void setUp() {
+        // email·social_id에 유니크 제약이 있다. @Transactional 없이 실제 커밋하므로,
+        // 앞선 실행이 비정상 종료해 정리가 안 됐으면 고정값은 setUp 자체를 깨뜨린다.
+        // 실행마다 유일한 값을 써서 남은 행과 부딪히지 않게 한다.
+        String unique = UUID.randomUUID().toString();
         Member m = memberRepository.save(Member.builder()
-                .email("mixed@ex.com").nickname("mixed")
+                .email("mixed-" + unique + "@ex.com").nickname("mixed")
                 .socialProvider(SocialProvider.GOOGLE).role(Role.ROLE_USER)
-                .socialId("mixed-sid").build());
+                .socialId("mixed-sid-" + unique).build());
         Challenge c = challengeRepository.save(Challenge.builder()
                 .name("mixed챌린지").category(ChallengeCategory.HEALTH).active(true).build());
         // 참여 중(active=true, 회차 1, 아직 인증 없음)으로 커밋해 둔다.
