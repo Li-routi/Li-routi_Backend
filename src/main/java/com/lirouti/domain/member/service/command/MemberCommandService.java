@@ -3,6 +3,7 @@ package com.lirouti.domain.member.service.command;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.lirouti.domain.auth.service.TokenService;
 import com.lirouti.domain.member.converter.MemberConverter;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.enums.SocialProvider;
@@ -18,6 +19,7 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 public class MemberCommandService {
     private final MemberRepository memberRepository;
+    private final TokenService tokenService;
 
     // 소셜 회원 조회 또는 생성
     @Transactional
@@ -70,5 +72,10 @@ public class MemberCommandService {
             log.warn("닉네임이 없어 소셜 회원가입을 중단했습니다.");
             throw new MemberException(MemberErrorCode.SOCIAL_NICKNAME_REQUIRED);
         }
+    }
+
+    public void logout(String accessToken) {
+        Long memberId = tokenService.logout(accessToken);
+        log.info("회원 로그아웃 처리를 완료했습니다. memberId={}", memberId);
     }
 }

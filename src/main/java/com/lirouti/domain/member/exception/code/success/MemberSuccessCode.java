@@ -23,6 +23,11 @@ public enum MemberSuccessCode implements BaseSuccessCode {
         "회원 탈퇴에 성공했습니다.",
         "MEMBER200_3"
     ),
+    MEMBER_LOGOUT_SUCCESS(
+        HttpStatus.OK,
+        "로그아웃에 성공했습니다.",
+        "MEMBER200_4"
+    ),
     ;
 
     private final HttpStatus httpStatus;

@@ -70,6 +70,7 @@ tasks.named('jar') {
 
 tasks.named('test') {
 	useJUnitPlatform()
+	systemProperty 'spring.profiles.active', 'test'
 	// application.yaml에서 fail-fast로(기본값 없이) 선언된 필수 값에 테스트용 더미값을 주입한다.
 	// systemProperty는 ${JWT_SECRET} 같은 플레이스홀더를 그대로 채우므로, 로컬·IDE·CI 어디서든
 	// env 주입 없이 @SpringBootTest 컨텍스트가 뜬다. 프로파일은 건드리지 않아(local 유지)

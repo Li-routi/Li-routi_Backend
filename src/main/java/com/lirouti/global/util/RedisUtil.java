@@ -2,14 +2,17 @@ package com.lirouti.global.util;
 
 import java.time.Duration;
 import java.util.Collections;
+
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.data.redis.core.script.RedisScript;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 @Component
 public class RedisUtil {
+    private static final String BLACKLIST_KEY_PREFIX = "auth:blacklist:";
+
     private static final RedisScript<Long> COMPARE_AND_SET_SCRIPT = new DefaultRedisScript<>(
             """
             if redis.call('GET', KEYS[1]) == ARGV[1] then
@@ -50,7 +53,7 @@ public class RedisUtil {
 
     // 블랙리스트 토큰 확인
     public boolean isBlackList(String accessToken) {
-        return hasKey(accessToken);
+        return hasKey(getBlacklistKey(accessToken));
     }
 
     // 존재 여부 확인
@@ -58,11 +61,19 @@ public class RedisUtil {
         return Boolean.TRUE.equals(redisTemplate.hasKey(key));
     }
 
-    // 블랙리스트 등록 (key가 액세스 토큰, value가 "logout", ttl이 남은 유효 시간이 됨)
+    // 블랙리스트 등록 (key가 액세스 토큰 해시, value가 "logout", ttl이 남은 유효 시간이 됨)
     public void setBlackList(String accessToken, Long remainingTime) {
         if (remainingTime > 0) {
-            redisTemplate.opsForValue().set(accessToken, "logout", Duration.ofMillis(remainingTime));
+            redisTemplate.opsForValue().set(
+                    getBlacklistKey(accessToken),
+                    "logout",
+                    Duration.ofMillis(remainingTime)
+            );
         }
+    }
+
+    private String getBlacklistKey(String accessToken) {
+        return BLACKLIST_KEY_PREFIX + TokenHashUtil.hash(accessToken);
     }
 
     public boolean compareAndSet(
