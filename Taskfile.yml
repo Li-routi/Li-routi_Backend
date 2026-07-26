@@ -66,6 +66,13 @@ tasks:
     cmds:
       - '{{.DC_LOCAL}} logs -f'
 
+  db-history:
+    desc: 로컬 DB에 적용된 Flyway 마이그레이션 이력 확인
+    # 계정은 docker-compose.local.yml의 로컬 개발 기본값(운영 비밀값 아님).
+    # 앱을 한 번도 안 띄웠으면 이력 테이블이 없다 — task run 으로 띄우면 생긴다.
+    cmds:
+      - '{{.DC_LOCAL}} exec -T mysql mysql -ulirouti -plirouti1234 lirouti -e "SELECT installed_rank, version, description, type, success, installed_on FROM flyway_schema_history ORDER BY installed_rank;"'
+
   clean:
     desc: build 산출물 및 QueryDSL 생성물 삭제
     cmds:

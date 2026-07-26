@@ -76,7 +76,11 @@ services:
       AWS_REGION: ${AWS_REGION:-ap-northeast-2}
       # 운영 설정
       SPRING_PROFILES_ACTIVE: prod
-      JPA_DDL_AUTO: update            # throwaway 베타 — 마이그레이션 도구 없이 스키마 자동 관리
+      # 스키마는 Flyway(db/migration의 V__/R__)가 만든다. Hibernate는 엔티티와 맞는지 대조만 한다.
+      # update로 되돌리면 Hibernate가 스키마를 임의로 고쳐 마이그레이션과 실제가 어긋나므로 쓰지 않는다.
+      # 다만 마이그레이션 문제로 부팅이 막히면 배포가 통째로 멈추므로, .env에 JPA_DDL_AUTO=update를
+      # 넣어 한시적으로 우회할 수 있게 열어 둔다(우회 후에는 반드시 마이그레이션으로 정리할 것).
+      JPA_DDL_AUTO: ${JPA_DDL_AUTO:-validate}
       JPA_SHOW_SQL: "false"
       TZ: Asia/Seoul
       # 2GB 인스턴스에서 힙 상한 필수 — 미설정 시 OOM
