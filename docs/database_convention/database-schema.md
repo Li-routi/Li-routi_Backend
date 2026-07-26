@@ -349,14 +349,16 @@
 | participation_round | INT | N | 인증 당시의 참여 회차. `member_challenge.participation_round`의 스냅샷 |
 | verified_date | DATE | N | 인증 기준일(KST) |
 | verified_at | DATETIME(6) | N | 인증 처리 시각 |
-| image_url | VARCHAR(2048) | N | 인증 사진. 사진 없는 인증은 허용하지 않는다. |
+| image_url | VARCHAR(2048) | N | 인증 사진의 **S3 오브젝트 key**(전체 URL이 아니다). 사진 없는 인증은 허용하지 않는다. |
 | content | VARCHAR(255) | Y | 인증 코멘트 |
 | created_at / updated_at | DATETIME(6) | N / N | 생성·수정 시각 |
 
 - `UNIQUE(member_challenge_id, participation_round, verified_date)`로 하루 1회 인증을 DB가 보장한다. 애플리케이션에서 "오늘 인증했는지" 조회한 뒤 저장하는 방식은 동시 요청 시 두 건이 들어갈 수 있다.
 - 유니크 제약에 `participation_round`가 포함되는 이유는 **같은 날 이탈 후 재참여하는 경우** 때문이다. 회차가 없으면 이전 회차의 오늘 인증 행 때문에 새 인증이 실패한다. 회차가 올라가면 새 인증을 정상적으로 등록할 수 있고, 지난 회차의 인증과도 분리된다.
 - 현재 참여의 인증만 조회할 때는 `member_challenge.participation_round`와 일치하는 행만 본다. 회차가 다른 인증은 이력이다.
-- 피드 조회를 위해 `(member_challenge_id, verified_at)` 인덱스가 필요하다. 챌린지 단위 피드는 `member_challenge`를 경유하므로 조인 비용을 확인한다.
+- 챌린지 단위 피드는 `member_challenge`를 경유한다. `member_challenge`를 `(challenge_id, active)` 인덱스로 좁힌 뒤 `challenge_verification`을 `member_challenge_id`로 조인한다. **이 조인에 별도 인덱스를 추가할 필요는 없다** — 위 유니크 제약의 선두 컬럼이 `member_challenge_id`라 그 인덱스가 조인과 "오늘 인증 행 찾기"를 모두 커버한다.
+- **피드의 정렬·커서 키는 `verified_at`이 아니라 `id`(내림차순)다.** 당일 재인증이 `verified_at`을 덮어쓰기 때문에, `verified_at`을 커서로 쓰면 페이지를 넘기는 도중 항목이 위로 점프해 중복·누락이 생긴다. `id`는 한 번 부여되면 변하지 않아 커서가 안정적이고, 하루 1건 제약상 오늘 인증은 어차피 상단에 온다. 따라서 `(member_challenge_id, verified_at)` 인덱스는 두지 않는다.
+- 참여자가 많아지면 조인 대상 `member_challenge` 행이 늘어 조인 후 정렬 비용이 커진다. 그 시점에는 `challenge_verification`에 `challenge_id`를 비정규화해 `(challenge_id, id)` 인덱스로 정렬까지 커버하는 방안을 검토한다. 현재 규모에서는 도입하지 않는다.
 - **회원 단위로 집계하거나 나열하는 쿼리는 회차 중복을 반드시 제거한다.** 같은 날 이탈 후 재참여해 다시 인증하면 회차가 다른 오늘자 인증 행이 두 건 생기기 때문이다. "오늘 완료자 수", "오늘 인증한 사람 목록"처럼 **사람을 세거나 나열하는 것**은 `member_challenge_id` 기준으로 중복을 제거하거나 현재 회차로 필터링한다.
 - 반대로 **인증(사진·포스트) 단위로 나열하는 피드는 중복 제거를 하지 않는다.** 회차가 다른 두 인증은 실제로 별개의 인증 이벤트이므로 둘 다 보여주는 것이 맞다. **"무엇을 세고 있는가 — 사람인가, 인증인가"를 먼저 정하고 쿼리를 작성한다.**
 - **이 테이블은 소프트 삭제하지 않는다.** `deleted_at`을 두지 않는 이유는 아래와 같다.
@@ -443,4 +445,7 @@
 - `member_routine`은 이름과 달리 회원 식별자가 없으며 다른 테이블과의 외래 키도 없다.
 - 챌린지 테이블은 위 표에 유니크 제약과 인덱스를 명시했다. 기존 테이블도 같은 수준으로 보완이 필요하다.
 - 소프트 삭제(`deleted_at`)와 유니크 제약은 함께 쓰면 충돌한다. 삭제된 행도 유니크 제약에 남기 때문이다. `challenge_verification`은 덮어쓰기 방식을 택해 이 문제를 피했으나, **기존 테이블 중 `deleted_at`과 유니크 제약을 함께 가진 것이 있다면 같은 문제가 있는지 점검이 필요하다.**
-- 챌린지 인증 사진은 외부 스토리지에 저장하고 DB에는 URL 또는 key만 둔다. 저장 방식은 이미지 업로드 인프라 작업에서 확정한다.
+- 챌린지 인증 사진은 외부 스토리지(S3)에 저장하고 DB에는 **오브젝트 key만** 둔다(전체 URL을 저장하지 않는다). CDN·버킷 도메인이 바뀌어도 저장된 데이터를 마이그레이션하지 않기 위해서다. 읽기 URL은 조회 시점에 `aws.s3.public-base-url` + key로 조립한다.
+  - `public-base-url`을 **미주입하면 버킷·리전으로 path-style S3 주소(`https://s3.<리전>.amazonaws.com/<버킷>`)를 계산해 기본값으로 쓴다.** 설정 하나가 없다고 앱 전체가 못 뜨는 것을 막기 위해서다(특히 merge=즉시 배포 환경). 기본값이 진짜 URL이라 피드의 사진 URL이 null로 새지 않는다. 다만 **버킷이 비공개면 그 URL은 403**이므로, 사진을 실제로 노출하려면 버킷을 공개하거나 CloudFront를 앞에 두고 `public-base-url`을 그 도메인으로 덮어쓴다(이 서빙 방식 확정은 별도 이슈에서 다룬다).
+  - path-style을 기본으로 쓰는 이유: 가상호스팅(`<버킷>.s3.<리전>...`)은 버킷명에 `.`이 있으면 와일드카드 TLS 인증서(`*.s3.<리전>...`)와 맞지 않아 조회가 깨진다. path-style은 버킷명에 무관하게 안전하다.
+  - 컬럼명이 `image_url`이지만 실제로 담기는 값은 key다. 이름과 내용이 어긋나 있으므로 마이그레이션 도구를 도입할 때 `image_key`로의 개명을 함께 검토한다.

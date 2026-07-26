@@ -12,6 +12,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -29,6 +30,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import com.lirouti.domain.challenge.dto.response.ChallengeResDTO;
 import com.lirouti.domain.challenge.entity.Challenge;
+import com.lirouti.domain.challenge.entity.MemberChallenge;
 import com.lirouti.domain.challenge.enums.ChallengeCategory;
 import com.lirouti.domain.challenge.exception.ChallengeException;
 import com.lirouti.domain.challenge.exception.code.error.ChallengeErrorCode;
@@ -177,17 +179,57 @@ class ChallengeQueryServiceTest {
     }
 
     @Test
-    @DisplayName("상세 조회 시 참여자 수와 오늘 완료자 수를 함께 담는다")
+    @DisplayName("상세 조회 시 참여자 수·인증 게시글 수·오늘 완료자 수를 함께 담는다")
     void getChallenge_ReturnsDetailWithCounts() {
         when(challengeRepository.findByIdAndActiveTrue(1L)).thenReturn(Optional.of(challenge("물 1L 마시기")));
         when(challengeRepository.countActiveParticipants(1L)).thenReturn(1234L);
+        when(challengeRepository.countVerificationPosts(1L)).thenReturn(80L);
         when(challengeRepository.countTodayCompletions(eq(1L), any(LocalDate.class))).thenReturn(456L);
 
-        ChallengeResDTO.Detail result = challengeQueryService.getChallenge(1L);
+        // 비로그인 조회(memberId == null) → participating은 false.
+        ChallengeResDTO.Detail result = challengeQueryService.getChallenge(1L, null);
 
         assertThat(result.participantCount()).isEqualTo(1234L);
+        assertThat(result.verificationPostCount()).isEqualTo(80L);
         assertThat(result.todayCompletionCount()).isEqualTo(456L);
+        assertThat(result.participating()).isFalse();
         assertThat(result.imageUrl()).isEqualTo("https://img/x.jpg");
+    }
+
+    @Test
+    @DisplayName("로그인 조회 시 참여 중이면 participating=true")
+    void getChallenge_LoggedInParticipating_ReturnsTrue() {
+        when(challengeRepository.findByIdAndActiveTrue(1L)).thenReturn(Optional.of(challenge("물 1L 마시기")));
+        when(challengeRepository.countActiveParticipants(1L)).thenReturn(0L);
+        when(challengeRepository.countVerificationPosts(1L)).thenReturn(0L);
+        when(challengeRepository.countTodayCompletions(eq(1L), any(LocalDate.class))).thenReturn(0L);
+        MemberChallenge participating = MemberChallenge.builder()
+                .participationRound(1).currentStreak(0)
+                .joinedAt(LocalDateTime.now()).active(true).build();
+        when(memberChallengeRepository.findByMemberIdAndChallengeId(7L, 1L))
+                .thenReturn(Optional.of(participating));
+
+        ChallengeResDTO.Detail result = challengeQueryService.getChallenge(1L, 7L);
+
+        assertThat(result.participating()).isTrue();
+    }
+
+    @Test
+    @DisplayName("로그인 조회여도 그만둔 참여면 participating=false")
+    void getChallenge_LoggedInButLeft_ReturnsFalse() {
+        when(challengeRepository.findByIdAndActiveTrue(1L)).thenReturn(Optional.of(challenge("물 1L 마시기")));
+        when(challengeRepository.countActiveParticipants(1L)).thenReturn(0L);
+        when(challengeRepository.countVerificationPosts(1L)).thenReturn(0L);
+        when(challengeRepository.countTodayCompletions(eq(1L), any(LocalDate.class))).thenReturn(0L);
+        MemberChallenge left = MemberChallenge.builder()
+                .participationRound(1).currentStreak(0)
+                .joinedAt(LocalDateTime.now()).active(false).build();
+        when(memberChallengeRepository.findByMemberIdAndChallengeId(7L, 1L))
+                .thenReturn(Optional.of(left));
+
+        ChallengeResDTO.Detail result = challengeQueryService.getChallenge(1L, 7L);
+
+        assertThat(result.participating()).isFalse();
     }
 
     @Test
@@ -195,7 +237,7 @@ class ChallengeQueryServiceTest {
     void getChallenge_NotFound_ThrowsException() {
         when(challengeRepository.findByIdAndActiveTrue(99L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> challengeQueryService.getChallenge(99L))
+        assertThatThrownBy(() -> challengeQueryService.getChallenge(99L, null))
                 .isInstanceOf(ChallengeException.class)
                 .hasFieldOrPropertyWithValue("code", ChallengeErrorCode.CHALLENGE_NOT_FOUND);
     }

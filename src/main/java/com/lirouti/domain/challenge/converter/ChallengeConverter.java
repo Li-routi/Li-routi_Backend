@@ -5,6 +5,7 @@ import java.util.Map;
 
 import com.lirouti.domain.challenge.dto.response.ChallengeResDTO;
 import com.lirouti.domain.challenge.entity.Challenge;
+import com.lirouti.domain.challenge.entity.ChallengeVerification;
 import com.lirouti.domain.challenge.entity.MemberChallenge;
 
 public final class ChallengeConverter {
@@ -79,10 +80,66 @@ public final class ChallengeConverter {
                 .build();
     }
 
-    // 참여자 수·오늘 완료자 수는 Service가 집계해 매개변수로 넘긴다.
+    /**
+     * 인증하기 결과. imageUrl은 저장된 key가 아니라 Service가 조립한 공개 URL을 받는다.
+     * challenge 프록시의 id만 읽으므로 추가 조회가 없다.
+     */
+    public static ChallengeResDTO.Verification toVerification(
+            ChallengeVerification verification,
+            String imageUrl,
+            int currentStreak,
+            boolean reverified
+    ) {
+        return ChallengeResDTO.Verification.builder()
+                .verificationId(verification.getId())
+                .challengeId(verification.getMemberChallenge().getChallenge().getId())
+                .verifiedDate(verification.getVerifiedDate())
+                .verifiedAt(verification.getVerifiedAt())
+                .imageUrl(imageUrl)
+                .content(verification.getContent())
+                .currentStreak(currentStreak)
+                .reverified(reverified)
+                .build();
+    }
+
+    // 피드 카드 한 건. 공개 URL은 Service가 조립해 넘긴다.
+    public static ChallengeResDTO.FeedItem toFeedItem(ChallengeVerification verification, String imageUrl) {
+        return ChallengeResDTO.FeedItem.builder()
+                .verificationId(verification.getId())
+                .nickname(verification.getMemberChallenge().getMember().getNickname())
+                .imageUrl(imageUrl)
+                .content(verification.getContent())
+                .verifiedAt(verification.getVerifiedAt())
+                .build();
+    }
+
+    /**
+     * 인증 피드 커서 응답.
+     * imageUrls는 Service가 인증 id별로 미리 조립해 둔 공개 URL 맵이다
+     * (Converter는 외부 규칙에 의존하지 않고 전달받은 값만 매핑한다).
+     */
+    public static ChallengeResDTO.Feed toFeed(
+            List<ChallengeVerification> verifications,
+            Map<Long, String> imageUrls,
+            Long nextCursor,
+            boolean hasNext
+    ) {
+        List<ChallengeResDTO.FeedItem> items = verifications.stream()
+                .map(v -> toFeedItem(v, imageUrls.get(v.getId())))
+                .toList();
+        return ChallengeResDTO.Feed.builder()
+                .verifications(items)
+                .nextCursor(nextCursor)
+                .hasNext(hasNext)
+                .build();
+    }
+
+    // 참여 여부·집계 수치는 Service가 조회해 매개변수로 넘긴다.
     public static ChallengeResDTO.Detail toDetail(
             Challenge challenge,
+            boolean participating,
             long participantCount,
+            long verificationPostCount,
             long todayCompletionCount
     ) {
         return ChallengeResDTO.Detail.builder()
@@ -92,7 +149,9 @@ public final class ChallengeConverter {
                 .imageUrl(challenge.getImageUrl())
                 .category(challenge.getCategory())
                 .routineCycle(challenge.getRoutineCycle())
+                .participating(participating)
                 .participantCount(participantCount)
+                .verificationPostCount(verificationPostCount)
                 .todayCompletionCount(todayCompletionCount)
                 .build();
     }

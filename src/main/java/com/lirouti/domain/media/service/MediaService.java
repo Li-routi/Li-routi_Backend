@@ -1,7 +1,9 @@
 package com.lirouti.domain.media.service;
 
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 import org.springframework.stereotype.Service;
 
@@ -23,7 +25,8 @@ import software.amazon.awssdk.services.s3.presigner.model.PresignedPutObjectRequ
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
 
 /**
- * 미디어 업로드용 presigned URL을 발급한다.
+ * 미디어 업로드용 presigned URL을 발급하고, 저장된 미디어 key의 검증·URL 조립을 담당한다.
+ * DB에는 오브젝트 key만 저장하므로(database-schema.md), key ↔ 공개 URL 규칙은 이 클래스가 소유한다.
  * DB를 다루지 않아 조회/변경 구분이 무의미하므로 CQRS를 적용하지 않는다.
  * (service_convention.md의 CQRS 예외 도메인)
  *
@@ -35,6 +38,10 @@ import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignReques
 @Service
 @RequiredArgsConstructor
 public class MediaService {
+    // generateMediaKey가 UUID.randomUUID()로 만드는 형태. 소문자 16진수 고정이다.
+    private static final Pattern ISSUED_KEY_UUID =
+            Pattern.compile("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
+
     private final S3Presigner s3Presigner;
     private final S3Properties s3Properties;
 
@@ -73,11 +80,63 @@ public class MediaService {
         return MediaConverter.toPresignedUrl(
                 presigned.url().toString(),
                 mediaKey,
-                s3Properties.getPublicBaseUrl(),
+                resolvePublicUrl(mediaKey),
                 signedContentType,
                 request.contentLength(),
                 presigned.expiration()
         );
+    }
+
+    /**
+     * 저장된 오브젝트 key를 클라이언트가 읽을 수 있는 공개 URL로 조립한다.
+     * DB에는 key만 저장하므로 조회 응답을 만들 때마다 이 메서드를 거친다.
+     * public-base-url은 필수 설정이라 null·빈 값은 부팅 시점에 걸러진다.
+     */
+    public String resolvePublicUrl(String mediaKey) {
+        String base = s3Properties.getPublicBaseUrl();
+        String normalizedBase = base.endsWith("/")
+                ? base.substring(0, base.length() - 1)
+                : base;
+        return normalizedBase + "/" + mediaKey;
+    }
+
+    /**
+     * 클라이언트가 보낸 key가 그 용도로 발급한 key의 형식인지 검증한다.
+     *
+     * key는 서버가 발급하지만 업로드 후 요청 본문으로 되돌아오므로 그대로 믿을 수 없다.
+     * 다른 용도의 경로나 임의 문자열이 저장되지 않도록 발급 규칙({@code prefix/UUID.확장자})과 대조한다.
+     * 실제 오브젝트가 업로드됐는지, 그 바이트가 정말 이미지인지는 확인하지 않는다(#22·#19 범위).
+     */
+    public void validateMediaKey(String mediaKey, MediaPurpose purpose) {
+        if (!matchesIssuedKeyFormat(mediaKey, purpose)) {
+            log.warn("발급 규칙에 맞지 않는 미디어 key입니다. purpose={}, mediaKey={}", purpose, mediaKey);
+            throw new MediaException(MediaErrorCode.INVALID_MEDIA_KEY);
+        }
+    }
+
+    private boolean matchesIssuedKeyFormat(String mediaKey, MediaPurpose purpose) {
+        if (mediaKey == null) {
+            return false;
+        }
+        String prefix = purpose.getPathPrefix() + "/";
+        if (!mediaKey.startsWith(prefix)) {
+            return false;
+        }
+        String fileName = mediaKey.substring(prefix.length());
+        int extensionSeparator = fileName.lastIndexOf('.');
+        if (extensionSeparator < 0) {
+            return false;
+        }
+        String baseName = fileName.substring(0, extensionSeparator);
+        String extension = fileName.substring(extensionSeparator + 1);
+        return ISSUED_KEY_UUID.matcher(baseName).matches() && isExtensionAllowedFor(purpose, extension);
+    }
+
+    /** 그 용도가 허용하는 카테고리의 형식들만 확장자로 인정한다(사진 전용 용도에 mp4 key 방지). */
+    private boolean isExtensionAllowedFor(MediaPurpose purpose, String extension) {
+        return Arrays.stream(MediaContentType.values())
+                .filter(type -> purpose.allows(type.getCategory()))
+                .anyMatch(type -> type.getExtension().equals(extension));
     }
 
     private PresignedPutObjectRequest presign(PutObjectPresignRequest presignRequest, String mediaKey) {

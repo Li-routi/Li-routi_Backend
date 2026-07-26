@@ -3,6 +3,7 @@ package com.lirouti.domain.challenge.controller.docs;
 import com.lirouti.domain.challenge.dto.response.ChallengeResDTO;
 import com.lirouti.domain.challenge.enums.ChallengeCategory;
 import com.lirouti.global.apiPayload.ApiResponse;
+import com.lirouti.global.auth.CustomUserDetails;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -48,7 +49,18 @@ public interface ChallengeControllerDocs {
 
     @Operation(
             summary = "챌린지 상세 조회",
-            description = "챌린지 상세와 루틴 주기, 전체 참여자 수, 오늘 완료자 수를 조회합니다. 로그인 없이 사용할 수 있습니다."
+            description = """
+                    챌린지 상세와 루틴 주기, 상단 통계(참여자 수·인증 게시글 수·오늘 완료자 수),
+                    그리고 조회자의 참여 여부를 조회합니다. 로그인 없이 사용할 수 있습니다.
+
+                    로그인하면 participating으로 '참여하기'/'인증하기' 버튼 상태를 정할 수 있고,
+                    비로그인이면 participating은 항상 false로 내려갑니다.
+
+                    응답 result: challengeId, name, description, imageUrl, category,
+                    routineCycle(DAILY/WEEKLY/MONTHLY), participating(조회자 참여 여부),
+                    participantCount(참여자 수), verificationPostCount(인증 게시글 수),
+                    todayCompletionCount(오늘 완료자 수).
+                    """
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "상세 조회 성공"),
@@ -56,6 +68,7 @@ public interface ChallengeControllerDocs {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "존재하지 않거나 비활성 챌린지")
     })
     ApiResponse<ChallengeResDTO.Detail> getChallenge(
+            CustomUserDetails userDetails,
             @Parameter(description = "챌린지 ID") Long challengeId
     );
 }
