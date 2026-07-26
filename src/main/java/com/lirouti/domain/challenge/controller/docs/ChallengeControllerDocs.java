@@ -28,7 +28,7 @@ public interface ChallengeControllerDocs {
 
                     응답 result: challenges(카드 목록), nextCursor, hasNext.
                     카드 한 건: challengeId, name, description, imageUrl, category, routineCycle(DAILY/WEEKLY/MONTHLY),
-                    participantCount(참여자 수), verificationPostCount(인증 게시글 수).
+                    reward(달성 시 부여되는 재화 수량), participantCount(참여자 수), verificationPostCount(인증 게시글 수).
                     category·routineCycle은 enum으로 내려가며 프론트가 한글로 변환합니다.
                     """
     )
@@ -57,9 +57,9 @@ public interface ChallengeControllerDocs {
                     비로그인이면 participating은 항상 false로 내려갑니다.
 
                     응답 result: challengeId, name, description, imageUrl, category,
-                    routineCycle(DAILY/WEEKLY/MONTHLY), participating(조회자 참여 여부),
-                    participantCount(참여자 수), verificationPostCount(인증 게시글 수),
-                    todayCompletionCount(오늘 완료자 수).
+                    routineCycle(DAILY/WEEKLY/MONTHLY), reward(달성 시 부여되는 재화 수량),
+                    participating(조회자 참여 여부), participantCount(참여자 수),
+                    verificationPostCount(인증 게시글 수), todayCompletionCount(오늘 완료자 수).
                     """
     )
     @ApiResponses({

@@ -34,6 +34,7 @@ public final class ChallengeConverter {
                 .imageUrl(challenge.getImageUrl())
                 .category(challenge.getCategory())
                 .routineCycle(challenge.getRoutineCycle())
+                .reward(challenge.getReward())
                 .participantCount(participantCount)
                 .verificationPostCount(verificationPostCount)
                 .build();
@@ -149,6 +150,7 @@ public final class ChallengeConverter {
                 .imageUrl(challenge.getImageUrl())
                 .category(challenge.getCategory())
                 .routineCycle(challenge.getRoutineCycle())
+                .reward(challenge.getReward())
                 .participating(participating)
                 .participantCount(participantCount)
                 .verificationPostCount(verificationPostCount)

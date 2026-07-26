@@ -45,7 +45,7 @@ class ChallengeControllerTest {
     private Challenge persistChallenge() {
         Challenge c = Challenge.builder()
                 .name("물 1L 마시기").description("설명").imageUrl("https://img/water.png")
-                .category(ChallengeCategory.HEALTH).active(true).build();
+                .category(ChallengeCategory.HEALTH).reward(30).active(true).build();
         em.persist(c);
         em.flush();
         return c;
@@ -91,8 +91,9 @@ class ChallengeControllerTest {
     void getChallenges_CursorPaging() throws Exception {
         Challenge older = Challenge.builder()
                 .name("mvctag오래된").description("d").category(ChallengeCategory.HOBBY).active(true).build();
+        // reward를 주지 않으면 엔티티 빌더가 0으로 채운다. 목록 카드에 그대로 실리는지 함께 본다.
         Challenge newer = Challenge.builder()
-                .name("mvctag최신").description("d").category(ChallengeCategory.HOBBY).active(true).build();
+                .name("mvctag최신").description("d").category(ChallengeCategory.HOBBY).reward(15).active(true).build();
         em.persist(older);
         em.persist(newer);
         em.flush();
@@ -103,6 +104,7 @@ class ChallengeControllerTest {
                 .andExpect(jsonPath("$.result.challenges.length()").value(1))
                 .andExpect(jsonPath("$.result.challenges[0].challengeId").value(newer.getId()))
                 .andExpect(jsonPath("$.result.challenges[0].routineCycle").value("DAILY"))
+                .andExpect(jsonPath("$.result.challenges[0].reward").value(15))
                 .andExpect(jsonPath("$.result.challenges[0].participantCount").value(0))
                 .andExpect(jsonPath("$.result.challenges[0].verificationPostCount").value(0))
                 .andExpect(jsonPath("$.result.hasNext").value(true))
@@ -115,6 +117,8 @@ class ChallengeControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.challenges.length()").value(1))
                 .andExpect(jsonPath("$.result.challenges[0].challengeId").value(older.getId()))
+                // reward를 안 준 챌린지는 0으로 내려간다(엔티티 빌더 기본값). null이 아니다.
+                .andExpect(jsonPath("$.result.challenges[0].reward").value(0))
                 .andExpect(jsonPath("$.result.hasNext").value(false))
                 .andExpect(jsonPath("$.result.nextCursor").doesNotExist());
     }
@@ -138,6 +142,8 @@ class ChallengeControllerTest {
                 .andExpect(jsonPath("$.result.name").value("물 1L 마시기"))
                 .andExpect(jsonPath("$.result.imageUrl").value("https://img/water.png"))
                 .andExpect(jsonPath("$.result.routineCycle").value("DAILY"))
+                // 달성 보상. 엔티티에 저장된 값이 그대로 실린다.
+                .andExpect(jsonPath("$.result.reward").value(30))
                 .andExpect(jsonPath("$.result.participantCount").value(1))
                 .andExpect(jsonPath("$.result.verificationPostCount").value(1))
                 .andExpect(jsonPath("$.result.todayCompletionCount").value(1))
