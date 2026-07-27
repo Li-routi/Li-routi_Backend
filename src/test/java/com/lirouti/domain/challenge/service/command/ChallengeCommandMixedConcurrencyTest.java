@@ -88,7 +88,7 @@ class ChallengeCommandMixedConcurrencyTest {
         memberChallengeRepository.findByMemberIdAndChallengeId(memberId, challengeId)
                 .ifPresent(mc -> {
                     challengeVerificationRepository.deleteAll(
-                            challengeVerificationRepository.findFeedByCursor(challengeId, null, 100));
+                            challengeVerificationRepository.findFeedByCursor(challengeId, null, null, 100));
                     memberChallengeRepository.delete(mc);
                 });
         challengeRepository.deleteById(challengeId);

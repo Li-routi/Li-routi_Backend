@@ -15,10 +15,12 @@ import com.lirouti.domain.challenge.dto.request.ChallengeReqDTO;
 import com.lirouti.domain.challenge.dto.response.ChallengeResDTO;
 import com.lirouti.domain.challenge.entity.Challenge;
 import com.lirouti.domain.challenge.entity.ChallengeVerification;
+import com.lirouti.domain.challenge.entity.ChallengeVerificationReport;
 import com.lirouti.domain.challenge.entity.MemberChallenge;
 import com.lirouti.domain.challenge.exception.ChallengeException;
 import com.lirouti.domain.challenge.exception.code.error.ChallengeErrorCode;
 import com.lirouti.domain.challenge.repository.ChallengeRepository;
+import com.lirouti.domain.challenge.repository.ChallengeVerificationReportRepository;
 import com.lirouti.domain.challenge.repository.ChallengeVerificationRepository;
 import com.lirouti.domain.challenge.repository.MemberChallengeRepository;
 import com.lirouti.domain.media.enums.MediaPurpose;
@@ -35,6 +37,7 @@ public class ChallengeCommandService {
     private final ChallengeRepository challengeRepository;
     private final MemberChallengeRepository memberChallengeRepository;
     private final ChallengeVerificationRepository challengeVerificationRepository;
+    private final ChallengeVerificationReportRepository challengeVerificationReportRepository;
     private final MemberRepository memberRepository;
     // 미디어 key의 발급 규칙·공개 URL 조립은 media 도메인이 소유한다. DB를 다루지 않는 유틸성 서비스다.
     private final MediaService mediaService;
@@ -147,6 +150,49 @@ public class ChallengeCommandService {
                 memberChallenge.currentStreakAsOf(today),
                 reverified
         );
+    }
+
+    /**
+     * 인증 신고. 신고자 본인의 피드에서만 그 인증이 가려진다 — 인증은 삭제되지 않고
+     * 다른 회원에게는 그대로 보인다(database-schema.md).
+     *
+     * 자기 인증을 신고하는 것을 막지 않는다. 기획에 그런 제약이 없고, 막지 않아도 결과는
+     * "본인 피드에서 본인 사진이 안 보인다"뿐이라 해가 없다. 필요해지면 조건을 추가한다.
+     *
+     * 중복 신고는 UNIQUE(challenge_verification_id, reporter_id)가 막는다. "이미 신고했는지"를
+     * 먼저 조회해 판단하지 않는 이유는 조회와 저장 사이의 동시 요청을 막지 못하기 때문이다.
+     * 제약 위반을 잡아 409로 바꾼다(인증 저장과 같은 방식).
+     */
+    @Transactional
+    public ChallengeResDTO.Report report(
+            Long memberId,
+            Long challengeId,
+            Long verificationId,
+            ChallengeReqDTO.Report request
+    ) {
+        // 경로의 challengeId와 실제 인증의 챌린지가 맞는지까지 확인한다. 어긋나면 404다.
+        ChallengeVerification verification = challengeVerificationRepository
+                .findByIdAndMemberChallengeChallengeId(verificationId, challengeId)
+                .orElseThrow(() -> new ChallengeException(ChallengeErrorCode.VERIFICATION_NOT_FOUND));
+
+        // 신고자는 FK만 필요하므로 프록시 참조로 불필요한 회원 조회를 피한다(참여 생성과 같은 이유).
+        Member reporter = memberRepository.getReferenceById(memberId);
+
+        ChallengeVerificationReport report = ChallengeVerificationReport.builder()
+                .challengeVerification(verification)
+                .reporter(reporter)
+                .reason(request.reason())
+                .build();
+        try {
+            // saveAndFlush로 제약 위반을 이 자리에서 잡는다. 커밋 시점까지 미루면
+            // 트랜잭션 밖에서 터져 도메인 코드로 바꿀 수 없다.
+            //
+            // 두 예외를 모두 잡는 이유는 인증 저장과 같다. 같은 유니크 키로 INSERT가 겹칠 때
+            // InnoDB가 중복 키 오류 대신 데드락으로 판정해 CannotAcquireLockException을 줄 수 있다.
+            return ChallengeConverter.toReport(challengeVerificationReportRepository.saveAndFlush(report));
+        } catch (DataIntegrityViolationException | CannotAcquireLockException e) {
+            throw new ChallengeException(ChallengeErrorCode.ALREADY_REPORTED);
+        }
     }
 
     private ChallengeVerification createVerification(

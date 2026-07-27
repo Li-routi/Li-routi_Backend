@@ -54,6 +54,9 @@ public interface ChallengeVerificationControllerDocs {
                     탈퇴한 회원의 인증은 제외됩니다. 같은 날 그만뒀다 다시 참여해 인증한 경우는
                     별개의 인증이므로 둘 다 보입니다.
 
+                    **내가 신고한 인증은 이 목록에서 빠집니다.** 신고는 사진을 지우는 것이 아니라
+                    신고자 본인의 화면에서만 가리는 것이라, 같은 인증이 다른 회원에게는 그대로 보입니다.
+
                     응답 result: verifications[{ verificationId, nickname, imageUrl, content, verifiedAt }],
                     nextCursor, hasNext.
                     """
@@ -64,8 +67,38 @@ public interface ChallengeVerificationControllerDocs {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "존재하지 않거나 비활성 챌린지")
     })
     ApiResponse<ChallengeResDTO.Feed> getVerificationFeed(
+            CustomUserDetails userDetails,
             @Parameter(description = "챌린지 ID") Long challengeId,
             @Parameter(description = "이전 응답의 nextCursor. 첫 요청에서는 생략") Long cursor,
             @Parameter(description = "페이지 크기(기본 20, 최대 50)") Integer size
+    );
+
+    @Operation(
+            summary = "인증 신고하기",
+            description = """
+                    피드의 인증을 신고합니다. 인증이 필요합니다.
+
+                    **신고해도 사진은 삭제되지 않습니다.** 신고자 본인의 피드 조회에서만 그 인증이 제외되며,
+                    다른 회원에게는 그대로 보입니다. 신고 누적으로 전체에게 숨기는 정책은 현재 없습니다.
+
+                    reason(신고 사유)은 선택입니다. 사유 선택 없이 바로 신고할 수 있습니다.
+
+                    같은 인증을 두 번 신고하면 409입니다. 신고 취소는 제공하지 않습니다.
+
+                    응답 result: reportId, verificationId.
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "신고 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "신고 사유가 255자를 초과"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "인증 필요(미인증)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "해당 챌린지에 그 인증이 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "이미 신고한 인증")
+    })
+    ApiResponse<ChallengeResDTO.Report> report(
+            CustomUserDetails userDetails,
+            @Parameter(description = "챌린지 ID") Long challengeId,
+            @Parameter(description = "신고할 인증 ID") Long verificationId,
+            ChallengeReqDTO.Report request
     );
 }

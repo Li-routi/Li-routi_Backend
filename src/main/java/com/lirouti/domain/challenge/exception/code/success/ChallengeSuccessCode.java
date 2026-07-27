@@ -45,6 +45,11 @@ public enum ChallengeSuccessCode implements BaseSuccessCode {
             HttpStatus.OK,
             "인증 피드 조회에 성공했습니다.",
             "CHALLENGE200_7"
+    ),
+    VERIFICATION_REPORT_SUCCESS(
+            HttpStatus.OK,
+            "인증 신고에 성공했습니다.",
+            "CHALLENGE200_8"
     );
 
     private final HttpStatus httpStatus;

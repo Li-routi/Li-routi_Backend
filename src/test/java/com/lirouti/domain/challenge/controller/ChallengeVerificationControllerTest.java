@@ -8,7 +8,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -20,6 +22,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.lirouti.domain.challenge.entity.Challenge;
+import com.lirouti.domain.challenge.entity.ChallengeVerification;
 import com.lirouti.domain.challenge.entity.MemberChallenge;
 import com.lirouti.domain.challenge.enums.ChallengeCategory;
 import com.lirouti.domain.member.entity.Member;
@@ -46,12 +49,33 @@ class ChallengeVerificationControllerTest {
     private EntityManager em;
 
     private Member persistMember() {
+        return persistMember("vermvc");
+    }
+
+    // email·social_id에 유니크 제약이 있어 한 테스트에서 회원을 둘 이상 만들 때는 접두사를 달리한다.
+    private Member persistMember(String tag) {
         Member m = Member.builder()
-                .email("vermvc@ex.com").nickname("vermvc")
+                .email(tag + "@ex.com").nickname(tag)
                 .socialProvider(SocialProvider.GOOGLE).role(Role.ROLE_USER)
-                .socialId("vermvc-sid").build();
+                .socialId(tag + "-sid").build();
         em.persist(m);
         return m;
+    }
+
+    private ChallengeVerification persistVerification(Member author, Challenge c) {
+        MemberChallenge mc = MemberChallenge.builder()
+                .member(author).challenge(c)
+                .participationRound(1).currentStreak(1)
+                .joinedAt(LocalDateTime.now()).active(true).build();
+        em.persist(mc);
+        ChallengeVerification v = ChallengeVerification.builder()
+                .memberChallenge(mc).participationRound(1)
+                .verifiedDate(LocalDate.now(ZoneId.of("Asia/Seoul")))
+                .verifiedAt(LocalDateTime.now())
+                .imageUrl(VALID_KEY).content("신고 대상")
+                .build();
+        em.persist(v);
+        return v;
     }
 
     private Challenge persistChallenge() {
@@ -176,5 +200,100 @@ class ChallengeVerificationControllerTest {
         mockMvc.perform(get("/api/challenges/{id}/verifications", 999_999_999L)
                         .with(user(principal(me))))
                 .andExpect(status().isNotFound());
+    }
+
+    // ── 인증 신고 (#15) ──
+    @Test
+    @DisplayName("인증 없이 신고를 요청하면 거부된다(403)")
+    void report_Unauthenticated_IsRejected() throws Exception {
+        mockMvc.perform(post("/api/challenges/{cid}/verifications/{vid}/reports", 1L, 1L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\": \"부적절\"}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("신고하면 200과 reportId·verificationId를 돌려주고, 사유는 생략할 수 있다")
+    void report_Success() throws Exception {
+        Member author = persistMember("verauthor");
+        Member reporter = persistMember("verreporter");
+        Challenge c = persistChallenge();
+        ChallengeVerification v = persistVerification(author, c);
+        em.flush();
+
+        mockMvc.perform(post("/api/challenges/{cid}/verifications/{vid}/reports", c.getId(), v.getId())
+                        .with(user(principal(reporter)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))   // reason 생략 — 사유 없이 바로 신고할 수 있어야 한다
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.isSuccess").value(true))
+                .andExpect(jsonPath("$.result.verificationId").value(v.getId()))
+                .andExpect(jsonPath("$.result.reportId").isNumber());
+    }
+
+    @Test
+    @DisplayName("같은 인증을 두 번 신고하면 409")
+    void report_Duplicate_Returns409() throws Exception {
+        Member author = persistMember("verauthor2");
+        Member reporter = persistMember("verreporter2");
+        Challenge c = persistChallenge();
+        ChallengeVerification v = persistVerification(author, c);
+        em.flush();
+
+        String url = "/api/challenges/" + c.getId() + "/verifications/" + v.getId() + "/reports";
+        mockMvc.perform(post(url).with(user(principal(reporter)))
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post(url).with(user(principal(reporter)))
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("CHALLENGE409_4"));
+    }
+
+    @Test
+    @DisplayName("경로의 챌린지에 속하지 않은 인증을 신고하면 404")
+    void report_VerificationOfAnotherChallenge_Returns404() throws Exception {
+        Member author = persistMember("verauthor3");
+        Member reporter = persistMember("verreporter3");
+        Challenge c = persistChallenge();
+        Challenge other = persistChallenge();
+        ChallengeVerification v = persistVerification(author, c);
+        em.flush();
+
+        // 인증은 c에 속하는데 other 경로로 신고 → 404
+        mockMvc.perform(post("/api/challenges/{cid}/verifications/{vid}/reports", other.getId(), v.getId())
+                        .with(user(principal(reporter)))
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("CHALLENGE404_2"));
+    }
+
+    @Test
+    @DisplayName("신고한 인증은 내 피드에서 사라지지만 다른 회원의 피드에는 남는다")
+    void getFeed_ExcludesMyReportedVerificationOnly() throws Exception {
+        Member author = persistMember("verauthor4");
+        Member reporter = persistMember("verreporter4");
+        Challenge c = persistChallenge();
+        ChallengeVerification v = persistVerification(author, c);
+        em.flush();
+
+        mockMvc.perform(post("/api/challenges/{cid}/verifications/{vid}/reports", c.getId(), v.getId())
+                        .with(user(principal(reporter)))
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isOk());
+
+        // 신고자에게는 빈 피드
+        mockMvc.perform(get("/api/challenges/{id}/verifications", c.getId())
+                        .with(user(principal(reporter))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.verifications").isEmpty());
+
+        // 작성자(다른 회원)에게는 그대로 보인다 — 신고는 삭제가 아니다
+        mockMvc.perform(get("/api/challenges/{id}/verifications", c.getId())
+                        .with(user(principal(author))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.verifications.length()").value(1))
+                .andExpect(jsonPath("$.result.verifications[0].verificationId").value(v.getId()));
     }
 }

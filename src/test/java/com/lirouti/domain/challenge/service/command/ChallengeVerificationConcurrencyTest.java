@@ -83,7 +83,7 @@ class ChallengeVerificationConcurrencyTest {
     void tearDown() {
         // 인증이 참여를 참조하므로 인증부터 지운다.
         challengeVerificationRepository.deleteAll(
-                challengeVerificationRepository.findFeedByCursor(challengeId, null, 100));
+                challengeVerificationRepository.findFeedByCursor(challengeId, null, null, 100));
         memberChallengeRepository.deleteById(memberChallengeId);
         challengeRepository.deleteById(challengeId);
         memberRepository.deleteById(memberId);
@@ -145,7 +145,7 @@ class ChallengeVerificationConcurrencyTest {
         assertThat(reloaded.getCurrentStreak()).isEqualTo(1);
 
         // 하루 1행이 유지된다.
-        assertThat(challengeVerificationRepository.findFeedByCursor(challengeId, null, 100)).hasSize(1);
+        assertThat(challengeVerificationRepository.findFeedByCursor(challengeId, null, null, 100)).hasSize(1);
 
         // 두 요청이 완전히 겹치면 진 쪽은 409고, 한쪽이 늦게 읽으면 덮어쓰기로 성공한다.
         // 스케줄링에 달렸으므로 성공 건수를 1로 못 박지 않고, 둘 중 하나였는지만 확인한다.

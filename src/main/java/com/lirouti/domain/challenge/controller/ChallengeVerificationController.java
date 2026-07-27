@@ -48,12 +48,28 @@ public class ChallengeVerificationController implements ChallengeVerificationCon
     @Override
     @GetMapping
     public ApiResponse<ChallengeResDTO.Feed> getVerificationFeed(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
             @PathVariable Long challengeId,
             @RequestParam(required = false) Long cursor,
             @RequestParam(required = false) Integer size
     ) {
-        ChallengeResDTO.Feed result =
-                challengeQueryService.getVerificationFeed(challengeId, cursor, size);
+        // 조회자가 신고한 인증을 빼려면 누가 보는지 알아야 한다(#15). 이 API는 인증이 필요해
+        // principal이 null이 아니지만, 서비스는 null이면 필터를 걸지 않도록 되어 있다.
+        ChallengeResDTO.Feed result = challengeQueryService
+                .getVerificationFeed(challengeId, userDetails.getMemberId(), cursor, size);
         return ApiResponse.onSuccess(ChallengeSuccessCode.VERIFICATION_FEED_FETCH_SUCCESS, result);
+    }
+
+    @Override
+    @PostMapping("/{verificationId}/reports")
+    public ApiResponse<ChallengeResDTO.Report> report(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long challengeId,
+            @PathVariable Long verificationId,
+            @Valid @RequestBody ChallengeReqDTO.Report request
+    ) {
+        ChallengeResDTO.Report result = challengeCommandService
+                .report(userDetails.getMemberId(), challengeId, verificationId, request);
+        return ApiResponse.onSuccess(ChallengeSuccessCode.VERIFICATION_REPORT_SUCCESS, result);
     }
 }
