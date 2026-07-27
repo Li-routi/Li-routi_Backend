@@ -10,10 +10,16 @@
 -- NOT EXISTS (... where challenge_verification_id = ? and reporter_id = ?) 형태라
 -- (challenge_verification_id, reporter_id) 두 컬럼을 그대로 탄다.
 --
--- V1·V2와 같은 이유로 제약·인덱스 이름과 컬럼 순서를 Hibernate 생성본 그대로 두고,
--- CREATE TABLE IF NOT EXISTS를 쓴다(로컬에서 이미 update로 만들어졌을 수 있다).
+-- 제약·인덱스 이름과 컬럼 순서는 V1·V2와 같이 Hibernate 생성본 그대로 둔다.
+--
+-- 다만 IF NOT EXISTS는 쓰지 않는다. V1은 Flyway 도입(#46) 이전부터 ddl-auto=update로
+-- 만들어져 있던 DB를, V2는 #42 머지 후 update로 만들어진 DB를 자가 치유하려고 쓴 것이다.
+-- 이 테이블은 ddl-auto가 validate로 바뀐 뒤 처음 들어오는 새 테이블이라 그런 DB가 없다.
+--
+-- 예상 밖으로 테이블이 이미 있다면 조용히 건너뛰지 말고 부팅을 실패시킨다. 제약이 빠진 채로
+-- Flyway 이력만 남으면 중복 신고 방지와 피드 필터 인덱스가 함께 사라진다.
 
-CREATE TABLE IF NOT EXISTS `challenge_verification_report` (
+CREATE TABLE `challenge_verification_report` (
   `challenge_verification_id` bigint NOT NULL,
   `created_at` datetime(6) NOT NULL,
   `id` bigint NOT NULL AUTO_INCREMENT,
