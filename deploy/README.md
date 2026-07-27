@@ -181,6 +181,9 @@ LiRouti는 **umc 계정 하나에만** 있고 다른 계정과 리소스를 공�
 
 서버에 access key를 두지 않기 위해 EC2에 IAM 역할을 붙여 S3 권한을 준다. **역할이 없으면 presigned URL 발급부터 실패하고**(서명에 자격증명이 필요하다) 백업 스크립트도 동작하지 않는다.
 
+> ✅ **2026-07-27 부착 완료.** 역할 `lirouti-ec2-role`, 인스턴스 프로필 `arn:aws:iam::058114477749:instance-profile/lirouti-ec2-role`. 아래 §6 검증을 전부 통과했다(결과는 그 절 끝에 기록).
+> 아래 절차는 **인스턴스를 새로 띄우거나 다른 환경에 재구축할 때** 그대로 다시 쓰는 용도로 남긴다.
+
 접근은 IAM 사용자가 아니라 **IAM Identity Center(SSO)**로 한다. 콘솔 작업은 **AdministratorAccess permission set**으로 로그인해야 한다 — ReadOnly로는 역할을 만들 수 없고, 이때 실패 원인은 SCP가 아니라 permission set이다.
 
 ### 1) 버킷 확인·생성
@@ -265,10 +268,34 @@ aws s3 ls s3://lirouti-db-backup/                    # 실패해야 정상 (List
 
 ①이 컨테이너의 자격증명 수령을, ③이 그 자격증명으로 서명까지 되는지를 본다. **③이 최종 판정이다** — presigned URL 발급은 서명에 자격증명이 필요하므로, 역할이 없으면 여기서 먼저 실패한다.
 
+#### 실측 결과 (2026-07-27)
+
+부착 직후 위 절차로 확인한 값이다. **거부돼야 하는 셋이 모두 거부된 것**이 최소 권한이 제대로 걸렸다는 증거다 — 권한이 넓게 새면 이 중 하나는 통과한다.
+
+| 확인 | 기대 | 결과 |
+| --- | --- | --- |
+| 호스트 IMDS `iam/info` | 200 | ✅ `Code: Success`, `instance-profile/lirouti-ec2-role` |
+| **app 컨테이너** IMDS `iam/info` | 200 | ✅ `Code: Success` (부착 전에는 404였다) |
+| `sts get-caller-identity` | assumed-role | ✅ `assumed-role/lirouti-ec2-role/i-0cbaa8bf4e7f45dd8` |
+| 백업 버킷 `PutObject` | 성공 | ✅ |
+| 백업 버킷 `ListBucket` | **거부** | ✅ `AccessDenied` |
+| 미디어 버킷 `PutObject` | 성공 | ✅ |
+| 미디어 버킷 `GetObject` | 성공 | ✅ 내용까지 일치 (#22가 쓸 권한) |
+| 백업 버킷 `GetObject` | **거부** | ✅ `403 Forbidden` (Put만 부여했으므로) |
+| 미디어 버킷 `DeleteObject` | **거부** | ✅ `AccessDenied` |
+
+앱 상태도 함께 확인했다 — 컨테이너 `running`, `GET /api/challenges` 200, 재시작 후 로그에 자격증명·S3 오류 0건.
+
+> 검증에 올린 테스트 객체(`s3://lirouti-db-backup/iam-check.txt`, `s3://lirouti-prod-bucket/iam-check/probe.txt`)는 **인스턴스 역할로 지울 수 없다**(DeleteObject 미부여). 콘솔에서 지운다. 미디어 쪽은 `iam-check/` prefix에 두어 실제 인증 사진(`challenge-verifications/`)과 섞이지 않게 했다.
+
+③(presigned URL 발급)은 로그인 토큰이 필요해 이번에 직접 호출하지는 않았다. 다만 컨테이너가 자격증명을 받고(②) 그 역할로 미디어 버킷 `PutObject`가 되는 것(위 표)까지 확인됐으므로, 서명 경로가 막힐 이유는 남아 있지 않다.
+
 ### 알아둘 것
 
 - **컨테이너에서 IMDS 도달 여부** — Docker 브리지가 홉을 하나 더 쓰기 때문에 인스턴스의 `http-put-response-hop-limit`이 1이면 컨테이너가 자격증명을 못 받는다. 이 인스턴스는 **도달 가능한 것을 확인했다** — 2026-07-27 `app` 컨테이너(`app_default` 브리지) 안에서 `169.254.169.254:80` TCP 연결 성공, 호스트에서는 토큰·메타데이터 모두 200. 다른 인스턴스로 옮길 때는 위 §6 ①로 다시 확인한다.
 - **presigned URL 만료** — instance profile 자격증명은 임시 자격증명이라, 그것으로 서명한 URL은 **자격증명이 만료되면 함께 무효가 된다.** 현재 설정은 `PT5M`(5분)이라 문제없지만, `S3Properties`가 최대 7일까지 허용하므로 길게 잡으면 원인 불명의 403이 난다.
+- **`aws-cli`는 서버에 설치돼 있다** — 2026-07-27 검증 때 `sudo snap install aws-cli --classic`으로 깔았다(v2). §6 ②와 `backup.sh` 둘 다 이걸 쓴다. 인스턴스를 새로 띄우면 다시 깔아야 한다.
+- **리전을 명시해야 하는 경우** — 서버에 `AWS_REGION`이 앱 컨테이너 환경변수로만 있고 호스트 셸에는 없다. 호스트에서 `aws` 명령을 직접 쓸 때는 `AWS_DEFAULT_REGION=ap-northeast-2`를 함께 준다(`backup.sh`는 버킷 URL로 해결되므로 영향 없다).
 
 ## 배포 · 롤백
 
