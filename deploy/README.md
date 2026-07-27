@@ -125,7 +125,7 @@ cd /opt/app && docker compose logs -f app
 
 ## AWS / 네트워크
 
-- **EC2 instance profile(IAM Role)** 부착: S3 `PutObject`(백업) + 앱 미디어 업로드용 `PutObject/GetObject`. access key를 서버에 두지 않는다.
+- **EC2 instance profile(IAM Role)** 부착: 아래 [IAM instance profile 부착] 절 참고. access key를 서버에 두지 않는다.
 - **보안그룹 인바운드**:
   - `8080` — 베타 HTTP 직접 노출.
   - `22`(SSH) — **`0.0.0.0/0` 개방 + 키 인증 전용(비밀번호 로그인 비활성 확인)**. 배포가 GitHub Actions 러너에서 SSH로 접속하는데 러너 IP가 유동적이라 대역 제한이 어렵다. ED25519 키 인증만 허용하는 전제로 1개월 한시 운영에 한해 전체 개방한다.
@@ -133,6 +133,80 @@ cd /opt/app && docker compose logs -f app
   - `3306`(MySQL)·`6379`(Redis) — **열지 않는다**(compose 내부 네트워크 전용).
 - **S3 버킷**: `lirouti-prod-bucket`(미디어)·`lirouti-db-backup`(백업) 이름으로 생성(비공개). 서버 `.env`의 `AWS_S3_BUCKET`·`backup.sh`의 `BUCKET`을 이 이름과 일치시킨다.
 - **백업 cron** (매일 04:00 KST): `crontab -e` → `0 4 * * * /opt/app/backup.sh >> /opt/app/backup.log 2>&1`
+
+## IAM instance profile 부착 (#58)
+
+서버에 access key를 두지 않기 위해 EC2에 IAM 역할을 붙여 S3 권한을 준다. **역할이 없으면 presigned URL 발급부터 실패하고**(서명에 자격증명이 필요하다) 백업 스크립트도 동작하지 않는다.
+
+접근은 IAM 사용자가 아니라 **IAM Identity Center(SSO)**로 한다. 콘솔 작업은 **AdministratorAccess permission set**으로 로그인해야 한다 — ReadOnly로는 역할을 만들 수 없고, 이때 실패 원인은 SCP가 아니라 permission set이다.
+
+### 1) 버킷 확인·생성
+
+`lirouti-prod-bucket`(미디어)·`lirouti-db-backup`(백업)이 있는지 본다. 없으면 **리전 `ap-northeast-2`, 퍼블릭 액세스 차단 유지, 기본 암호화(SSE-S3)** 로 만든다.
+
+- 리전을 다른 곳으로 잡으면 조직 SCP의 리전 잠금(`ap-northeast-2`·`us-east-1`만 허용)에 걸린다.
+- **SSE-KMS를 고르면** 아래 정책에 `kms:GenerateDataKey`·`kms:Decrypt`가 추가로 필요하다. 특별한 이유가 없으면 기본값을 쓴다.
+- **미디어 버킷을 공개로 열지 않는다.** 사진을 어떻게 서빙할지(CloudFront vs 공개 버킷)는 #39에서 정한다.
+- **라이프사이클 규칙은 지금 걸지 않는다.** 스테이징용 prefix가 아직 없어서, 현재 유일한 prefix(`challenge-verifications/`)에 자동 삭제를 걸면 정상 인증 사진이 지워진다. prefix 구조는 #39, 고아 파일 정리는 #19에서 다룬다.
+
+### 2) 정책 생성
+
+IAM → 정책 → 정책 생성 → JSON 탭에 [`deploy/iam-policy.json`](./iam-policy.json)의 내용을 붙여넣는다. 이름은 `lirouti-app-s3`.
+
+오브젝트 수준(`버킷/*`)으로만 허용해 버킷 자체는 건드리지 못하게 한다. `s3:DeleteObject`와 `s3:ListBucket`은 지금 앱이 쓰지 않아 뺐다(삭제는 #19에서 필요해지면 추가).
+
+### 3) 역할 생성
+
+IAM → 역할 → 역할 생성
+
+| 항목 | 값 |
+| --- | --- |
+| 신뢰할 수 있는 엔터티 | AWS 서비스 |
+| 사용 사례 | **EC2** |
+| 권한 정책 | `lirouti-app-s3` |
+| 역할 이름 | `lirouti-ec2-role` |
+
+EC2 사용 사례를 고르면 신뢰 정책과 인스턴스 프로필이 함께 만들어진다.
+
+### 4) 인스턴스에 부착
+
+EC2 → 인스턴스 → 대상 인스턴스 → **작업 → 보안 → IAM 역할 수정** → `lirouti-ec2-role` → 업데이트.
+
+재부팅은 필요 없다. 몇 초 안에 IMDS로 자격증명이 내려온다.
+
+### 5) 앱 컨테이너 재시작
+
+```bash
+ssh <서버> 'cd /opt/app && sudo docker compose restart app'
+```
+
+AWS SDK는 실패한 자격증명 조회를 영구 캐시하지 않아 재시작 없이도 붙을 가능성이 높지만, 비용이 없으므로 확실히 하고 넘어간다.
+
+### 6) 검증
+
+```bash
+# ① 역할이 붙었는가 — 부착 전에는 404가 나온다
+TOKEN=$(curl -sX PUT "http://169.254.169.254/latest/api/token" \
+  -H "X-aws-ec2-metadata-token-ttl-seconds: 60")
+curl -s -H "X-aws-ec2-metadata-token: $TOKEN" \
+  http://169.254.169.254/latest/meta-data/iam/info
+
+# ② 권한 범위가 의도대로인가 (aws-cli 필요: sudo snap install aws-cli --classic)
+echo t > /tmp/t.txt
+aws s3 cp /tmp/t.txt s3://lirouti-db-backup/t.txt   # 성공해야 정상 (PutObject)
+aws s3 ls s3://lirouti-db-backup/                    # 실패해야 정상 (ListBucket 미부여)
+```
+
+②의 두 번째가 **실패해야** 최소 권한이 제대로 걸린 것이다. 올린 테스트 객체는 인스턴스 역할로 지울 수 없으므로(DeleteObject 미부여) 콘솔에서 지운다.
+
+> ⚠️ `.../iam/security-credentials/<역할명>`은 **실제 임시 액세스 키를 반환한다.** 조회하지 않는다. 끝에 슬래시만 붙인 목록 경로와 `iam/info`는 역할 이름·ARN만 나와 안전하다.
+
+마지막으로 앱에서 `POST /api/media/presigned-url`이 URL을 돌려주는지, 그 URL로 업로드가 되는지까지 확인하면 완결이다.
+
+### 알아둘 것
+
+- **컨테이너에서 IMDS 도달 여부** — Docker 브리지가 홉을 하나 더 쓰기 때문에 인스턴스의 `http-put-response-hop-limit`이 1이면 컨테이너가 자격증명을 못 받는다. 이 인스턴스는 **이미 도달 가능한 것을 확인했다**(토큰·메타데이터 모두 200). 다른 인스턴스로 옮길 때는 다시 확인한다.
+- **presigned URL 만료** — instance profile 자격증명은 임시 자격증명이라, 그것으로 서명한 URL은 **자격증명이 만료되면 함께 무효가 된다.** 현재 설정은 `PT5M`(5분)이라 문제없지만, `S3Properties`가 최대 7일까지 허용하므로 길게 잡으면 원인 불명의 403이 난다.
 
 ## 배포 · 롤백
 
