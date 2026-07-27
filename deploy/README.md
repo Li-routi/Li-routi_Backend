@@ -134,6 +134,41 @@ cd /opt/app && docker compose logs -f app
 - **S3 버킷**: `lirouti-prod-bucket`(미디어)·`lirouti-db-backup`(백업) 이름으로 생성(비공개). 서버 `.env`의 `AWS_S3_BUCKET`·`backup.sh`의 `BUCKET`을 이 이름과 일치시킨다.
 - **백업 cron** (매일 04:00 KST): `crontab -e` → `0 4 * * * /opt/app/backup.sh >> /opt/app/backup.log 2>&1`
 
+## AWS 조직·접근 구조
+
+배포 대상이 어떤 환경에 있는지, 콘솔 작업 시 무엇이 막히고 왜 막히는지 알아두면 삽질이 줄어든다.
+
+```text
+Root (management 계정 — 워크로드 없음, SCP 적용 대상 아님)
+├── team502 OU   (별개 프로젝트, LiRouti와 무관)
+├── dvely OU     (별개 프로젝트, LiRouti와 무관)
+└── umc OU
+    └── umc 계정  ← LiRouti 배포 대상 (EC2: ap-northeast-2)
+```
+
+LiRouti는 **umc 계정 하나에만** 있고 다른 계정과 리소스를 공유하지 않는다. 운영 종료 시 리소스만 지우고 계정·OU는 보존한다.
+
+### 로그인 — IAM 사용자를 만들지 않는다
+
+사람의 접근은 전부 **IAM Identity Center(SSO)** 를 통한다. 콘솔 로그인 시 실제 주체는 `assumed-role/AWSReservedSSO_...` 형태의 **임시 자격증명**이고 장기 액세스 키가 존재하지 않는다.
+
+- permission set: 배포 담당 `AdministratorAccess`, 열람 인원 `ReadOnlyAccess`
+- **IAM 역할 생성 같은 작업이 막히면 SCP보다 permission set을 먼저 의심한다.** ReadOnly로 로그인한 경우가 대부분이다.
+- 서버(EC2)의 AWS 권한은 사람 계정과 무관하게 **instance profile**로 부여한다(아래 절).
+
+### SCP — IAM 권한 위에 걸린 천장
+
+계정 안에서 어떤 권한을 받아도 이 천장은 넘지 못한다. 실무에서 부딪히는 건 둘이다.
+
+| 제약 | 내용 | 실무에서 뜻하는 것 |
+| --- | --- | --- |
+| **리전 잠금** (Root) | `ap-northeast-2`·`us-east-1` 외 Deny | **버킷·리소스를 서울에 만들어야 한다.** 다른 리전은 `UnauthorizedOperation` |
+| **서비스 화이트리스트** (umc OU) | EC2·S3·IAM/STS·CloudWatch/Logs·SSM·KMS·Budgets/CE만 허용 | 목록 밖 서비스(RDS·Lambda 등)는 **켤 수 없다.** 보안 경계이자 비용 안전장치 |
+
+`iam:*`·`sts:*`는 리전 잠금의 예외로 빠져 있고 화이트리스트에도 있어, IAM 작업은 이중으로 안전하다.
+
+> 콘솔이 자동 호출하는 부가 서비스(`compute-optimizer` 등)에서 간헐적으로 뜨는 `AccessDenied`는 **정상이며 무해하다.** 실제 작업이 막힐 때만 화이트리스트에 추가한다.
+
 ## IAM instance profile 부착 (#58)
 
 서버에 access key를 두지 않기 위해 EC2에 IAM 역할을 붙여 S3 권한을 준다. **역할이 없으면 presigned URL 발급부터 실패하고**(서명에 자격증명이 필요하다) 백업 스크립트도 동작하지 않는다.
