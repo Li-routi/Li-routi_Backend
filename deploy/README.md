@@ -139,12 +139,17 @@ cd /opt/app && docker compose logs -f app
 배포 대상이 어떤 환경에 있는지, 콘솔 작업 시 무엇이 막히고 왜 막히는지 알아두면 삽질이 줄어든다.
 
 ```text
-Root (management 계정 — 워크로드 없음, SCP 적용 대상 아님)
+Root (조직 최상위 컨테이너 — SCP를 붙이는 지점)
+├── management 계정  (조직 관리 전용, 워크로드 없음. OU로 옮길 수 없다)
 ├── team502 OU   (별개 프로젝트, LiRouti와 무관)
 ├── dvely OU     (별개 프로젝트, LiRouti와 무관)
 └── umc OU
-    └── umc 계정  ← LiRouti 배포 대상 (EC2: ap-northeast-2)
+    └── umc 계정  ← LiRouti 배포 대상 (member account, EC2: ap-northeast-2)
 ```
+
+**Root는 계정이 아니라 컨테이너다.** management 계정은 그 아래 별도 노드로 존재하며, OU 안으로 옮길 수 없다.
+
+SCP는 Root와 OU에 붙고 **member account가 상속받는다.** 즉 `umc` 계정은 Root의 리전 잠금과 umc OU의 서비스 화이트리스트를 **둘 다** 받는다(아래 표). **management 계정만 SCP 적용에서 면제된다** — 그래서 거기에 워크로드를 두지 않는다.
 
 LiRouti는 **umc 계정 하나에만** 있고 다른 계정과 리소스를 공유하지 않는다. 운영 종료 시 리소스만 지우고 계정·OU는 보존한다.
 
@@ -153,6 +158,9 @@ LiRouti는 **umc 계정 하나에만** 있고 다른 계정과 리소스를 공�
 사람의 접근은 전부 **IAM Identity Center(SSO)** 를 통한다. 콘솔 로그인 시 실제 주체는 `assumed-role/AWSReservedSSO_...` 형태의 **임시 자격증명**이고 장기 액세스 키가 존재하지 않는다.
 
 - permission set: 배포 담당 `AdministratorAccess`, 열람 인원 `ReadOnlyAccess`
+  > ⚠️ **`AdministratorAccess`는 최소 권한이 아니다.** 현재 조직에 설정된 값을 그대로 적은 것이고, 데모 기간(1개월) 한시 운영 전제다.
+  > 실 운영으로 전환하는 시점에는 **역할 생성·부착과 버킷 설정만 담은 전용 permission set**을 만들어 배포 담당을 그쪽으로 옮긴다. `ReadOnlyAccess`는 지금도 열람 전용이라 그대로 둔다.
+  > SSH `0.0.0.0/0` 개방과 같은 성격의 한시 조치이므로, 철거·전환 시 함께 정리한다.
 - **IAM 역할 생성 같은 작업이 막히면 SCP보다 permission set을 먼저 의심한다.** ReadOnly로 로그인한 경우가 대부분이다.
 - 서버(EC2)의 AWS 권한은 사람 계정과 무관하게 **instance profile**로 부여한다(아래 절).
 
@@ -181,6 +189,8 @@ LiRouti는 **umc 계정 하나에만** 있고 다른 계정과 리소스를 공�
 
 - 리전을 다른 곳으로 잡으면 조직 SCP의 리전 잠금(`ap-northeast-2`·`us-east-1`만 허용)에 걸린다.
 - **SSE-KMS를 고르면** 아래 정책에 `kms:GenerateDataKey`·`kms:Decrypt`가 추가로 필요하다. 특별한 이유가 없으면 기본값을 쓴다.
+  - 여기서 **customer-managed 키(CMK)를 쓰면 IAM 정책만으로는 부족하다.** KMS는 키 정책(key policy)이 IAM 위임을 허용해야 IAM 쪽 권한이 효력을 갖는다. 허용 문구가 없으면 권한을 붙여도 S3 PUT에서 `AccessDenied`가 난다. CMK를 쓸 경우 키 정책에 `lirouti-ec2-role`의 ARN을 직접 넣거나, 계정 위임(`arn:aws:iam::<계정>:root` 허용) 문구가 있는지 확인한다.
+  - AWS 관리형 키(`aws/s3`)는 키 정책이 이미 계정 위임을 허용하므로 이 문제가 없다.
 - **미디어 버킷을 공개로 열지 않는다.** 사진을 어떻게 서빙할지(CloudFront vs 공개 버킷)는 #39에서 정한다.
 - **라이프사이클 규칙은 지금 걸지 않는다.** 스테이징용 prefix가 아직 없어서, 현재 유일한 prefix(`challenge-verifications/`)에 자동 삭제를 걸면 정상 인증 사진이 지워진다. prefix 구조는 #39, 고아 파일 정리는 #19에서 다룬다.
 
@@ -219,14 +229,23 @@ AWS SDK는 실패한 자격증명 조회를 영구 캐시하지 않아 재시작
 
 ### 6) 검증
 
-```bash
-# ① 역할이 붙었는가 — 부착 전에는 404가 나온다
-TOKEN=$(curl -sX PUT "http://169.254.169.254/latest/api/token" \
-  -H "X-aws-ec2-metadata-token-ttl-seconds: 60")
-curl -s -H "X-aws-ec2-metadata-token: $TOKEN" \
-  http://169.254.169.254/latest/meta-data/iam/info
+**실제로 S3를 호출하는 주체는 호스트가 아니라 `app` 컨테이너다.** 호스트에서만 확인하면 두 가지를 놓친다 — 컨테이너가 IMDS에 닿는지(Docker 브리지가 홉을 하나 더 쓴다), 그리고 호스트에 남은 자격증명 때문에 거짓 통과하는지. 그래서 ①은 컨테이너 안에서 돌린다.
 
+```bash
+# ① 컨테이너가 역할 자격증명을 받는가 — 부착 전에는 404가 나온다
+#    app 이미지(eclipse-temurin:21-jre)에 curl이 들어 있어 그대로 쓸 수 있다.
+cd /opt/app && sudo docker compose exec app bash -c '
+  TOKEN=$(curl -sX PUT "http://169.254.169.254/latest/api/token" \
+    -H "X-aws-ec2-metadata-token-ttl-seconds: 60")
+  curl -s -H "X-aws-ec2-metadata-token: $TOKEN" \
+    http://169.254.169.254/latest/meta-data/iam/info'
+```
+
+```bash
 # ② 권한 범위가 의도대로인가 (aws-cli 필요: sudo snap install aws-cli --classic)
+#    컨테이너에는 aws-cli가 없으므로 호스트에서 돌린다. 대신 주체부터 확인한다.
+aws sts get-caller-identity     # Arn이 assumed-role/lirouti-ec2-role/... 이어야 한다
+
 echo t > /tmp/t.txt
 aws s3 cp /tmp/t.txt s3://lirouti-db-backup/t.txt   # 성공해야 정상 (PutObject)
 aws s3 ls s3://lirouti-db-backup/                    # 실패해야 정상 (ListBucket 미부여)
@@ -234,13 +253,21 @@ aws s3 ls s3://lirouti-db-backup/                    # 실패해야 정상 (List
 
 ②의 두 번째가 **실패해야** 최소 권한이 제대로 걸린 것이다. 올린 테스트 객체는 인스턴스 역할로 지울 수 없으므로(DeleteObject 미부여) 콘솔에서 지운다.
 
+> ⚠️ **`aws sts get-caller-identity`를 건너뛰지 않는다.** AWS 자격증명 체인은 환경변수 → 공유 credential 파일 → instance profile 순으로 본다. 호스트에 `AWS_ACCESS_KEY_ID` 같은 변수나 `~/.aws/credentials`가 남아 있으면 **역할이 안 붙었는데도 ②가 성공해버린다.**
+> (2026-07-27 실측: 이 서버는 `AWS_*` 환경변수 0개, `~/.aws` 없음 — 현재는 문제없다.)
+
 > ⚠️ `.../iam/security-credentials/<역할명>`은 **실제 임시 액세스 키를 반환한다.** 조회하지 않는다. 끝에 슬래시만 붙인 목록 경로와 `iam/info`는 역할 이름·ARN만 나와 안전하다.
 
-마지막으로 앱에서 `POST /api/media/presigned-url`이 URL을 돌려주는지, 그 URL로 업로드가 되는지까지 확인하면 완결이다.
+```bash
+# ③ 앱의 실제 경로가 도는가 — 여기까지 봐야 완결이다
+#    POST /api/media/presigned-url 이 URL을 돌려주는지, 그 URL로 업로드가 되는지 확인한다.
+```
+
+①이 컨테이너의 자격증명 수령을, ③이 그 자격증명으로 서명까지 되는지를 본다. **③이 최종 판정이다** — presigned URL 발급은 서명에 자격증명이 필요하므로, 역할이 없으면 여기서 먼저 실패한다.
 
 ### 알아둘 것
 
-- **컨테이너에서 IMDS 도달 여부** — Docker 브리지가 홉을 하나 더 쓰기 때문에 인스턴스의 `http-put-response-hop-limit`이 1이면 컨테이너가 자격증명을 못 받는다. 이 인스턴스는 **이미 도달 가능한 것을 확인했다**(토큰·메타데이터 모두 200). 다른 인스턴스로 옮길 때는 다시 확인한다.
+- **컨테이너에서 IMDS 도달 여부** — Docker 브리지가 홉을 하나 더 쓰기 때문에 인스턴스의 `http-put-response-hop-limit`이 1이면 컨테이너가 자격증명을 못 받는다. 이 인스턴스는 **도달 가능한 것을 확인했다** — 2026-07-27 `app` 컨테이너(`app_default` 브리지) 안에서 `169.254.169.254:80` TCP 연결 성공, 호스트에서는 토큰·메타데이터 모두 200. 다른 인스턴스로 옮길 때는 위 §6 ①로 다시 확인한다.
 - **presigned URL 만료** — instance profile 자격증명은 임시 자격증명이라, 그것으로 서명한 URL은 **자격증명이 만료되면 함께 무효가 된다.** 현재 설정은 `PT5M`(5분)이라 문제없지만, `S3Properties`가 최대 7일까지 허용하므로 길게 잡으면 원인 불명의 403이 난다.
 
 ## 배포 · 롤백
