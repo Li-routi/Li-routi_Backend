@@ -62,11 +62,13 @@ jobs:
       # Taskfile과 같은 로직이다(task db-check-duplicates). CI에는 task가 없어 그대로 옮겨 적었다.
       - name: Check migration version duplicates
         run: |
+          # 버전은 점·밑줄로 나뉠 수 있다(V2.1__, V1_1__). Taskfile의 db-check-duplicates와 같은 로직이다.
           dup=$(ls src/main/resources/db/migration/V*.sql 2>/dev/null \
-            | sed 's|.*/V\([0-9][0-9]*\)__.*|\1|' | sort -n | uniq -d)
+            | sed 's|.*/V\([0-9][0-9._]*\)__.*|\1|' | sort | uniq -d)
           if [ -n "$dup" ]; then
             echo "::error::마이그레이션 버전이 중복됩니다: $dup — 빈 번호로 바꾸지 않으면 배포 후 부팅이 실패합니다."
-            ls src/main/resources/db/migration/V*.sql | grep -E "/V($(echo "$dup" | paste -sd'|' -))__"
+            pattern=$(printf '%s' "$dup" | sed 's/\./\\./g' | paste -sd'|' -)
+            ls src/main/resources/db/migration/V*.sql | grep -E "/V($pattern)__"
             exit 1
           fi
           echo "✅ 마이그레이션 버전 중복 없음"

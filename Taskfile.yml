@@ -99,15 +99,22 @@ tasks:
 
   db-repair:
     desc: 로컬 Flyway 이력 복구 (체크섬 재계산 · 실패 행 정리)
-    # 두 경우에 쓴다.
-    #   1) 이미 적용된 V__ 파일을 고쳐 "Migration checksum mismatch" 로 부팅이 막힐 때
-    #   2) 마이그레이션이 중간에 죽어 success=0 행이 남아 이후 부팅이 전부 막힐 때
-    #
     # repair 는 이력 테이블만 고친다 — 실제 스키마는 건드리지 않는다.
-    # 즉 "파일을 고쳤으니 그 변경을 DB에 반영"해 주지 않는다. 그건 새 V__ 를 추가해야 한다.
+    #
+    # 1) 체크섬 불일치: 적용된 V__ 를 고쳐 부팅이 막힌 경우. 여기서는 바로 써도 된다.
+    #    단 바꾸려던 스키마 변경은 새 V__ 로 추가해야 한다(repair 가 반영해 주지 않는다).
+    #
+    # 2) 마이그레이션 실패(success=0): 바로 쓰면 안 된다. MySQL 은 DDL 이 롤백되지 않아
+    #    죽기 전까지 실행된 문장이 이미 반영돼 있다. 실패 기록만 지우고 재실행하면
+    #    "Table already exists" 로 또 죽거나 절반만 적용된 스키마 위에 나머지가 얹힌다.
+    #    db-info 로 실패 버전을 확인하고 → 적용된 부분을 되돌리거나 재실행 안전하게 고친 뒤
+    #    → repair → 같은 V__ 를 다시 실행시킨다(새 번호를 만들지 않는다).
+    #    자세한 절차는 deploy/README.md 의 "Flyway 운영" 절에 있다.
     cmds:
+      - cmd: echo "⚠️  실패한 마이그레이션(success=0)이면 먼저 db-info 로 확인하고, 부분 적용된 스키마를 정리한 뒤 실행하세요."
+        silent: true
       - '{{.FLYWAY}} repair'
-      - cmd: echo "✅ 이력 테이블을 복구했습니다. 실제 스키마 변경은 새 V__ 마이그레이션으로 하세요."
+      - cmd: echo "✅ 이력 테이블을 복구했습니다. 실제 스키마는 바뀌지 않았습니다."
         silent: true
 
   db-check-duplicates:
@@ -118,11 +125,16 @@ tasks:
     silent: true
     cmds:
       - |
+        # 버전은 숫자뿐 아니라 점·밑줄로 나뉠 수 있다(V2.1__, V1_1__). 숫자만 받으면
+        # 그런 파일이 매칭에서 빠져 중복을 놓친다. sort는 문자열 정렬로 충분하다 —
+        # uniq -d 가 필요한 건 같은 값이 인접하는 것뿐이고, -n 은 2.1 과 2.10 을 같게 본다.
         dup=$(ls src/main/resources/db/migration/V*.sql 2>/dev/null \
-          | sed 's|.*/V\([0-9][0-9]*\)__.*|\1|' | sort -n | uniq -d)
+          | sed 's|.*/V\([0-9][0-9._]*\)__.*|\1|' | sort | uniq -d)
         if [ -n "$dup" ]; then
           echo "❌ 마이그레이션 버전이 중복됩니다: $dup"
-          ls src/main/resources/db/migration/V*.sql | grep -E "/V($(echo "$dup" | paste -sd'|' -))__"
+          # 버전의 '.'은 정규식 메타문자라 이스케이프한다(V2.1 이 V231 을 잡지 않도록).
+          pattern=$(printf '%s' "$dup" | sed 's/\./\\./g' | paste -sd'|' -)
+          ls src/main/resources/db/migration/V*.sql | grep -E "/V($pattern)__"
           echo "   빈 번호로 하나를 바꾸세요. 이대로 머지되면 부팅이 실패합니다."
           exit 1
         fi
