@@ -33,7 +33,7 @@ public interface ChallengeVerificationRepositoryCustom {
     /**
      * 한 회원이 그 챌린지에서 남긴 인증을 커서 기반으로 조회한다(#62).
      *
-     * 피드와 달리 <b>회차로 범위를 좁힌다.</b> member_challenge는 이탈 후 재참여 시 같은 행을
+     * 피드와 달리 회차로 범위를 좁힌다. member_challenge는 이탈 후 재참여 시 같은 행을
      * 재활용하고 participation_round만 올리므로, 회차를 걸지 않으면 지난 참여의 인증까지 섞인다.
      * 스트릭·오늘 완료 여부가 모두 현재 회차 기준이라(database-schema.md) 목록도 같은 기준으로 둔다.
      *
