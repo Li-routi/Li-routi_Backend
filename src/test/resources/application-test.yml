@@ -39,3 +39,9 @@ oauth:
 aws:
   s3:
     byte-validation-enabled: false
+
+# 통합 테스트에서는 레이트 리밋을 끈다(#23). 카운터가 Redis에 남아 테스트 간에 누적되면
+# 실행 순서에 따라 결과가 달라진다. 제한이 실제로 걸리는지는 RateLimitIntegrationTest가
+# @TestPropertySource로 다시 켜서 검증한다.
+rate-limit:
+  enabled: false

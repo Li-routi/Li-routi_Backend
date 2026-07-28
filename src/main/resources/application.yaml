@@ -95,6 +95,18 @@ aws:
     # CloudFront 등을 붙이면 AWS_S3_PUBLIC_BASE_URL로 이 값을 덮어써 오리진을 바꾼다.
     public-base-url: ${AWS_S3_PUBLIC_BASE_URL:https://s3.${AWS_REGION:ap-northeast-2}.amazonaws.com/${AWS_S3_BUCKET}}
 
+# 사용자당 요청 빈도 제한(#23). 한도를 코드가 아니라 여기 두어 재배포 없이 조정한다.
+# 정책 이름은 컨트롤러의 @RateLimit 값과 맞아야 한다 — 없는 이름이면 제한이 안 걸리고 ERROR 로그만 남는다.
+rate-limit:
+  # 오탐으로 정상 사용자가 막히거나 Redis 문제가 생겼을 때의 탈출구.
+  enabled: ${RATE_LIMIT_ENABLED:true}
+  policies:
+    # presigned URL 발급. 발급 한 건이 최대 10MB 업로드를 허용하므로 이 값이 곧 시간당 상한이 된다
+    # (20건 × 10MB = 200MB/시간). 실사용은 챌린지 인증 몇 건 + 재시도 정도라 넉넉한 편이다.
+    media-presign:
+      limit: ${RATE_LIMIT_MEDIA_PRESIGN_LIMIT:20}
+      window: ${RATE_LIMIT_MEDIA_PRESIGN_WINDOW:PT1H}
+
 ---
 # 로컬 개발 전용 오버라이드.
 # 이 블록이 application-local.yaml이 아니라 여기 있는 이유: application-local.yaml은
