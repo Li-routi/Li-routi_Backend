@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.net.URI;
@@ -31,6 +32,15 @@ import com.lirouti.domain.media.exception.code.error.MediaErrorCode;
 import com.lirouti.global.properties.S3Properties;
 
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import java.io.ByteArrayInputStream;
+import software.amazon.awssdk.core.ResponseInputStream;
+import software.amazon.awssdk.core.exception.SdkClientException;
+import software.amazon.awssdk.http.AbortableInputStream;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
+import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
+import software.amazon.awssdk.services.s3.model.S3Exception;
+import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.PresignedPutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
@@ -47,6 +57,8 @@ class MediaServiceTest {
 
     @Mock
     private S3Presigner s3Presigner;
+    @Mock
+    private S3Client s3Client;
 
     private S3Properties s3Properties;
     private MediaService mediaService;
@@ -60,7 +72,7 @@ class MediaServiceTest {
         s3Properties.setMaxVideoSize(MAX_VIDEO_SIZE);
         s3Properties.setPublicBaseUrl(PUBLIC_BASE_URL);
 
-        mediaService = new MediaService(s3Presigner, s3Properties);
+        mediaService = new MediaService(s3Presigner, s3Client, s3Properties);
     }
 
     private void mockPresign() {
@@ -291,5 +303,115 @@ class MediaServiceTest {
         assertThatThrownBy(() -> mediaService.issuePresignedUrl(request))
                 .isInstanceOf(MediaException.class)
                 .hasFieldOrPropertyWithValue("code", MediaErrorCode.PRESIGNED_URL_ISSUE_FAILED);
+    }
+
+    // ── 업로드 바이트 검증 (#22) ──
+
+    private static final String JPEG_KEY =
+            "challenge-verifications/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.jpg";
+
+    /** S3가 Range GET으로 돌려줄 앞부분 바이트를 흉내낸다. */
+    private void mockHeadBytes(int... bytes) {
+        byte[] head = new byte[bytes.length];
+        for (int i = 0; i < bytes.length; i++) {
+            head[i] = (byte) bytes[i];
+        }
+        when(s3Client.getObject(any(GetObjectRequest.class)))
+                .thenReturn(new ResponseInputStream<>(
+                        GetObjectResponse.builder().build(),
+                        AbortableInputStream.create(new ByteArrayInputStream(head))));
+    }
+
+    @Test
+    @DisplayName("바이트가 선언한 형식(JPEG)과 맞으면 통과한다")
+    void validateUploadedBytes_MatchingSignature_Passes() {
+        mockHeadBytes(0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01);
+
+        assertThatCode(() ->
+                mediaService.validateUploadedBytes(JPEG_KEY, MediaPurpose.CHALLENGE_VERIFICATION))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("확장자는 jpg인데 실제 바이트가 이미지가 아니면 422 — presigned 서명이 못 막는 경로다")
+    void validateUploadedBytes_NotAnImage_Throws422() {
+        // ELF 실행 파일 헤더(0x7F 'E' 'L' 'F'). Content-Type: image/jpeg로 선언해도 올라갈 수 있다.
+        mockHeadBytes(0x7F, 0x45, 0x4C, 0x46, 0x02, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00);
+
+        assertThatThrownBy(() ->
+                mediaService.validateUploadedBytes(JPEG_KEY, MediaPurpose.CHALLENGE_VERIFICATION))
+                .isInstanceOf(MediaException.class)
+                .hasFieldOrPropertyWithValue("code", MediaErrorCode.MEDIA_CONTENT_MISMATCH);
+    }
+
+    @Test
+    @DisplayName("PNG 바이트를 jpg key로 올려도 422 — 형식이 서로 뒤바뀐 경우")
+    void validateUploadedBytes_WrongImageFormat_Throws422() {
+        mockHeadBytes(0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D);
+
+        assertThatThrownBy(() ->
+                mediaService.validateUploadedBytes(JPEG_KEY, MediaPurpose.CHALLENGE_VERIFICATION))
+                .isInstanceOf(MediaException.class)
+                .hasFieldOrPropertyWithValue("code", MediaErrorCode.MEDIA_CONTENT_MISMATCH);
+    }
+
+    @Test
+    @DisplayName("파일이 시그니처보다 짧아도 422 — 빈 파일을 올린 경우")
+    void validateUploadedBytes_TooShort_Throws422() {
+        mockHeadBytes(0xFF, 0xD8);
+
+        assertThatThrownBy(() ->
+                mediaService.validateUploadedBytes(JPEG_KEY, MediaPurpose.CHALLENGE_VERIFICATION))
+                .isInstanceOf(MediaException.class)
+                .hasFieldOrPropertyWithValue("code", MediaErrorCode.MEDIA_CONTENT_MISMATCH);
+    }
+
+    @Test
+    @DisplayName("업로드하지 않은 key면 404 — 존재 확인을 겸한다")
+    void validateUploadedBytes_NotUploaded_Throws404() {
+        when(s3Client.getObject(any(GetObjectRequest.class)))
+                .thenThrow(NoSuchKeyException.builder().message("not found").build());
+
+        assertThatThrownBy(() ->
+                mediaService.validateUploadedBytes(JPEG_KEY, MediaPurpose.CHALLENGE_VERIFICATION))
+                .isInstanceOf(MediaException.class)
+                .hasFieldOrPropertyWithValue("code", MediaErrorCode.MEDIA_NOT_UPLOADED);
+    }
+
+    @Test
+    @DisplayName("S3 조회 자체가 실패하면 500 — 사용자 잘못이 아니므로 저장은 막되 4xx로 돌리지 않는다")
+    void validateUploadedBytes_S3Failure_Throws500() {
+        when(s3Client.getObject(any(GetObjectRequest.class)))
+                .thenThrow(SdkClientException.create("timeout"));
+
+        assertThatThrownBy(() ->
+                mediaService.validateUploadedBytes(JPEG_KEY, MediaPurpose.CHALLENGE_VERIFICATION))
+                .isInstanceOf(MediaException.class)
+                .hasFieldOrPropertyWithValue("code", MediaErrorCode.MEDIA_VALIDATION_FAILED);
+    }
+
+    @Test
+    @DisplayName("검증을 끄면 S3를 아예 호출하지 않는다 — 탈출구가 실제로 동작하는지")
+    void validateUploadedBytes_Disabled_SkipsS3Call() {
+        s3Properties.setByteValidationEnabled(false);
+
+        assertThatCode(() ->
+                mediaService.validateUploadedBytes(JPEG_KEY, MediaPurpose.CHALLENGE_VERIFICATION))
+                .doesNotThrowAnyException();
+        verifyNoInteractions(s3Client);
+    }
+
+    @Test
+    @DisplayName("없는 key에 403이 와도 404로 돌려준다 — ListBucket이 없으면 S3가 존재 여부를 숨긴다")
+    void validateUploadedBytes_ForbiddenBecauseNoListBucket_TreatedAsNotUploaded() {
+        // 실측(2026-07-27): 최소 권한 정책에는 s3:ListBucket이 없어서, 업로드하지 않은 key를
+        // GetObject 하면 NoSuchKey가 아니라 AccessDenied(403)가 온다.
+        when(s3Client.getObject(any(GetObjectRequest.class)))
+                .thenThrow(S3Exception.builder().statusCode(403).message("AccessDenied").build());
+
+        assertThatThrownBy(() ->
+                mediaService.validateUploadedBytes(JPEG_KEY, MediaPurpose.CHALLENGE_VERIFICATION))
+                .isInstanceOf(MediaException.class)
+                .hasFieldOrPropertyWithValue("code", MediaErrorCode.MEDIA_NOT_UPLOADED);
     }
 }
