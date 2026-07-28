@@ -30,6 +30,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @DisplayName("MemberCommandService 테스트")
 class MemberCommandServiceTest {
     private static final Long MEMBER_ID = 1L;
+    private static final String ACCESS_TOKEN = "access-token";
     private static final SocialProvider PROVIDER = SocialProvider.GOOGLE;
     private static final String SOCIAL_ID = "google-subject";
     private static final String EMAIL = "member@example.com";
@@ -146,10 +147,10 @@ class MemberCommandServiceTest {
                 new MemberReqDTO.Withdraw("리루티를 탈퇴합니다");
 
         // when
-        assertDoesNotThrow(() -> memberCommandService.withdraw(MEMBER_ID, request));
+        assertDoesNotThrow(() -> memberCommandService.withdraw(MEMBER_ID, request, ACCESS_TOKEN));
 
         // then
-        verify(tokenService).invalidateRefreshToken(MEMBER_ID);
+        verify(tokenService).logout(ACCESS_TOKEN);
     }
 
     @Test
@@ -164,10 +165,10 @@ class MemberCommandServiceTest {
                 new MemberReqDTO.Withdraw(" \t리루티를 탈퇴합니다 \n");
 
         // when
-        assertDoesNotThrow(() -> memberCommandService.withdraw(MEMBER_ID, request));
+        assertDoesNotThrow(() -> memberCommandService.withdraw(MEMBER_ID, request, ACCESS_TOKEN));
 
         // then
-        verify(tokenService).invalidateRefreshToken(MEMBER_ID);
+        verify(tokenService).logout(ACCESS_TOKEN);
     }
 
     @Test
@@ -179,7 +180,7 @@ class MemberCommandServiceTest {
 
         // when
         Throwable thrown = catchThrowable(
-                () -> memberCommandService.withdraw(MEMBER_ID, request));
+                () -> memberCommandService.withdraw(MEMBER_ID, request, ACCESS_TOKEN));
 
         // then
         assertThat(thrown).isInstanceOf(MemberException.class);
@@ -193,7 +194,7 @@ class MemberCommandServiceTest {
     void withdraw_NullRequest_ThrowsException() {
         // when
         Throwable thrown = catchThrowable(
-                () -> memberCommandService.withdraw(MEMBER_ID, null));
+                () -> memberCommandService.withdraw(MEMBER_ID, null, ACCESS_TOKEN));
 
         // then
         assertThat(thrown).isInstanceOf(MemberException.class);

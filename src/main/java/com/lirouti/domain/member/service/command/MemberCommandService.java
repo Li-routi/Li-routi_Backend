@@ -44,7 +44,7 @@ public class MemberCommandService {
 
     // 회원 탈퇴 처리
     @Transactional
-    public void withdraw(Long memberId, MemberReqDTO.Withdraw request) {
+    public void withdraw(Long memberId, MemberReqDTO.Withdraw request, String authorization) {
         log.info("회원 탈퇴 처리를 시작합니다. memberId={}", memberId);
         validateWithdrawalConfirmation(request);
 
@@ -67,7 +67,8 @@ public class MemberCommandService {
                 LocalDateTime.now()
         );
         memberRepository.save(member);
-        tokenService.invalidateRefreshToken(memberId);
+        tokenService.logout(authorization);
+        
         log.info("회원 탈퇴 처리를 완료했습니다. memberId={}", memberId);
     }
 
