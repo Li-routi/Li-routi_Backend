@@ -123,6 +123,10 @@ cd /opt/app && docker compose logs -f app
 
 아래 [AWS / 네트워크] 절의 cron 항목 참고 (매일 04:00 KST).
 
+**등록 전에 백업 버킷의 버전 관리를 켠다.** 앱과 백업이 같은 인스턴스 역할을 쓰기 때문에 앱이 침해되면 백업을 덮어쓸 수 있다 — 이유와 확인 방법은 [2) 정책 생성](#2-정책-생성)의 경고를 볼 것.
+
+> 2026-07-28 기준 **cron은 아직 등록되어 있지 않다.** `/opt/app/backup.sh`는 올라가 있으나 `crontab`이 비어 있어 **백업이 한 번도 돌지 않았다.** 앱·DB가 한 인스턴스에 동거하므로 지금은 인스턴스 소멸 = 데이터 소멸이다(#58 잔여 작업).
+
 ## AWS / 네트워크
 
 - **EC2 instance profile(IAM Role)** 부착: 아래 [IAM instance profile 부착] 절 참고. access key를 서버에 두지 않는다.
@@ -203,6 +207,18 @@ IAM → 정책 → 정책 생성 → JSON 탭에 [`deploy/iam-policy.json`](./ia
 
 오브젝트 수준(`버킷/*`)으로만 허용해 버킷 자체는 건드리지 못하게 한다. `s3:DeleteObject`와 `s3:ListBucket`은 지금 앱이 쓰지 않아 뺐다(삭제는 #19에서 필요해지면 추가).
 
+> ⚠️ **앱이 백업을 덮어쓸 수 있다 — 버킷 버전 관리로 막아야 한다.**
+>
+> `BackupObjectWrite`는 `lirouti-ec2-role`에 붙고, 앱 컨테이너는 IMDS로 그 역할을 그대로 쓴다. 즉 **앱이 침해되면 백업 파일을 덮어쓸 수 있다.** 2026-07-28 실측으로 확인했다 — 앱 역할로 백업 버킷의 기존 오브젝트를 `PutObject`로 덮어쓰는 데 성공했다.
+>
+> `backup.sh`가 키를 `<날짜>.sql.gz`로 만들기 때문에 더 나쁘다. `ListBucket`이 거부돼도 **날짜만 찍으면 키를 맞힐 수 있어서**, 최근 며칠치를 순서대로 덮어쓰는 데 목록 권한이 필요 없다. 게다가 이 역할에는 백업 버킷 `GetObject`가 없어 **덮어써졌는지 앱 쪽에서 확인할 방법도 없다.**
+>
+> **역할을 나누는 것으로는 거의 해결되지 않는다.** 앱과 백업 cron이 같은 EC2에 살아서, 그 호스트에서 코드 실행이 되는 공격자는 어느 역할이든 쓸 수 있다. 컴퓨팅이 분리돼야 의미가 생긴다.
+>
+> **실효가 있는 건 버킷 버전 관리다.** 덮어쓰기가 새 버전을 만들 뿐 이전 버전이 남으므로 복구가 된다. 콘솔에서 S3 → `lirouti-db-backup` → 속성 → 버전 관리 → 활성화. 비용은 이전 버전 만료 라이프사이클(예: 30일)로 잡는다.
+>
+> **현재 켜져 있는지는 이 문서로 확답할 수 없다.** 인스턴스 역할에 `s3:GetBucketVersioning`이 없어서(오브젝트 수준만 허용) 서버에서 조회하면 `AccessDenied`가 난다. **콘솔에서 직접 확인할 것.** 백업 cron은 아직 등록되어 있지 않으므로(#58 잔여) 등록 전에 켜두면 된다.
+
 ### 3) 역할 생성
 
 IAM → 역할 → 역할 생성
@@ -234,39 +250,71 @@ AWS SDK는 실패한 자격증명 조회를 영구 캐시하지 않아 재시작
 
 **실제로 S3를 호출하는 주체는 호스트가 아니라 `app` 컨테이너다.** 호스트에서만 확인하면 두 가지를 놓친다 — 컨테이너가 IMDS에 닿는지(Docker 브리지가 홉을 하나 더 쓴다), 그리고 호스트에 남은 자격증명 때문에 거짓 통과하는지. 그래서 ①은 컨테이너 안에서 돌린다.
 
+**세 단계 모두 실패하면 즉시 멈추도록 썼다.** 검증 절차가 조용히 통과하면 "역할이 붙었다"고 잘못 결론내리게 되므로, `set -euo pipefail`과 `curl -fsS`로 fail-closed를 강제한다. 특히 `curl -s`는 **HTTP 404에도 종료 코드 0**을 주기 때문에 `-f`가 없으면 미부착 상태가 성공으로 보인다.
+
 ```bash
 # ① 컨테이너가 역할 자격증명을 받는가 — 부착 전에는 404가 나온다
 #    app 이미지(eclipse-temurin:21-jre)에 curl이 들어 있어 그대로 쓸 수 있다.
 cd /opt/app && sudo docker compose exec app bash -c '
-  TOKEN=$(curl -sX PUT "http://169.254.169.254/latest/api/token" \
+  set -euo pipefail
+  TOKEN=$(curl -fsS --max-time 5 -X PUT "http://169.254.169.254/latest/api/token" \
     -H "X-aws-ec2-metadata-token-ttl-seconds: 60")
-  curl -s -H "X-aws-ec2-metadata-token: $TOKEN" \
+  test -n "$TOKEN"
+  curl -fsS --max-time 5 -H "X-aws-ec2-metadata-token: $TOKEN" \
     http://169.254.169.254/latest/meta-data/iam/info'
 ```
 
 ```bash
 # ② 권한 범위가 의도대로인가 (aws-cli 필요: sudo snap install aws-cli --classic)
 #    컨테이너에는 aws-cli가 없으므로 호스트에서 돌린다. 대신 주체부터 확인한다.
-aws sts get-caller-identity     # Arn이 assumed-role/lirouti-ec2-role/... 이어야 한다
+set -euo pipefail
+
+ARN="$(aws sts get-caller-identity --query Arn --output text)"
+[[ "$ARN" =~ :assumed-role/lirouti-ec2-role/ ]] || { echo "역할이 아니다: $ARN" >&2; exit 1; }
 
 echo t > /tmp/t.txt
-aws s3 cp /tmp/t.txt s3://lirouti-db-backup/t.txt   # 성공해야 정상 (PutObject)
-aws s3 ls s3://lirouti-db-backup/                    # 실패해야 정상 (ListBucket 미부여)
+aws s3 cp /tmp/t.txt s3://lirouti-db-backup/t.txt          # 성공해야 정상 (PutObject)
+
+# ListBucket은 거부돼야 정상이다. "실패했다"로 끝내지 말고 거부 사유까지 확인한다 —
+# 네트워크 오류나 오타로 실패한 것도 똑같이 비정상 종료라 구분이 안 되기 때문이다.
+if aws s3api list-objects-v2 --bucket lirouti-db-backup >/tmp/ls.out 2>&1; then
+  echo "ListBucket이 허용돼 있다 — 정책이 넓다" >&2; exit 1
+fi
+grep -q "AccessDenied" /tmp/ls.out || { echo "거부됐지만 사유가 AccessDenied가 아니다" >&2; exit 1; }
+echo "② OK"
 ```
 
-②의 두 번째가 **실패해야** 최소 권한이 제대로 걸린 것이다. 올린 테스트 객체는 인스턴스 역할로 지울 수 없으므로(DeleteObject 미부여) 콘솔에서 지운다.
+올린 테스트 객체는 인스턴스 역할로 지울 수 없으므로(DeleteObject 미부여) 콘솔에서 지운다.
 
 > ⚠️ **`aws sts get-caller-identity`를 건너뛰지 않는다.** AWS 자격증명 체인은 환경변수 → 공유 credential 파일 → instance profile 순으로 본다. 호스트에 `AWS_ACCESS_KEY_ID` 같은 변수나 `~/.aws/credentials`가 남아 있으면 **역할이 안 붙었는데도 ②가 성공해버린다.**
 > (2026-07-27 실측: 이 서버는 `AWS_*` 환경변수 0개, `~/.aws` 없음 — 현재는 문제없다.)
-
+>
 > ⚠️ `.../iam/security-credentials/<역할명>`은 **실제 임시 액세스 키를 반환한다.** 조회하지 않는다. 끝에 슬래시만 붙인 목록 경로와 `iam/info`는 역할 이름·ARN만 나와 안전하다.
 
 ```bash
 # ③ 앱의 실제 경로가 도는가 — 여기까지 봐야 완결이다
-#    POST /api/media/presigned-url 이 URL을 돌려주는지, 그 URL로 업로드가 되는지 확인한다.
+#    로그인이 필요한 API라 액세스 토큰이 하나 있어야 한다.
+set -euo pipefail
+TOKEN="<로그인해서 받은 accessToken>"
+BASE="http://localhost:8080"
+
+# 발급 — 역할이 없으면 여기서 PRESIGNED_URL_ISSUE_FAILED로 떨어진다
+RES="$(curl -fsS -X POST "$BASE/api/media/presigned-url" \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"purpose":"CHALLENGE_VERIFICATION","contentType":"image/jpeg","contentLength":3}')"
+echo "$RES" | grep -q '"isSuccess":true' || { echo "발급 실패: $RES" >&2; exit 1; }
+
+UPLOAD_URL="$(echo "$RES" | sed -n 's/.*"uploadUrl":"\([^"]*\)".*/\1/p')"
+
+# 업로드 — 서명한 Content-Type·Content-Length와 정확히 일치해야 S3가 받는다
+printf '\xFF\xD8\xFF' > /tmp/probe.jpg
+curl -fsS -X PUT "$UPLOAD_URL" -H 'Content-Type: image/jpeg' --data-binary @/tmp/probe.jpg
+echo "③ OK"
 ```
 
 ①이 컨테이너의 자격증명 수령을, ③이 그 자격증명으로 서명까지 되는지를 본다. **③이 최종 판정이다** — presigned URL 발급은 서명에 자격증명이 필요하므로, 역할이 없으면 여기서 먼저 실패한다.
+
+> ③으로 올린 `probe.jpg`도 역할로는 못 지운다. 콘솔에서 함께 지운다.
 
 #### 실측 결과 (2026-07-27)
 
@@ -286,7 +334,18 @@ aws s3 ls s3://lirouti-db-backup/                    # 실패해야 정상 (List
 
 앱 상태도 함께 확인했다 — 컨테이너 `running`, `GET /api/challenges` 200, 재시작 후 로그에 자격증명·S3 오류 0건.
 
-> 검증에 올린 테스트 객체(`s3://lirouti-db-backup/iam-check.txt`, `s3://lirouti-prod-bucket/iam-check/probe.txt`)는 **인스턴스 역할로 지울 수 없다**(DeleteObject 미부여). 콘솔에서 지운다. 미디어 쪽은 `iam-check/` prefix에 두어 실제 인증 사진(`challenge-verifications/`)과 섞이지 않게 했다.
+> 검증에 올린 테스트 객체(`s3://lirouti-db-backup/iam-check.txt`, `s3://lirouti-prod-bucket/iam-check/probe.txt`, `s3://lirouti-prod-bucket/iam-check/tiny.bin`)는 **인스턴스 역할로 지울 수 없다**(DeleteObject 미부여). 콘솔에서 지운다. 미디어 쪽은 `iam-check/` prefix에 두어 실제 인증 사진(`challenge-verifications/`)과 섞이지 않게 했다.
+
+#### 추가 실측 (2026-07-28)
+
+| 확인 | 결과 |
+| --- | --- |
+| 백업 버킷 기존 오브젝트 **덮어쓰기** | ⚠️ **성공** — 앱 역할로 덮어써진다. [2) 정책 생성](#2-정책-생성) 경고 참고 |
+| 백업 버킷 `HeadObject` | ✅ `403` (GetObject 미부여 — 덮어쓴 결과를 읽어볼 수도 없다) |
+| `s3:GetBucketVersioning` | ✅ `AccessDenied` — 버전 관리 여부는 **콘솔에서 확인해야 한다** |
+| 미디어 공개 URL 익명 GET | ✅ `403` — 버킷 비공개가 유지되고 있다(사진 서빙은 #39) |
+| 백업 cron 등록 여부 | ⚠️ **미등록** — `backup.sh`는 있으나 `crontab` 비어 있음 |
+| 호스트에서 `localhost:8080` | ✅ `GET /api/challenges` 200, `POST /api/media/presigned-url` 403(인증 필요) — ③ 명령의 전제 확인 |
 
 ③(presigned URL 발급)은 로그인 토큰이 필요해 이번에 직접 호출하지는 않았다. 다만 컨테이너가 자격증명을 받고(②) 그 역할로 미디어 버킷 `PutObject`가 되는 것(위 표)까지 확인됐으므로, 서명 경로가 막힐 이유는 남아 있지 않다.
 
