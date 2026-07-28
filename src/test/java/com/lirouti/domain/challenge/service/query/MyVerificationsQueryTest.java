@@ -244,6 +244,88 @@ class MyVerificationsQueryTest {
     }
 
     @Test
+    @DisplayName("같은 회원이 두 챌린지에 참여해도 그 챌린지 인증만 나온다")
+    void getMyVerifications_ScopedToOneChallenge() {
+        Member me = persistMember("twoch");
+        Challenge a = persistChallenge();
+        Challenge b = persistChallenge();
+        LocalDate today = LocalDate.now(KST);
+
+        MemberChallenge mcA = persistParticipation(me, a, 1, true);
+        persistVerification(mcA, 1, today, "A챌린지");
+        MemberChallenge mcB = persistParticipation(me, b, 1, true);
+        persistVerification(mcB, 1, today, "B챌린지");
+        em.flush();
+
+        ChallengeResDTO.MyVerifications result =
+                challengeQueryService.getMyVerifications(me.getId(), a.getId(), null, null);
+
+        assertThat(result.verifications()).hasSize(1);
+        assertThat(result.verifications().get(0).content()).isEqualTo("A챌린지");
+    }
+
+    @Test
+    @DisplayName("커서에 남의 인증 id를 넣어도 남의 기록이 새지 않는다")
+    void getMyVerifications_ForeignCursor_LeaksNothing() {
+        Challenge c = persistChallenge();
+        Member me = persistMember("cur-me");
+        Member other = persistMember("cur-other");
+        LocalDate today = LocalDate.now(KST);
+
+        MemberChallenge myMc = persistParticipation(me, c, 1, true);
+        persistVerification(myMc, 1, today, "내 것");
+
+        // 남의 인증을 나중에 저장해 더 큰 id를 갖게 한다(커서로 쓰면 내 것이 그 아래에 든다).
+        MemberChallenge otherMc = persistParticipation(other, c, 1, true);
+        ChallengeVerification foreign = persistVerification(otherMc, 1, today, "남의 것");
+        em.flush();
+
+        ChallengeResDTO.MyVerifications result = challengeQueryService
+                .getMyVerifications(me.getId(), c.getId(), foreign.getId(), null);
+
+        // 커서는 id 상한으로만 작용하고, 결과는 여전히 내 참여 행으로 좁혀진다.
+        assertThat(result.verifications()).hasSize(1);
+        assertThat(result.verifications().get(0).content()).isEqualTo("내 것");
+    }
+
+    @Test
+    @DisplayName("코멘트 없이 올린 인증도 그대로 나온다")
+    void getMyVerifications_NullContent_IsReturned() {
+        Challenge c = persistChallenge();
+        Member me = persistMember("nocontent");
+        LocalDate today = LocalDate.now(KST);
+
+        MemberChallenge mc = persistParticipation(me, c, 1, true);
+        persistVerification(mc, 1, today, null);
+        em.flush();
+
+        ChallengeResDTO.MyVerifications result =
+                challengeQueryService.getMyVerifications(me.getId(), c.getId(), null, null);
+
+        assertThat(result.verifications()).hasSize(1);
+        assertThat(result.verifications().get(0).content()).isNull();
+        assertThat(result.verifications().get(0).verifiedDate()).isEqualTo(today);
+    }
+
+    @Test
+    @DisplayName("size가 0이나 음수면 기본값으로 처리한다 — 빈 페이지가 나오지 않는다")
+    void getMyVerifications_NonPositiveSize_FallsBackToDefault() {
+        Challenge c = persistChallenge();
+        Member me = persistMember("badsize");
+        LocalDate today = LocalDate.now(KST);
+
+        MemberChallenge mc = persistParticipation(me, c, 1, true);
+        persistVerification(mc, 1, today, "있음");
+        em.flush();
+
+        for (Integer size : List.of(0, -1)) {
+            ChallengeResDTO.MyVerifications result =
+                    challengeQueryService.getMyVerifications(me.getId(), c.getId(), null, size);
+            assertThat(result.verifications()).as("size=%s", size).hasSize(1);
+        }
+    }
+
+    @Test
     @DisplayName("size는 최대치로 제한된다 — 큰 값을 줘도 한 번에 다 내려가지 않는다")
     void getMyVerifications_SizeClamped() {
         Challenge c = persistChallenge();
