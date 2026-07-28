@@ -414,4 +414,45 @@ class MediaServiceTest {
                 .isInstanceOf(MediaException.class)
                 .hasFieldOrPropertyWithValue("code", MediaErrorCode.MEDIA_NOT_UPLOADED);
     }
+
+    @Test
+    @DisplayName("빈 오브젝트의 416은 422로 돌려준다 — 읽을 바이트가 없다는 뜻이지 서버 오류가 아니다")
+    void validateUploadedBytes_EmptyObjectRange_Throws422() {
+        // 0바이트 오브젝트는 시작 오프셋 0조차 범위 밖이라 Range GET이 416(InvalidRange)을 준다.
+        when(s3Client.getObject(any(GetObjectRequest.class)))
+                .thenThrow(S3Exception.builder().statusCode(416).message("InvalidRange").build());
+
+        assertThatThrownBy(() ->
+                mediaService.validateUploadedBytes(JPEG_KEY, MediaPurpose.CHALLENGE_VERIFICATION))
+                .isInstanceOf(MediaException.class)
+                .hasFieldOrPropertyWithValue("code", MediaErrorCode.MEDIA_CONTENT_MISMATCH);
+    }
+
+    // WEBP만 시그니처가 두 구간(0~3 "RIFF", 8~11 "WEBP")으로 나뉜다.
+    // 앞 구간만 보는 구현이면 다른 RIFF 컨테이너가 통과해버리므로 따로 덮는다.
+    private static final String WEBP_KEY =
+            "challenge-verifications/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.webp";
+
+    @Test
+    @DisplayName("WEBP 바이트가 맞으면 통과한다 — RIFF와 오프셋 8의 WEBP를 모두 본다")
+    void validateUploadedBytes_Webp_Passes() {
+        // "RIFF" + 파일 크기 4바이트 + "WEBP"
+        mockHeadBytes(0x52, 0x49, 0x46, 0x46, 0x24, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50);
+
+        assertThatCode(() ->
+                mediaService.validateUploadedBytes(WEBP_KEY, MediaPurpose.CHALLENGE_VERIFICATION))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("RIFF 헤더만 맞고 오프셋 8이 다르면 422 — AVI를 webp로 올린 경우")
+    void validateUploadedBytes_RiffButNotWebp_Throws422() {
+        // "RIFF" + 크기 + "AVI " — 앞 4바이트만 비교하는 구현이었다면 여기서 통과해버린다.
+        mockHeadBytes(0x52, 0x49, 0x46, 0x46, 0x24, 0x00, 0x00, 0x00, 0x41, 0x56, 0x49, 0x20);
+
+        assertThatThrownBy(() ->
+                mediaService.validateUploadedBytes(WEBP_KEY, MediaPurpose.CHALLENGE_VERIFICATION))
+                .isInstanceOf(MediaException.class)
+                .hasFieldOrPropertyWithValue("code", MediaErrorCode.MEDIA_CONTENT_MISMATCH);
+    }
 }

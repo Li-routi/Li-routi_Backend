@@ -40,7 +40,8 @@ public class S3Config {
      * 그래서 운영 EC2의 instance profile에 {@code s3:GetObject}가 있어야 한다(deploy/README.md).
      *
      * 타임아웃을 명시하는 이유: 인증 요청 경로에서 동기로 호출되므로, 기본값(수십 초)으로 두면
-     * S3가 느려질 때 요청 스레드가 그만큼 붙잡힌다. 앞 16바이트만 읽는 호출이라 짧게 잡는다.
+     * S3가 느려질 때 요청 스레드가 그만큼 붙잡힌다. 앞 12바이트({@link
+     * com.lirouti.domain.media.enums.MediaContentType#SIGNATURE_LENGTH})만 읽는 호출이라 짧게 잡는다.
      */
     @Bean
     public S3Client s3Client() {

@@ -190,6 +190,19 @@ public class MediaService {
                         status, mediaKey);
                 throw new MediaException(MediaErrorCode.MEDIA_NOT_UPLOADED);
             }
+            // 0바이트 오브젝트는 Range GET에 416(InvalidRange)을 준다. 시작 오프셋 0조차
+            // 객체 범위 밖이기 때문이다(1바이트만 있어도 있는 만큼 돌려주므로 416이 아니다).
+            //
+            // 읽을 바이트가 없다는 뜻이니 "이미지가 아니다"와 같은 결론이고, 사용자에게
+            // 서버 오류(500)라고 답할 일이 아니다.
+            //
+            // 정상 경로로는 도달하지 않는다 — contentLength는 @Positive로 막히고, presigned URL은
+            // 그 길이를 서명에 넣어 다른 크기의 PUT을 거부한다. 발급 경로를 거치지 않고 버킷에
+            // 직접 쓰인 오브젝트를 위한 방어다.
+            if (status == HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE.value()) {
+                log.warn("업로드된 오브젝트가 비어 있습니다(416). mediaKey={}", mediaKey);
+                throw new MediaException(MediaErrorCode.MEDIA_CONTENT_MISMATCH);
+            }
             log.error("미디어 바이트 조회에 실패했습니다. mediaKey={}", mediaKey, e);
             throw new MediaException(MediaErrorCode.MEDIA_VALIDATION_FAILED);
         } catch (SdkException | IOException e) {
