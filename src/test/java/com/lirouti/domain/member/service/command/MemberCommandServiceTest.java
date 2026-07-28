@@ -14,11 +14,13 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import com.lirouti.domain.auth.service.TokenService;
 import com.lirouti.domain.member.dto.request.MemberReqDTO;
 import com.lirouti.domain.member.entity.Member;
+import com.lirouti.domain.member.event.MemberWithdrawnEvent;
 import com.lirouti.domain.member.enums.SocialProvider;
 import com.lirouti.domain.member.exception.MemberException;
 import com.lirouti.domain.member.exception.code.error.MemberErrorCode;
 import com.lirouti.domain.member.repository.MemberRepository;
 import java.util.Optional;
+import org.springframework.context.ApplicationEventPublisher;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -41,6 +43,9 @@ class MemberCommandServiceTest {
 
     @Mock
     private TokenService tokenService;
+
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private MemberCommandService memberCommandService;
@@ -150,7 +155,8 @@ class MemberCommandServiceTest {
         assertDoesNotThrow(() -> memberCommandService.withdraw(MEMBER_ID, request, ACCESS_TOKEN));
 
         // then
-        verify(tokenService).logout(ACCESS_TOKEN);
+        verify(eventPublisher).publishEvent(any(MemberWithdrawnEvent.class));
+        verifyNoInteractions(tokenService);
     }
 
     @Test
@@ -168,7 +174,8 @@ class MemberCommandServiceTest {
         assertDoesNotThrow(() -> memberCommandService.withdraw(MEMBER_ID, request, ACCESS_TOKEN));
 
         // then
-        verify(tokenService).logout(ACCESS_TOKEN);
+        verify(eventPublisher).publishEvent(any(MemberWithdrawnEvent.class));
+        verifyNoInteractions(tokenService);
     }
 
     @Test
@@ -186,7 +193,7 @@ class MemberCommandServiceTest {
         assertThat(thrown).isInstanceOf(MemberException.class);
         assertThat(((MemberException) thrown).getCode())
                 .isEqualTo(MemberErrorCode.INVALID_WITHDRAWAL_CONFIRMATION);
-        verifyNoInteractions(memberRepository, tokenService);
+        verifyNoInteractions(memberRepository, tokenService, eventPublisher);
     }
 
     @Test
@@ -200,6 +207,6 @@ class MemberCommandServiceTest {
         assertThat(thrown).isInstanceOf(MemberException.class);
         assertThat(((MemberException) thrown).getCode())
                 .isEqualTo(MemberErrorCode.INVALID_WITHDRAWAL_CONFIRMATION);
-        verifyNoInteractions(memberRepository, tokenService);
+        verifyNoInteractions(memberRepository, tokenService, eventPublisher);
     }
 }
