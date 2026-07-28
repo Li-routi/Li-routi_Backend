@@ -96,6 +96,17 @@ public final class ChallengeResDTO {
     ) {
     }
 
+    /**
+     * 인증 신고 결과.
+     * 신고해도 인증은 삭제되지 않는다 — 신고자 본인의 피드에서만 이후 조회에서 빠진다.
+     */
+    @Builder
+    public record Report(
+            Long reportId,
+            Long verificationId
+    ) {
+    }
+
     // 피드 카드 한 건. 닉네임·사진·코멘트를 보여준다.
     @Builder
     public record FeedItem(

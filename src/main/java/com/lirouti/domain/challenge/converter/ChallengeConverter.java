@@ -6,6 +6,7 @@ import java.util.Map;
 import com.lirouti.domain.challenge.dto.response.ChallengeResDTO;
 import com.lirouti.domain.challenge.entity.Challenge;
 import com.lirouti.domain.challenge.entity.ChallengeVerification;
+import com.lirouti.domain.challenge.entity.ChallengeVerificationReport;
 import com.lirouti.domain.challenge.entity.MemberChallenge;
 
 public final class ChallengeConverter {
@@ -100,6 +101,14 @@ public final class ChallengeConverter {
                 .content(verification.getContent())
                 .currentStreak(currentStreak)
                 .reverified(reverified)
+                .build();
+    }
+
+    // 인증 신고 결과. 신고 id와 대상 인증 id만 돌려준다(인증 내용은 신고 응답에 필요 없다).
+    public static ChallengeResDTO.Report toReport(ChallengeVerificationReport report) {
+        return ChallengeResDTO.Report.builder()
+                .reportId(report.getId())
+                .verificationId(report.getChallengeVerification().getId())
                 .build();
     }
 
