@@ -74,6 +74,43 @@ public interface ChallengeVerificationControllerDocs {
     );
 
     @Operation(
+            summary = "내가 인증한 게시물만 조회",
+            description = """
+                    그 챌린지에서 **내가 남긴 인증만** 최신순으로 조회합니다. 인증이 필요합니다.
+
+                    커서 페이지네이션은 피드와 같습니다(커서 값은 verificationId).
+
+                    **현재 회차의 인증만 나옵니다.** 그만뒀다 다시 참여하면 회차가 올라가고
+                    지난 회차의 인증은 이 목록에 포함되지 않습니다. 스트릭·오늘 완료 여부와
+                    같은 기준입니다.
+
+                    **그만둔 챌린지도 조회됩니다.** 마지막으로 참여했던 회차의 기록이 그대로 보입니다.
+                    한 번도 참여한 적이 없으면 빈 목록이 아니라 409입니다.
+
+                    피드와 달리 nickname이 없습니다(전부 본인입니다). 대신 verifiedDate가 있어
+                    날짜별로 묶어 보여줄 수 있습니다. 당일 재인증은 verifiedAt만 갱신되므로
+                    두 값이 다를 수 있습니다.
+
+                    currentStreak은 저장값이 아니라 **오늘 기준으로 다시 판정한 값**입니다.
+                    마지막 인증이 이틀 전이면 0으로 내려갑니다.
+
+                    응답 result: verifications[{ verificationId, imageUrl, content, verifiedDate, verifiedAt }],
+                    currentStreak, nextCursor, hasNext.
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "인증 필요(미인증)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "그 챌린지에 참여한 이력이 없음")
+    })
+    ApiResponse<ChallengeResDTO.MyVerifications> getMyVerifications(
+            CustomUserDetails userDetails,
+            @Parameter(description = "챌린지 ID") Long challengeId,
+            @Parameter(description = "이전 응답의 nextCursor. 첫 요청에서는 생략") Long cursor,
+            @Parameter(description = "페이지 크기(기본 20, 최대 50)") Integer size
+    );
+
+    @Operation(
             summary = "인증 신고하기",
             description = """
                     피드의 인증을 신고합니다. 인증이 필요합니다.

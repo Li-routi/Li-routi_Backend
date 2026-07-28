@@ -118,6 +118,39 @@ public final class ChallengeResDTO {
     ) {
     }
 
+    /**
+     * 내 인증 목록 래퍼(#62). 커서 방식은 피드와 같고 커서 값도 verificationId다.
+     *
+     * currentStreak을 함께 싣는 이유는, 이 화면이 "며칠째 이어오고 있는지"와 목록을 같이 보여주기
+     * 때문이다. 상세(Detail)에도 있지만 그쪽은 챌린지 정보를 받는 호출이라 스크롤 도중에는
+     * 다시 부르지 않는다.
+     */
+    @Builder
+    public record MyVerifications(
+            List<MyVerificationItem> verifications,
+            int currentStreak,
+            Long nextCursor,
+            boolean hasNext
+    ) {
+    }
+
+    /**
+     * 내 인증 한 건(#62).
+     *
+     * 피드(FeedItem)와 달리 nickname이 없다 — 전부 본인이라 화면에 쓸 데가 없다.
+     * 대신 verifiedDate(KST 기준일)를 싣는다. 날짜별로 묶어 보여주려면 시각이 아니라 기준일이
+     * 필요한데, 당일 재인증은 verifiedAt만 덮어쓰고 verifiedDate는 그대로여서 둘이 다를 수 있다.
+     */
+    @Builder
+    public record MyVerificationItem(
+            Long verificationId,
+            String imageUrl,
+            String content,
+            LocalDate verifiedDate,
+            LocalDateTime verifiedAt
+    ) {
+    }
+
     // 상세 화면
     // participating: 조회자가 현재 참여 중인지. 비로그인이면 false('참여하기' 버튼 노출).
     // reward: 챌린지 달성 시 부여되는 재화 수량. 목록 카드와 같은 값이다.

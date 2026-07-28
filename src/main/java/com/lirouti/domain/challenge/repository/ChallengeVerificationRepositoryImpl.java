@@ -51,7 +51,7 @@ public class ChallengeVerificationRepositoryImpl implements ChallengeVerificatio
     }
 
     /**
-     * 조회자가 신고한 인증을 제외한다(#15). 신고는 인증을 지우지 않고 <b>신고자 본인에게만</b> 가린다.
+     * 조회자가 신고한 인증을 제외한다(#15). 신고는 인증을 지우지 않고 신고자 본인에게만 가린다.
      *
      * 조인이 아니라 NOT EXISTS를 쓰는 이유는 두 가지다. 조인은 신고가 없는 인증을 걸러내려면
      * left join + is null이 되어 fetch join과 섞였을 때 읽기 어려워지고, 한 인증에 신고가
@@ -73,6 +73,27 @@ public class ChallengeVerificationRepositoryImpl implements ChallengeVerificatio
                         report.reporter.id.eq(viewerId)
                 )
                 .notExists();
+    }
+
+    @Override
+    public List<ChallengeVerification> findMineByCursor(
+            Long memberChallengeId,
+            int participationRound,
+            Long cursor,
+            int limit
+    ) {
+        // 피드와 달리 fetch join이 없다. 응답에 닉네임을 싣지 않으므로 회원을 읽을 일이 없고,
+        // 참여(member_challenge)도 서비스가 이미 조회해 두었다.
+        return queryFactory
+                .selectFrom(verification)
+                .where(
+                        verification.memberChallenge.id.eq(memberChallengeId),
+                        verification.participationRound.eq(participationRound),
+                        cursorLt(cursor)
+                )
+                .orderBy(verification.id.desc())
+                .limit(limit)
+                .fetch();
     }
 
     private BooleanExpression cursorLt(Long cursor) {

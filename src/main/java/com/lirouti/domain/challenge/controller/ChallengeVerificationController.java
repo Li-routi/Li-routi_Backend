@@ -61,6 +61,21 @@ public class ChallengeVerificationController implements ChallengeVerificationCon
     }
 
     @Override
+    @GetMapping("/me")
+    public ApiResponse<ChallengeResDTO.MyVerifications> getMyVerifications(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long challengeId,
+            @RequestParam(required = false) Long cursor,
+            @RequestParam(required = false) Integer size
+    ) {
+        // 피드(GET /)와 달리 경로를 나눈 것은 인증 필수를 경로 단위로 못박기 위해서다.
+        // ?mine=true 였다면 "mine=true인데 비로그인" 조합을 런타임에 막아야 한다.
+        ChallengeResDTO.MyVerifications result = challengeQueryService
+                .getMyVerifications(userDetails.getMemberId(), challengeId, cursor, size);
+        return ApiResponse.onSuccess(ChallengeSuccessCode.MY_VERIFICATION_FETCH_SUCCESS, result);
+    }
+
+    @Override
     @PostMapping("/{verificationId}/reports")
     public ApiResponse<ChallengeResDTO.Report> report(
             @AuthenticationPrincipal CustomUserDetails userDetails,

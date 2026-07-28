@@ -296,4 +296,62 @@ class ChallengeVerificationControllerTest {
                 .andExpect(jsonPath("$.result.verifications.length()").value(1))
                 .andExpect(jsonPath("$.result.verifications[0].verificationId").value(v.getId()));
     }
+
+    // ── 내 인증 목록 (#62) ──
+
+    @Test
+    @DisplayName("인증 없이 내 인증 목록을 요청하면 거부된다(403)")
+    void getMyVerifications_Unauthenticated_IsRejected() throws Exception {
+        mockMvc.perform(get("/api/challenges/{id}/verifications/me", 1L))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("내 인증 목록은 nickname 없이 verifiedDate와 currentStreak을 싣는다")
+    void getMyVerifications_ReturnsMineWithDateAndStreak() throws Exception {
+        Member author = persistMember("vermine1");
+        Challenge c = persistChallenge();
+        ChallengeVerification v = persistVerification(author, c);
+        em.flush();
+
+        mockMvc.perform(get("/api/challenges/{id}/verifications/me", c.getId())
+                        .with(user(principal(author))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("CHALLENGE200_9"))
+                .andExpect(jsonPath("$.result.verifications.length()").value(1))
+                .andExpect(jsonPath("$.result.verifications[0].verificationId").value(v.getId()))
+                .andExpect(jsonPath("$.result.verifications[0].verifiedDate").exists())
+                .andExpect(jsonPath("$.result.verifications[0].nickname").doesNotExist())
+                .andExpect(jsonPath("$.result.currentStreak").exists())
+                .andExpect(jsonPath("$.result.hasNext").value(false));
+    }
+
+    @Test
+    @DisplayName("남의 인증은 내 목록에 나오지 않는다")
+    void getMyVerifications_ExcludesOthers() throws Exception {
+        Member author = persistMember("vermine2");
+        Member viewer = persistMember("vermine2v");
+        Challenge c = persistChallenge();
+        persistVerification(author, c);
+        persistParticipation(viewer, c);
+        em.flush();
+
+        mockMvc.perform(get("/api/challenges/{id}/verifications/me", c.getId())
+                        .with(user(principal(viewer))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.verifications").isEmpty());
+    }
+
+    @Test
+    @DisplayName("참여한 적 없는 챌린지의 내 인증을 조회하면 409다")
+    void getMyVerifications_NeverParticipated_Returns409() throws Exception {
+        Member stranger = persistMember("vermine3");
+        Challenge c = persistChallenge();
+        em.flush();
+
+        mockMvc.perform(get("/api/challenges/{id}/verifications/me", c.getId())
+                        .with(user(principal(stranger))))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("CHALLENGE409_2"));
+    }
 }
