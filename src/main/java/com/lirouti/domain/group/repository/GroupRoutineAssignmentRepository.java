@@ -2,10 +2,12 @@ package com.lirouti.domain.group.repository;
 
 import com.lirouti.domain.group.entity.GroupRoutineAssignment;
 import com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus;
+import jakarta.persistence.LockModeType;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -67,6 +69,56 @@ public interface GroupRoutineAssignmentRepository
      * @return 해당 날짜의 할당 목록
      */
     List<GroupRoutineAssignment> findAllByMemberIdAndAssignedDate(Long memberId, LocalDate assignedDate);
+
+    /**
+     * 한 루틴의 특정 날짜 할당을 ID 순서로 잠가 수정·완료·상태 전이 경합을 직렬화한다.
+     * 회원 식별에는 지연 프록시의 ID를 사용하므로 불필요한 회원 엔티티 조회를 수행하지 않는다.
+     *
+     * @param groupRoutineId 대상 그룹 루틴 ID
+     * @param assignedDate 잠글 할당 날짜
+     * @return 잠긴 날짜별 할당 목록
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select assignment
+            from GroupRoutineAssignment assignment
+            where assignment.groupRoutine.id = :groupRoutineId
+              and assignment.assignedDate = :assignedDate
+            order by assignment.id
+            """)
+    List<GroupRoutineAssignment> findAllByGroupRoutineIdAndAssignedDateForUpdate(
+            @Param("groupRoutineId") Long groupRoutineId,
+            @Param("assignedDate") LocalDate assignedDate
+    );
+
+    /**
+     * 아직 확정되지 않은 할당의 수행 시간 스냅샷과 상태를 한 번에 변경한다.
+     * 조회 이후 완료·마감 처리가 경합하더라도 확정 상태를 덮어쓰지 않도록 상태 조건을 유지한다.
+     *
+     * @param assignmentIds 변경할 할당 ID 목록
+     * @param scheduledStartTime 변경할 시작 시각
+     * @param scheduledEndTime 변경할 마감 시각
+     * @param status 변경 후 상태
+     * @param mutableStatuses 변경 가능한 기존 상태
+     * @return 변경된 할당 수
+     */
+    @Modifying(flushAutomatically = true)
+    @Query("""
+            update GroupRoutineAssignment assignment
+            set assignment.scheduledStartTime = :scheduledStartTime,
+                assignment.scheduledEndTime = :scheduledEndTime,
+                assignment.status = :status,
+                assignment.version = assignment.version + 1
+            where assignment.id in :assignmentIds
+              and assignment.status in :mutableStatuses
+            """)
+    int rescheduleAssignmentsIfMutable(
+            @Param("assignmentIds") List<Long> assignmentIds,
+            @Param("scheduledStartTime") LocalTime scheduledStartTime,
+            @Param("scheduledEndTime") LocalTime scheduledEndTime,
+            @Param("status") GroupRoutineAssignmentStatus status,
+            @Param("mutableStatuses") List<GroupRoutineAssignmentStatus> mutableStatuses
+    );
 
     /**
      * 인증 시각이 할당의 수행 범위에 포함될 때만 미완료 상태를 완료로 변경한다.

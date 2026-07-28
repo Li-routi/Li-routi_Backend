@@ -4,6 +4,7 @@ import static org.hamcrest.Matchers.containsString;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -21,6 +22,7 @@ import com.lirouti.domain.member.enums.SocialProvider;
 import com.lirouti.global.auth.CustomUserDetails;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
@@ -356,6 +358,178 @@ class GroupControllerTest {
                 .andExpect(content().string(containsString("201")));
     }
 
+    @Test
+    @DisplayName("OWNER가 루틴을 수정하면 미확정 할당만 새 시간으로 동기화하고 확정 이력을 보존한다")
+    void updateRoutine_Owner_UpdatesRoutineAndReconcilesAssignments() throws Exception {
+        // given
+        Group group = group("GU00001");
+        Member owner = member();
+        Member member = member();
+        membership(owner, group, GroupMemberRole.OWNER);
+        membership(member, group, GroupMemberRole.MEMBER);
+        RoutineCategory oldCategory = category(true);
+        RoutineCategory changedCategory = category(true);
+        GroupRoutine routine = routine(group, oldCategory, "기존 공동 루틴");
+        routine.addSchedule(
+                today().getDayOfWeek(),
+                LocalTime.of(9, 0),
+                LocalTime.of(10, 0)
+        );
+        GroupRoutineAssignment completed = assignment(
+                routine,
+                owner,
+                LocalTime.of(9, 0),
+                LocalTime.of(10, 0),
+                GroupRoutineAssignmentStatus.COMPLETED
+        );
+        GroupRoutineAssignment pending = assignment(
+                routine,
+                member,
+                LocalTime.of(9, 0),
+                LocalTime.of(10, 0),
+                GroupRoutineAssignmentStatus.PENDING
+        );
+        em.flush();
+        Long completedId = completed.getId();
+        Long pendingId = pending.getId();
+        em.clear();
+
+        // when & then
+        mockMvc.perform(put("/api/groups/{groupId}/routines/{routineId}",
+                        group.getId(), routine.getId())
+                        .with(user(principal(owner)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updateRequest(
+                                changedCategory.getId(),
+                                "수정 공동 루틴",
+                                today().getDayOfWeek(),
+                                LocalTime.of(18, 0),
+                                LocalTime.of(19, 0)
+                        )))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.isSuccess").value(true))
+                .andExpect(jsonPath("$.code").value("GROUP200_2"))
+                .andExpect(jsonPath("$.result.routineId").value(routine.getId()))
+                .andExpect(jsonPath("$.result.groupId").value(group.getId()))
+                .andExpect(jsonPath("$.result.categoryId").value(changedCategory.getId()))
+                .andExpect(jsonPath("$.result.title").value("수정 공동 루틴"))
+                .andExpect(jsonPath("$.result.assignmentCount").value(2))
+                .andExpect(jsonPath("$.result.schedules[0].startTime").value("18:00"))
+                .andExpect(jsonPath("$.result.schedules[0].endTime").value("19:00"));
+
+        em.flush();
+        em.clear();
+        GroupRoutine updated = em.find(GroupRoutine.class, routine.getId());
+        GroupRoutineAssignment preserved = em.find(GroupRoutineAssignment.class, completedId);
+        GroupRoutineAssignment rescheduled = em.find(GroupRoutineAssignment.class, pendingId);
+        org.assertj.core.api.Assertions.assertThat(updated.getCategory().getId())
+                .isEqualTo(changedCategory.getId());
+        org.assertj.core.api.Assertions.assertThat(updated.getTitle()).isEqualTo("수정 공동 루틴");
+        org.assertj.core.api.Assertions.assertThat(updated.getSchedules()).singleElement()
+                .satisfies(schedule -> {
+                    org.assertj.core.api.Assertions.assertThat(schedule.getStartTime())
+                            .isEqualTo(LocalTime.of(18, 0));
+                    org.assertj.core.api.Assertions.assertThat(schedule.getEndTime())
+                            .isEqualTo(LocalTime.of(19, 0));
+                });
+        org.assertj.core.api.Assertions.assertThat(preserved.getStatus())
+                .isEqualTo(GroupRoutineAssignmentStatus.COMPLETED);
+        org.assertj.core.api.Assertions.assertThat(preserved.getScheduledStartTime())
+                .isEqualTo(LocalTime.of(9, 0));
+        org.assertj.core.api.Assertions.assertThat(rescheduled.getScheduledStartTime())
+                .isEqualTo(LocalTime.of(18, 0));
+        org.assertj.core.api.Assertions.assertThat(rescheduled.getScheduledEndTime())
+                .isEqualTo(LocalTime.of(19, 0));
+    }
+
+    @Test
+    @DisplayName("일반 구성원은 그룹 루틴을 수정할 수 없다")
+    void updateRoutine_RegularMember_ReturnsOwnerAccessDenied() throws Exception {
+        // given
+        Group group = group("GU00002");
+        Member regularMember = member();
+        membership(regularMember, group, GroupMemberRole.MEMBER);
+        RoutineCategory category = category(true);
+        GroupRoutine routine = routine(group, category, "수정 권한 루틴");
+        em.flush();
+
+        // when & then
+        mockMvc.perform(put("/api/groups/{groupId}/routines/{routineId}",
+                        group.getId(), routine.getId())
+                        .with(user(principal(regularMember)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updateRequest(
+                                category.getId(),
+                                "권한 없는 수정",
+                                today().getDayOfWeek(),
+                                LocalTime.of(9, 0),
+                                LocalTime.of(10, 0)
+                        )))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("GROUP403_3"));
+    }
+
+    @Test
+    @DisplayName("요청 그룹에 속하지 않은 루틴은 찾을 수 없는 루틴으로 처리한다")
+    void updateRoutine_RoutineInAnotherGroup_ReturnsNotFound() throws Exception {
+        // given
+        Group targetGroup = group("GU00003");
+        Group otherGroup = group("GU00004");
+        Member owner = member();
+        membership(owner, targetGroup, GroupMemberRole.OWNER);
+        RoutineCategory category = category(true);
+        GroupRoutine otherRoutine = routine(otherGroup, category, "다른 그룹 루틴");
+        em.flush();
+
+        // when & then
+        mockMvc.perform(put("/api/groups/{groupId}/routines/{routineId}",
+                        targetGroup.getId(), otherRoutine.getId())
+                        .with(user(principal(owner)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updateRequest(
+                                category.getId(),
+                                "잘못된 소속 수정",
+                                today().getDayOfWeek(),
+                                LocalTime.of(9, 0),
+                                LocalTime.of(10, 0)
+                        )))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("GROUP404_4"));
+    }
+
+    @Test
+    @DisplayName("그룹 루틴 수정 일정의 시간 범위가 잘못되면 400을 반환한다")
+    void updateRoutine_InvalidSchedule_ReturnsBadRequest() throws Exception {
+        // given
+        String request = updateRequest(
+                1L,
+                "잘못된 수정",
+                DayOfWeek.MONDAY,
+                LocalTime.of(10, 0),
+                LocalTime.of(9, 0)
+        );
+
+        // when & then
+        mockMvc.perform(put("/api/groups/{groupId}/routines/{routineId}", 1L, 1L)
+                        .with(user(new CustomUserDetails(1L, Role.ROLE_USER)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(request))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("COMMON400_1"));
+    }
+
+    @Test
+    @DisplayName("OpenAPI 문서에 그룹 루틴 수정 경로와 200 응답이 노출된다")
+    void openApi_GroupRoutineUpdate_IsDocumented() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString(
+                        "/api/groups/{groupId}/routines/{routineId}"
+                )))
+                .andExpect(content().string(containsString("그룹 루틴 수정")))
+                .andExpect(content().string(containsString("200")));
+    }
+
     private String validRequest(Long categoryId, String title) {
         return """
                 {
@@ -367,6 +541,25 @@ class GroupControllerTest {
                   ]
                 }
                 """.formatted(categoryId, title, today().getDayOfWeek().name());
+    }
+
+    private String updateRequest(
+            Long categoryId,
+            String title,
+            DayOfWeek repeatDay,
+            LocalTime startTime,
+            LocalTime endTime
+    ) {
+        return """
+                {
+                  "categoryId": %d,
+                  "title": "%s",
+                  "description": "수정된 그룹 루틴 설명입니다.",
+                  "schedules": [
+                    {"repeatDay": "%s", "startTime": "%s", "endTime": "%s"}
+                  ]
+                }
+                """.formatted(categoryId, title, repeatDay.name(), startTime, endTime);
     }
 
     private LocalDate today() {

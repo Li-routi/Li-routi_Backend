@@ -13,6 +13,11 @@ public enum GroupSuccessCode implements BaseSuccessCode {
             "오늘의 그룹 루틴 조회에 성공했습니다.",
             "GROUP200_1"
     ),
+    GROUP_ROUTINE_UPDATE_SUCCESS(
+            HttpStatus.OK,
+            "그룹 루틴 수정에 성공했습니다.",
+            "GROUP200_2"
+    ),
     GROUP_ROUTINE_CREATE_SUCCESS(
             HttpStatus.CREATED,
             "그룹 루틴 생성에 성공했습니다.",

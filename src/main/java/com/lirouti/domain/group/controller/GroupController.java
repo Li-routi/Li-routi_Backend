@@ -15,6 +15,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -68,5 +69,31 @@ public class GroupController implements GroupControllerDocs {
                 request
         );
         return ApiResponse.onSuccess(GroupSuccessCode.GROUP_ROUTINE_CREATE_SUCCESS, result);
+    }
+
+    /**
+     * 인증 회원이 소유한 그룹의 공동 루틴과 반복 일정을 전체 수정한다.
+     *
+     * @param userDetails 인증 회원 정보
+     * @param groupId 루틴이 속한 그룹 ID
+     * @param routineId 수정할 그룹 루틴 ID
+     * @param request 카테고리, 제목, 설명 및 변경 후 전체 반복 일정
+     * @return 수정된 루틴과 동기화 후 오늘 할당 결과
+     */
+    @Override
+    @PutMapping("/{groupId}/routines/{routineId}")
+    public ApiResponse<GroupResDTO.RoutineUpdateResult> updateRoutine(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long groupId,
+            @PathVariable Long routineId,
+            @Valid @RequestBody GroupReqDTO.UpdateRoutine request
+    ) {
+        GroupResDTO.RoutineUpdateResult result = groupCommandService.updateRoutine(
+                groupId,
+                routineId,
+                userDetails.getMemberId(),
+                request
+        );
+        return ApiResponse.onSuccess(GroupSuccessCode.GROUP_ROUTINE_UPDATE_SUCCESS, result);
     }
 }

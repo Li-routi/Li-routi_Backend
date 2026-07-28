@@ -23,6 +23,11 @@ public enum GroupErrorCode implements BaseErrorCode {
             "그룹 루틴 할당 내역을 찾을 수 없습니다.",
             "GROUP404_3"
     ),
+    GROUP_ROUTINE_NOT_FOUND(
+            HttpStatus.NOT_FOUND,
+            "그룹 루틴을 찾을 수 없습니다.",
+            "GROUP404_4"
+    ),
     GROUP_INACTIVE(
             HttpStatus.FORBIDDEN,
             "사용할 수 없는 그룹입니다.",

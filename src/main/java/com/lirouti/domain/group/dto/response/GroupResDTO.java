@@ -38,6 +38,31 @@ public final class GroupResDTO {
     }
 
     /**
+     * 그룹 루틴 수정 결과와 수정 후 오늘 조회 가능한 할당 수를 전달한다.
+     *
+     * @param routineId 수정된 그룹 루틴 ID
+     * @param groupId 루틴이 속한 그룹 ID
+     * @param categoryId 루틴 카테고리 ID
+     * @param categoryName 루틴 카테고리 이름
+     * @param title 루틴 제목
+     * @param description 루틴 설명
+     * @param schedules 요일 순서로 정렬된 반복 일정
+     * @param assignmentCount 수정 후 ACTIVE 구성원이 오늘 조회할 수 있는 해당 루틴 할당 수
+     */
+    @Builder
+    public record RoutineUpdateResult(
+            Long routineId,
+            Long groupId,
+            Long categoryId,
+            String categoryName,
+            String title,
+            String description,
+            List<RoutineSchedule> schedules,
+            int assignmentCount
+    ) {
+    }
+
+    /**
      * 그룹 루틴의 요일별 수행 시간 범위를 전달한다.
      *
      * @param repeatDay 반복 요일

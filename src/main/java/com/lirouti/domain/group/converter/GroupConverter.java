@@ -53,11 +53,6 @@ public final class GroupConverter {
             GroupRoutine groupRoutine,
             int assignmentCount
     ) {
-        List<GroupResDTO.RoutineSchedule> schedules = groupRoutine.getSchedules().stream()
-                .sorted(Comparator.comparingInt(schedule -> schedule.getRepeatDay().getValue()))
-                .map(GroupConverter::toRoutineSchedule)
-                .toList();
-
         return GroupResDTO.RoutineCreateResult.builder()
                 .routineId(groupRoutine.getId())
                 .groupId(groupRoutine.getGroup().getId())
@@ -65,9 +60,35 @@ public final class GroupConverter {
                 .categoryName(groupRoutine.getCategory().getName())
                 .title(groupRoutine.getTitle())
                 .description(groupRoutine.getDescription())
-                .schedules(schedules)
+                .schedules(toRoutineSchedules(groupRoutine))
                 .assignmentCount(assignmentCount)
                 .build();
+    }
+
+    /** 저장된 그룹 루틴을 수정 결과 응답으로 변환한다. */
+    public static GroupResDTO.RoutineUpdateResult toRoutineUpdateResult(
+            GroupRoutine groupRoutine,
+            int assignmentCount
+    ) {
+        return GroupResDTO.RoutineUpdateResult.builder()
+                .routineId(groupRoutine.getId())
+                .groupId(groupRoutine.getGroup().getId())
+                .categoryId(groupRoutine.getCategory().getId())
+                .categoryName(groupRoutine.getCategory().getName())
+                .title(groupRoutine.getTitle())
+                .description(groupRoutine.getDescription())
+                .schedules(toRoutineSchedules(groupRoutine))
+                .assignmentCount(assignmentCount)
+                .build();
+    }
+
+    private static List<GroupResDTO.RoutineSchedule> toRoutineSchedules(
+            GroupRoutine groupRoutine
+    ) {
+        return groupRoutine.getSchedules().stream()
+                .sorted(Comparator.comparingInt(schedule -> schedule.getRepeatDay().getValue()))
+                .map(GroupConverter::toRoutineSchedule)
+                .toList();
     }
 
     /**
