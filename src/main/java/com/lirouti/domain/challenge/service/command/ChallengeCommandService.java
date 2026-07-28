@@ -1,9 +1,6 @@
 package com.lirouti.domain.challenge.service.command;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.ZonedDateTime;
-import java.util.Optional;
 
 import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -27,7 +24,6 @@ import com.lirouti.domain.media.enums.MediaPurpose;
 import com.lirouti.domain.media.service.MediaService;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.repository.MemberRepository;
-import com.lirouti.global.util.TimeUtil;
 
 import lombok.RequiredArgsConstructor;
 
@@ -36,9 +32,12 @@ import lombok.RequiredArgsConstructor;
 public class ChallengeCommandService {
     private final ChallengeRepository challengeRepository;
     private final MemberChallengeRepository memberChallengeRepository;
+    // 신고가 대상 인증을 찾을 때 쓴다. 인증 저장은 ChallengeVerificationCommandService가 맡는다.
     private final ChallengeVerificationRepository challengeVerificationRepository;
     private final ChallengeVerificationReportRepository challengeVerificationReportRepository;
     private final MemberRepository memberRepository;
+    // 인증 저장의 트랜잭션 경계는 이 빈에 있다. 자기 호출로는 트랜잭션이 걸리지 않아 분리했다.
+    private final ChallengeVerificationCommandService challengeVerificationCommandService;
     // 미디어 key의 발급 규칙·공개 URL 조립은 media 도메인이 소유한다. DB를 다루지 않는 유틸성 서비스다.
     private final MediaService mediaService;
 
@@ -81,75 +80,36 @@ public class ChallengeCommandService {
     }
 
     /**
-     * 챌린지 인증. 사진과 코멘트를 등록하고 같은 트랜잭션에서 스트릭을 갱신한다.
+     * 챌린지 인증. <b>트랜잭션 밖에서 끝내야 하는 검증을 먼저 하고</b> 저장은 다른 빈에 위임한다.
      *
-     * 오늘 이미 인증했으면 행을 새로 만들지 않고 덮어쓴다(당일 재인증). 이때 스트릭은 오르지 않는다.
-     * 인증 INSERT와 스트릭 갱신을 한 트랜잭션에 두는 것이 중복 증가를 막는 핵심이다 —
-     * 동시 요청은 UNIQUE(member_challenge_id, participation_round, verified_date)에 걸려 실패하고,
-     * 그 예외로 트랜잭션 전체가 롤백되어 스트릭 갱신도 함께 되돌아간다.
+     * 이 메서드에 @Transactional이 없는 것은 의도다. 아래 미디어 바이트 검증(#22)이 S3를 실제로
+     * 호출하는데, 트랜잭션 안에서 부르면 DB 커넥션과 참여 행 락을 S3 왕복 시간만큼 붙잡는다
+     * (service_convention: 트랜잭션 내 장시간 외부 API 호출 금지).
+     * 저장·스트릭 갱신의 트랜잭션 경계는 {@link ChallengeVerificationCommandService#save}에 있다.
+     * 자기 호출로는 트랜잭션이 걸리지 않아 빈을 나눴다(AuthService → MemberCommandService와 같은 모양).
      *
-     * 비활성 챌린지라도 참여 중이면 인증할 수 있다. 운영이 챌린지를 내려도 진행 중인 스트릭이
-     * 끊기지 않게 하기 위해서이며, 이탈(leave)이 챌린지 active를 보지 않는 것과 같은 기준이다.
-     *
-     * 현재는 자가인증이다 — 사진을 등록하면 그대로 통과한다. 사진이 챌린지 의도(이름·설명)에
-     * 맞는지 심사하는 로직은 아직 없으며, #40에서 이 메서드에 추가한다(아래 TODO 참고).
+     * 현재는 자가인증이다 — 형식과 바이트가 맞으면 그대로 통과한다. 사진이 챌린지 의도(이름·설명)에
+     * 맞는지 심사하는 로직은 아직 없으며 #40에서 아래 TODO 자리에 들어간다.
      */
-    @Transactional
     public ChallengeResDTO.Verification verify(
             Long memberId,
             Long challengeId,
             ChallengeReqDTO.Verify request
     ) {
-        // key는 서버가 발급하지만 요청으로 되돌아오므로, 저장 전에 발급 규칙과 대조한다.
+        // ① key는 서버가 발급하지만 요청으로 되돌아오므로, 저장 전에 발급 규칙과 대조한다.
         mediaService.validateMediaKey(request.mediaKey(), MediaPurpose.CHALLENGE_VERIFICATION);
 
+        // ② 업로드된 실제 바이트가 그 형식이 맞는지 확인한다(#22). S3를 호출하므로 트랜잭션 밖이다.
+        //    presigned URL은 요청 메타데이터(Content-Type·Length)만 강제할 뿐 바이트 내용은 막지 못한다.
+        //    이 호출이 오브젝트 존재 확인도 겸한다 — 업로드하지 않은 key면 404로 걸린다.
+        mediaService.validateUploadedBytes(request.mediaKey(), MediaPurpose.CHALLENGE_VERIFICATION);
+
         // TODO(#40): 사진이 챌린지 의도(challenge.name + description)에 맞는지 AI 심사.
-        //  통과해야 아래 저장·스트릭 갱신으로 진행하고, 반려면 여기서 예외를 던져 막는다.
-        //  ⚠️ 외부 AI 호출은 이 @Transactional 트랜잭션 안에서 하면 안 된다(service_convention:
-        //     트랜잭션 내 장시간 외부 API 호출 금지). 심사는 트랜잭션을 열기 전에 끝내야 하므로,
-        //     이 메서드를 "심사(트랜잭션 밖) → 저장·스트릭(트랜잭션 안)" 두 단계로 쪼개야 한다.
-        //  심사가 사진을 실제로 읽으므로 S3 존재 확인도 이 단계에서 겸한다.
+        //  자리는 여기다 — ②와 같은 "트랜잭션 밖" 구간이라 그대로 추가하면 된다.
         //  방식·제공자·임계값·반려 UX·판정결과 저장(스키마 영향)은 #40에서 확정한다.
 
-        // 이탈·재참여와 같은 행을 바꾸므로 잠그고 읽는다. 락 없이 읽으면 이 트랜잭션이 커밋할 때
-        // 그 사이 커밋된 이탈·재참여 결과를 오래된 스냅샷으로 되돌린다(#53).
-        // 회차(participation_round)를 읽어 인증 행에 심으므로, 잠그지 않으면 이미 바뀐 회차를
-        // 모르고 옛 회차로 인증을 저장한다 — 유니크 제약에도 걸리지 않아 조용히 어긋난다.
-        MemberChallenge memberChallenge = memberChallengeRepository
-                .findByMemberIdAndChallengeIdForUpdate(memberId, challengeId)
-                .filter(MemberChallenge::isParticipating)
-                .orElseThrow(() -> new ChallengeException(ChallengeErrorCode.NOT_PARTICIPATING));
-
-        // 기준일과 인증 시각을 같은 순간에서 뽑는다. now()를 두 번 부르면 자정 경계에서
-        // 날짜와 시각이 서로 다른 날을 가리킬 수 있다.
-        ZonedDateTime now = ZonedDateTime.now(TimeUtil.KST);
-        LocalDate today = now.toLocalDate();
-        LocalDateTime verifiedAt = now.toLocalDateTime();
-
-        Optional<ChallengeVerification> todayVerification = challengeVerificationRepository
-                .findByMemberChallengeIdAndParticipationRoundAndVerifiedDate(
-                        memberChallenge.getId(),
-                        memberChallenge.getParticipationRound(),
-                        today
-                );
-        boolean reverified = todayVerification.isPresent();
-
-        ChallengeVerification verification = todayVerification
-                .map(existing -> {
-                    existing.reverify(request.mediaKey(), request.content(), verifiedAt);
-                    return existing;
-                })
-                .orElseGet(() -> createVerification(memberChallenge, request, today, verifiedAt));
-
-        // 재인증이면 applyVerification이 오늘 날짜를 보고 스트릭을 그대로 둔다.
-        memberChallenge.applyVerification(today);
-
-        return ChallengeConverter.toVerification(
-                verification,
-                mediaService.resolvePublicUrl(verification.getImageUrl()),
-                memberChallenge.currentStreakAsOf(today),
-                reverified
-        );
+        // ③ 저장·스트릭 갱신. 여기서부터가 트랜잭션이다.
+        return challengeVerificationCommandService.save(memberId, challengeId, request);
     }
 
     /**
@@ -192,42 +152,6 @@ public class ChallengeCommandService {
             return ChallengeConverter.toReport(challengeVerificationReportRepository.saveAndFlush(report));
         } catch (DataIntegrityViolationException | CannotAcquireLockException e) {
             throw new ChallengeException(ChallengeErrorCode.ALREADY_REPORTED);
-        }
-    }
-
-    private ChallengeVerification createVerification(
-            MemberChallenge memberChallenge,
-            ChallengeReqDTO.Verify request,
-            LocalDate verifiedDate,
-            LocalDateTime verifiedAt
-    ) {
-        ChallengeVerification verification = ChallengeVerification.builder()
-                .memberChallenge(memberChallenge)
-                .participationRound(memberChallenge.getParticipationRound())
-                .verifiedDate(verifiedDate)
-                .verifiedAt(verifiedAt)
-                .imageUrl(request.mediaKey())
-                .content(request.content())
-                .build();
-        try {
-            // "오늘 인증이 없다"는 선검사와 저장 사이의 동시 요청 경합은 유니크 제약이 막는다.
-            // saveAndFlush로 그 실패를 여기서 잡아 409로 바꾼다.
-            //
-            // 두 예외를 모두 잡는다. 같은 유니크 키로 INSERT가 겹칠 때 InnoDB는 늘 중복 키 오류
-            // (DataIntegrityViolationException)를 주지 않는다. 중복을 만난 쪽이 기존 인덱스 레코드에
-            // 락을 요청하면서 데드락으로 판정되면 CannotAcquireLockException으로 올라온다
-            // (실제로 인증 동시성 테스트에서 이 경로가 관측됐다). 둘 다 "같은 날 인증 경합에서 졌다"는
-            // 같은 의미이고, 어느 쪽이든 이 트랜잭션은 롤백되므로 처리도 같다.
-            //
-            // 예외를 잡되 삼키지는 않는다. 여기서 던지는 ChallengeException이 트랜잭션을 롤백시켜
-            // 위의 스트릭 갱신까지 함께 되돌린다. 만약 "이미 인증했으니 무시하고 진행"으로 처리하면
-            // 스트릭 갱신만 커밋되어 값이 두 번 오른다(database-schema.md).
-            //
-            // 재시도하지 않는 이유: 재시도는 먼저 들어온 요청의 인증을 덮어쓰게 된다.
-            // 같은 사용자의 중복 클릭이므로 409로 알리는 편이 정직하다.
-            return challengeVerificationRepository.saveAndFlush(verification);
-        } catch (DataIntegrityViolationException | CannotAcquireLockException e) {
-            throw new ChallengeException(ChallengeErrorCode.VERIFICATION_CONFLICT);
         }
     }
 

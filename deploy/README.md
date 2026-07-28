@@ -123,9 +123,13 @@ cd /opt/app && docker compose logs -f app
 
 아래 [AWS / 네트워크] 절의 cron 항목 참고 (매일 04:00 KST).
 
+**등록 전에 백업 버킷의 버전 관리를 켠다.** 앱과 백업이 같은 인스턴스 역할을 쓰기 때문에 앱이 침해되면 백업을 덮어쓸 수 있다 — 이유와 확인 방법은 [2) 정책 생성](#2-정책-생성)의 경고를 볼 것.
+
+> 2026-07-28 기준 **cron은 아직 등록되어 있지 않다.** `/opt/app/backup.sh`는 올라가 있으나 `crontab`이 비어 있어 **백업이 한 번도 돌지 않았다.** 앱·DB가 한 인스턴스에 동거하므로 지금은 인스턴스 소멸 = 데이터 소멸이다(#58 잔여 작업).
+
 ## AWS / 네트워크
 
-- **EC2 instance profile(IAM Role)** 부착: S3 `PutObject`(백업) + 앱 미디어 업로드용 `PutObject/GetObject`. access key를 서버에 두지 않는다.
+- **EC2 instance profile(IAM Role)** 부착: 아래 [IAM instance profile 부착] 절 참고. access key를 서버에 두지 않는다.
 - **보안그룹 인바운드**:
   - `8080` — 베타 HTTP 직접 노출.
   - `22`(SSH) — **`0.0.0.0/0` 개방 + 키 인증 전용(비밀번호 로그인 비활성 확인)**. 배포가 GitHub Actions 러너에서 SSH로 접속하는데 러너 IP가 유동적이라 대역 제한이 어렵다. ED25519 키 인증만 허용하는 전제로 1개월 한시 운영에 한해 전체 개방한다.
@@ -133,6 +137,224 @@ cd /opt/app && docker compose logs -f app
   - `3306`(MySQL)·`6379`(Redis) — **열지 않는다**(compose 내부 네트워크 전용).
 - **S3 버킷**: `lirouti-prod-bucket`(미디어)·`lirouti-db-backup`(백업) 이름으로 생성(비공개). 서버 `.env`의 `AWS_S3_BUCKET`·`backup.sh`의 `BUCKET`을 이 이름과 일치시킨다.
 - **백업 cron** (매일 04:00 KST): `crontab -e` → `0 4 * * * /opt/app/backup.sh >> /opt/app/backup.log 2>&1`
+
+## AWS 조직·접근 구조
+
+배포 대상이 어떤 환경에 있는지, 콘솔 작업 시 무엇이 막히고 왜 막히는지 알아두면 삽질이 줄어든다.
+
+```text
+Root (조직 최상위 컨테이너 — SCP를 붙이는 지점)
+├── management 계정  (조직 관리 전용, 워크로드 없음. OU로 옮길 수 없다)
+├── team502 OU   (별개 프로젝트, LiRouti와 무관)
+├── dvely OU     (별개 프로젝트, LiRouti와 무관)
+└── umc OU
+    └── umc 계정  ← LiRouti 배포 대상 (member account, EC2: ap-northeast-2)
+```
+
+**Root는 계정이 아니라 컨테이너다.** management 계정은 그 아래 별도 노드로 존재하며, OU 안으로 옮길 수 없다.
+
+SCP는 Root와 OU에 붙고 **member account가 상속받는다.** 즉 `umc` 계정은 Root의 리전 잠금과 umc OU의 서비스 화이트리스트를 **둘 다** 받는다(아래 표). **management 계정만 SCP 적용에서 면제된다** — 그래서 거기에 워크로드를 두지 않는다.
+
+LiRouti는 **umc 계정 하나에만** 있고 다른 계정과 리소스를 공유하지 않는다. 운영 종료 시 리소스만 지우고 계정·OU는 보존한다.
+
+### 로그인 — IAM 사용자를 만들지 않는다
+
+사람의 접근은 전부 **IAM Identity Center(SSO)** 를 통한다. 콘솔 로그인 시 실제 주체는 `assumed-role/AWSReservedSSO_...` 형태의 **임시 자격증명**이고 장기 액세스 키가 존재하지 않는다.
+
+- permission set: 배포 담당 `AdministratorAccess`, 열람 인원 `ReadOnlyAccess`
+  > ⚠️ **`AdministratorAccess`는 최소 권한이 아니다.** 현재 조직에 설정된 값을 그대로 적은 것이고, 데모 기간(1개월) 한시 운영 전제다.
+  > 실 운영으로 전환하는 시점에는 **역할 생성·부착과 버킷 설정만 담은 전용 permission set**을 만들어 배포 담당을 그쪽으로 옮긴다. `ReadOnlyAccess`는 지금도 열람 전용이라 그대로 둔다.
+  > SSH `0.0.0.0/0` 개방과 같은 성격의 한시 조치이므로, 철거·전환 시 함께 정리한다.
+- **IAM 역할 생성 같은 작업이 막히면 SCP보다 permission set을 먼저 의심한다.** ReadOnly로 로그인한 경우가 대부분이다.
+- 서버(EC2)의 AWS 권한은 사람 계정과 무관하게 **instance profile**로 부여한다(아래 절).
+
+### SCP — IAM 권한 위에 걸린 천장
+
+계정 안에서 어떤 권한을 받아도 이 천장은 넘지 못한다. 실무에서 부딪히는 건 둘이다.
+
+| 제약 | 내용 | 실무에서 뜻하는 것 |
+| --- | --- | --- |
+| **리전 잠금** (Root) | `ap-northeast-2`·`us-east-1` 외 Deny | **버킷·리소스를 서울에 만들어야 한다.** 다른 리전은 `UnauthorizedOperation` |
+| **서비스 화이트리스트** (umc OU) | EC2·S3·IAM/STS·CloudWatch/Logs·SSM·KMS·Budgets/CE만 허용 | 목록 밖 서비스(RDS·Lambda 등)는 **켤 수 없다.** 보안 경계이자 비용 안전장치 |
+
+`iam:*`·`sts:*`는 리전 잠금의 예외로 빠져 있고 화이트리스트에도 있어, IAM 작업은 이중으로 안전하다.
+
+> 콘솔이 자동 호출하는 부가 서비스(`compute-optimizer` 등)에서 간헐적으로 뜨는 `AccessDenied`는 **정상이며 무해하다.** 실제 작업이 막힐 때만 화이트리스트에 추가한다.
+
+## IAM instance profile 부착 (#58)
+
+서버에 access key를 두지 않기 위해 EC2에 IAM 역할을 붙여 S3 권한을 준다. **역할이 없으면 presigned URL 발급부터 실패하고**(서명에 자격증명이 필요하다) 백업 스크립트도 동작하지 않는다.
+
+> ✅ **2026-07-27 부착 완료.** 역할 `lirouti-ec2-role`, 인스턴스 프로필 `arn:aws:iam::058114477749:instance-profile/lirouti-ec2-role`. 아래 §6 검증을 전부 통과했다(결과는 그 절 끝에 기록).
+> 아래 절차는 **인스턴스를 새로 띄우거나 다른 환경에 재구축할 때** 그대로 다시 쓰는 용도로 남긴다.
+
+접근은 IAM 사용자가 아니라 **IAM Identity Center(SSO)**로 한다. 콘솔 작업은 **AdministratorAccess permission set**으로 로그인해야 한다 — ReadOnly로는 역할을 만들 수 없고, 이때 실패 원인은 SCP가 아니라 permission set이다.
+
+### 1) 버킷 확인·생성
+
+`lirouti-prod-bucket`(미디어)·`lirouti-db-backup`(백업)이 있는지 본다. 없으면 **리전 `ap-northeast-2`, 퍼블릭 액세스 차단 유지, 기본 암호화(SSE-S3)** 로 만든다.
+
+- 리전을 다른 곳으로 잡으면 조직 SCP의 리전 잠금(`ap-northeast-2`·`us-east-1`만 허용)에 걸린다.
+- **SSE-KMS를 고르면** 아래 정책에 `kms:GenerateDataKey`·`kms:Decrypt`가 추가로 필요하다. 특별한 이유가 없으면 기본값을 쓴다.
+  - 여기서 **customer-managed 키(CMK)를 쓰면 IAM 정책만으로는 부족하다.** KMS는 키 정책(key policy)이 IAM 위임을 허용해야 IAM 쪽 권한이 효력을 갖는다. 허용 문구가 없으면 권한을 붙여도 S3 PUT에서 `AccessDenied`가 난다. CMK를 쓸 경우 키 정책에 `lirouti-ec2-role`의 ARN을 직접 넣거나, 계정 위임(`arn:aws:iam::<계정>:root` 허용) 문구가 있는지 확인한다.
+  - AWS 관리형 키(`aws/s3`)는 키 정책이 이미 계정 위임을 허용하므로 이 문제가 없다.
+- **미디어 버킷을 공개로 열지 않는다.** 사진을 어떻게 서빙할지(CloudFront vs 공개 버킷)는 #39에서 정한다.
+- **라이프사이클 규칙은 지금 걸지 않는다.** 스테이징용 prefix가 아직 없어서, 현재 유일한 prefix(`challenge-verifications/`)에 자동 삭제를 걸면 정상 인증 사진이 지워진다. prefix 구조는 #39, 고아 파일 정리는 #19에서 다룬다.
+
+### 2) 정책 생성
+
+IAM → 정책 → 정책 생성 → JSON 탭에 [`deploy/iam-policy.json`](./iam-policy.json)의 내용을 붙여넣는다. 이름은 `lirouti-app-s3`.
+
+오브젝트 수준(`버킷/*`)으로만 허용해 버킷 자체는 건드리지 못하게 한다. `s3:DeleteObject`와 `s3:ListBucket`은 지금 앱이 쓰지 않아 뺐다(삭제는 #19에서 필요해지면 추가).
+
+> ⚠️ **앱이 백업을 덮어쓸 수 있다 — 버킷 버전 관리로 막아야 한다.**
+>
+> `BackupObjectWrite`는 `lirouti-ec2-role`에 붙고, 앱 컨테이너는 IMDS로 그 역할을 그대로 쓴다. 즉 **앱이 침해되면 백업 파일을 덮어쓸 수 있다.** 2026-07-28 실측으로 확인했다 — 앱 역할로 백업 버킷의 기존 오브젝트를 `PutObject`로 덮어쓰는 데 성공했다.
+>
+> `backup.sh`가 키를 `<날짜>.sql.gz`로 만들기 때문에 더 나쁘다. `ListBucket`이 거부돼도 **날짜만 찍으면 키를 맞힐 수 있어서**, 최근 며칠치를 순서대로 덮어쓰는 데 목록 권한이 필요 없다. 게다가 이 역할에는 백업 버킷 `GetObject`가 없어 **덮어써졌는지 앱 쪽에서 확인할 방법도 없다.**
+>
+> **역할을 나누는 것으로는 거의 해결되지 않는다.** 앱과 백업 cron이 같은 EC2에 살아서, 그 호스트에서 코드 실행이 되는 공격자는 어느 역할이든 쓸 수 있다. 컴퓨팅이 분리돼야 의미가 생긴다.
+>
+> **실효가 있는 건 버킷 버전 관리다.** 덮어쓰기가 새 버전을 만들 뿐 이전 버전이 남으므로 복구가 된다. 콘솔에서 S3 → `lirouti-db-backup` → 속성 → 버전 관리 → 활성화. 비용은 이전 버전 만료 라이프사이클(예: 30일)로 잡는다.
+>
+> **현재 켜져 있는지는 이 문서로 확답할 수 없다.** 인스턴스 역할에 `s3:GetBucketVersioning`이 없어서(오브젝트 수준만 허용) 서버에서 조회하면 `AccessDenied`가 난다. **콘솔에서 직접 확인할 것.** 백업 cron은 아직 등록되어 있지 않으므로(#58 잔여) 등록 전에 켜두면 된다.
+
+### 3) 역할 생성
+
+IAM → 역할 → 역할 생성
+
+| 항목 | 값 |
+| --- | --- |
+| 신뢰할 수 있는 엔터티 | AWS 서비스 |
+| 사용 사례 | **EC2** |
+| 권한 정책 | `lirouti-app-s3` |
+| 역할 이름 | `lirouti-ec2-role` |
+
+EC2 사용 사례를 고르면 신뢰 정책과 인스턴스 프로필이 함께 만들어진다.
+
+### 4) 인스턴스에 부착
+
+EC2 → 인스턴스 → 대상 인스턴스 → **작업 → 보안 → IAM 역할 수정** → `lirouti-ec2-role` → 업데이트.
+
+재부팅은 필요 없다. 몇 초 안에 IMDS로 자격증명이 내려온다.
+
+### 5) 앱 컨테이너 재시작
+
+```bash
+ssh <서버> 'cd /opt/app && sudo docker compose restart app'
+```
+
+AWS SDK는 실패한 자격증명 조회를 영구 캐시하지 않아 재시작 없이도 붙을 가능성이 높지만, 비용이 없으므로 확실히 하고 넘어간다.
+
+### 6) 검증
+
+**실제로 S3를 호출하는 주체는 호스트가 아니라 `app` 컨테이너다.** 호스트에서만 확인하면 두 가지를 놓친다 — 컨테이너가 IMDS에 닿는지(Docker 브리지가 홉을 하나 더 쓴다), 그리고 호스트에 남은 자격증명 때문에 거짓 통과하는지. 그래서 ①은 컨테이너 안에서 돌린다.
+
+**세 단계 모두 실패하면 즉시 멈추도록 썼다.** 검증 절차가 조용히 통과하면 "역할이 붙었다"고 잘못 결론내리게 되므로, `set -euo pipefail`과 `curl -fsS`로 fail-closed를 강제한다. 특히 `curl -s`는 **HTTP 404에도 종료 코드 0**을 주기 때문에 `-f`가 없으면 미부착 상태가 성공으로 보인다.
+
+```bash
+# ① 컨테이너가 역할 자격증명을 받는가 — 부착 전에는 404가 나온다
+#    app 이미지(eclipse-temurin:21-jre)에 curl이 들어 있어 그대로 쓸 수 있다.
+cd /opt/app && sudo docker compose exec app bash -c '
+  set -euo pipefail
+  TOKEN=$(curl -fsS --max-time 5 -X PUT "http://169.254.169.254/latest/api/token" \
+    -H "X-aws-ec2-metadata-token-ttl-seconds: 60")
+  test -n "$TOKEN"
+  curl -fsS --max-time 5 -H "X-aws-ec2-metadata-token: $TOKEN" \
+    http://169.254.169.254/latest/meta-data/iam/info'
+```
+
+```bash
+# ② 권한 범위가 의도대로인가 (aws-cli 필요: sudo snap install aws-cli --classic)
+#    컨테이너에는 aws-cli가 없으므로 호스트에서 돌린다. 대신 주체부터 확인한다.
+set -euo pipefail
+
+ARN="$(aws sts get-caller-identity --query Arn --output text)"
+[[ "$ARN" =~ :assumed-role/lirouti-ec2-role/ ]] || { echo "역할이 아니다: $ARN" >&2; exit 1; }
+
+echo t > /tmp/t.txt
+aws s3 cp /tmp/t.txt s3://lirouti-db-backup/t.txt          # 성공해야 정상 (PutObject)
+
+# ListBucket은 거부돼야 정상이다. "실패했다"로 끝내지 말고 거부 사유까지 확인한다 —
+# 네트워크 오류나 오타로 실패한 것도 똑같이 비정상 종료라 구분이 안 되기 때문이다.
+if aws s3api list-objects-v2 --bucket lirouti-db-backup >/tmp/ls.out 2>&1; then
+  echo "ListBucket이 허용돼 있다 — 정책이 넓다" >&2; exit 1
+fi
+grep -q "AccessDenied" /tmp/ls.out || { echo "거부됐지만 사유가 AccessDenied가 아니다" >&2; exit 1; }
+echo "② OK"
+```
+
+올린 테스트 객체는 인스턴스 역할로 지울 수 없으므로(DeleteObject 미부여) 콘솔에서 지운다.
+
+> ⚠️ **`aws sts get-caller-identity`를 건너뛰지 않는다.** AWS 자격증명 체인은 환경변수 → 공유 credential 파일 → instance profile 순으로 본다. 호스트에 `AWS_ACCESS_KEY_ID` 같은 변수나 `~/.aws/credentials`가 남아 있으면 **역할이 안 붙었는데도 ②가 성공해버린다.**
+> (2026-07-27 실측: 이 서버는 `AWS_*` 환경변수 0개, `~/.aws` 없음 — 현재는 문제없다.)
+>
+> ⚠️ `.../iam/security-credentials/<역할명>`은 **실제 임시 액세스 키를 반환한다.** 조회하지 않는다. 끝에 슬래시만 붙인 목록 경로와 `iam/info`는 역할 이름·ARN만 나와 안전하다.
+
+```bash
+# ③ 앱의 실제 경로가 도는가 — 여기까지 봐야 완결이다
+#    로그인이 필요한 API라 액세스 토큰이 하나 있어야 한다.
+set -euo pipefail
+TOKEN="<로그인해서 받은 accessToken>"
+BASE="http://localhost:8080"
+
+# 발급 — 역할이 없으면 여기서 PRESIGNED_URL_ISSUE_FAILED로 떨어진다
+RES="$(curl -fsS -X POST "$BASE/api/media/presigned-url" \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"purpose":"CHALLENGE_VERIFICATION","contentType":"image/jpeg","contentLength":3}')"
+echo "$RES" | grep -q '"isSuccess":true' || { echo "발급 실패: $RES" >&2; exit 1; }
+
+UPLOAD_URL="$(echo "$RES" | sed -n 's/.*"uploadUrl":"\([^"]*\)".*/\1/p')"
+
+# 업로드 — 서명한 Content-Type·Content-Length와 정확히 일치해야 S3가 받는다
+printf '\xFF\xD8\xFF' > /tmp/probe.jpg
+curl -fsS -X PUT "$UPLOAD_URL" -H 'Content-Type: image/jpeg' --data-binary @/tmp/probe.jpg
+echo "③ OK"
+```
+
+①이 컨테이너의 자격증명 수령을, ③이 그 자격증명으로 서명까지 되는지를 본다. **③이 최종 판정이다** — presigned URL 발급은 서명에 자격증명이 필요하므로, 역할이 없으면 여기서 먼저 실패한다.
+
+> ③으로 올린 `probe.jpg`도 역할로는 못 지운다. 콘솔에서 함께 지운다.
+
+#### 실측 결과 (2026-07-27)
+
+부착 직후 위 절차로 확인한 값이다. **거부돼야 하는 셋이 모두 거부된 것**이 최소 권한이 제대로 걸렸다는 증거다 — 권한이 넓게 새면 이 중 하나는 통과한다.
+
+| 확인 | 기대 | 결과 |
+| --- | --- | --- |
+| 호스트 IMDS `iam/info` | 200 | ✅ `Code: Success`, `instance-profile/lirouti-ec2-role` |
+| **app 컨테이너** IMDS `iam/info` | 200 | ✅ `Code: Success` (부착 전에는 404였다) |
+| `sts get-caller-identity` | assumed-role | ✅ `assumed-role/lirouti-ec2-role/i-0cbaa8bf4e7f45dd8` |
+| 백업 버킷 `PutObject` | 성공 | ✅ |
+| 백업 버킷 `ListBucket` | **거부** | ✅ `AccessDenied` |
+| 미디어 버킷 `PutObject` | 성공 | ✅ |
+| 미디어 버킷 `GetObject` | 성공 | ✅ 내용까지 일치 (#22가 쓸 권한) |
+| 백업 버킷 `GetObject` | **거부** | ✅ `403 Forbidden` (Put만 부여했으므로) |
+| 미디어 버킷 `DeleteObject` | **거부** | ✅ `AccessDenied` |
+
+앱 상태도 함께 확인했다 — 컨테이너 `running`, `GET /api/challenges` 200, 재시작 후 로그에 자격증명·S3 오류 0건.
+
+> 검증에 올린 테스트 객체(`s3://lirouti-db-backup/iam-check.txt`, `s3://lirouti-prod-bucket/iam-check/probe.txt`, `s3://lirouti-prod-bucket/iam-check/tiny.bin`)는 **인스턴스 역할로 지울 수 없다**(DeleteObject 미부여). 콘솔에서 지운다. 미디어 쪽은 `iam-check/` prefix에 두어 실제 인증 사진(`challenge-verifications/`)과 섞이지 않게 했다.
+
+#### 추가 실측 (2026-07-28)
+
+| 확인 | 결과 |
+| --- | --- |
+| 백업 버킷 기존 오브젝트 **덮어쓰기** | ⚠️ **성공** — 앱 역할로 덮어써진다. [2) 정책 생성](#2-정책-생성) 경고 참고 |
+| 백업 버킷 `HeadObject` | ✅ `403` (GetObject 미부여 — 덮어쓴 결과를 읽어볼 수도 없다) |
+| `s3:GetBucketVersioning` | ✅ `AccessDenied` — 버전 관리 여부는 **콘솔에서 확인해야 한다** |
+| 미디어 공개 URL 익명 GET | ✅ `403` — 버킷 비공개가 유지되고 있다(사진 서빙은 #39) |
+| 백업 cron 등록 여부 | ⚠️ **미등록** — `backup.sh`는 있으나 `crontab` 비어 있음 |
+| 호스트에서 `localhost:8080` | ✅ `GET /api/challenges` 200, `POST /api/media/presigned-url` 403(인증 필요) — ③ 명령의 전제 확인 |
+
+③(presigned URL 발급)은 로그인 토큰이 필요해 이번에 직접 호출하지는 않았다. 다만 컨테이너가 자격증명을 받고(②) 그 역할로 미디어 버킷 `PutObject`가 되는 것(위 표)까지 확인됐으므로, 서명 경로가 막힐 이유는 남아 있지 않다.
+
+### 알아둘 것
+
+- **컨테이너에서 IMDS 도달 여부** — Docker 브리지가 홉을 하나 더 쓰기 때문에 인스턴스의 `http-put-response-hop-limit`이 1이면 컨테이너가 자격증명을 못 받는다. 이 인스턴스는 **도달 가능한 것을 확인했다** — 2026-07-27 `app` 컨테이너(`app_default` 브리지) 안에서 `169.254.169.254:80` TCP 연결 성공, 호스트에서는 토큰·메타데이터 모두 200. 다른 인스턴스로 옮길 때는 위 §6 ①로 다시 확인한다.
+- **presigned URL 만료** — instance profile 자격증명은 임시 자격증명이라, 그것으로 서명한 URL은 **자격증명이 만료되면 함께 무효가 된다.** 현재 설정은 `PT5M`(5분)이라 문제없지만, `S3Properties`가 최대 7일까지 허용하므로 길게 잡으면 원인 불명의 403이 난다.
+- **`aws-cli`는 서버에 설치돼 있다** — 2026-07-27 검증 때 `sudo snap install aws-cli --classic`으로 깔았다(v2). §6 ②와 `backup.sh` 둘 다 이걸 쓴다. 인스턴스를 새로 띄우면 다시 깔아야 한다.
+- **리전을 명시해야 하는 경우** — 서버에 `AWS_REGION`이 앱 컨테이너 환경변수로만 있고 호스트 셸에는 없다. 호스트에서 `aws` 명령을 직접 쓸 때는 `AWS_DEFAULT_REGION=ap-northeast-2`를 함께 준다(`backup.sh`는 버킷 URL로 해결되므로 영향 없다).
 
 ## 배포 · 롤백
 
