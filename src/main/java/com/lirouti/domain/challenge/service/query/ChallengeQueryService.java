@@ -95,6 +95,56 @@ public class ChallengeQueryService {
         return ChallengeConverter.toFeed(page.rows(), imageUrls, page.nextCursor(), page.hasNext());
     }
 
+    /**
+     * 그 챌린지에서 <b>내가 남긴 인증만</b> 커서 기반으로 조회한다(#62).
+     *
+     * <b>현재 회차만 돌려준다.</b> 이탈 후 재참여하면 회차가 오르고 지난 회차 인증이 그대로 남는데,
+     * 그것까지 섞으면 스트릭은 0인데 목록에는 지난 참여의 기록이 쌓여 있는 화면이 된다.
+     * 인증·연속 참여일·오늘 완료 여부를 모두 현재 회차로 판단하는 기준과 맞춘 것이다
+     * (database-schema.md). 화면이 "이번 참여"가 아니라 "전체 내 기록"으로 확정되면 회차 조건만 빼면 된다.
+     *
+     * <b>이탈한 챌린지도 조회된다.</b> 이탈은 active만 내리고 회차는 그대로여서, 이탈 상태의
+     * 현재 회차는 곧 마지막 참여 기록이다. 그만뒀다고 자기 기록을 못 보게 할 이유가 없다.
+     * 다만 <b>한 번도 참여한 적이 없으면</b> 빈 목록이 아니라 NOT_PARTICIPATING으로 돌려준다 —
+     * 그 경우는 "기록이 없다"가 아니라 "볼 자격이 없다"에 가깝다.
+     *
+     * 피드와 달리 챌린지 존재 여부를 따로 확인하지 않는다. 참여 행이 있다는 것이 곧 그 챌린지가
+     * 있었다는 뜻이고, 운영이 챌린지를 내려도 이미 남긴 내 기록은 보여야 한다(이탈과 같은 기준).
+     */
+    @Transactional(readOnly = true)
+    public ChallengeResDTO.MyVerifications getMyVerifications(
+            Long memberId,
+            Long challengeId,
+            Long cursor,
+            Integer size
+    ) {
+        MemberChallenge memberChallenge = memberChallengeRepository
+                .findByMemberIdAndChallengeId(memberId, challengeId)
+                .orElseThrow(() -> new ChallengeException(ChallengeErrorCode.NOT_PARTICIPATING));
+
+        int appliedSize = clampSize(size);
+        List<ChallengeVerification> rows = challengeVerificationRepository.findMineByCursor(
+                memberChallenge.getId(),
+                memberChallenge.getParticipationRound(),
+                cursor,
+                appliedSize + 1
+        );
+        CursorPage<ChallengeVerification> page =
+                sliceByCursor(rows, appliedSize, ChallengeVerification::getId);
+
+        Map<Long, String> imageUrls = page.rows().stream()
+                .collect(Collectors.toMap(
+                        ChallengeVerification::getId,
+                        v -> mediaService.resolvePublicUrl(v.getImageUrl())));
+
+        // 스트릭은 저장된 값을 그대로 쓰지 않고 오늘 기준으로 다시 판정한다.
+        // 마지막 인증이 이틀 전이면 저장값은 그대로여도 실제로는 끊긴 상태다.
+        int currentStreak = memberChallenge.currentStreakAsOf(LocalDate.now(TimeUtil.KST));
+
+        return ChallengeConverter.toMyVerifications(
+                page.rows(), imageUrls, currentStreak, page.nextCursor(), page.hasNext());
+    }
+
     /** size + 1로 받아온 행에서 현재 페이지·다음 커서·다음 페이지 여부를 뽑아낸 결과. */
     private record CursorPage<T>(List<T> rows, Long nextCursor, boolean hasNext) {
     }

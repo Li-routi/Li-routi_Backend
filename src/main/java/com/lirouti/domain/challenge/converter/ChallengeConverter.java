@@ -144,6 +144,42 @@ public final class ChallengeConverter {
                 .build();
     }
 
+    // 내 인증 한 건(#62). 닉네임은 싣지 않는다 — 전부 본인이다.
+    public static ChallengeResDTO.MyVerificationItem toMyVerificationItem(
+            ChallengeVerification verification,
+            String imageUrl
+    ) {
+        return ChallengeResDTO.MyVerificationItem.builder()
+                .verificationId(verification.getId())
+                .imageUrl(imageUrl)
+                .content(verification.getContent())
+                .verifiedDate(verification.getVerifiedDate())
+                .verifiedAt(verification.getVerifiedAt())
+                .build();
+    }
+
+    /**
+     * 내 인증 목록 커서 응답(#62).
+     * imageUrls·currentStreak은 Service가 계산해 넘긴다(Converter는 전달받은 값만 매핑한다).
+     */
+    public static ChallengeResDTO.MyVerifications toMyVerifications(
+            List<ChallengeVerification> verifications,
+            Map<Long, String> imageUrls,
+            int currentStreak,
+            Long nextCursor,
+            boolean hasNext
+    ) {
+        List<ChallengeResDTO.MyVerificationItem> items = verifications.stream()
+                .map(v -> toMyVerificationItem(v, imageUrls.get(v.getId())))
+                .toList();
+        return ChallengeResDTO.MyVerifications.builder()
+                .verifications(items)
+                .currentStreak(currentStreak)
+                .nextCursor(nextCursor)
+                .hasNext(hasNext)
+                .build();
+    }
+
     // 참여 여부·집계 수치는 Service가 조회해 매개변수로 넘긴다.
     public static ChallengeResDTO.Detail toDetail(
             Challenge challenge,

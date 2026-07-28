@@ -75,6 +75,27 @@ public class ChallengeVerificationRepositoryImpl implements ChallengeVerificatio
                 .notExists();
     }
 
+    @Override
+    public List<ChallengeVerification> findMineByCursor(
+            Long memberChallengeId,
+            int participationRound,
+            Long cursor,
+            int limit
+    ) {
+        // 피드와 달리 fetch join이 없다. 응답에 닉네임을 싣지 않으므로 회원을 읽을 일이 없고,
+        // 참여(member_challenge)도 서비스가 이미 조회해 두었다.
+        return queryFactory
+                .selectFrom(verification)
+                .where(
+                        verification.memberChallenge.id.eq(memberChallengeId),
+                        verification.participationRound.eq(participationRound),
+                        cursorLt(cursor)
+                )
+                .orderBy(verification.id.desc())
+                .limit(limit)
+                .fetch();
+    }
+
     private BooleanExpression cursorLt(Long cursor) {
         return (cursor != null) ? verification.id.lt(cursor) : null;
     }
