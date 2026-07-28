@@ -465,6 +465,87 @@ git revert <문제_커밋> && git push
 > :warning: 서버에서 `.env`를 직접 고치는 것은 **긴급 임시 조치로만** 쓴다. 다음 배포에서 시크릿 내용으로 원복되므로, 반드시 `ENV_FILE`에도 반영해 둘 것.
 > 서버에서 임시로 고쳤을 때 반영하려면 `docker compose up -d`(재생성)를 쓴다. `docker compose restart`는 **기존 컨테이너를 그대로 재시작해 환경변수가 갱신되지 않는다.**
 
+## Flyway 운영 (#48 · #49)
+
+스키마는 Flyway가 만들고 Hibernate(`ddl-auto: validate`)는 대조만 한다. 그래서 **마이그레이션이 어긋나면 앱이 아예 뜨지 않는다** — 의도된 게이트지만, 막혔을 때 풀 방법을 알고 있어야 한다.
+
+### 상태 확인 · 복구 (로컬)
+
+```bash
+task db-info      # 파일과 DB를 대조 — Pending / Missing / Failed 구분
+task db-repair    # 체크섬 재계산 + 실패한 이력 행 정리
+task db-history   # 이력 테이블을 그대로 조회
+```
+
+`db-info`와 `db-history`는 다르다. `db-history`는 **DB에 뭐가 적혀 있는지**만 보여주고, `db-info`는 **파일과 대조**해 `Pending`(파일은 있는데 미적용)·`Missing`(적용됐는데 파일이 없음)·`Failed`를 구분한다. 부팅이 막혔으면 `db-info`부터 본다.
+
+> **`repair`는 이력 테이블만 고친다.** 실제 스키마는 건드리지 않는다.
+
+두 경우를 구분해야 한다. **섞으면 스키마가 조용히 어긋난다.**
+
+**(가) 체크섬 불일치** — 이미 적용된 `V__` 파일을 고쳐서 `Migration checksum mismatch`가 난 경우다. DB 상태는 멀쩡하고 기록만 어긋나 있다.
+
+1. 파일을 **원래대로 되돌린다**(적용된 마이그레이션은 수정하지 않는 것이 원칙이다)
+2. 되돌릴 수 없으면 `db-repair`로 체크섬을 재계산한다
+3. **바꾸려던 스키마 변경은 새 `V__`로 추가한다** — `repair`는 파일 내용을 DB에 반영해 주지 않는다
+
+**(나) 마이그레이션 실패** — 중간에 죽어 `success = 0` 행이 남은 경우다. **여기서는 `repair`부터 돌리면 안 된다.**
+
+MySQL은 DDL이 트랜잭션으로 롤백되지 않는다. 즉 **죽기 전까지 실행된 문장은 이미 반영돼 있다.** 이 상태로 `repair`만 돌려 실패 기록을 지우고 재실행하면 `Table already exists` 같은 오류로 다시 죽거나, 더 나쁘게는 절반만 적용된 스키마 위에 나머지가 얹힌다.
+
+1. `db-info`로 어느 버전이 `Failed`인지 확인한다
+2. **그 `V__` 파일을 열어 어디까지 적용됐는지 DB와 대조한다**
+3. 적용된 부분을 **수동으로 되돌리거나**, 마이그레이션을 재실행해도 안전하도록(`IF NOT EXISTS` 등) 고친다
+4. 그 다음 `db-repair`로 실패 기록을 지운다
+5. 앱을 다시 띄워 **같은 `V__`를 다시 실행**시킨다 (새 번호를 만들지 않는다 — 그 버전은 아직 성공한 적이 없다)
+
+### 운영에서 복구가 필요할 때
+
+서버에는 `task`가 없다. 같은 일을 도커로 직접 한다.
+
+```bash
+ssh <서버>
+cd /opt/app
+source .env    # DB_ROOT_PASSWORD 등
+
+# 상태 확인 (repair 전에 반드시 먼저 본다)
+sudo docker run --rm --network container:$(sudo docker compose ps -q db) \
+  -v /opt/app/migration:/flyway/sql:ro flyway/flyway:11 \
+  -url=jdbc:mysql://localhost:3306/lirouti -user=root -password="$DB_ROOT_PASSWORD" info
+```
+
+운영 이미지에는 마이그레이션 파일이 jar 안에 들어 있어 호스트 경로로 바로 마운트할 수 없다. **복구가 필요하면 해당 커밋의 `src/main/resources/db/migration`을 서버 `/opt/app/migration`에 scp로 올린 뒤** 위 명령을 쓴다. `info`로 원인을 확인하고, 필요할 때만 마지막 인자를 `repair`로 바꾼다.
+
+> **운영에서 `repair`를 돌리기 전에 백업을 확인한다.** 이력 테이블을 고치는 작업이라 되돌리기 어렵다.
+
+대부분의 경우 **더 안전한 길은 롤백**이다(위 [배포 · 롤백]). 이전 커밋 이미지로 되돌려 서비스를 살린 뒤, 마이그레이션을 고쳐 새로 배포한다.
+
+### 버전 번호 중복은 CI가 막는다
+
+두 브랜치가 각각 `V4__a.sql`·`V4__b.sql`을 추가하면 **파일명이 달라 git이 충돌로 보지 않는다.** 양쪽 다 조용히 머지되고, develop 배포 후 부팅에서 죽는다 — `Found more than one migration with version 4`.
+
+`test.yml`의 **Check migration version duplicates** 스텝이 이걸 잡는다. 로컬에서 미리 보려면 `task db-check-duplicates`.
+
+### `ddl-auto` 우회를 되돌리기 (#49)
+
+마이그레이션 문제로 부팅이 막혔을 때 `ENV_FILE`에 `JPA_DDL_AUTO=update`를 넣어 한시적으로 넘길 수 있다. **막아두지 않은 것은 의도다** — develop 머지가 곧 배포인 구조에서 긴급 우회 경로가 없는 쪽이 더 위험하다.
+
+대신 우회가 방치되지 않도록 두 군데서 드러낸다.
+
+| 어디서 | 무엇을 보는가 |
+| --- | --- |
+| 배포 Discord 알림 | `ENV_FILE`의 `JPA_DDL_AUTO`가 **비어 있지 않고 `validate`도 아니면** 경고 한 줄 추가(대소문자 무시). 배포 성패와 무관하게 붙는다 |
+| 앱 기동 로그 | `prod` 프로파일에서 `ddl-auto != validate`면 WARN (`SchemaManagementGuard`) |
+
+**둘 다 필요하다.** 워크플로는 시크릿만 보므로 **서버 `.env`를 직접 고친 경우를 못 잡고**, 그건 앱 로그만 잡아낸다.
+
+되돌리는 절차:
+
+1. 막혔던 마이그레이션을 고친다 (새 `V__` 추가 — 이미 적용된 파일은 수정하지 않는다)
+2. `ENV_FILE` 시크릿에서 `JPA_DDL_AUTO` 줄을 **지운다**
+3. develop 머지 또는 Deploy 수동 실행
+4. Discord 알림에 경고가 사라졌는지, 앱 로그에 WARN이 없는지 확인
+
 ## 메모리 예산 (t4g.small 2GB)
 
 JVM(힙 768m + 메타 192m) + MySQL(buffer 256m) + Redis(≤200m) ≈ 1.6GB + OS. 빠듯하므로 `docker-compose.prod.yml`의 상한들을 임의로 늘리지 말 것. OOM 시 `dmesg`·`docker stats`로 확인.
