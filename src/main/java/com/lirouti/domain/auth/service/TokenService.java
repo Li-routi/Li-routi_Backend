@@ -78,7 +78,7 @@ public class TokenService {
 
         String newAccessToken = jwtUtil.createAccessToken(member.getId(), member.getRole());
         String newRefreshToken = jwtUtil.createRefreshToken(member.getId());
-        
+
         // Refresh Token 해시를 Redis에 저장하고, 기존 해시와 비교하여 일치하지 않으면 예외 발생
         boolean stored = redisUtil.compareAndSet(
                 getRefreshTokenKey(member.getId()),

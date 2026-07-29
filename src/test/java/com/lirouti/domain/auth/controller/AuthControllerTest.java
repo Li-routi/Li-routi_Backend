@@ -42,7 +42,7 @@ class AuthControllerTest {
 
     @MockitoBean
     private JwtExceptionFilter jwtExceptionFilter;
-    
+
     @MockitoBean
     private JpaMetamodelMappingContext jpaMappingContext; // JPA 관련 의존성을 우회
 

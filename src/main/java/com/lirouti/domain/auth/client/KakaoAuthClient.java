@@ -85,7 +85,7 @@ public class KakaoAuthClient implements SocialAuthClient {
             log.error(failureLogMsg, e);
             throw new AuthException(AuthErrorCode.SOCIAL_COMMUNICATION_ERROR);
         }
-    } 
+    }
 
     private void validateTokenInfo(KakaoTokenInfo tokenInfo) {
         if (tokenInfo == null
