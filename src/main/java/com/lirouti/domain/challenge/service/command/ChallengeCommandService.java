@@ -1,6 +1,7 @@
 package com.lirouti.domain.challenge.service.command;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -17,6 +18,7 @@ import com.lirouti.domain.challenge.entity.MemberChallenge;
 import com.lirouti.domain.challenge.exception.ChallengeException;
 import com.lirouti.domain.challenge.exception.code.error.ChallengeErrorCode;
 import com.lirouti.domain.challenge.repository.ChallengeRepository;
+import com.lirouti.domain.challenge.repository.ChallengeVerificationLikeRepository;
 import com.lirouti.domain.challenge.repository.ChallengeVerificationReportRepository;
 import com.lirouti.domain.challenge.repository.ChallengeVerificationRepository;
 import com.lirouti.domain.challenge.repository.MemberChallengeRepository;
@@ -35,6 +37,7 @@ public class ChallengeCommandService {
     // 신고가 대상 인증을 찾을 때 쓴다. 인증 저장은 ChallengeVerificationCommandService가 맡는다.
     private final ChallengeVerificationRepository challengeVerificationRepository;
     private final ChallengeVerificationReportRepository challengeVerificationReportRepository;
+    private final ChallengeVerificationLikeRepository challengeVerificationLikeRepository;
     private final MemberRepository memberRepository;
     // 인증 저장의 트랜잭션 경계는 이 빈에 있다. 자기 호출로는 트랜잭션이 걸리지 않아 분리했다.
     private final ChallengeVerificationCommandService challengeVerificationCommandService;
@@ -153,6 +156,57 @@ public class ChallengeCommandService {
         } catch (DataIntegrityViolationException | CannotAcquireLockException e) {
             throw new ChallengeException(ChallengeErrorCode.ALREADY_REPORTED);
         }
+    }
+
+    /**
+     * 인증 게시물에 좋아요(#63). 이미 눌러둔 상태여도 성공으로 처리한다.
+     *
+     * 좋아요는 토글이라 같은 요청이 두 번 오는 것이 정상 사용이다(따닥 누르기). 신고처럼 409를
+     * 돌려주면 화면이 흔들리므로, 최종 상태를 그대로 응답한다(database-schema.md).
+     *
+     * 중복을 예외로 잡지 않고 ON DUPLICATE KEY UPDATE로 흡수한다. 제약 위반이 나면 트랜잭션이
+     * 롤백 전용이 되어, 예외를 잡아 넘겨도 이어지는 집계가 커밋에서 터지기 때문이다.
+     *
+     * 자기 인증에 누르는 것을 막지 않는다. 막으면 검증 분기와 에러 코드가 늘지만 얻는 것이 적다.
+     */
+    @Transactional
+    public ChallengeResDTO.Like like(Long memberId, Long challengeId, Long verificationId) {
+        findVerificationInChallenge(challengeId, verificationId);
+        challengeVerificationLikeRepository.insertIfAbsent(verificationId, memberId);
+        return buildLikeResult(verificationId, true);
+    }
+
+    /**
+     * 좋아요 취소(#63). 누르지 않은 상태여도 성공으로 처리한다.
+     *
+     * 취소는 행 삭제다. 소프트 삭제를 쓰면 취소 후 다시 누를 때 남아 있는 행이 유니크 제약에
+     * 걸린다(database-schema.md).
+     */
+    @Transactional
+    public ChallengeResDTO.Like unlike(Long memberId, Long challengeId, Long verificationId) {
+        // 없는 인증에 대한 취소는 404로 알린다. 멱등한 것은 "좋아요가 없는 경우"이지
+        // "인증이 없는 경우"가 아니다 — 후자는 클라이언트가 잘못된 id를 보낸 것이다.
+        findVerificationInChallenge(challengeId, verificationId);
+        challengeVerificationLikeRepository.deleteLike(verificationId, memberId);
+        return buildLikeResult(verificationId, false);
+    }
+
+    /** 경로의 challengeId와 인증의 챌린지가 맞는지까지 확인한다. 어긋나면 404다(신고와 같은 기준). */
+    private ChallengeVerification findVerificationInChallenge(Long challengeId, Long verificationId) {
+        return challengeVerificationRepository
+                .findByIdAndMemberChallengeChallengeId(verificationId, challengeId)
+                .orElseThrow(() -> new ChallengeException(ChallengeErrorCode.VERIFICATION_NOT_FOUND));
+    }
+
+    /**
+     * 응답에 최종 상태를 실어 클라이언트가 재조회 없이 화면을 갱신하게 한다.
+     * 집계는 피드와 같은 배치 쿼리를 한 건짜리로 부른다 — 세는 규칙(탈퇴 회원 제외)이 갈리지 않도록.
+     */
+    private ChallengeResDTO.Like buildLikeResult(Long verificationId, boolean liked) {
+        long likeCount = challengeVerificationLikeRepository
+                .countByVerificationIds(List.of(verificationId))
+                .getOrDefault(verificationId, 0L);
+        return ChallengeConverter.toLike(verificationId, likeCount, liked);
     }
 
     private MemberChallenge rejoinOrReject(MemberChallenge existing) {

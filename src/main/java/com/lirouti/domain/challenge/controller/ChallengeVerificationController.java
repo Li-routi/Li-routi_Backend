@@ -3,6 +3,7 @@ package com.lirouti.domain.challenge.controller;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -73,6 +74,31 @@ public class ChallengeVerificationController implements ChallengeVerificationCon
         ChallengeResDTO.MyVerifications result = challengeQueryService
                 .getMyVerifications(userDetails.getMemberId(), challengeId, cursor, size);
         return ApiResponse.onSuccess(ChallengeSuccessCode.MY_VERIFICATION_FETCH_SUCCESS, result);
+    }
+
+    @Override
+    @PostMapping("/{verificationId}/likes")
+    public ApiResponse<ChallengeResDTO.Like> like(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long challengeId,
+            @PathVariable Long verificationId
+    ) {
+        // 이미 눌러둔 상태여도 성공이다. 좋아요는 토글이라 같은 요청이 두 번 오는 것이 정상이다(#63).
+        ChallengeResDTO.Like result =
+                challengeCommandService.like(userDetails.getMemberId(), challengeId, verificationId);
+        return ApiResponse.onSuccess(ChallengeSuccessCode.VERIFICATION_LIKE_SUCCESS, result);
+    }
+
+    @Override
+    @DeleteMapping("/{verificationId}/likes")
+    public ApiResponse<ChallengeResDTO.Like> unlike(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long challengeId,
+            @PathVariable Long verificationId
+    ) {
+        ChallengeResDTO.Like result =
+                challengeCommandService.unlike(userDetails.getMemberId(), challengeId, verificationId);
+        return ApiResponse.onSuccess(ChallengeSuccessCode.VERIFICATION_UNLIKE_SUCCESS, result);
     }
 
     @Override

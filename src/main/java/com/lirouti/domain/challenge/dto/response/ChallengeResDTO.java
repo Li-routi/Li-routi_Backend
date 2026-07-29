@@ -107,14 +107,30 @@ public final class ChallengeResDTO {
     ) {
     }
 
-    // 피드 카드 한 건. 닉네임·사진·코멘트를 보여준다.
+    // 피드 카드 한 건. 닉네임·사진·코멘트에 좋아요 수와 내가 눌렀는지를 함께 보여준다(#63).
     @Builder
     public record FeedItem(
             Long verificationId,
             String nickname,
             String imageUrl,
             String content,
-            LocalDateTime verifiedAt
+            LocalDateTime verifiedAt,
+            long likeCount,
+            boolean liked
+    ) {
+    }
+
+    /**
+     * 좋아요·취소 결과(#63).
+     *
+     * 최종 상태를 실어 클라이언트가 재조회 없이 화면을 갱신하게 한다. 좋아요·취소는 멱등하므로
+     * 이미 눌린 상태에서 다시 눌러도 오류가 아니라 같은 응답이 나간다.
+     */
+    @Builder
+    public record Like(
+            Long verificationId,
+            long likeCount,
+            boolean liked
     ) {
     }
 
@@ -140,6 +156,10 @@ public final class ChallengeResDTO {
      * 피드(FeedItem)와 달리 nickname이 없다 — 전부 본인이라 화면에 쓸 데가 없다.
      * 대신 verifiedDate(KST 기준일)를 싣는다. 날짜별로 묶어 보여주려면 시각이 아니라 기준일이
      * 필요한데, 당일 재인증은 verifiedAt만 덮어쓰고 verifiedDate는 그대로여서 둘이 다를 수 있다.
+     *
+     * likeCount는 있고 liked는 없다(#63). 좋아요는 인증 한 건에 붙으므로 같은 사진이 피드에
+     * 나올 때와 수가 같아야 한다 — 한쪽만 비어 있으면 화면이 어긋난다. 반면 "내가 눌렀는지"는
+     * 자기 게시물에서 쓸 데가 없다.
      */
     @Builder
     public record MyVerificationItem(
@@ -147,7 +167,8 @@ public final class ChallengeResDTO {
             String imageUrl,
             String content,
             LocalDate verifiedDate,
-            LocalDateTime verifiedAt
+            LocalDateTime verifiedAt,
+            long likeCount
     ) {
     }
 
