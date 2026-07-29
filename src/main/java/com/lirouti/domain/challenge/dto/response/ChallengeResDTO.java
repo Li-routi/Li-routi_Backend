@@ -173,7 +173,7 @@ public final class ChallengeResDTO {
     }
 
     // 상세 화면
-    // participating: 조회자가 현재 참여 중인지. 비로그인이면 false('참여하기' 버튼 노출).
+    // participating: 조회자가 현재 참여 중인지. false면 '참여하기', true면 '인증하기' 버튼을 노출한다.
     // reward: 챌린지 달성 시 부여되는 재화 수량. 목록 카드와 같은 값이다.
     // verificationPostCount: 인증 게시글 수(상단 통계). participantCount와 함께 카드 상단에 쓰인다.
     @Builder
