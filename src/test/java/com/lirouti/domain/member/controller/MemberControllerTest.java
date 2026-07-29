@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.lirouti.domain.auth.exception.code.error.AuthErrorCode;
 import com.lirouti.domain.member.exception.code.success.MemberSuccessCode;
 import com.lirouti.domain.member.service.command.MemberCommandService;
+import com.lirouti.domain.member.service.query.MemberQueryService;
 import com.lirouti.global.auth.filter.JwtAuthFilter;
 import com.lirouti.global.auth.filter.JwtExceptionFilter;
 import org.junit.jupiter.api.DisplayName;
@@ -42,6 +43,9 @@ class MemberControllerTest {
 
     @MockitoBean
     private JpaMetamodelMappingContext jpaMappingContext;
+
+    @MockitoBean
+    private MemberQueryService memberQueryService;
 
     @Test
     @DisplayName("유효한 Bearer 토큰으로 로그아웃하면 성공 응답을 반환한다")
