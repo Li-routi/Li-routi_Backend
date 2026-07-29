@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 import com.lirouti.domain.member.dto.response.MemberResDTO;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -11,6 +12,7 @@ import com.lirouti.domain.auth.service.TokenService;
 import com.lirouti.domain.member.converter.MemberConverter;
 import com.lirouti.domain.member.dto.request.MemberReqDTO;
 import com.lirouti.domain.member.entity.Member;
+import com.lirouti.domain.member.event.MemberWithdrawnEvent;
 import com.lirouti.domain.member.enums.SocialProvider;
 import com.lirouti.domain.member.exception.MemberException;
 import com.lirouti.domain.member.exception.code.error.MemberErrorCode;
@@ -29,6 +31,7 @@ public class MemberCommandService {
 
     private final MemberRepository memberRepository;
     private final TokenService tokenService;
+    private final ApplicationEventPublisher eventPublisher;
 
     // 소셜 회원 조회 또는 생성
     @Transactional
@@ -45,9 +48,10 @@ public class MemberCommandService {
 
     // 회원 탈퇴 처리
     @Transactional
-    public void withdraw(Long memberId, MemberReqDTO.Withdraw request) {
+    public void withdraw(Long memberId, MemberReqDTO.Withdraw request, String accessToken) {
         log.info("회원 탈퇴 처리를 시작합니다. memberId={}", memberId);
         validateWithdrawalConfirmation(request);
+        tokenService.validateAccessTokenOwner(accessToken, memberId);
 
         Member member = memberRepository.findByIdForUpdate(memberId)
                 .orElseThrow(() -> {
@@ -68,7 +72,8 @@ public class MemberCommandService {
                 LocalDateTime.now()
         );
         memberRepository.save(member);
-        tokenService.invalidateRefreshToken(memberId);
+        eventPublisher.publishEvent(new MemberWithdrawnEvent(memberId, accessToken));
+
         log.info("회원 탈퇴 처리를 완료했습니다. memberId={}", memberId);
     }
 

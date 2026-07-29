@@ -121,6 +121,17 @@ public class TokenService {
         return memberId;
     }
 
+    // access token의 subject가 요청 대상 회원과 일치하는지 검증
+    public void validateAccessTokenOwner(String accessToken, Long expectedMemberId) {
+        Claims claims = jwtUtil.getClaims(accessToken);
+        validateAccessCategory(claims);
+
+        Long tokenMemberId = parseMemberId(claims.getSubject());
+        if (expectedMemberId == null || !expectedMemberId.equals(tokenMemberId)) {
+            throw new AuthException(AuthErrorCode.TOKEN_INVALID);
+        }
+    }
+
     // Refresh Token 무효화
     public void invalidateRefreshToken(Long memberId) {
         redisUtil.delete(getRefreshTokenKey(memberId));

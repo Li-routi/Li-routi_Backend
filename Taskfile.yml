@@ -12,6 +12,22 @@ vars:
   DC_LOCAL:
     sh: printf 'docker compose -f docker-compose.local.yml%s' "$([ -f docker-compose.local.override.yml ] && printf ' -f docker-compose.local.override.yml')"
 
+  # Flyway CLI를 컨테이너로 부른다(#48). Gradle 플러그인 대신 이 방식을 쓰는 이유는
+  # 플러그인이 build.gradle에 접속 정보를 또 적게 만들어 application.yaml과 설정이 두 벌이 되기 때문이다.
+  #
+  # --network container:lirouti-mysql 은 MySQL 컨테이너의 네트워크를 그대로 공유한다.
+  # compose 네트워크 이름(프로젝트 디렉터리명에서 파생)에 의존하지 않아 clone 위치가 달라도 동작한다.
+  #
+  # 로컬은 db/migration 과 db/dummy 를 모두 건다. migration 만 걸면 이미 적용된 더미가
+  # "Missing" 으로 잡혀 멀쩡한 DB가 망가진 것처럼 보인다.
+  FLYWAY: >-
+    docker run --rm --network container:lirouti-mysql
+    -v "$PWD/src/main/resources/db/migration:/flyway/sql:ro"
+    -v "$PWD/src/main/resources/db/dummy:/flyway/dummy:ro"
+    flyway/flyway:11
+    -url=jdbc:mysql://localhost:3306/lirouti -user=lirouti -password=lirouti1234
+    -locations=filesystem:/flyway/sql,filesystem:/flyway/dummy -connectRetries=2
+
 tasks:
   default:
     desc: 사용 가능한 태스크 목록 출력
@@ -72,6 +88,57 @@ tasks:
     # 앱을 한 번도 안 띄웠으면 이력 테이블이 없다 — task run 으로 띄우면 생긴다.
     cmds:
       - '{{.DC_LOCAL}} exec -T mysql mysql -ulirouti -plirouti1234 lirouti -e "SELECT installed_rank, version, description, type, success, installed_on FROM flyway_schema_history ORDER BY installed_rank;"'
+
+  db-info:
+    desc: 로컬 Flyway 상태 확인 (적용·미적용·체크섬 불일치)
+    # db-history 가 이력 테이블을 그대로 보여준다면, 이쪽은 파일과 DB를 대조한다.
+    # Pending(파일은 있는데 미적용) · Missing(적용됐는데 파일이 없음) ·
+    # Failed(중간에 죽음)를 구분해 주므로 부팅이 막혔을 때 원인을 여기서 먼저 본다.
+    cmds:
+      - '{{.FLYWAY}} info'
+
+  db-repair:
+    desc: 로컬 Flyway 이력 복구 (체크섬 재계산 · 실패 행 정리)
+    # repair 는 이력 테이블만 고친다 — 실제 스키마는 건드리지 않는다.
+    #
+    # 1) 체크섬 불일치: 적용된 V__ 를 고쳐 부팅이 막힌 경우. 여기서는 바로 써도 된다.
+    #    단 바꾸려던 스키마 변경은 새 V__ 로 추가해야 한다(repair 가 반영해 주지 않는다).
+    #
+    # 2) 마이그레이션 실패(success=0): 바로 쓰면 안 된다. MySQL 은 DDL 이 롤백되지 않아
+    #    죽기 전까지 실행된 문장이 이미 반영돼 있다. 실패 기록만 지우고 재실행하면
+    #    "Table already exists" 로 또 죽거나 절반만 적용된 스키마 위에 나머지가 얹힌다.
+    #    db-info 로 실패 버전을 확인하고 → 적용된 부분을 되돌리거나 재실행 안전하게 고친 뒤
+    #    → repair → 같은 V__ 를 다시 실행시킨다(새 번호를 만들지 않는다).
+    #    자세한 절차는 deploy/README.md 의 "Flyway 운영" 절에 있다.
+    cmds:
+      - cmd: echo "⚠️  실패한 마이그레이션(success=0)이면 먼저 db-info 로 확인하고, 부분 적용된 스키마를 정리한 뒤 실행하세요."
+        silent: true
+      - '{{.FLYWAY}} repair'
+      - cmd: echo "✅ 이력 테이블을 복구했습니다. 실제 스키마는 바뀌지 않았습니다."
+        silent: true
+
+  db-check-duplicates:
+    desc: 마이그레이션 버전 번호 중복 검사 (CI에서도 실행)
+    # git 이 안 잡아주는 충돌을 막는다. 두 브랜치가 각각 V4__a.sql · V4__b.sql 을 추가하면
+    # 파일명이 달라 자동 병합이 되고, 리뷰에서도 CI 테스트에서도 걸리지 않는다.
+    # 그리고 develop 머지 후 부팅에서 죽는다 — Found more than one migration with version 4.
+    silent: true
+    cmds:
+      - |
+        # 버전은 숫자뿐 아니라 점·밑줄로 나뉠 수 있다(V2.1__, V1_1__). 숫자만 받으면
+        # 그런 파일이 매칭에서 빠져 중복을 놓친다. sort는 문자열 정렬로 충분하다 —
+        # uniq -d 가 필요한 건 같은 값이 인접하는 것뿐이고, -n 은 2.1 과 2.10 을 같게 본다.
+        dup=$(ls src/main/resources/db/migration/V*.sql 2>/dev/null \
+          | sed 's|.*/V\([0-9][0-9._]*\)__.*|\1|' | sort | uniq -d)
+        if [ -n "$dup" ]; then
+          echo "❌ 마이그레이션 버전이 중복됩니다: $dup"
+          # 버전의 '.'은 정규식 메타문자라 이스케이프한다(V2.1 이 V231 을 잡지 않도록).
+          pattern=$(printf '%s' "$dup" | sed 's/\./\\./g' | paste -sd'|' -)
+          ls src/main/resources/db/migration/V*.sql | grep -E "/V($pattern)__"
+          echo "   빈 번호로 하나를 바꾸세요. 이대로 머지되면 부팅이 실패합니다."
+          exit 1
+        fi
+        echo "✅ 마이그레이션 버전 중복 없음"
 
   clean:
     desc: build 산출물 및 QueryDSL 생성물 삭제

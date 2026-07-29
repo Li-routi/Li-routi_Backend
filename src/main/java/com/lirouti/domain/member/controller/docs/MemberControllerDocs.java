@@ -4,6 +4,7 @@ import com.lirouti.domain.member.dto.request.MemberReqDTO;
 import com.lirouti.domain.member.dto.response.MemberResDTO;
 import com.lirouti.global.auth.CustomUserDetails;
 import com.lirouti.global.apiPayload.ApiResponse;
+import com.lirouti.global.auth.CustomUserDetails;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -92,7 +93,7 @@ public interface MemberControllerDocs {
                 description = "서버 내부 오류"
         )
     })
-    ApiResponse<Void> logout(String authorization);
+    ApiResponse<Void> logout(@Parameter(hidden = true) String authorization);
 
     @Operation(
             summary = "회원 탈퇴",
@@ -117,7 +118,8 @@ public interface MemberControllerDocs {
         )
     })
     ApiResponse<Void> withdraw(
-            @Parameter(hidden = true) CustomUserDetails userDetails,
-            MemberReqDTO.Withdraw request
+        @Parameter(hidden = true) String authorization,
+        @Parameter(hidden = true) CustomUserDetails userDetails,
+        MemberReqDTO.Withdraw request
     );
 }

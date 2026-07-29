@@ -58,6 +58,16 @@ public class S3Properties {
     )
     private String publicBaseUrl;
 
+    /**
+     * 업로드된 바이트가 선언한 형식과 실제로 맞는지 검사할지 여부(#22).
+     *
+     * 기본은 켜짐이다. 검증이 목적인 기능이라 꺼진 채로 도는 것이 기본값이면 의미가 없다.
+     * 끌 수 있게 둔 이유는 탈출구다 — S3 권한·네트워크 문제로 검증이 전부 실패하면
+     * 인증 API가 통째로 막히는데, 그때 이미지 롤백보다 이 값 하나를 끄는 편이 빠르다.
+     * (운영에서는 ENV_FILE에 AWS_S3_BYTE_VALIDATION_ENABLED=false를 넣고 재배포)
+     */
+    private boolean byteValidationEnabled = true;
+
     // S3 presigned URL은 최대 7일이다.
     private static final Duration MAX_PRESIGNED_EXPIRATION = Duration.ofDays(7);
 

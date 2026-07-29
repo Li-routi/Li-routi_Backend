@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.lirouti.domain.challenge.entity.Challenge;
 import com.lirouti.domain.challenge.entity.ChallengeVerification;
+import com.lirouti.domain.challenge.entity.ChallengeVerificationReport;
 import com.lirouti.domain.challenge.entity.MemberChallenge;
 import com.lirouti.domain.challenge.enums.ChallengeCategory;
 import com.lirouti.domain.member.entity.Member;
@@ -83,7 +84,61 @@ class ChallengeVerificationRepositoryTest {
         return v;
     }
 
+    private ChallengeVerificationReport report(ChallengeVerification v, Member reporter) {
+        ChallengeVerificationReport r = ChallengeVerificationReport.builder()
+                .challengeVerification(v).reporter(reporter).reason("부적절한 사진").build();
+        em.persist(r);
+        return r;
+    }
+
     // ── 테스트 ──
+    @Test
+    @DisplayName("내가 신고한 인증은 내 피드에서만 빠지고, 다른 회원의 피드에는 그대로 보인다")
+    void findFeedByCursor_ExcludesOnlyViewersOwnReports() {
+        Challenge c = challenge();
+        MemberChallenge mc = join(member(true), c, 1, true);
+        ChallengeVerification kept = verify(mc, LocalDate.of(2026, 7, 1), 1);
+        ChallengeVerification reported = verify(mc, LocalDate.of(2026, 7, 2), 1);
+
+        Member reporter = member(true);
+        Member bystander = member(true);
+        report(reported, reporter);
+        em.flush();
+
+        // 신고자 본인: 신고한 인증만 빠진다.
+        assertThat(challengeVerificationRepository.findFeedByCursor(c.getId(), reporter.getId(), null, BIG))
+                .extracting(ChallengeVerification::getId)
+                .containsExactly(kept.getId());
+
+        // 다른 회원: 신고와 무관하게 둘 다 보인다. 신고는 삭제가 아니다.
+        assertThat(challengeVerificationRepository.findFeedByCursor(c.getId(), bystander.getId(), null, BIG))
+                .extracting(ChallengeVerification::getId)
+                .containsExactly(reported.getId(), kept.getId());
+
+        // viewerId가 없으면 필터를 걸지 않는다.
+        assertThat(challengeVerificationRepository.findFeedByCursor(c.getId(), null, null, BIG))
+                .hasSize(2);
+    }
+
+    @Test
+    @DisplayName("신고로 걸러진 뒤에도 요청한 개수(limit)만큼 채워 내려준다")
+    void findFeedByCursor_FillsLimitAfterExcludingReports() {
+        Challenge c = challenge();
+        MemberChallenge mc = join(member(true), c, 1, true);
+        ChallengeVerification v1 = verify(mc, LocalDate.of(2026, 7, 1), 1);
+        ChallengeVerification v2 = verify(mc, LocalDate.of(2026, 7, 2), 1);
+        ChallengeVerification v3 = verify(mc, LocalDate.of(2026, 7, 3), 1);
+
+        Member reporter = member(true);
+        report(v3, reporter);   // 가장 최신 것을 신고
+        em.flush();
+
+        // 신고분을 제외한 뒤 최신 2건. 필터가 limit 이후가 아니라 이전에 적용돼야 한다.
+        assertThat(challengeVerificationRepository.findFeedByCursor(c.getId(), reporter.getId(), null, 2))
+                .extracting(ChallengeVerification::getId)
+                .containsExactly(v2.getId(), v1.getId());
+    }
+
     @Test
     @DisplayName("최신순(id 내림차순)으로 내려주고, 다른 챌린지의 인증은 섞이지 않는다")
     void findFeedByCursor_OrdersByIdDescAndScopesToChallenge() {
@@ -98,7 +153,7 @@ class ChallengeVerificationRepositoryTest {
         em.flush();
 
         List<ChallengeVerification> feed =
-                challengeVerificationRepository.findFeedByCursor(target.getId(), null, BIG);
+                challengeVerificationRepository.findFeedByCursor(target.getId(), null, null, BIG);
 
         assertThat(feed).extracting(ChallengeVerification::getId)
                 .containsExactly(second.getId(), first.getId());
@@ -115,7 +170,7 @@ class ChallengeVerificationRepositoryTest {
         em.flush();
 
         List<ChallengeVerification> feed =
-                challengeVerificationRepository.findFeedByCursor(c.getId(), newest.getId(), BIG);
+                challengeVerificationRepository.findFeedByCursor(c.getId(), null, newest.getId(), BIG);
 
         assertThat(feed).extracting(ChallengeVerification::getId)
                 .containsExactly(middle.getId(), oldest.getId());
@@ -131,7 +186,7 @@ class ChallengeVerificationRepositoryTest {
         verify(mc, LocalDate.of(2026, 7, 3), 1);
         em.flush();
 
-        assertThat(challengeVerificationRepository.findFeedByCursor(c.getId(), null, 2)).hasSize(2);
+        assertThat(challengeVerificationRepository.findFeedByCursor(c.getId(), null, null, 2)).hasSize(2);
     }
 
     @Test
@@ -145,7 +200,7 @@ class ChallengeVerificationRepositoryTest {
         em.flush();
 
         List<ChallengeVerification> feed =
-                challengeVerificationRepository.findFeedByCursor(c.getId(), null, BIG);
+                challengeVerificationRepository.findFeedByCursor(c.getId(), null, null, BIG);
 
         assertThat(feed).extracting(ChallengeVerification::getId).containsExactly(visible.getId());
     }
@@ -158,7 +213,7 @@ class ChallengeVerificationRepositoryTest {
         ChallengeVerification v = verify(left, LocalDate.of(2026, 7, 1), 1);
         em.flush();
 
-        assertThat(challengeVerificationRepository.findFeedByCursor(c.getId(), null, BIG))
+        assertThat(challengeVerificationRepository.findFeedByCursor(c.getId(), null, null, BIG))
                 .extracting(ChallengeVerification::getId).containsExactly(v.getId());
     }
 
@@ -178,7 +233,7 @@ class ChallengeVerificationRepositoryTest {
         em.flush();
 
         // 인증(게시글) 단위 나열이므로 중복 제거를 하지 않는다.
-        assertThat(challengeVerificationRepository.findFeedByCursor(c.getId(), null, BIG))
+        assertThat(challengeVerificationRepository.findFeedByCursor(c.getId(), null, null, BIG))
                 .extracting(ChallengeVerification::getId)
                 .containsExactly(round2.getId(), round1.getId());
     }

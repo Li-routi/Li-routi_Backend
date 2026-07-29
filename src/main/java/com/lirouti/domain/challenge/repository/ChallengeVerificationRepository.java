@@ -22,4 +22,17 @@ public interface ChallengeVerificationRepository
             Integer participationRound,
             LocalDate verifiedDate
     );
+
+    /**
+     * 그 챌린지에 속한 인증인지까지 확인하며 조회한다(#15 신고용).
+     *
+     * 신고 경로가 /api/challenges/{challengeId}/verifications/{verificationId}/reports라
+     * 두 값이 서로 맞는지 확인해야 한다. id만으로 찾으면 다른 챌린지의 인증을 이 챌린지 경로로
+     * 신고할 수 있고, 응답만으로는 그 인증의 존재 여부가 드러난다.
+     * 어긋나면 빈 값이 나가 404로 처리된다.
+     */
+    Optional<ChallengeVerification> findByIdAndMemberChallengeChallengeId(
+            Long id,
+            Long challengeId
+    );
 }
