@@ -7,7 +7,7 @@ version: '3'
 
 vars:
   # OS에 따라 gradle wrapper 실행 파일 선택 (mac/linux: ./gradlew, windows: gradlew.bat)
-  GRADLEW: '{{if eq OS "windows"}}gradlew.bat{{else}}./gradlew{{end}}'
+  GRADLEW: '{{if eq OS "windows"}}./gradlew.bat{{else}}./gradlew{{end}}'
   # 로컬 compose 호출. 개인 포트 override(docker-compose.local.override.yml)가 있으면 자동 병합.
   DC_LOCAL:
     sh: printf 'docker compose -f docker-compose.local.yml%s' "$([ -f docker-compose.local.override.yml ] && printf ' -f docker-compose.local.override.yml')"
