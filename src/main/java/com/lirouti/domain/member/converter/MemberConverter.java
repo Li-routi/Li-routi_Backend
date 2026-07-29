@@ -1,5 +1,6 @@
 package com.lirouti.domain.member.converter;
 
+import com.lirouti.domain.member.dto.response.MemberResDTO;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.enums.Role;
 import com.lirouti.domain.member.enums.SocialProvider;
@@ -20,6 +21,16 @@ public final class MemberConverter {
                 .email(email)
                 .nickname(nickname)
                 .role(Role.ROLE_USER)
+                .build();
+    }
+
+    public static MemberResDTO.MemberInfo toMemberInfo(Member member) {
+        return MemberResDTO.MemberInfo.builder()
+                .memberId(member.getId())
+                .email(member.getEmail())
+                .nickname(member.getNickname())
+                .socialProvider(member.getSocialProvider())
+                .onboardingCompleted(member.isOnboardingCompleted())
                 .build();
     }
 }

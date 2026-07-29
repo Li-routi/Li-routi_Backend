@@ -1,5 +1,7 @@
 package com.lirouti.domain.member.service.query;
 
+import com.lirouti.domain.member.converter.MemberConverter;
+import com.lirouti.domain.member.dto.response.MemberResDTO;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.exception.MemberException;
 import com.lirouti.domain.member.exception.code.error.MemberErrorCode;
@@ -36,5 +38,11 @@ public class MemberQueryService {
             throw new MemberException(MemberErrorCode.WITHDRAWN_MEMBER);
         }
         return member;
+    }
+
+    @Transactional(readOnly = true)
+    public MemberResDTO.MemberInfo getMemberInfo(Long memberId) {
+        Member member = getActiveMember(memberId);
+        return MemberConverter.toMemberInfo(member);
     }
 }

@@ -3,6 +3,7 @@ package com.lirouti.domain.member.service.command;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+import com.lirouti.domain.member.dto.response.MemberResDTO;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -123,5 +124,24 @@ public class MemberCommandService {
                 || !WITHDRAWAL_CONFIRMATION.equals(request.confirmation().strip())) {
             throw new MemberException(MemberErrorCode.INVALID_WITHDRAWAL_CONFIRMATION);
         }
+    }
+
+    // 프로필 수정
+    @Transactional
+    public MemberResDTO.MemberInfo updateProfile(Long memberId, MemberReqDTO.UpdateProfile request) {
+        Member member = memberRepository.findById(memberId)
+                .orElseThrow(() -> {
+                    log.warn("존재하지 않는 회원입니다.");
+                    return new MemberException(MemberErrorCode.MEMBER_NOT_FOUND);
+                });
+        if (!member.isActiveMember()) {
+            log.warn("탈퇴하거나 비활성화된 회원입니다");
+            throw new MemberException(MemberErrorCode.WITHDRAWN_MEMBER);
+        }
+
+        member.updateProfile(request.nickname());
+        Member savedMember = memberRepository.save(member);
+        log.info("회원 프로필 수정을 완료했습니다.");
+        return MemberConverter.toMemberInfo(savedMember);
     }
 }
