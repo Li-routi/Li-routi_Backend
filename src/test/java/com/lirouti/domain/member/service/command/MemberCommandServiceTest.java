@@ -6,12 +6,15 @@ import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
 import com.lirouti.domain.auth.service.TokenService;
+import com.lirouti.domain.auth.exception.AuthException;
+import com.lirouti.domain.auth.exception.code.error.AuthErrorCode;
 import com.lirouti.domain.member.dto.request.MemberReqDTO;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.event.MemberWithdrawnEvent;
@@ -156,7 +159,7 @@ class MemberCommandServiceTest {
 
         // then
         verify(eventPublisher).publishEvent(any(MemberWithdrawnEvent.class));
-        verifyNoInteractions(tokenService);
+        verify(tokenService).validateAccessTokenOwner(ACCESS_TOKEN, MEMBER_ID);
     }
 
     @Test
@@ -175,7 +178,27 @@ class MemberCommandServiceTest {
 
         // then
         verify(eventPublisher).publishEvent(any(MemberWithdrawnEvent.class));
-        verifyNoInteractions(tokenService);
+        verify(tokenService).validateAccessTokenOwner(ACCESS_TOKEN, MEMBER_ID);
+    }
+
+    @Test
+    @DisplayName("access token의 subject가 탈퇴 대상 회원과 다르면 탈퇴하지 않는다")
+    void withdraw_AccessTokenOwnerMismatch_ThrowsException() {
+        // given
+        MemberReqDTO.Withdraw request =
+                new MemberReqDTO.Withdraw("리루티를 탈퇴합니다");
+        doThrow(new AuthException(AuthErrorCode.TOKEN_INVALID))
+                .when(tokenService)
+                .validateAccessTokenOwner(ACCESS_TOKEN, MEMBER_ID);
+
+        // when & then
+        assertThatThrownBy(
+                () -> memberCommandService.withdraw(MEMBER_ID, request, ACCESS_TOKEN))
+                .isInstanceOf(AuthException.class)
+                .extracting("code")
+                .isEqualTo(AuthErrorCode.TOKEN_INVALID);
+        verify(tokenService).validateAccessTokenOwner(ACCESS_TOKEN, MEMBER_ID);
+        verifyNoInteractions(memberRepository, eventPublisher);
     }
 
     @Test

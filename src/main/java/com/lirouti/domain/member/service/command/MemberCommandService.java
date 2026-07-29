@@ -50,6 +50,7 @@ public class MemberCommandService {
     public void withdraw(Long memberId, MemberReqDTO.Withdraw request, String accessToken) {
         log.info("회원 탈퇴 처리를 시작합니다. memberId={}", memberId);
         validateWithdrawalConfirmation(request);
+        tokenService.validateAccessTokenOwner(accessToken, memberId);
 
         Member member = memberRepository.findByIdForUpdate(memberId)
                 .orElseThrow(() -> {
