@@ -3,6 +3,7 @@ package com.lirouti.domain.challenge.service.query;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -18,6 +19,7 @@ import com.lirouti.domain.challenge.enums.ChallengeCategory;
 import com.lirouti.domain.challenge.exception.ChallengeException;
 import com.lirouti.domain.challenge.exception.code.error.ChallengeErrorCode;
 import com.lirouti.domain.challenge.repository.ChallengeRepository;
+import com.lirouti.domain.challenge.repository.ChallengeVerificationLikeRepository;
 import com.lirouti.domain.challenge.repository.ChallengeVerificationRepository;
 import com.lirouti.domain.challenge.repository.MemberChallengeRepository;
 import com.lirouti.domain.media.service.MediaService;
@@ -34,6 +36,7 @@ public class ChallengeQueryService {
     private final ChallengeRepository challengeRepository;
     private final MemberChallengeRepository memberChallengeRepository;
     private final ChallengeVerificationRepository challengeVerificationRepository;
+    private final ChallengeVerificationLikeRepository challengeVerificationLikeRepository;
     // 저장된 오브젝트 key를 읽기용 공개 URL로 바꾸기 위해 주입한다(DB를 다루지 않는 유틸성 서비스).
     private final MediaService mediaService;
 
@@ -92,7 +95,15 @@ public class ChallengeQueryService {
                         ChallengeVerification::getId,
                         v -> mediaService.resolvePublicUrl(v.getImageUrl())));
 
-        return ChallengeConverter.toFeed(page.rows(), imageUrls, page.nextCursor(), page.hasNext());
+        // 좋아요 수와 "내가 눌렀는지"는 이 페이지의 인증 id 목록으로 각각 한 번에 가져온다(#63).
+        // 건별로 세거나 exists를 부르면 페이지 크기만큼 쿼리가 늘어난다.
+        List<Long> ids = page.rows().stream().map(ChallengeVerification::getId).toList();
+        Map<Long, Long> likeCounts = challengeVerificationLikeRepository.countByVerificationIds(ids);
+        Set<Long> likedIds =
+                challengeVerificationLikeRepository.findLikedVerificationIds(ids, viewerId);
+
+        return ChallengeConverter.toFeed(
+                page.rows(), imageUrls, likeCounts, likedIds, page.nextCursor(), page.hasNext());
     }
 
     /**
@@ -145,12 +156,17 @@ public class ChallengeQueryService {
                         ChallengeVerification::getId,
                         v -> mediaService.resolvePublicUrl(v.getImageUrl())));
 
+        // 좋아요 수는 피드와 같은 배치 쿼리를 쓴다(#63). 같은 인증이 피드에도 여기에도 나오므로
+        // 수가 달라 보이면 안 된다. liked는 싣지 않는다 — 자기 게시물이라 쓸 데가 없다.
+        List<Long> ids = page.rows().stream().map(ChallengeVerification::getId).toList();
+        Map<Long, Long> likeCounts = challengeVerificationLikeRepository.countByVerificationIds(ids);
+
         // 스트릭은 저장된 값을 그대로 쓰지 않고 오늘 기준으로 다시 판정한다.
         // 마지막 인증이 이틀 전이면 저장값은 그대로여도 실제로는 끊긴 상태다.
         int currentStreak = memberChallenge.currentStreakAsOf(LocalDate.now(TimeUtil.KST));
 
         return ChallengeConverter.toMyVerifications(
-                page.rows(), imageUrls, currentStreak, page.nextCursor(), page.hasNext());
+                page.rows(), imageUrls, likeCounts, currentStreak, page.nextCursor(), page.hasNext());
     }
 
     /** size + 1로 받아온 행에서 현재 페이지·다음 커서·다음 페이지 여부를 뽑아낸 결과. */

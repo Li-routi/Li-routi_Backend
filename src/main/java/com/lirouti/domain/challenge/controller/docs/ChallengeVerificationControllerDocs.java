@@ -57,8 +57,11 @@ public interface ChallengeVerificationControllerDocs {
                     **내가 신고한 인증은 이 목록에서 빠집니다.** 신고는 사진을 지우는 것이 아니라
                     신고자 본인의 화면에서만 가리는 것이라, 같은 인증이 다른 회원에게는 그대로 보입니다.
 
-                    응답 result: verifications[{ verificationId, nickname, imageUrl, content, verifiedAt }],
-                    nextCursor, hasNext.
+                    각 카드에 likeCount(좋아요 수)와 liked(내가 눌렀는지)가 함께 나갑니다(#63).
+                    좋아요 수는 탈퇴 회원의 좋아요를 뺀 값입니다.
+
+                    응답 result: verifications[{ verificationId, nickname, imageUrl, content,
+                    verifiedAt, likeCount, liked }], nextCursor, hasNext.
                     """
     )
     @ApiResponses({
@@ -94,8 +97,11 @@ public interface ChallengeVerificationControllerDocs {
                     currentStreak은 저장값이 아니라 **오늘 기준으로 다시 판정한 값**입니다.
                     마지막 인증이 이틀 전이면 0으로 내려갑니다.
 
-                    응답 result: verifications[{ verificationId, imageUrl, content, verifiedDate, verifiedAt }],
-                    currentStreak, nextCursor, hasNext.
+                    likeCount는 있고 liked는 없습니다. 같은 인증이 피드에 나올 때와 좋아요 수가 같아야 하지만,
+                    "내가 눌렀는지"는 자기 게시물에서 쓸 데가 없습니다.
+
+                    응답 result: verifications[{ verificationId, imageUrl, content, verifiedDate,
+                    verifiedAt, likeCount }], currentStreak, nextCursor, hasNext.
                     """
     )
     @ApiResponses({
@@ -108,6 +114,59 @@ public interface ChallengeVerificationControllerDocs {
             @Parameter(description = "챌린지 ID") Long challengeId,
             @Parameter(description = "이전 응답의 nextCursor. 첫 요청에서는 생략") Long cursor,
             @Parameter(description = "페이지 크기(기본 20, 최대 50)") Integer size
+    );
+
+    @Operation(
+            summary = "인증 게시물 좋아요",
+            description = """
+                    인증 게시물에 좋아요를 남깁니다. 인증이 필요합니다.
+
+                    좋아요는 챌린지가 아니라 **인증 한 건**에 붙습니다. 같은 사진이 피드에도
+                    내 인증 목록에도 나오지만 좋아요 수는 하나입니다.
+
+                    **이미 눌러둔 상태에서 다시 불러도 성공입니다.** 좋아요는 토글이라 같은 요청이
+                    두 번 오는 것이 정상 사용이라, 오류 대신 최종 상태를 돌려줍니다.
+                    응답의 likeCount·liked로 화면을 갱신하면 되며 재조회가 필요 없습니다.
+
+                    자기 인증에도 누를 수 있습니다.
+
+                    응답 result: verificationId, likeCount, liked.
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "좋아요 성공(이미 눌린 상태 포함)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "인증 필요(미인증)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "그 챌린지에 없는 인증")
+    })
+    ApiResponse<ChallengeResDTO.Like> like(
+            CustomUserDetails userDetails,
+            @Parameter(description = "챌린지 ID") Long challengeId,
+            @Parameter(description = "인증 ID") Long verificationId
+    );
+
+    @Operation(
+            summary = "인증 게시물 좋아요 취소",
+            description = """
+                    좋아요를 취소합니다. 인증이 필요합니다.
+
+                    **누르지 않은 상태에서 불러도 성공입니다**(멱등). 다만 그 챌린지에 없는
+                    인증 ID를 보내면 404입니다 — 멱등한 것은 "좋아요가 없는 경우"이지
+                    "인증이 없는 경우"가 아닙니다.
+
+                    취소는 기록을 남기지 않고 행을 지웁니다. 다시 눌러도 제약에 걸리지 않습니다.
+
+                    응답 result: verificationId, likeCount, liked(false).
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "취소 성공(눌러둔 적 없는 경우 포함)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "인증 필요(미인증)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "그 챌린지에 없는 인증")
+    })
+    ApiResponse<ChallengeResDTO.Like> unlike(
+            CustomUserDetails userDetails,
+            @Parameter(description = "챌린지 ID") Long challengeId,
+            @Parameter(description = "인증 ID") Long verificationId
     );
 
     @Operation(
