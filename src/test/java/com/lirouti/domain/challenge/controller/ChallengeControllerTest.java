@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -42,6 +43,23 @@ class ChallengeControllerTest {
     @PersistenceContext
     private EntityManager em;
 
+    /**
+     * 조회용 로그인 회원. 챌린지 조회 API가 인증을 요구하므로(#77) 모든 조회 호출에 붙인다.
+     * 참여는 하지 않은 상태라 participating은 false로 나온다.
+     */
+    private CustomUserDetails viewer;
+
+    @BeforeEach
+    void setUpViewer() {
+        Member m = Member.builder()
+                .email("mvc-viewer@ex.com").nickname("mvcViewer")
+                .socialProvider(SocialProvider.GOOGLE).role(Role.ROLE_USER)
+                .socialId("mvc-viewer-sid").build();
+        em.persist(m);
+        em.flush();
+        viewer = new CustomUserDetails(m.getId(), Role.ROLE_USER);
+    }
+
     private Challenge persistChallenge() {
         Challenge c = Challenge.builder()
                 .name("물 1L 마시기").description("설명").imageUrl("https://img/water.png")
@@ -77,9 +95,9 @@ class ChallengeControllerTest {
     }
 
     @Test
-    @DisplayName("목록 조회는 로그인 없이 200, 응답은 무한스크롤 래퍼(challenges·nextCursor·hasNext)다")
-    void getChallenges_Public_ReturnsCursorList() throws Exception {
-        mockMvc.perform(get("/api/challenges"))
+    @DisplayName("목록 조회 응답은 무한스크롤 래퍼(challenges·nextCursor·hasNext)다")
+    void getChallenges_ReturnsCursorList() throws Exception {
+        mockMvc.perform(get("/api/challenges").with(user(viewer)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.isSuccess").value(true))
                 .andExpect(jsonPath("$.result.challenges").isArray())
@@ -99,7 +117,8 @@ class ChallengeControllerTest {
         em.flush();
 
         // 첫 페이지: 최신(newer)이 먼저, hasNext=true, nextCursor=newer.id, 카드에 통계·루틴 주기 포함
-        mockMvc.perform(get("/api/challenges").param("keyword", "mvctag").param("size", "1"))
+        mockMvc.perform(get("/api/challenges").with(user(viewer))
+                        .param("keyword", "mvctag").param("size", "1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.challenges.length()").value(1))
                 .andExpect(jsonPath("$.result.challenges[0].challengeId").value(newer.getId()))
@@ -111,7 +130,7 @@ class ChallengeControllerTest {
                 .andExpect(jsonPath("$.result.nextCursor").value(newer.getId()));
 
         // 다음 페이지: cursor=newer.id → older 한 건, hasNext=false, nextCursor=null
-        mockMvc.perform(get("/api/challenges")
+        mockMvc.perform(get("/api/challenges").with(user(viewer))
                         .param("keyword", "mvctag").param("size", "1")
                         .param("cursor", String.valueOf(newer.getId())))
                 .andExpect(status().isOk())
@@ -126,17 +145,17 @@ class ChallengeControllerTest {
     @Test
     @DisplayName("잘못된 category 값은 400을 반환한다")
     void getChallenges_InvalidCategory_Returns400() throws Exception {
-        mockMvc.perform(get("/api/challenges").param("category", "NOPE"))
+        mockMvc.perform(get("/api/challenges").with(user(viewer)).param("category", "NOPE"))
                 .andExpect(status().isBadRequest());
     }
 
     @Test
-    @DisplayName("비로그인 상세는 200과 참여자 수·인증 게시글 수·오늘 완료자 수를 태워 반환하고 participating=false")
+    @DisplayName("참여하지 않은 회원의 상세는 200과 참여자 수·인증 게시글 수·오늘 완료자 수를 싣고 participating=false")
     void getChallenge_Existing_Returns200() throws Exception {
         Challenge c = persistChallenge();
         persistParticipantWithTodayVerification(c);
 
-        mockMvc.perform(get("/api/challenges/{id}", c.getId()))
+        mockMvc.perform(get("/api/challenges/{id}", c.getId()).with(user(viewer)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.challengeId").value(c.getId()))
                 .andExpect(jsonPath("$.result.name").value("물 1L 마시기"))
@@ -147,7 +166,7 @@ class ChallengeControllerTest {
                 .andExpect(jsonPath("$.result.participantCount").value(1))
                 .andExpect(jsonPath("$.result.verificationPostCount").value(1))
                 .andExpect(jsonPath("$.result.todayCompletionCount").value(1))
-                // 비로그인이므로 참여 여부는 false다.
+                // 조회자가 참여하지 않았으므로 false다.
                 .andExpect(jsonPath("$.result.participating").value(false));
     }
 
@@ -175,7 +194,7 @@ class ChallengeControllerTest {
     @Test
     @DisplayName("존재하지 않는 챌린지 상세는 404를 반환한다")
     void getChallenge_NotFound_Returns404() throws Exception {
-        mockMvc.perform(get("/api/challenges/{id}", 999999L))
+        mockMvc.perform(get("/api/challenges/{id}", 999999L).with(user(viewer)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("CHALLENGE404_1"));
     }
@@ -183,7 +202,7 @@ class ChallengeControllerTest {
     @Test
     @DisplayName("숫자가 아닌 challengeId는 400을 반환한다")
     void getChallenge_MalformedId_Returns400() throws Exception {
-        mockMvc.perform(get("/api/challenges/{id}", "abc"))
+        mockMvc.perform(get("/api/challenges/{id}", "abc").with(user(viewer)))
                 .andExpect(status().isBadRequest());
     }
 
@@ -193,6 +212,22 @@ class ChallengeControllerTest {
         // SecurityConfig가 GET만 permitAll하고 나머지는 authenticated. 커스텀 EntryPoint를 안 붙여
         // Spring Security 기본 Http403ForbiddenEntryPoint가 미인증 요청에 403을 낸다.
         mockMvc.perform(post("/api/challenges"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("인증 없이 목록을 요청하면 거부된다(403) — 이 서비스에는 게스트가 없다")
+    void getChallenges_Unauthenticated_IsRejected() throws Exception {
+        mockMvc.perform(get("/api/challenges"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("인증 없이 상세를 요청하면 거부된다(403)")
+    void getChallenge_Unauthenticated_IsRejected() throws Exception {
+        Challenge c = persistChallenge();
+
+        mockMvc.perform(get("/api/challenges/{id}", c.getId()))
                 .andExpect(status().isForbidden());
     }
 }

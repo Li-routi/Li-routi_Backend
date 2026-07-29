@@ -172,8 +172,12 @@ jobs:
             docker compose pull
             docker compose up -d
             # 앱이 실제로 응답할 때까지 대기(최대 ~90s). 안 뜨면 배포 실패로 처리해 실패 알림이 나가게 한다.
+            #
+            # /health를 쓴다. 예전에는 /api/challenges를 봤는데, 그 경로가 인증 필요로 바뀌면서(#77)
+            # 정상 기동한 앱도 403을 돌려주게 됐다. curl -f는 403을 실패로 보므로 배포가 통째로 실패한다.
+            # /health는 SecurityConfig의 PUBLIC_URIS에 있어 인증 없이 200을 준다.
             for i in $(seq 1 30); do
-              if curl -fsS -o /dev/null http://localhost:8080/api/challenges; then
+              if curl -fsS -o /dev/null http://localhost:8080/health; then
                 echo "app is ready"; break
               fi
               if [ "$i" = "30" ]; then

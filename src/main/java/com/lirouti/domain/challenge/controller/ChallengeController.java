@@ -42,9 +42,11 @@ public class ChallengeController implements ChallengeControllerDocs {
             @AuthenticationPrincipal CustomUserDetails userDetails,
             @PathVariable Long challengeId
     ) {
-        // 상세는 비로그인도 볼 수 있어 principal이 null일 수 있다. 그때 memberId는 null → participating=false.
-        Long memberId = (userDetails != null) ? userDetails.getMemberId() : null;
-        ChallengeResDTO.Detail result = challengeQueryService.getChallenge(challengeId, memberId);
+        // 인증이 필요한 경로라 principal은 항상 있다(#77). null 분기를 두지 않는 것은 의도다 —
+        // 이 서비스에는 게스트 개념이 없으므로, 비로그인 대비 코드를 남기면 없는 개념을 코드가
+        // 다시 만들어 낸다. 서비스 계층은 memberId == null을 여전히 견디게 두었다(그쪽 주석 참고).
+        ChallengeResDTO.Detail result =
+                challengeQueryService.getChallenge(challengeId, userDetails.getMemberId());
         return ApiResponse.onSuccess(ChallengeSuccessCode.CHALLENGE_DETAIL_FETCH_SUCCESS, result);
     }
 }
