@@ -8,8 +8,8 @@ import com.lirouti.domain.group.dto.response.GroupResDTO;
 import com.lirouti.domain.group.entity.Group;
 import com.lirouti.domain.group.entity.GroupRoutine;
 import com.lirouti.domain.group.entity.GroupRoutineSchedule;
-import com.lirouti.domain.group.entity.RoutineCategory;
 import com.lirouti.domain.group.repository.GroupRoutineAssignmentRepositoryCustom.TodayAssignmentProjection;
+import com.lirouti.domain.routine.entity.RoutineCategory;
 
 public final class GroupConverter {
     private GroupConverter() {

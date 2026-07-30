@@ -1,5 +1,6 @@
 package com.lirouti.domain.group.entity;
 
+import com.lirouti.domain.routine.entity.RoutineCategory;
 import com.lirouti.global.entity.BaseEntity;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;

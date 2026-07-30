@@ -7,7 +7,7 @@ import com.lirouti.domain.group.dto.request.GroupReqDTO;
 import com.lirouti.domain.group.dto.response.GroupResDTO;
 import com.lirouti.domain.group.entity.Group;
 import com.lirouti.domain.group.entity.GroupRoutine;
-import com.lirouti.domain.group.entity.RoutineCategory;
+import com.lirouti.domain.routine.entity.RoutineCategory;
 import java.time.DayOfWeek;
 import java.time.LocalTime;
 import java.util.List;

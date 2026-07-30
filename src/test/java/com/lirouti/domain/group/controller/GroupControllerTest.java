@@ -32,12 +32,12 @@ import com.lirouti.domain.group.entity.Group;
 import com.lirouti.domain.group.entity.GroupMember;
 import com.lirouti.domain.group.entity.GroupRoutine;
 import com.lirouti.domain.group.entity.GroupRoutineAssignment;
-import com.lirouti.domain.group.entity.RoutineCategory;
 import com.lirouti.domain.group.enums.GroupMemberRole;
 import com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.enums.Role;
 import com.lirouti.domain.member.enums.SocialProvider;
+import com.lirouti.domain.routine.entity.RoutineCategory;
 import com.lirouti.global.auth.CustomUserDetails;
 
 import jakarta.persistence.EntityManager;

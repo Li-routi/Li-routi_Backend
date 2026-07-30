@@ -1,0 +1,262 @@
+package com.lirouti.domain.routine.controller.docs;
+
+import com.lirouti.domain.routine.dto.request.RoutineReqDTO;
+import com.lirouti.domain.routine.dto.response.RoutineResDTO;
+import com.lirouti.global.apiPayload.ApiResponse;
+import com.lirouti.global.auth.CustomUserDetails;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
+
+// 태그 이름에 "개인"을 박아 둔다. Group 태그에도 그룹 루틴 API가 있어서, 문서를 처음 여는
+// 사람이 두 태그를 나란히 보면 어느 쪽이 내 루틴인지 이름만으로는 구분되지 않는다.
+@Tag(name = "Routine (개인 루틴)", description = "개인 루틴 및 루틴 카테고리 API")
+public interface RoutineControllerDocs {
+
+    /**
+     * 루틴 추가 화면의 카테고리 칩 목록 조회 API 명세다.
+     *
+     * @param userDetails 인증 회원 정보
+     * @return 고정 카테고리와 인증 회원의 사용자 카테고리 목록
+     */
+    @Operation(
+            summary = "루틴 카테고리 목록 조회",
+            description = """
+                    앱이 제공하는 고정 카테고리(운동, 건강, 자기계발, 생활정리, 마음관리, 취미)와
+                    인증 회원이 추가한 사용자 카테고리를 화면 노출 순서대로 조회합니다.
+                    고정 카테고리가 먼저 오고, 사용자 카테고리는 생성 순서로 이어집니다.
+                    addableCount는 더 추가할 수 있는 사용자 카테고리 수(최대 5개 기준)입니다.
+                    0이면 추가 버튼을 비활성을 부탁 드리겠습니다:)
+
+                    fixed가 true면 앱이 제공하는 고정 카테고리라 수정·삭제할 수 없고,
+                    false면 이 회원이 만든 카테고리입니다.
+                    사용자 카테고리도 색을 "없음"으로 고를 수 있어 color만으로는 구분할 수 없습니다.
+
+                    ### 에러 코드
+
+                    | code | HTTP | 언제 | 화면 처리 |
+                    | --- | --- | --- | --- |
+                    | `MEMBER403_1` | 403 | 탈퇴·비활성 회원 | 로그아웃 처리 |
+                    | `MEMBER404_1` | 404 | 토큰이 가리키는 회원이 없음 | 로그아웃 처리 |
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "루틴 카테고리 목록 조회 성공"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401",
+                    description = "유효하지 않거나 만료된 인증 토큰"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "403",
+                    description = "미인증 요청 또는 탈퇴·비활성 회원"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404",
+                    description = "인증 토큰이 참조하는 회원을 찾을 수 없음"
+            )
+    })
+    ApiResponse<RoutineResDTO.CategoryList> getCategories(
+            @Parameter(hidden = true) CustomUserDetails userDetails
+    );
+
+    /**
+     * 카테고리별 기본 제공 루틴 목록 조회 API 명세다.
+     *
+     * @param userDetails 인증 회원 정보
+     * @param categoryId 조회할 카테고리 ID. 생략하면 전체 카테고리
+     * @return 기본 제공 루틴 목록
+     */
+    @Operation(
+            summary = "기본 제공 루틴 목록 조회",
+            description = """
+                    카테고리마다 앱이 미리 제공하는 루틴 목록을 조회합니다.
+                    categoryId를 생략하면 화면의 `전체` 탭에 해당하는 모든 카테고리의 목록을
+                    카테고리 순서대로 반환합니다.
+                    사용자 카테고리에는 기본 제공 루틴이 없으므로 빈 목록이 반환될 수 있습니다.
+                    alreadyAdded가 true면 인증 회원이 이미 등록한 기본 루틴이며, 다시 등록할 수 없습니다.
+
+                    고정 카테고리 ID는 운동 1, 건강 2, 자기계발 3, 생활정리 4, 마음관리 5, 취미 6입니다.
+                    응답의 templateId를 `POST /api/routines`의 templateId에 그대로 넣으면 됩니다.
+
+                    ### 에러 코드
+
+                    | code | HTTP | 언제 | 화면 처리 |
+                    | --- | --- | --- | --- |
+                    | `ROUTINE403_1` | 403 | 다른 회원이 만든 카테고리를 조회 | 카테고리 목록을 다시 조회 |
+                    | `MEMBER403_1` | 403 | 탈퇴·비활성 회원 | 로그아웃 처리 |
+                    | `MEMBER404_1` | 404 | 토큰이 가리키는 회원이 없음 | 로그아웃 처리 |
+                    | `ROUTINE404_1` | 404 | categoryId가 없거나 비활성 | 카테고리 목록을 다시 조회 |
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "기본 제공 루틴 목록 조회 성공"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401",
+                    description = "유효하지 않거나 만료된 인증 토큰"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "403",
+                    description = "미인증 요청, 탈퇴·비활성 회원 또는 다른 회원의 카테고리 조회"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404",
+                    description = "회원 또는 활성 카테고리를 찾을 수 없음"
+            )
+    })
+    ApiResponse<RoutineResDTO.TemplateList> getTemplates(
+            @Parameter(hidden = true) CustomUserDetails userDetails,
+            @Parameter(description = "조회할 카테고리 ID. 생략하면 전체", example = "2") Long categoryId
+    );
+
+    /**
+     * 개인 루틴 벌크 생성 API 명세다.
+     *
+     * @param userDetails 인증 회원 정보
+     * @param request 등록할 루틴 목록
+     * @return 생성된 루틴과 생성 후 활성 루틴 총 개수
+     */
+    @Operation(
+            summary = "개인 루틴 생성",
+            description = """
+                    루틴 추가 화면에서 선택하거나 직접 작성한 루틴을 한 번에 등록합니다.
+                    전체 목록은 하나의 트랜잭션으로 저장되며, 한 건이라도 실패하면 모두 롤백됩니다.
+
+                    규칙
+                    - 활성 루틴은 기존 개수와 요청 개수를 합해 최대 30개까지 등록할 수 있습니다.
+                    - 이름은 앞뒤 공백을 제거한 뒤 1~20자여야 하며 줄바꿈을 포함할 수 없습니다.
+                    - templateId를 보내고 이름을 그대로 두면 그 기본 루틴을 고른 상태로 저장됩니다.
+                      이름을 바꾸면 원본 선택이 해제되고 같은 카테고리의 사용자 루틴으로 등록됩니다.
+                    - templateId 없이 보내면 지정한 카테고리에 직접 추가한 루틴이 되며,
+                      사용자 루틴끼리는 같은 이름을 허용합니다.
+                    - 같은 기본 루틴을 두 번 등록할 수 없습니다(요청 안에서도, 기존 루틴과도).
+                    - 반복 요일을 생략하면 매일, 마감 시각을 생략하면 23:59이 적용됩니다.
+
+                    ### categoryId / templateId 값
+
+                    아래 ID는 `R__seed_routine.sql`이 고정 값으로 넣습니다. 사용자가 추가한 카테고리의
+                    ID는 `GET /api/routines/categories`로, 최신 기본 루틴 목록은
+                    `GET /api/routines/templates`로 확인하세요.
+
+                    | categoryId | 카테고리 | templateId — 기본 제공 루틴 |
+                    | --- | --- | --- |
+                    | 1 | 운동 | 101 산책하기 · 102 스트레칭하기 · 103 홈트레이닝 하기 · 104 러닝하기 · 105 근력 운동하기 · 106 헬스장 다녀오기 |
+                    | 2 | 건강 | 201 물 챙겨 마시기 · 202 영양제 챙겨 먹기 · 203 건강한 한 끼 먹기 · 204 채소 챙겨 먹기 · 205 단백질 챙겨 먹기 · 206 집밥 먹기 |
+                    | 3 | 자기계발 | 301 책 읽기 · 302 뉴스 읽기 · 303 관심 분야 자료 정리하기 · 304 외국어 공부하기 · 305 강연 보고 기록 남기기 · 306 포트폴리오 작업하기 |
+                    | 4 | 생활정리 | 401 침대 정리하기 · 402 쓰레기 버리기 · 403 책상 정리하기 · 404 설거지하기 · 405 빨래하기 · 406 방 정리하기 · 407 바닥 청소하기 |
+                    | 5 | 마음관리 | 501 긍정 문장 남기기 · 502 일기 쓰기 · 503 감사 기록 쓰기 · 504 감정 기록 남기기 |
+                    | 6 | 취미 | 601 사진 찍기 · 602 다이어리 쓰기 · 603 글쓰기 · 604 그림 그리기 · 605 요리하기 · 606 악기 연습하기 · 607 취미생활하기 |
+
+                    `기타` 카테고리는 사용하지 않습니다.
+
+                    ### 에러 코드
+
+                    | code | HTTP | 언제 | 화면 처리 |
+                    | --- | --- | --- | --- |
+                    | `COMMON400_1` | 400 | 요청 형식 검증 실패 — 이름이 비었거나 20자 초과·줄바꿈 포함, 루틴 0개 또는 31개 이상, 한 요청에 같은 templateId 두 번, 요일 중복 | 입력값 문제이므로 서버 메시지를 그대로 노출하지 않고 해당 입력 필드에 안내 |
+                    | `ROUTINE400_1` | 400 | 이름이 앞뒤 공백 제거 후 1~20자를 벗어남 | 이름 입력란에 안내 |
+                    | `ROUTINE400_3` | 400 | templateId가 요청한 categoryId에 속하지 않음 | 클라이언트 조합 오류. 목록을 다시 조회 |
+                    | `ROUTINE403_1` | 403 | 다른 회원이 만든 카테고리를 지정 | 카테고리 목록을 다시 조회 |
+                    | `MEMBER403_1` | 403 | 탈퇴·비활성 회원 | 로그아웃 처리 |
+                    | `MEMBER404_1` | 404 | 토큰이 가리키는 회원이 없음 | 로그아웃 처리 |
+                    | `ROUTINE404_1` | 404 | 카테고리가 없거나 비활성 | 카테고리 목록을 다시 조회 |
+                    | `ROUTINE404_2` | 404 | 기본 제공 루틴이 없거나 비활성 | 기본 루틴 목록을 다시 조회 |
+                    | `ROUTINE409_1` | 409 | 기존 + 요청 개수가 30개를 넘음 | "루틴은 최대 30개까지" 안내 후 선택 수를 줄이도록 유도 |
+                    | `ROUTINE409_2` | 409 | 이미 등록한 기본 루틴을 같은 이름으로 다시 등록 | 해당 항목을 체크된 상태로 갱신. 목록의 alreadyAdded로 사전에 막을 수 있음 |
+
+                    실패 시 전체가 롤백되므로 일부만 저장되는 경우는 없습니다.
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "201",
+                    description = "개인 루틴 생성 성공"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "400",
+                    description = "요청 값, 이름 규칙 또는 기본 루틴과 카테고리 불일치"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "403",
+                    description = "미인증 요청, 탈퇴·비활성 회원 또는 다른 회원의 카테고리 사용"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404",
+                    description = "회원, 활성 카테고리 또는 활성 기본 제공 루틴을 찾을 수 없음"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "409",
+                    description = "활성 루틴 30개 초과 또는 이미 등록한 기본 제공 루틴"
+            )
+    })
+    ApiResponse<RoutineResDTO.RoutineCreateResult> createRoutines(
+            @Parameter(hidden = true) CustomUserDetails userDetails,
+            RoutineReqDTO.CreateRoutines request
+    );
+
+    /**
+     * 사용자 카테고리 추가 API 명세다.
+     *
+     * @param userDetails 인증 회원 정보
+     * @param request 카테고리 이름과 색상
+     * @return 생성된 카테고리
+     */
+    @Operation(
+            summary = "루틴 카테고리 추가",
+            description = """
+                    인증 회원만 사용하는 사용자 카테고리를 추가합니다.
+
+                    규칙
+                    - 회원당 최대 5개까지 추가할 수 있습니다.
+                    - 이름은 앞뒤 공백을 제거한 뒤 1~10자여야 하며 줄바꿈을 포함할 수 없습니다.
+                    - 고정 카테고리 및 본인의 기존 카테고리와 같은 이름은 사용할 수 없습니다.
+                    - color를 생략하면 "색 없음"으로 저장됩니다.
+
+                    색상 칩은 RED, ORANGE, YELLOW, GREEN, BLUE, MAGENTA, BLACK 일곱 가지입니다.
+                    실제 색상 값(HEX)은 테마·플랫폼마다 달라 서버가 정하지 않습니다.
+
+                    ### 에러 코드
+
+                    | code | HTTP | 언제 | 화면 처리 |
+                    | --- | --- | --- | --- |
+                    | `COMMON400_1` | 400 | 요청 형식 검증 실패 — 이름이 비었거나 10자 초과·줄바꿈 포함, 없는 색상 값 | 이름 입력란에 안내 |
+                    | `ROUTINE400_2` | 400 | 이름이 앞뒤 공백 제거 후 1~10자를 벗어남 | 이름 입력란에 안내 |
+                    | `MEMBER403_1` | 403 | 탈퇴·비활성 회원 | 로그아웃 처리 |
+                    | `MEMBER404_1` | 404 | 토큰이 가리키는 회원이 없음 | 로그아웃 처리 |
+                    | `ROUTINE409_3` | 409 | 이미 카테고리가 5개 | "카테고리는 최대 5개까지" 안내 |
+                    | `ROUTINE409_4` | 409 | 고정 카테고리 또는 본인의 기존 카테고리와 이름 중복 | 이름 입력란에 중복 안내 |
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "201",
+                    description = "루틴 카테고리 생성 성공"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "400",
+                    description = "요청 값 또는 이름 규칙 오류"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "403",
+                    description = "미인증 요청 또는 탈퇴·비활성 회원"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404",
+                    description = "인증 토큰이 참조하는 회원을 찾을 수 없음"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "409",
+                    description = "카테고리 5개 초과 또는 이름 중복"
+            )
+    })
+    ApiResponse<RoutineResDTO.Category> createCategory(
+            @Parameter(hidden = true) CustomUserDetails userDetails,
+            RoutineReqDTO.CreateCategory request
+    );
+}
