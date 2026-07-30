@@ -73,29 +73,114 @@ public class GroupCommandService {
     }
 
     /**
+     * ACTIVE OWNER와 대상 루틴의 그룹 소속을 검증한 뒤 기본 정보·반복 일정·오늘 할당을 수정한다.
+     * 전체 변경은 하나의 트랜잭션으로 처리되어 할당 동기화 실패 시 루틴과 일정도 롤백된다.
+     *
+     * @param groupId 요청 대상 그룹 ID
+     * @param routineId 수정 대상 그룹 루틴 ID
+     * @param memberId 수정을 요청한 회원 ID
+     * @param request 그룹 루틴 전체 수정 요청
+     * @return 수정된 루틴과 동기화 후 오늘 할당 수
+     */
+    @Transactional
+    public GroupResDTO.RoutineUpdateResult updateRoutine(
+            Long groupId,
+            Long routineId,
+            Long memberId,
+            GroupReqDTO.UpdateRoutine request
+    ) {
+        validateRequest(request);
+        groupValidationService.validateGroupOwner(groupId, memberId);
+
+        GroupRoutine groupRoutine = groupRoutineRepository
+                .findByIdAndGroupIdForUpdate(routineId, groupId)
+                .orElseThrow(() -> {
+                    log.warn("수정할 그룹 루틴을 찾을 수 없습니다. "
+                                    + "groupId={}, routineId={}, memberId={}",
+                            groupId, routineId, memberId);
+                    return new GroupException(GroupErrorCode.GROUP_ROUTINE_NOT_FOUND);
+                });
+        RoutineCategory category = routineCategoryRepository
+                .findByIdAndActiveTrue(request.categoryId())
+                .orElseThrow(() -> {
+                    log.warn("활성 그룹 루틴 카테고리 조회에 실패했습니다. "
+                                    + "groupId={}, routineId={}, memberId={}, categoryId={}",
+                            groupId, routineId, memberId, request.categoryId());
+                    return new GroupException(GroupErrorCode.ROUTINE_CATEGORY_NOT_FOUND);
+                });
+        validateRoutineTitleNotDuplicated(groupId, routineId, request.title());
+
+        groupRoutine.update(category, request.title(), request.description());
+        groupRoutine.replaceSchedules(request.schedules().stream()
+                .map(schedule -> new GroupRoutine.ScheduleUpdate(
+                        schedule.repeatDay(),
+                        schedule.startTime(),
+                        schedule.endTime()
+                ))
+                .toList());
+        saveGroupRoutine(groupRoutine);
+
+        int assignmentCount = assignmentCommandService
+                .synchronizeRoutineAssignmentsToday(groupRoutine);
+        log.info("그룹 루틴 수정을 완료했습니다. "
+                        + "groupId={}, routineId={}, memberId={}, assignmentCount={}",
+                groupId, routineId, memberId, assignmentCount);
+        return GroupConverter.toRoutineUpdateResult(groupRoutine, assignmentCount);
+    }
+
+    /**
      * Controller 외의 호출 경로에서도 생성 요청의 필수값과 일정 규칙을 방어적으로 검증한다.
      *
      * @param request 검증할 그룹 루틴 생성 요청
      * @throws IllegalArgumentException 필수값, 길이, 요일 또는 시간 범위가 유효하지 않은 경우
      */
     private void validateRequest(GroupReqDTO.CreateRoutine request) {
-        if (request == null
-                || request.categoryId() == null
-                || request.title() == null
-                || request.title().isBlank()
-                || request.title().length() > 20
-                || request.description() == null
-                || request.description().isBlank()
-                || request.description().length() > 255
-                || request.schedules() == null
-                || request.schedules().isEmpty()
-                || request.schedules().size() > 7) {
-            log.warn("그룹 루틴 생성 요청 검증에 실패했습니다.");
+        if (request == null) {
             throw new IllegalArgumentException("유효하지 않은 그룹 루틴 생성 요청입니다.");
+        }
+        validateRoutineRequest(
+                request.categoryId(),
+                request.title(),
+                request.description(),
+                request.schedules()
+        );
+    }
+
+    private void validateRequest(GroupReqDTO.UpdateRoutine request) {
+        if (request == null) {
+            throw new IllegalArgumentException("유효하지 않은 그룹 루틴 수정 요청입니다.");
+        }
+        validateRoutineRequest(
+                request.categoryId(),
+                request.title(),
+                request.description(),
+                request.schedules()
+        );
+    }
+
+    private void validateRoutineRequest(
+            Long categoryId,
+            String title,
+            String description,
+            java.util.List<GroupReqDTO.RoutineSchedule> schedules
+    ) {
+        if (categoryId == null
+                || categoryId <= 0
+                || title == null
+                || title.isBlank()
+                || title.length() > 20
+                || description == null
+                || description.isBlank()
+                || description.length() > 255
+                || schedules == null
+                || schedules.isEmpty()
+                || schedules.size() > 7) {
+            log.warn("그룹 루틴 요청 검증에 실패했습니다.");
+            throw new IllegalArgumentException("유효하지 않은 그룹 루틴 요청입니다.");
         }
 
         Set<java.time.DayOfWeek> repeatDays = new HashSet<>();
-        boolean invalidSchedule = request.schedules().stream().anyMatch(schedule ->
+        boolean invalidSchedule = schedules.stream().anyMatch(schedule ->
                 schedule == null
                         || schedule.repeatDay() == null
                         || schedule.startTime() == null
@@ -124,6 +209,19 @@ public class GroupCommandService {
         }
     }
 
+    private void validateRoutineTitleNotDuplicated(
+            Long groupId,
+            Long routineId,
+            String title
+    ) {
+        if (groupRoutineRepository.existsByGroupIdAndTitleAndIdNot(groupId, title, routineId)) {
+            log.warn("동일한 제목의 그룹 루틴 수정을 차단했습니다. "
+                            + "groupId={}, routineId={}, title={}",
+                    groupId, routineId, title);
+            throw new GroupException(GroupErrorCode.DUPLICATE_GROUP_ROUTINE_TITLE);
+        }
+    }
+
     /**
      * 루틴과 cascade로 연결된 일정을 즉시 반영하고 저장 중 무결성 오류를 도메인 예외로 변환한다.
      *
@@ -136,7 +234,26 @@ public class GroupCommandService {
         } catch (DataIntegrityViolationException e) {
             log.warn("그룹 루틴 저장 중 무결성 제약을 위반했습니다. groupId={}, title={}",
                     groupRoutine.getGroup().getId(), groupRoutine.getTitle());
-            throw new GroupException(GroupErrorCode.DUPLICATE_GROUP_ROUTINE_TITLE);
+            if (isRoutineTitleConstraintViolation(e)) {
+                throw new GroupException(GroupErrorCode.DUPLICATE_GROUP_ROUTINE_TITLE);
+            }
+            throw e;
         }
+    }
+
+    private boolean isRoutineTitleConstraintViolation(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            String message = current.getMessage();
+            if (message != null
+                    && message.toLowerCase().contains("uk_group_routine_group_title")) {
+                return true;
+            }
+            if (current.getCause() == current) {
+                break;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 }

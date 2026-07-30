@@ -5,6 +5,8 @@ import com.lirouti.domain.group.enums.GroupMemberStatus;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface GroupMemberRepository extends JpaRepository<GroupMember, Long> {
 
@@ -15,11 +17,23 @@ public interface GroupMemberRepository extends JpaRepository<GroupMember, Long> 
     Optional<GroupMember> findByGroupIdAndMemberId(Long groupId, Long memberId);
 
     /**
-     * 대상 그룹에서 지정한 가입 상태인 구성원을 모두 조회한다.
+     * 대상 그룹에서 지정한 가입 상태이며 계정도 활성 상태인 구성원을 모두 조회한다.
      *
      * @param groupId 대상 그룹 ID
      * @param status 조회할 가입 상태
-     * @return 조건에 맞는 그룹 구성원 목록
+     * @return 회원까지 함께 조회한 조건에 맞는 그룹 구성원 목록
      */
-    List<GroupMember> findAllByGroupIdAndStatus(Long groupId, GroupMemberStatus status);
+    @Query("""
+            select groupMember
+            from GroupMember groupMember
+            join fetch groupMember.member
+            where groupMember.group.id = :groupId
+              and groupMember.status = :status
+              and groupMember.member.isActive = true
+              and groupMember.member.deletedAt is null
+            """)
+    List<GroupMember> findAllByGroupIdAndStatus(
+            @Param("groupId") Long groupId,
+            @Param("status") GroupMemberStatus status
+    );
 }
