@@ -78,7 +78,7 @@ scp -i <pem> deploy/backup.sh               ubuntu@<서버IP>:/opt/app/backup.sh
 ```
 
 > **compose 와 Caddyfile 은 배포 워크플로가 갱신하지 않는다.** `.env` 와 달리 이 둘은 서버에 있는 파일을 그대로 쓴다. 레포에서 고쳤다면 **머지 전에 다시 scp** 해야 반영된다.
-
+>
 > 파일명 매핑 주의: `docker-compose.prod.yml` → 서버에선 **`docker-compose.yml`**. 배포 워크플로가 `cd /opt/app` 후 이 파일명 그대로를 쓴다.
 > `.env`는 올리지 않는다 — 배포 때 `ENV_FILE` 시크릿 내용으로 자동 생성된다(4번 참고).
 
@@ -147,9 +147,11 @@ cd /opt/app && docker compose logs -f app
 
 ### 순서를 지켜야 한다
 
-인증서 발급은 **DNS 와 방화벽이 먼저 맞아 있어야** 성공한다. 순서를 어기면 발급이 실패하고, Let's Encrypt 는 같은 도메인에 **주당 5회 실패 제한**이 있어 재시도를 반복하면 그 주 내내 막힌다.
+인증서 발급은 **DNS 와 방화벽이 먼저 맞아 있어야** 성공한다. 순서를 어기면 발급이 실패하는데, Let's Encrypt 는 인증 실패를 **계정·도메인 조합마다 시간당 5회**로 제한한다(12분에 하나씩 회복). 원인을 고치기 전에 재시도를 반복하면 그 한도를 다 써버린다.
 
-```
+> 흔히 말하는 "주당 5회"는 **다른 제한**이다 — 같은 도메인 조합의 인증서를 중복 발급할 때 걸린다. 발급이 반복 실패하는 상황에서 걸리는 것은 위의 시간당 제한이다.
+
+```text
 1. 도메인 발급 → A 레코드를 서버 EIP 로 연결
 2. dig +short <도메인> 이 EIP 를 뱉는지 확인      ← 여기서 안 맞으면 진행 금지
 3. 보안그룹 인바운드 80 · 443 개방               ← 80 은 HTTP-01 챌린지에 필요
@@ -164,12 +166,25 @@ cd /opt/app && docker compose logs -f app
 
 | 키 | 필수 | 설명 |
 | --- | --- | --- |
-| `LIROUTI_DOMAIN` | ✅ | 서비스 도메인. 없으면 배포가 중단된다 |
-| `LETSENCRYPT_EMAIL` | | 만료 임박·발급 실패 알림 주소. 없으면 익명 발급이라 알림이 오지 않는다 |
+| `LIROUTI_DOMAIN` | ✅ | 서비스 도메인. 없거나 형식이 틀리면 배포가 중단된다 |
+| `LETSENCRYPT_EMAIL` | ✅ | 만료 임박·발급 실패 알림 주소 |
+
+> **`LETSENCRYPT_EMAIL` 은 선택이 아니다.** 값이 비면 인자 없는 `email` 지시어가 되어 Caddy 가 설정 파싱에서 죽는다. 실제 Caddy 로 확인한 동작이다.
+>
+> ```
+> Error: adapting config using caddyfile: parsing caddyfile tokens for 'email':
+> wrong argument count or unexpected line ending after 'email'
+> ```
+>
+> 배포 워크플로가 두 값의 존재와 도메인 형식을 먼저 확인하고, CI 는 `caddy validate` 로 Caddyfile 자체를 검사한다.
 
 ### 8080 은 아직 열려 있다
 
 Caddy 를 붙였지만 `8080` 공개 매핑을 **일부러 남겨 뒀다.** 앱 클라이언트가 아직 `http://<EIP>:8080` 을 보고 있어서, 여기서 닫으면 앱이 서버에 못 붙는다.
+
+**이건 편의 문제가 아니라 보안 문제다.** 앱에 `server.forward-headers-strategy: framework` 를 켜 두었는데, 이 설정은 `X-Forwarded-Proto`·`X-Forwarded-Host` 를 **보낸 주체를 따지지 않고 그대로 믿는다.** Caddy 를 거친 요청은 `header_up` 이 그 헤더를 덮어써서 안전하지만, **8080 으로 직접 오는 요청은 헤더를 위조할 수 있다.** 즉 8080 이 공개인 동안에는 프록시의 신뢰 경계를 우회할 수 있다.
+
+지금 당장 큰 피해로 이어지지는 않는다 — 위조된 헤더는 그 요청이 만드는 절대 URL 에만 영향을 주고, 캐시나 메일 링크 생성처럼 남에게 퍼지는 경로가 아직 없다. 그래도 **8080 을 닫는 것이 이 설정의 전제**이므로 미뤄서는 안 된다.
 
 **앱이 `https://<도메인>` 으로 전환된 것을 확인한 뒤** `docker-compose.yml` 에서 한 줄만 바꾸고 다시 scp·배포한다.
 
@@ -215,7 +230,7 @@ docker compose logs caddy | tail -20     # certificate obtained 류의 줄
 [`deploy/bucket-policy-media.json`](./bucket-policy-media.json)을 S3 → 버킷 → 권한 → 버킷 정책에 붙여넣는다. `s3:GetObject`만, `challenge-verifications/*`만 허용한다. 이 정책은 **익명 접근자**에게 적용되며 `ListBucket`을 주지 않으므로 **목록으로 훑는 것은 불가능**하고 key가 UUID라 추측도 안 된다.
 
 > **주체를 구분할 것.** 위 문장은 버킷 정책(익명 접근자) 이야기다. 앱이 쓰는 IAM 역할은 별개이며, 미참조 이미지 정리를 위해 `challenge-verifications/` 아래에 한해 `ListBucket`을 갖는다(아래 [미참조 미디어 정리] 절). 즉 **URL을 아는 외부인은 여전히 열거할 수 없고, 열거할 수 있는 것은 서버뿐이다.**
-
+>
 > **퍼블릭 액세스 차단을 먼저 푼다.** S3 → 버킷 → 권한 → "퍼블릭 액세스 차단"에서 **`BlockPublicPolicy`·`RestrictPublicBuckets` 두 개를 끈다.** 켜져 있으면 정책을 붙여도 무시된다. 나머지 두 개(ACL 관련)는 켜둔 채로 둔다 — ACL은 쓰지 않는다.
 
 앱 설정은 바꿀 게 없다. `AWS_S3_PUBLIC_BASE_URL` 미설정 시 `application.yaml`이 S3 path-style 주소를 계산해 쓰고, 그 주소가 그대로 열린다.
@@ -400,9 +415,9 @@ IAM → 정책 → 정책 생성 → JSON 탭에 [`deploy/iam-policy.json`](./ia
 미디어 버킷에는 `PutObject`·`GetObject`(업로드·검증·서빙, 버킷 전체)에 더해 **`ListBucket`·`DeleteObject`(미참조 이미지 정리)** 를 허용하되, 뒤의 둘은 **`challenge-verifications/` 아래로만** 좁힌다. 백업 버킷은 `PutObject`만 준다 — 백업은 쓰기만 하면 되고, 읽기·삭제까지 주면 앱 침해 시 백업을 지울 수 있다.
 
 > **`ListBucket`만 리소스가 버킷 ARN(`arn:aws:s3:::lirouti-prod-bucket`)이고 나머지는 오브젝트(`/*`)다.** 버킷 수준 액션과 오브젝트 수준 액션은 리소스 형태가 다르다. `ListBucket`에 `/*`를 붙이면 **오류 없이 조용히 권한이 안 먹는다.** prefix 제한은 리소스가 아니라 `Condition`의 `s3:prefix`로 건다.
-
+>
 > 이 두 권한을 붙였다고 정리 배치가 바로 도는 것은 아니다. 앱 쪽 기본값이 꺼짐이라 `MEDIA_CLEANUP_ENABLED=true`까지 넣어야 시작한다. 순서와 근거는 아래 [미참조 미디어 정리] 절을 볼 것.
-
+>
 > ⚠️ **앱이 백업을 덮어쓸 수 있다 — 버킷 버전 관리로 막아야 한다.**
 >
 > `BackupObjectWrite`는 `lirouti-ec2-role`에 붙고, 앱 컨테이너는 IMDS로 그 역할을 그대로 쓴다. 즉 **앱이 침해되면 백업 파일을 덮어쓸 수 있다.** 2026-07-28 실측으로 확인했다 — 앱 역할로 백업 버킷의 기존 오브젝트를 `PutObject`로 덮어쓰는 데 성공했다.
