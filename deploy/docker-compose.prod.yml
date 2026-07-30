@@ -89,7 +89,7 @@ services:
       TZ: Asia/Seoul
       # 2GB 인스턴스에서 힙 상한 필수 — 미설정 시 OOM
       JAVA_TOOL_OPTIONS: "-Xmx768m -XX:MaxMetaspaceSize=192m"
-    # 외부 트래픽은 Caddy(443) 로만 들어온다. 아래 매핑은 127.0.0.1 에만 바인딩하므로
+    # 외부 트래픽은 Caddy(80·443) 로만 들어온다. 아래 매핑은 127.0.0.1 에만 바인딩하므로
     # 퍼블릭 IP 로는 닫히고, 배포 헬스체크(localhost:8080)와 SSH 터널만 닿는다.
     # Caddy 는 compose 내부 네트워크(app:8080)로 붙으므로 이 매핑과 무관하다.
     #
