@@ -1,8 +1,9 @@
 package com.lirouti.domain.member.controller;
 
 import com.lirouti.domain.member.dto.response.MemberResDTO;
-import com.lirouti.domain.member.service.query.MemberQueryService;import org.springframework.http.HttpHeaders;
+import com.lirouti.domain.member.service.query.MemberQueryService;
 import org.springframework.http.HttpHeaders;
+
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
