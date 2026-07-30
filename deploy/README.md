@@ -113,7 +113,7 @@ read -rsp 'GHCR PAT(read:packages): ' PAT && echo "$PAT" | docker login ghcr.io 
 
 서버를 준비만 해두고 develop에 머지하면 첫 배포가 진행된다. 즉시 한 번 돌리고 싶으면 Actions → Deploy to EC2 → Run workflow(develop)로 수동 실행해도 된다.
 
-워크플로가 배포 후 `http://localhost:8080/api/challenges` 응답을 최대 ~90초 확인하고, 안 뜨면 배포 실패로 처리한다. 서버에서 직접 로그를 보려면:
+워크플로가 배포 후 `http://localhost:8080/health` 응답을 최대 ~90초 확인하고, 안 뜨면 배포 실패로 처리한다. 이 경로를 쓰는 이유는 인증이 필요 없기 때문이다 — 업무 API는 전부 JWT를 요구하므로(#77) 헬스체크에 쓰면 정상 기동한 앱도 403으로 실패 처리된다. 서버에서 직접 로그를 보려면:
 
 ```bash
 cd /opt/app && docker compose logs -f app
@@ -411,6 +411,8 @@ echo "③ OK"
 | 미디어 공개 URL 익명 GET | ✅ `403` — 버킷 비공개가 유지되고 있다(사진 서빙은 #39) |
 | 백업 cron 등록 여부 | ⚠️ **미등록** — `backup.sh`는 있으나 `crontab` 비어 있음 |
 | 호스트에서 `localhost:8080` | ✅ `GET /api/challenges` 200, `POST /api/media/presigned-url` 403(인증 필요) — ③ 명령의 전제 확인 |
+
+> 위 표는 2026-07-28 시점의 기록이다. **#77 이후 `GET /api/challenges`는 403이다** — 챌린지 조회에도 로그인이 필요해졌다. 기동만 확인하려면 인증이 필요 없는 `/health`를 쓴다.
 
 ③(presigned URL 발급)은 로그인 토큰이 필요해 이번에 직접 호출하지는 않았다. 다만 컨테이너가 자격증명을 받고(②) 그 역할로 미디어 버킷 `PutObject`가 되는 것(위 표)까지 확인됐으므로, 서명 경로가 막힐 이유는 남아 있지 않다.
 

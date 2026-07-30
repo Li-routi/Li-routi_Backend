@@ -198,7 +198,8 @@ public class ChallengeQueryService {
         return ChallengeConverter.toMyListing(challenges);
     }
 
-    // memberId는 조회자. 상세는 비로그인도 볼 수 있으므로 null일 수 있고, 그때 participating은 false다.
+    // memberId는 조회자. 상세도 인증이 필요하므로(#77) 컨트롤러에서 null이 오지 않는다.
+    // 그래도 null을 견디게 둔다 — 방어를 전 계층에서 동시에 지우면 정책이 다시 바뀔 때 NPE로 터진다.
     @Transactional(readOnly = true)
     public ChallengeResDTO.Detail getChallenge(Long challengeId, Long memberId) {
         Challenge challenge = challengeRepository.findByIdAndActiveTrue(challengeId)
@@ -214,7 +215,7 @@ public class ChallengeQueryService {
                 challenge, participating, participantCount, verificationPostCount, todayCompletionCount);
     }
 
-    // 비로그인(memberId == null)이면 참여 중이 아니다. 로그인 시에는 현재 참여 상태를 본다.
+    // memberId가 null이면 참여 중이 아닌 것으로 본다(위 getChallenge 주석 참고). 그 외에는 현재 참여 상태를 본다.
     private boolean isParticipating(Long memberId, Long challengeId) {
         if (memberId == null) {
             return false;
