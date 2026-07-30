@@ -271,7 +271,12 @@ class MediaServiceTest {
             "challenge-verifications/not-a-uuid.jpg",               // UUID가 아님
             "challenge-verifications/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.mp4", // 사진 전용 용도인데 영상 확장자
             "challenge-verifications/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f",     // 확장자 없음
-            "6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg"              // 용도 경로 없음
+            "6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg",             // 용도 경로 없음
+            // 날짜 구간이 형식에 안 맞는 경우(#39). 임의 세그먼트를 끼워 넣지 못하게 한다.
+            "challenge-verifications/2026/7/30/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg",  // 월·일이 두 자리 아님
+            "challenge-verifications/2026/07/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg",    // 구간이 둘뿐
+            "challenge-verifications/3/412/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg",      // 식별자를 끼워 넣음
+            "challenge-verifications/2026/07/30/31/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg" // 구간이 넷
     })
     void validateMediaKey_NotIssuedFormat_ThrowsInvalidMediaKey(String mediaKey) {
         assertThatThrownBy(() ->
@@ -454,5 +459,87 @@ class MediaServiceTest {
                 mediaService.validateUploadedBytes(WEBP_KEY, MediaPurpose.CHALLENGE_VERIFICATION))
                 .isInstanceOf(MediaException.class)
                 .hasFieldOrPropertyWithValue("code", MediaErrorCode.MEDIA_CONTENT_MISMATCH);
+    }
+
+    // ── key 구조 (#39) ──
+
+    private static final java.time.ZoneId KST = java.time.ZoneId.of("Asia/Seoul");
+    private static final java.time.format.DateTimeFormatter KEY_DATE_PATH =
+            java.time.format.DateTimeFormatter.ofPattern("yyyy/MM/dd");
+
+    @Test
+    @DisplayName("발급한 key에 KST 날짜 구간이 들어간다")
+    void issuePresignedUrl_KeyContainsKstDatePath() {
+        mockPresign();
+
+        // 호출 전후로 날짜를 읽는다. KST 자정이 그 사이에 지나면 두 값이 달라지므로
+        // 한쪽만 기대하면 간헐적으로 실패한다.
+        java.time.LocalDate before = java.time.LocalDate.now(KST);
+        String key = mediaService.issuePresignedUrl(new MediaReqDTO.PresignedUrl(
+                MediaPurpose.CHALLENGE_VERIFICATION, "image/jpeg", 1024L)).mediaKey();
+        java.time.LocalDate after = java.time.LocalDate.now(KST);
+
+        assertThat(key).satisfiesAnyOf(
+                k -> assertThat(k).startsWith("challenge-verifications/" + before.format(KEY_DATE_PATH) + "/"),
+                k -> assertThat(k).startsWith("challenge-verifications/" + after.format(KEY_DATE_PATH) + "/"));
+        assertThat(key).endsWith(".jpg");
+    }
+
+    @ParameterizedTest
+    @DisplayName("달력에 없는 날짜가 든 key는 거부한다 — 정규식은 자릿수만 보기 때문")
+    @ValueSource(strings = {
+            "challenge-verifications/2026/02/30/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg", // 2월 30일
+            "challenge-verifications/2025/13/99/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg", // 13월 99일
+            "challenge-verifications/2025/02/29/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg", // 평년의 2월 29일
+            "challenge-verifications/2026/00/10/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg"  // 0월
+    })
+    void validateMediaKey_ImpossibleDate_ThrowsInvalidMediaKey(String mediaKey) {
+        assertThatThrownBy(() ->
+                mediaService.validateMediaKey(mediaKey, MediaPurpose.CHALLENGE_VERIFICATION))
+                .isInstanceOf(MediaException.class)
+                .hasFieldOrPropertyWithValue("code", MediaErrorCode.INVALID_MEDIA_KEY);
+    }
+
+    @Test
+    @DisplayName("윤년의 2월 29일은 통과한다 — 실재하는 날짜는 막지 않는다")
+    void validateMediaKey_LeapDay_Passes() {
+        String leapDayKey =
+                "challenge-verifications/2028/02/29/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg";
+
+        assertThatCode(() ->
+                mediaService.validateMediaKey(leapDayKey, MediaPurpose.CHALLENGE_VERIFICATION))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("공개 용도의 key에는 회원·챌린지 식별자가 들어가지 않는다 — 공개 URL로 노출되므로")
+    void issuePresignedUrl_PublicKeyCarriesNoIdentifier() {
+        mockPresign();
+
+        String key = mediaService.issuePresignedUrl(new MediaReqDTO.PresignedUrl(
+                MediaPurpose.CHALLENGE_VERIFICATION, "image/jpeg", 1024L)).mediaKey();
+
+        // challenge-verifications / yyyy / MM / dd / {uuid}.jpg → 정확히 5개 세그먼트
+        assertThat(key.split("/")).hasSize(5);
+    }
+
+    @Test
+    @DisplayName("날짜 도입 전에 발급된 flat key도 검증을 통과한다 — 기존 데이터를 옮기지 않는다")
+    void validateMediaKey_LegacyFlatKey_StillPasses() {
+        String legacyKey = "challenge-verifications/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg";
+
+        assertThatCode(() ->
+                mediaService.validateMediaKey(legacyKey, MediaPurpose.CHALLENGE_VERIFICATION))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("두 형태 모두 같은 규칙으로 공개 URL이 조립된다")
+    void resolvePublicUrl_BothKeyShapes() {
+        String dated = "challenge-verifications/2026/07/30/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg";
+        String legacy = "challenge-verifications/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg";
+
+        assertThat(mediaService.resolvePublicUrl(dated)).isEqualTo(PUBLIC_BASE_URL + "/" + dated);
+        assertThat(mediaService.resolvePublicUrl(legacy)).isEqualTo(PUBLIC_BASE_URL + "/" + legacy);
     }
 }
