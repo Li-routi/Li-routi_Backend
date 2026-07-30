@@ -31,9 +31,7 @@ public final class HomeResDTO {
     @Builder
     public record UserInfo(
             Long memberId,
-            String nickname,
-            String greetingMessage,
-            String characterImageUrl
+            String nickname
     ) {
     }
 
