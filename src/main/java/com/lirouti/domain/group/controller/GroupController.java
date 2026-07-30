@@ -1,15 +1,5 @@
 package com.lirouti.domain.group.controller;
 
-import com.lirouti.domain.group.controller.docs.GroupControllerDocs;
-import com.lirouti.domain.group.dto.request.GroupReqDTO;
-import com.lirouti.domain.group.dto.response.GroupResDTO;
-import com.lirouti.domain.group.exception.code.success.GroupSuccessCode;
-import com.lirouti.domain.group.service.command.GroupCommandService;
-import com.lirouti.domain.group.service.query.GroupQueryService;
-import com.lirouti.global.apiPayload.ApiResponse;
-import com.lirouti.global.auth.CustomUserDetails;
-import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,12 +10,28 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.lirouti.domain.group.controller.docs.GroupControllerDocs;
+import com.lirouti.domain.group.dto.request.GroupReqDTO;
+import com.lirouti.domain.group.dto.response.GroupResDTO;
+import com.lirouti.domain.group.exception.code.success.GroupSuccessCode;
+import com.lirouti.domain.group.service.command.GroupCommandService;
+import com.lirouti.domain.group.service.command.GroupInviteCodeCommandService;
+import com.lirouti.domain.group.service.query.GroupInviteCodeQueryService;
+import com.lirouti.domain.group.service.query.GroupQueryService;
+import com.lirouti.global.apiPayload.ApiResponse;
+import com.lirouti.global.auth.CustomUserDetails;
+
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/groups")
 public class GroupController implements GroupControllerDocs {
     private final GroupCommandService groupCommandService;
     private final GroupQueryService groupQueryService;
+    private final GroupInviteCodeCommandService groupInviteCodeCommandService;
+    private final GroupInviteCodeQueryService groupInviteCodeQueryService;
 
     /**
      * 로그인 회원에게 오늘 할당된 활성 그룹의 루틴을 조회한다.
@@ -68,5 +74,34 @@ public class GroupController implements GroupControllerDocs {
                 request
         );
         return ApiResponse.onSuccess(GroupSuccessCode.GROUP_ROUTINE_CREATE_SUCCESS, result);
+    }
+
+    // 그룹 초대 코드 조회 API
+    @Override
+    @GetMapping("/{groupId}/invite-code")
+    public ApiResponse<GroupResDTO.InviteCode> getInviteCode(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long groupId
+    ) {
+        GroupResDTO.InviteCode result = groupInviteCodeQueryService.getInviteCode(
+                groupId,
+                userDetails.getMemberId()
+        );
+        return ApiResponse.onSuccess(GroupSuccessCode.GROUP_INVITE_CODE_FETCH_SUCCESS, result);
+    }
+
+    // 그룹 초대 코드 발급&재발급 API
+    @Override
+    @PostMapping("/{groupId}/invite-code")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ApiResponse<GroupResDTO.InviteCode> issueInviteCode(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long groupId
+    ) {
+        GroupResDTO.InviteCode result = groupInviteCodeCommandService.issueInviteCode(
+                groupId,
+                userDetails.getMemberId()
+        );
+        return ApiResponse.onSuccess(GroupSuccessCode.GROUP_INVITE_CODE_ISSUE_SUCCESS, result);
     }
 }

@@ -62,6 +62,11 @@ public enum GroupErrorCode implements BaseErrorCode {
             HttpStatus.CONFLICT,
             "이미 이행한 그룹 루틴 할당입니다.",
             "GROUP409_5"
+    ),
+    INVITE_CODE_ISSUE_FAILED(
+            HttpStatus.INTERNAL_SERVER_ERROR,
+            "초대코드 발급에 실패했습니다.",
+            "GROUP500_1"
     );
 
     private final HttpStatus httpStatus;
