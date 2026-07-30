@@ -33,6 +33,9 @@ public class MemberCommandService {
     private final TokenService tokenService;
     private final ApplicationEventPublisher eventPublisher;
 
+    // 닉네임 제공받지 못한 경우 defalut 값
+    private static final String DEFAULT_NICKNAME_PREFIX = "user_";
+
     // 소셜 회원 조회 또는 생성
     @Transactional
     public Member findOrCreateSocialMember(
@@ -98,27 +101,24 @@ public class MemberCommandService {
             String email,
             String nickname
     ) {
-        validateSignupProfile(email, nickname);
+        validateSignupEmail(email);
         if (memberRepository.existsByEmail(email)) {
             log.warn("다른 소셜 계정에서 사용 중인 이메일로 가입을 시도했습니다. provider={}", socialProvider);
             throw new MemberException(MemberErrorCode.EMAIL_ALREADY_REGISTERED_WITH_OTHER_PROVIDER);
         }
 
-        Member member = MemberConverter.toSocialMember(socialProvider, socialId, email, nickname);
+        String initialNickname = resolveInitialNickname(nickname);
+        Member member = MemberConverter.toSocialMember(socialProvider, socialId, email, initialNickname);
         Member savedMember = memberRepository.save(member);
         log.info("신규 소셜 회원을 생성했습니다. memberId={}, provider={}",
                 savedMember.getId(), savedMember.getSocialProvider());
         return savedMember;
     }
 
-    private void validateSignupProfile(String email, String nickname) {
+    private void validateSignupEmail(String email) {
         if (email == null || email.isBlank()) {
             log.warn("검증된 이메일이 없어 소셜 회원가입을 중단했습니다.");
             throw new MemberException(MemberErrorCode.SOCIAL_EMAIL_REQUIRED);
-        }
-        if (nickname == null || nickname.isBlank()) {
-            log.warn("닉네임이 없어 소셜 회원가입을 중단했습니다.");
-            throw new MemberException(MemberErrorCode.SOCIAL_NICKNAME_REQUIRED);
         }
     }
 
@@ -129,6 +129,13 @@ public class MemberCommandService {
                 || !WITHDRAWAL_CONFIRMATION.equals(request.confirmation().strip())) {
             throw new MemberException(MemberErrorCode.INVALID_WITHDRAWAL_CONFIRMATION);
         }
+    }
+
+    private String resolveInitialNickname(String providerNickname) {
+        if(providerNickname != null && !providerNickname.isBlank()) {
+            return providerNickname;
+        }
+        return DEFAULT_NICKNAME_PREFIX + UUID.randomUUID().toString().substring(0, 8);
     }
 
     // 프로필 수정
