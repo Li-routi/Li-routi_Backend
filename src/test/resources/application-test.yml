@@ -31,3 +31,17 @@ oauth:
   google:
     web-client-id: ${GOOGLE_WEB_CLIENT_ID:test-google-client-id}
     allowed-issuers: ${GOOGLE_ALLOWED_ISSUERS:https://accounts.google.com,accounts.google.com}
+
+# 통합 테스트에서는 업로드 바이트 검증(#22)을 끈다.
+# 켜두면 @SpringBootTest의 인증 경로가 실제 S3를 호출하는데, 테스트에는 자격증명도
+# 업로드된 오브젝트도 없다. 검증 로직 자체는 MediaServiceTest에서 S3Client를 목으로
+# 두고 단위 테스트한다(성공·형식불일치·미업로드·조회실패·비활성 경로 전부).
+aws:
+  s3:
+    byte-validation-enabled: false
+
+# 통합 테스트에서는 레이트 리밋을 끈다(#23). 카운터가 Redis에 남아 테스트 간에 누적되면
+# 실행 순서에 따라 결과가 달라진다. 제한이 실제로 걸리는지는 RateLimitIntegrationTest가
+# @TestPropertySource로 다시 켜서 검증한다.
+rate-limit:
+  enabled: false

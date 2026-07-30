@@ -86,3 +86,52 @@ ON DUPLICATE KEY UPDATE
   image_url   = IF(challenge_verification.id >= 9000, new_row.image_url, challenge_verification.image_url),
   content     = IF(challenge_verification.id >= 9000, new_row.content, challenge_verification.content),
   updated_at  = IF(challenge_verification.id >= 9000, NOW(), challenge_verification.updated_at);
+
+-- 5) 그룹과 구성원 (초대코드 조회·발급 화면 확인용)
+INSERT INTO member_group (
+    id,
+    invite_code,
+    invite_code_expires_at,
+    name,
+    status,
+    created_at,
+    updated_at
+)
+VALUES (
+    9001,
+    'DUMMY01',
+    DATE_ADD(NOW(6), INTERVAL 1 DAY),
+    '[더미] 함께하는 루틴 그룹',
+    'ACTIVE',
+    NOW(6),
+    NOW(6)
+)
+AS new_row
+ON DUPLICATE KEY UPDATE
+  invite_code            = IF(member_group.id >= 9000, new_row.invite_code, member_group.invite_code),
+  invite_code_expires_at = IF(member_group.id >= 9000, new_row.invite_code_expires_at, member_group.invite_code_expires_at),
+  name                   = IF(member_group.id >= 9000, new_row.name, member_group.name),
+  status                 = IF(member_group.id >= 9000, new_row.status, member_group.status),
+  updated_at             = IF(member_group.id >= 9000, NOW(6), member_group.updated_at);
+
+INSERT INTO group_member (
+    id,
+    member_id,
+    group_id,
+    role,
+    status,
+    joined_at,
+    left_at,
+    created_at,
+    updated_at
+)
+VALUES
+  (9001, 9001, 9001, 'OWNER',  'ACTIVE', NOW(6), NULL, NOW(6), NOW(6)),
+  (9002, 9002, 9001, 'MEMBER', 'ACTIVE', NOW(6), NULL, NOW(6), NOW(6))
+AS new_row
+ON DUPLICATE KEY UPDATE
+  role       = IF(group_member.id >= 9000, new_row.role, group_member.role),
+  status     = IF(group_member.id >= 9000, new_row.status, group_member.status),
+  joined_at  = IF(group_member.id >= 9000, new_row.joined_at, group_member.joined_at),
+  left_at    = IF(group_member.id >= 9000, new_row.left_at, group_member.left_at),
+  updated_at = IF(group_member.id >= 9000, NOW(6), group_member.updated_at);

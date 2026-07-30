@@ -2,10 +2,12 @@ package com.lirouti.domain.challenge.converter;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import com.lirouti.domain.challenge.dto.response.ChallengeResDTO;
 import com.lirouti.domain.challenge.entity.Challenge;
 import com.lirouti.domain.challenge.entity.ChallengeVerification;
+import com.lirouti.domain.challenge.entity.ChallengeVerificationReport;
 import com.lirouti.domain.challenge.entity.MemberChallenge;
 
 public final class ChallengeConverter {
@@ -103,14 +105,38 @@ public final class ChallengeConverter {
                 .build();
     }
 
-    // 피드 카드 한 건. 공개 URL은 Service가 조립해 넘긴다.
-    public static ChallengeResDTO.FeedItem toFeedItem(ChallengeVerification verification, String imageUrl) {
+    // 인증 신고 결과. 신고 id와 대상 인증 id만 돌려준다(인증 내용은 신고 응답에 필요 없다).
+    public static ChallengeResDTO.Report toReport(ChallengeVerificationReport report) {
+        return ChallengeResDTO.Report.builder()
+                .reportId(report.getId())
+                .verificationId(report.getChallengeVerification().getId())
+                .build();
+    }
+
+    // 피드 카드 한 건. 공개 URL·좋아요 수·좋아요 여부는 Service가 배치로 구해 넘긴다.
+    public static ChallengeResDTO.FeedItem toFeedItem(
+            ChallengeVerification verification,
+            String imageUrl,
+            long likeCount,
+            boolean liked
+    ) {
         return ChallengeResDTO.FeedItem.builder()
                 .verificationId(verification.getId())
                 .nickname(verification.getMemberChallenge().getMember().getNickname())
                 .imageUrl(imageUrl)
                 .content(verification.getContent())
                 .verifiedAt(verification.getVerifiedAt())
+                .likeCount(likeCount)
+                .liked(liked)
+                .build();
+    }
+
+    // 좋아요·취소 결과(#63). 최종 상태만 담아 클라이언트가 재조회 없이 갱신하게 한다.
+    public static ChallengeResDTO.Like toLike(Long verificationId, long likeCount, boolean liked) {
+        return ChallengeResDTO.Like.builder()
+                .verificationId(verificationId)
+                .likeCount(likeCount)
+                .liked(liked)
                 .build();
     }
 
@@ -122,14 +148,60 @@ public final class ChallengeConverter {
     public static ChallengeResDTO.Feed toFeed(
             List<ChallengeVerification> verifications,
             Map<Long, String> imageUrls,
+            Map<Long, Long> likeCounts,
+            Set<Long> likedIds,
             Long nextCursor,
             boolean hasNext
     ) {
         List<ChallengeResDTO.FeedItem> items = verifications.stream()
-                .map(v -> toFeedItem(v, imageUrls.get(v.getId())))
+                .map(v -> toFeedItem(
+                        v,
+                        imageUrls.get(v.getId()),
+                        likeCounts.getOrDefault(v.getId(), 0L),
+                        likedIds.contains(v.getId())))
                 .toList();
         return ChallengeResDTO.Feed.builder()
                 .verifications(items)
+                .nextCursor(nextCursor)
+                .hasNext(hasNext)
+                .build();
+    }
+
+    // 내 인증 한 건(#62). 닉네임은 싣지 않는다 — 전부 본인이다.
+    public static ChallengeResDTO.MyVerificationItem toMyVerificationItem(
+            ChallengeVerification verification,
+            String imageUrl,
+            long likeCount
+    ) {
+        return ChallengeResDTO.MyVerificationItem.builder()
+                .verificationId(verification.getId())
+                .imageUrl(imageUrl)
+                .content(verification.getContent())
+                .verifiedDate(verification.getVerifiedDate())
+                .verifiedAt(verification.getVerifiedAt())
+                .likeCount(likeCount)
+                .build();
+    }
+
+    /**
+     * 내 인증 목록 커서 응답(#62).
+     * imageUrls·currentStreak은 Service가 계산해 넘긴다(Converter는 전달받은 값만 매핑한다).
+     */
+    public static ChallengeResDTO.MyVerifications toMyVerifications(
+            List<ChallengeVerification> verifications,
+            Map<Long, String> imageUrls,
+            Map<Long, Long> likeCounts,
+            int currentStreak,
+            Long nextCursor,
+            boolean hasNext
+    ) {
+        List<ChallengeResDTO.MyVerificationItem> items = verifications.stream()
+                .map(v -> toMyVerificationItem(
+                        v, imageUrls.get(v.getId()), likeCounts.getOrDefault(v.getId(), 0L)))
+                .toList();
+        return ChallengeResDTO.MyVerifications.builder()
+                .verifications(items)
+                .currentStreak(currentStreak)
                 .nextCursor(nextCursor)
                 .hasNext(hasNext)
                 .build();

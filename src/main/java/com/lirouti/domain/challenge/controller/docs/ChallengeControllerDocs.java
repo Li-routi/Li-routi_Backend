@@ -16,7 +16,7 @@ public interface ChallengeControllerDocs {
     @Operation(
             summary = "챌린지 목록 조회 (무한 스크롤)",
             description = """
-                    앱이 제공하는 활성 챌린지 목록을 최신순으로 조회합니다. 로그인 없이 사용할 수 있습니다.
+                    앱이 제공하는 활성 챌린지 목록을 최신순으로 조회합니다. 인증이 필요합니다.
 
                     무한 스크롤(커서 방식): 첫 요청은 cursor 없이 보내고, 응답의 nextCursor를 다음 요청의 cursor로 넘깁니다.
                     hasNext가 false(= nextCursor가 null)면 더 요청하지 않습니다.
@@ -34,7 +34,8 @@ public interface ChallengeControllerDocs {
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "목록 조회 성공"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "잘못된 category 값")
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "잘못된 category 값"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "인증 필요(미인증)")
     })
     ApiResponse<ChallengeResDTO.Listing> getChallenges(
             @Parameter(description = "분류 필터 (HEALTH, EXERCISE, STUDY, LIFE, HOBBY). 생략 시 전체")
@@ -51,10 +52,9 @@ public interface ChallengeControllerDocs {
             summary = "챌린지 상세 조회",
             description = """
                     챌린지 상세와 루틴 주기, 상단 통계(참여자 수·인증 게시글 수·오늘 완료자 수),
-                    그리고 조회자의 참여 여부를 조회합니다. 로그인 없이 사용할 수 있습니다.
+                    그리고 조회자의 참여 여부를 조회합니다. 인증이 필요합니다.
 
-                    로그인하면 participating으로 '참여하기'/'인증하기' 버튼 상태를 정할 수 있고,
-                    비로그인이면 participating은 항상 false로 내려갑니다.
+                    participating으로 '참여하기'/'인증하기' 버튼 상태를 정합니다.
 
                     응답 result: challengeId, name, description, imageUrl, category,
                     routineCycle(DAILY/WEEKLY/MONTHLY), reward(달성 시 부여되는 재화 수량),
@@ -65,6 +65,7 @@ public interface ChallengeControllerDocs {
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "상세 조회 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "challengeId 형식이 올바르지 않음(숫자 아님)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "인증 필요(미인증)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "존재하지 않거나 비활성 챌린지")
     })
     ApiResponse<ChallengeResDTO.Detail> getChallenge(

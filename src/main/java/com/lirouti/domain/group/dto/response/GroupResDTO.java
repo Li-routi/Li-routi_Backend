@@ -1,11 +1,14 @@
 package com.lirouti.domain.group.dto.response;
 
-import com.fasterxml.jackson.annotation.JsonFormat;
-import com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
+
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus;
+
 import lombok.Builder;
 
 public final class GroupResDTO {
@@ -102,6 +105,14 @@ public final class GroupResDTO {
             @JsonFormat(pattern = "HH:mm") LocalTime scheduledStartTime,
             @JsonFormat(pattern = "HH:mm") LocalTime scheduledEndTime,
             GroupRoutineAssignmentStatus status
+    ) {
+    }
+
+    // 그룹 설정에서 확인할 초대코드와 말소 시각
+    @Builder
+    public record InviteCode(
+            String inviteCode,
+            LocalDateTime expiresAt
     ) {
     }
 }

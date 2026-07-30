@@ -1,6 +1,7 @@
 package com.lirouti.domain.member.controller;
 
 import org.springframework.http.HttpHeaders;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -15,13 +16,11 @@ import com.lirouti.domain.member.controller.docs.MemberControllerDocs;
 import com.lirouti.domain.member.dto.request.MemberReqDTO;
 import com.lirouti.domain.member.exception.code.success.MemberSuccessCode;
 import com.lirouti.domain.member.service.command.MemberCommandService;
-import com.lirouti.global.auth.CustomUserDetails;
 import com.lirouti.global.apiPayload.ApiResponse;
+import com.lirouti.global.auth.CustomUserDetails;
 
-import io.swagger.v3.oas.annotations.Parameter;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
 
 @RestController
 @RequiredArgsConstructor
@@ -32,7 +31,6 @@ public class MemberController implements MemberControllerDocs {
     @Override
     @PostMapping("/logout")
     public ApiResponse<Void> logout(
-        @Parameter(hidden = true)
         @RequestHeader(HttpHeaders.AUTHORIZATION)
         String authorization
     ) {
@@ -43,10 +41,16 @@ public class MemberController implements MemberControllerDocs {
     @Override
     @DeleteMapping("/me")
     public ApiResponse<Void> withdraw(
-            @AuthenticationPrincipal CustomUserDetails userDetails,
-            @Valid @RequestBody MemberReqDTO.Withdraw request
+        @RequestHeader(HttpHeaders.AUTHORIZATION)
+        String authorization,
+        @AuthenticationPrincipal CustomUserDetails userDetails,
+        @Valid @RequestBody MemberReqDTO.Withdraw request
     ) {
-        memberCommandService.withdraw(userDetails.getMemberId(), request);
+        memberCommandService.withdraw(
+            userDetails.getMemberId(),
+            request,
+            extractBearerToken(authorization)
+        );
         return ApiResponse.onSuccess(MemberSuccessCode.MEMBER_WITHDRAWAL_SUCCESS, null);
     }
 

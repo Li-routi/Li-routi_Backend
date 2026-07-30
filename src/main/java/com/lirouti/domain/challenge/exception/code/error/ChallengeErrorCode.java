@@ -32,6 +32,17 @@ public enum ChallengeErrorCode implements BaseErrorCode {
             HttpStatus.CONFLICT,
             "인증 처리 중 중복 요청이 감지되었습니다. 잠시 후 다시 시도해 주세요.",
             "CHALLENGE409_3"
+    ),
+    VERIFICATION_NOT_FOUND(
+            HttpStatus.NOT_FOUND,
+            "인증을 찾을 수 없습니다.",
+            "CHALLENGE404_2"
+    ),
+    // 이미 신고한 인증을 다시 신고한 경우. 유니크 제약이 막는다.
+    ALREADY_REPORTED(
+            HttpStatus.CONFLICT,
+            "이미 신고한 인증입니다.",
+            "CHALLENGE409_4"
     );
 
     private final HttpStatus httpStatus;

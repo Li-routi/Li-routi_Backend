@@ -96,19 +96,84 @@ public final class ChallengeResDTO {
     ) {
     }
 
-    // 피드 카드 한 건. 닉네임·사진·코멘트를 보여준다.
+    /**
+     * 인증 신고 결과.
+     * 신고해도 인증은 삭제되지 않는다 — 신고자 본인의 피드에서만 이후 조회에서 빠진다.
+     */
+    @Builder
+    public record Report(
+            Long reportId,
+            Long verificationId
+    ) {
+    }
+
+    // 피드 카드 한 건. 닉네임·사진·코멘트에 좋아요 수와 내가 눌렀는지를 함께 보여준다(#63).
     @Builder
     public record FeedItem(
             Long verificationId,
             String nickname,
             String imageUrl,
             String content,
-            LocalDateTime verifiedAt
+            LocalDateTime verifiedAt,
+            long likeCount,
+            boolean liked
+    ) {
+    }
+
+    /**
+     * 좋아요·취소 결과(#63).
+     *
+     * 최종 상태를 실어 클라이언트가 재조회 없이 화면을 갱신하게 한다. 좋아요·취소는 멱등하므로
+     * 이미 눌린 상태에서 다시 눌러도 오류가 아니라 같은 응답이 나간다.
+     */
+    @Builder
+    public record Like(
+            Long verificationId,
+            long likeCount,
+            boolean liked
+    ) {
+    }
+
+    /**
+     * 내 인증 목록 래퍼(#62). 커서 방식은 피드와 같고 커서 값도 verificationId다.
+     *
+     * currentStreak을 함께 싣는 이유는, 이 화면이 "며칠째 이어오고 있는지"와 목록을 같이 보여주기
+     * 때문이다. 상세(Detail)에도 있지만 그쪽은 챌린지 정보를 받는 호출이라 스크롤 도중에는
+     * 다시 부르지 않는다.
+     */
+    @Builder
+    public record MyVerifications(
+            List<MyVerificationItem> verifications,
+            int currentStreak,
+            Long nextCursor,
+            boolean hasNext
+    ) {
+    }
+
+    /**
+     * 내 인증 한 건(#62).
+     *
+     * 피드(FeedItem)와 달리 nickname이 없다 — 전부 본인이라 화면에 쓸 데가 없다.
+     * 대신 verifiedDate(KST 기준일)를 싣는다. 날짜별로 묶어 보여주려면 시각이 아니라 기준일이
+     * 필요한데, 당일 재인증은 verifiedAt만 덮어쓰고 verifiedDate는 그대로여서 둘이 다를 수 있다.
+     *
+     * likeCount는 있고 liked는 없다(#63). 좋아요는 인증 한 건에 붙으므로 같은 사진이 피드에
+     * 나올 때와 수가 같아야 한다 — 한쪽만 비어 있으면 화면이 어긋난다. 반면 "내가 눌렀는지"는
+     * 자기 게시물에서 쓸 데가 없다.
+     */
+    @Builder
+    public record MyVerificationItem(
+            Long verificationId,
+            String imageUrl,
+            String content,
+            LocalDate verifiedDate,
+            LocalDateTime verifiedAt,
+            long likeCount
     ) {
     }
 
     // 상세 화면
-    // participating: 조회자가 현재 참여 중인지. 비로그인이면 false('참여하기' 버튼 노출).
+    // participating: 조회자가 현재 참여 중인지. false면 '참여하기', true면 '인증하기' 버튼을 노출한다.
     // reward: 챌린지 달성 시 부여되는 재화 수량. 목록 카드와 같은 값이다.
     // verificationPostCount: 인증 게시글 수(상단 통계). participantCount와 함께 카드 상단에 쓰인다.
     @Builder

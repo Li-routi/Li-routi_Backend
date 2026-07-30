@@ -23,4 +23,16 @@ public final class ChallengeReqDTO {
             String content
     ) {
     }
+
+    /**
+     * 인증 신고하기.
+     *
+     * reason은 선택이다. 화면의 더보기 메뉴에서 사유 선택 없이 바로 신고할 수 있어야 하므로
+     * 필수로 두지 않는다(database-schema.md의 reason NULL 허용과 짝을 이룬다).
+     */
+    public record Report(
+            @Size(max = 255, message = "신고 사유는 255자를 넘을 수 없습니다.")
+            String reason
+    ) {
+    }
 }

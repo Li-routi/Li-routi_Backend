@@ -56,6 +56,23 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      # 빌드보다 먼저 돌린다. git이 안 잡아주는 충돌이라 여기서만 걸린다 —
+      # 두 브랜치가 각각 V4__a.sql·V4__b.sql을 추가하면 파일명이 달라 자동 병합되고,
+      # develop 머지 후 부팅에서 "Found more than one migration with version 4"로 죽는다.
+      # Taskfile과 같은 로직이다(task db-check-duplicates). CI에는 task가 없어 그대로 옮겨 적었다.
+      - name: Check migration version duplicates
+        run: |
+          # 버전은 점·밑줄로 나뉠 수 있다(V2.1__, V1_1__). Taskfile의 db-check-duplicates와 같은 로직이다.
+          dup=$(ls src/main/resources/db/migration/V*.sql 2>/dev/null \
+            | sed 's|.*/V\([0-9][0-9._]*\)__.*|\1|' | sort | uniq -d)
+          if [ -n "$dup" ]; then
+            echo "::error::마이그레이션 버전이 중복됩니다: $dup — 빈 번호로 바꾸지 않으면 배포 후 부팅이 실패합니다."
+            pattern=$(printf '%s' "$dup" | sed 's/\./\\./g' | paste -sd'|' -)
+            ls src/main/resources/db/migration/V*.sql | grep -E "/V($pattern)__"
+            exit 1
+          fi
+          echo "✅ 마이그레이션 버전 중복 없음"
+
       # fail-fast 필수 값(JWT_SECRET 등)은 build.gradle의 test 태스크가 더미로 주입하므로 env 불필요.
       # DB/Redis는 application.yaml 기본값(localhost:3306 / 6379)이 위 서비스 컨테이너에 붙는다.
       - name: Build & test

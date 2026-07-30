@@ -1,10 +1,17 @@
 package com.lirouti.domain.media.service;
 
+import java.io.IOException;
 import java.time.Duration;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.time.format.ResolverStyle;
 import java.util.Arrays;
 import java.util.UUID;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 import com.lirouti.domain.media.converter.MediaConverter;
@@ -16,10 +23,18 @@ import com.lirouti.domain.media.enums.MediaPurpose;
 import com.lirouti.domain.media.exception.MediaException;
 import com.lirouti.domain.media.exception.code.error.MediaErrorCode;
 import com.lirouti.global.properties.S3Properties;
+import com.lirouti.global.util.TimeUtil;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import software.amazon.awssdk.core.ResponseInputStream;
+import software.amazon.awssdk.core.exception.SdkException;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
+import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.PresignedPutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
@@ -38,11 +53,34 @@ import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignReques
 @Service
 @RequiredArgsConstructor
 public class MediaService {
-    // generateMediaKey가 UUID.randomUUID()로 만드는 형태. 소문자 16진수 고정이다.
-    private static final Pattern ISSUED_KEY_UUID =
-            Pattern.compile("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
+    /**
+     * 용도 prefix 뒤에 올 수 있는 부분의 형태(#39).
+     *
+     * {@code (yyyy/MM/dd/)?UUID} 두 가지를 모두 받는다. 날짜 도입 전에 발급된
+     * {@code prefix/UUID} 형태가 이미 저장돼 있고, 형식이 바뀌기 전에 발급된 key가 바뀐 뒤에
+     * 저장될 수도 있다(presigned URL 유효 시간이 5분이라 창은 좁다).
+     *
+     * UUID는 randomUUID()가 만드는 소문자 16진수로 고정한다.
+     */
+    private static final Pattern ISSUED_KEY_BODY = Pattern.compile(
+            "(?<date>\\d{4}/\\d{2}/\\d{2}/)?"
+                    + "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
+
+    /**
+     * key의 날짜 구간. 스트릭·인증일과 같은 KST 기준을 쓴다(#39).
+     *
+     * 생성과 검증이 같은 포맷터를 쓴다 — 두 벌이면 규칙이 갈린다.
+     * STRICT + uuuu 조합인 이유: 검증에서 2026/02/30 · 2025/13/99 처럼 달력에 없는 날짜를
+     * 걸러내야 한다. 기본(SMART) 해석은 일자를 그 달의 마지막 날로 맞춰버려 통과시킨다.
+     * STRICT 에서는 연도 패턴이 yyyy(era 기준)면 era 없이 파싱할 수 없어 uuuu 를 쓴다.
+     */
+    private static final DateTimeFormatter KEY_DATE_PATH = DateTimeFormatter
+            .ofPattern("uuuu/MM/dd")
+            .withResolverStyle(ResolverStyle.STRICT);
 
     private final S3Presigner s3Presigner;
+    // 업로드된 바이트를 실제로 읽어 검증하기 위한 클라이언트(#22). presigner와 달리 S3를 호출한다.
+    private final S3Client s3Client;
     private final S3Properties s3Properties;
 
     public MediaResDTO.PresignedUrl issuePresignedUrl(MediaReqDTO.PresignedUrl request) {
@@ -104,7 +142,8 @@ public class MediaService {
      * 클라이언트가 보낸 key가 그 용도로 발급한 key의 형식인지 검증한다.
      *
      * key는 서버가 발급하지만 업로드 후 요청 본문으로 되돌아오므로 그대로 믿을 수 없다.
-     * 다른 용도의 경로나 임의 문자열이 저장되지 않도록 발급 규칙({@code prefix/UUID.확장자})과 대조한다.
+     * 다른 용도의 경로나 임의 문자열이 저장되지 않도록 발급 규칙과 대조한다. 날짜가 붙은 현재 형태와
+     * 날짜 도입 전의 flat 형태를 모두 받는다(#39, ISSUED_KEY_BODY 참고).
      * 실제 오브젝트가 업로드됐는지, 그 바이트가 정말 이미지인지는 확인하지 않는다(#22·#19 범위).
      */
     public void validateMediaKey(String mediaKey, MediaPurpose purpose) {
@@ -112,6 +151,101 @@ public class MediaService {
             log.warn("발급 규칙에 맞지 않는 미디어 key입니다. purpose={}, mediaKey={}", purpose, mediaKey);
             throw new MediaException(MediaErrorCode.INVALID_MEDIA_KEY);
         }
+    }
+
+    /**
+     * 업로드된 오브젝트의 <b>실제 바이트</b>가 key의 확장자와 맞는 형식인지 확인한다(#22).
+     *
+     * presigned URL은 서명에 Content-Type·Content-Length를 넣어 <b>요청 메타데이터</b>를 강제하지만,
+     * 바이트 내용까지 강제하지는 못한다. 즉 {@code Content-Type: image/jpeg}로 선언하고 임의의
+     * 바이너리를 올리는 것을 막지 못한다. 그 오브젝트가 공개 피드에 그대로 노출되면 문제가 된다.
+     *
+     * <p><b>앞 12바이트만 읽는다.</b> Range GET이라 파일이 커도 비용이 일정하고, 전체를 받아
+     * 디코딩하면 압축 폭탄(작은 파일이 거대한 이미지로 풀리는 것)에 노출된다. 매직 넘버 대조는
+     * "이 바이트가 정말 JPEG/PNG/WEBP인가"까지만 답한다 — 내용이 무엇인지는 판단하지 않으며
+     * 그건 AI 심사(#40) 몫이다.
+     *
+     * <p><b>트랜잭션 밖에서 호출해야 한다.</b> 외부 API 호출이라 트랜잭션 안에서 부르면
+     * DB 커넥션·행 락을 S3 왕복 시간만큼 붙잡는다(service_convention).
+     *
+     * @throws MediaException 업로드가 안 됐거나(404), 바이트가 형식과 다르거나(422),
+     *                        S3 조회 자체가 실패한 경우(500)
+     */
+    public void validateUploadedBytes(String mediaKey, MediaPurpose purpose) {
+        if (!s3Properties.isByteValidationEnabled()) {
+            log.debug("바이트 검증이 꺼져 있어 건너뜁니다. mediaKey={}", mediaKey);
+            return;
+        }
+        // 확장자는 앞선 형식 검증(validateMediaKey)을 통과한 값이라 반드시 매칭된다.
+        MediaContentType expected = resolveTypeByExtension(mediaKey);
+        byte[] head = readHead(mediaKey);
+
+        if (!expected.matchesSignature(head)) {
+            log.warn("업로드된 바이트가 선언한 형식과 다릅니다. purpose={}, expected={}, mediaKey={}",
+                    purpose, expected, mediaKey);
+            throw new MediaException(MediaErrorCode.MEDIA_CONTENT_MISMATCH);
+        }
+    }
+
+    /** 오브젝트 앞부분만 Range로 읽는다. 없으면 404, 그 밖의 실패는 500으로 바꾼다. */
+    private byte[] readHead(String mediaKey) {
+        GetObjectRequest request = GetObjectRequest.builder()
+                .bucket(s3Properties.getBucket())
+                .key(mediaKey)
+                // bytes=0-11 → 앞 12바이트. 파일이 그보다 짧으면 있는 만큼만 온다.
+                .range("bytes=0-" + (MediaContentType.SIGNATURE_LENGTH - 1))
+                .build();
+        try (ResponseInputStream<GetObjectResponse> response = s3Client.getObject(request)) {
+            return response.readAllBytes();
+        } catch (NoSuchKeyException e) {
+            log.warn("업로드되지 않은 미디어 key입니다. mediaKey={}", mediaKey);
+            throw new MediaException(MediaErrorCode.MEDIA_NOT_UPLOADED);
+        } catch (S3Exception e) {
+            // 404뿐 아니라 403도 "업로드 안 됨"으로 본다.
+            //
+            // 우리 정책은 s3:ListBucket을 일부러 주지 않는다(최소 권한). 그런데 S3는 ListBucket이
+            // 없는 주체에게는 오브젝트 존재 여부를 숨기려고 없는 key에도 NoSuchKey 대신
+            // AccessDenied(403)를 준다. 실측으로 확인한 동작이다(deploy/README.md).
+            // 그래서 403을 500으로 돌리면 "업로드를 안 한 클라이언트"에게 서버 오류라고 알려주게 된다.
+            //
+            // 대신 이렇게 하면 진짜 권한 문제도 404로 보이는 맹점이 생긴다. 다만 그 경우
+            // 정상 업로드된 key까지 전부 실패하므로 개별 요청이 아니라 전 요청이 404가 된다 —
+            // 아래 로그가 몰려 찍히면 업로드 누락이 아니라 정책 문제로 봐야 한다.
+            int status = e.statusCode();
+            if (status == HttpStatus.NOT_FOUND.value() || status == HttpStatus.FORBIDDEN.value()) {
+                log.warn("업로드된 오브젝트를 읽지 못했습니다(status={}). 업로드 누락으로 처리합니다."
+                        + " 이 로그가 계속 몰려 찍히면 s3:GetObject 권한을 확인하세요. mediaKey={}",
+                        status, mediaKey);
+                throw new MediaException(MediaErrorCode.MEDIA_NOT_UPLOADED);
+            }
+            // 0바이트 오브젝트는 Range GET에 416(InvalidRange)을 준다. 시작 오프셋 0조차
+            // 객체 범위 밖이기 때문이다(1바이트만 있어도 있는 만큼 돌려주므로 416이 아니다).
+            //
+            // 읽을 바이트가 없다는 뜻이니 "이미지가 아니다"와 같은 결론이고, 사용자에게
+            // 서버 오류(500)라고 답할 일이 아니다.
+            //
+            // 정상 경로로는 도달하지 않는다 — contentLength는 @Positive로 막히고, presigned URL은
+            // 그 길이를 서명에 넣어 다른 크기의 PUT을 거부한다. 발급 경로를 거치지 않고 버킷에
+            // 직접 쓰인 오브젝트를 위한 방어다.
+            if (status == HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE.value()) {
+                log.warn("업로드된 오브젝트가 비어 있습니다(416). mediaKey={}", mediaKey);
+                throw new MediaException(MediaErrorCode.MEDIA_CONTENT_MISMATCH);
+            }
+            log.error("미디어 바이트 조회에 실패했습니다. mediaKey={}", mediaKey, e);
+            throw new MediaException(MediaErrorCode.MEDIA_VALIDATION_FAILED);
+        } catch (SdkException | IOException e) {
+            // 권한·네트워크·타임아웃. 사용자 잘못이 아니므로 5xx로 돌려주고 저장은 막는다.
+            log.error("미디어 바이트 조회에 실패했습니다. mediaKey={}", mediaKey, e);
+            throw new MediaException(MediaErrorCode.MEDIA_VALIDATION_FAILED);
+        }
+    }
+
+    private MediaContentType resolveTypeByExtension(String mediaKey) {
+        String extension = mediaKey.substring(mediaKey.lastIndexOf('.') + 1);
+        return Arrays.stream(MediaContentType.values())
+                .filter(type -> type.getExtension().equals(extension))
+                .findFirst()
+                .orElseThrow(() -> new MediaException(MediaErrorCode.INVALID_MEDIA_KEY));
     }
 
     private boolean matchesIssuedKeyFormat(String mediaKey, MediaPurpose purpose) {
@@ -129,7 +263,35 @@ public class MediaService {
         }
         String baseName = fileName.substring(0, extensionSeparator);
         String extension = fileName.substring(extensionSeparator + 1);
-        return ISSUED_KEY_UUID.matcher(baseName).matches() && isExtensionAllowedFor(purpose, extension);
+
+        Matcher matcher = ISSUED_KEY_BODY.matcher(baseName);
+        if (!matcher.matches() || !isExtensionAllowedFor(purpose, extension)) {
+            return false;
+        }
+        return isValidDatePathOrAbsent(matcher.group("date"));
+    }
+
+    /**
+     * 날짜 구간이 달력에 실제로 있는 날인지 본다(#39).
+     *
+     * 정규식은 자릿수만 보므로 2026/02/30 · 2025/13/99 도 통과한다. 그런 key는 서버가 발급한
+     * 적이 없으니 보통 업로드 확인(#22)에서 걸리지만, 그 검증은 킬 스위치로 끌 수 있다
+     * (AWS_S3_BYTE_VALIDATION_ENABLED). 꺼진 동안에는 존재하지 않는 오브젝트를 가리키는 key가
+     * 그대로 저장되어 피드에 깨진 이미지로 남는다.
+     *
+     * 날짜가 없는 형태(날짜 도입 전 발급)는 통과시킨다.
+     */
+    private static boolean isValidDatePathOrAbsent(String datePathWithSlash) {
+        if (datePathWithSlash == null) {
+            return true;
+        }
+        try {
+            // 정규식이 잡은 구간은 끝에 '/'가 붙어 있다.
+            LocalDate.parse(datePathWithSlash.substring(0, datePathWithSlash.length() - 1), KEY_DATE_PATH);
+            return true;
+        } catch (DateTimeParseException e) {
+            return false;
+        }
     }
 
     /** 그 용도가 허용하는 카테고리의 형식들만 확장자로 인정한다(사진 전용 용도에 mp4 key 방지). */
@@ -186,12 +348,27 @@ public class MediaService {
     }
 
     /**
-     * key는 추측할 수 없어야 한다. UUID를 사용해 다른 사용자의 미디어 경로를 유추하지 못하게 한다.
-     * 클라이언트가 보낸 파일명은 신뢰하지 않고 사용하지 않는다(경로 조작 방지).
+     * {@code {용도}/{yyyy}/{MM}/{dd}/{UUID}.{확장자}} 형태로 만든다(#39).
+     *
+     * 리프는 UUID다. key는 추측할 수 없어야 하고, 클라이언트가 보낸 파일명은 신뢰하지 않는다
+     * (경로 조작 방지).
+     *
+     * <p>날짜를 넣는 이유는 미참조 이미지 정리(#19)다. 날짜 prefix가 있으면 하루치만 훑어
+     * 고아 파일을 찾을 수 있고, 없으면 용도 전체를 스캔해야 한다.
+     *
+     * <p><b>이 날짜는 "업로드일"이다.</b> 발급은 인증보다 먼저 일어나므로 인증일을 담을 수 없다.
+     * 23:59에 발급받아 00:01에 인증하면 경로는 어제, DB는 오늘이 된다.
+     * <b>업무 판정에 경로의 날짜를 쓰지 않는다</b> — 판정은 항상 DB 컬럼을 본다.
+     *
+     * <p>공개 용도에는 challengeId·memberId 같은 식별자를 넣지 않는다. 공개 prefix는 경로가
+     * URL에 그대로 노출되므로(#66) 식별자를 넣으면 URL만 보고 누가 무엇을 했는지 알 수 있다.
+     * 비공개 용도의 접근 범위 식별자 규칙은 database-schema.md에 정의돼 있다(해당 미디어가
+     * 생길 때 구현한다).
      */
     private String generateMediaKey(MediaPurpose purpose, MediaContentType contentType) {
-        return "%s/%s.%s".formatted(
+        return "%s/%s/%s.%s".formatted(
                 purpose.getPathPrefix(),
+                LocalDate.now(TimeUtil.KST).format(KEY_DATE_PATH),
                 UUID.randomUUID(),
                 contentType.getExtension()
         );

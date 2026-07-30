@@ -1,5 +1,8 @@
 package com.lirouti.domain.group.converter;
 
+import java.util.Comparator;
+import java.util.List;
+
 import com.lirouti.domain.group.dto.request.GroupReqDTO;
 import com.lirouti.domain.group.dto.response.GroupResDTO;
 import com.lirouti.domain.group.entity.Group;
@@ -7,8 +10,6 @@ import com.lirouti.domain.group.entity.GroupRoutine;
 import com.lirouti.domain.group.entity.GroupRoutineSchedule;
 import com.lirouti.domain.group.entity.RoutineCategory;
 import com.lirouti.domain.group.repository.GroupRoutineAssignmentRepositoryCustom.TodayAssignmentProjection;
-import java.util.Comparator;
-import java.util.List;
 
 public final class GroupConverter {
     private GroupConverter() {
@@ -120,6 +121,14 @@ public final class GroupConverter {
 
         return GroupResDTO.TodayRoutineList.builder()
                 .routines(routines)
+                .build();
+    }
+
+    // 저장된 그룹 초대코드를 설정 화면 응답으로 변환
+    public static GroupResDTO.InviteCode toInviteCodeResult(Group group) {
+        return GroupResDTO.InviteCode.builder()
+                .inviteCode(group.getInviteCode())
+                .expiresAt(group.getInviteCodeExpiresAt())
                 .build();
     }
 

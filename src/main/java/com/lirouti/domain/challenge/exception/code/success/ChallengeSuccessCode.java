@@ -45,6 +45,27 @@ public enum ChallengeSuccessCode implements BaseSuccessCode {
             HttpStatus.OK,
             "인증 피드 조회에 성공했습니다.",
             "CHALLENGE200_7"
+    ),
+    VERIFICATION_REPORT_SUCCESS(
+            HttpStatus.OK,
+            "인증 신고에 성공했습니다.",
+            "CHALLENGE200_8"
+    ),
+    MY_VERIFICATION_FETCH_SUCCESS(
+            HttpStatus.OK,
+            "내 인증 목록 조회에 성공했습니다.",
+            "CHALLENGE200_9"
+    ),
+    // 좋아요·취소는 멱등하다. 이미 그 상태여도 실패가 아니라 이 코드로 최종 상태를 돌려준다(#63).
+    VERIFICATION_LIKE_SUCCESS(
+            HttpStatus.OK,
+            "인증 좋아요에 성공했습니다.",
+            "CHALLENGE200_10"
+    ),
+    VERIFICATION_UNLIKE_SUCCESS(
+            HttpStatus.OK,
+            "인증 좋아요 취소에 성공했습니다.",
+            "CHALLENGE200_11"
     );
 
     private final HttpStatus httpStatus;

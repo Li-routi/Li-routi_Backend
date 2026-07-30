@@ -4,6 +4,7 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.PessimisticLockingFailureException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -17,6 +18,7 @@ import com.lirouti.global.apiPayload.ApiResponse;
 import com.lirouti.global.apiPayload.code.BaseErrorCode;
 import com.lirouti.global.apiPayload.code.GeneralErrorCode;
 import com.lirouti.global.apiPayload.exception.GeneralException;
+import com.lirouti.global.ratelimit.RateLimitExceededException;
 
 import java.sql.SQLException;
 import java.util.function.Predicate;
@@ -40,6 +42,22 @@ public class GeneralExceptionAdvice {
                 .body(ApiResponse.onFailure(
                         e.getCode()
                 ));
+    }
+
+    /**
+     * 레이트 리밋 초과(#23). GeneralException 처리기로도 429가 나가지만, 여기서 잡아
+     * {@code Retry-After}를 붙인다 — 언제 다시 되는지 알려주지 않으면 클라이언트가 즉시
+     * 재시도하며 한도를 더 깎는다.
+     *
+     * 로그는 인터셉터가 정책·식별자와 함께 이미 남겼으므로 여기서 다시 남기지 않는다.
+     */
+    @ExceptionHandler(RateLimitExceededException.class)
+    public ResponseEntity<@NonNull ApiResponse<Void>> handleRateLimitExceeded(
+            RateLimitExceededException e) {
+        return ResponseEntity
+                .status(e.getCode().getHttpStatus())
+                .header(HttpHeaders.RETRY_AFTER, String.valueOf(e.getRetryAfterSeconds()))
+                .body(ApiResponse.onFailure(e.getCode()));
     }
 
     // @Valid에서 검증 오류가 발생한 예외에 대한 핸들러
