@@ -25,7 +25,7 @@ public interface HomeControllerDocs {
             ),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
                     responseCode = "401",
-                    description = "유효하지 않거나 만려된 인증 토큰"
+                    description = "유효하지 않거나 만료된 인증 토큰"
             ),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
                     responseCode = "404",
