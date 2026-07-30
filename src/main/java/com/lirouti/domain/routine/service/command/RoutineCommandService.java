@@ -1,6 +1,7 @@
 package com.lirouti.domain.routine.service.command;
 
 import com.lirouti.domain.member.entity.Member;
+import com.lirouti.domain.member.repository.MemberRepository;
 import com.lirouti.domain.member.service.query.MemberQueryService;
 import com.lirouti.domain.routine.converter.RoutineConverter;
 import com.lirouti.domain.routine.dto.request.RoutineReqDTO;
@@ -23,7 +24,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,7 +32,14 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class RoutineCommandService {
+    /** 같은 기본 제공 루틴을 두 번 고르지 못하게 하는 제약. V7 마이그레이션과 이름이 같아야 한다. */
+    private static final String UK_MEMBER_ROUTINE_TEMPLATE = "uk_member_routine_member_template";
+
+    /** 한 회원 안에서 카테고리 이름 중복을 막는 제약. V7 마이그레이션과 이름이 같아야 한다. */
+    private static final String UK_ROUTINE_CATEGORY_MEMBER_NAME = "uk_routine_category_member_name";
+
     private final MemberQueryService memberQueryService;
+    private final MemberRepository memberRepository;
     private final RoutineCategoryRepository routineCategoryRepository;
     private final RoutineTemplateRepository routineTemplateRepository;
     private final MemberRoutineRepository memberRoutineRepository;
@@ -54,6 +62,7 @@ public class RoutineCommandService {
     ) {
         validateRequest(request);
 
+        lockMember(memberId);
         Member member = memberQueryService.getActiveMember(memberId);
         List<RoutineReqDTO.CreateRoutine> items = request.routines();
 
@@ -91,6 +100,7 @@ public class RoutineCommandService {
             throw new IllegalArgumentException("유효하지 않은 카테고리 생성 요청입니다.");
         }
 
+        lockMember(memberId);
         Member member = memberQueryService.getActiveMember(memberId);
         String name = normalizedCategoryName(memberId, request.name());
 
@@ -117,6 +127,27 @@ public class RoutineCommandService {
                 memberId, category.getId());
 
         return RoutineConverter.toCategory(category);
+    }
+
+    /**
+     * 개수 상한을 세는 시점부터 저장까지를 회원 단위로 직렬화하기 위해 회원 행에 쓰기 잠금을 건다.
+     *
+     * <p>활성 루틴 30개와 카테고리 5개 상한은 "지금 개수 + 이번 요청"으로 판단한다. 세는 것과
+     * 저장하는 것이 원자적이지 않으므로, 같은 회원의 요청 둘이 겹치면(더블탭·재시도) 양쪽 모두
+     * 상한 검사를 통과해 합계가 상한을 넘을 수 있다. 이 상한은 유니크 제약처럼 DB로 표현할 수
+     * 있는 규칙이 아니라서, 잠금으로 구간을 직렬화하는 방법을 쓴다.
+     *
+     * <p>잠그는 대상이 회원 행이므로 다른 회원의 요청은 서로 막지 않는다. 회원 한 명이 자기
+     * 루틴을 동시에 여러 번 만드는 일은 드물어 대기 비용도 사실상 없다.
+     *
+     * @param memberId 잠글 회원 ID
+     */
+    private void lockMember(Long memberId) {
+        if (memberId == null) {
+            log.warn("회원 ID 없이 루틴 생성이 호출됐습니다.");
+            throw new IllegalArgumentException("회원 ID는 필수입니다.");
+        }
+        memberRepository.findByIdForUpdate(memberId);
     }
 
     /**
@@ -325,37 +356,74 @@ public class RoutineCommandService {
     }
 
     /**
-     * 루틴과 cascade로 연결된 반복 요일을 즉시 반영하고, 저장 중 무결성 오류를 도메인 예외로 바꾼다.
+     * 루틴과 cascade로 연결된 반복 요일을 즉시 반영하고, 기본 루틴 중복만 도메인 예외로 바꾼다.
      * 애플리케이션 검증을 통과했는데도 걸린다면 같은 요청이 동시에 두 번 들어온 경우다.
      *
      * @param memberId 요청 회원 ID
      * @param routines 저장할 루틴 목록
-     * @throws RoutineException 저장 과정에서 무결성 제약을 위반한 경우
+     * @throws RoutineException 같은 기본 루틴이 이미 등록되어 유니크 제약을 위반한 경우
      */
     private void saveRoutines(Long memberId, List<MemberRoutine> routines) {
         try {
             memberRoutineRepository.saveAll(routines);
             memberRoutineRepository.flush();
-        } catch (DataIntegrityViolationException e) {
-            log.warn("개인 루틴 저장 중 무결성 제약을 위반했습니다. memberId={}", memberId);
+        } catch (DuplicateKeyException e) {
+            if (!violates(e, UK_MEMBER_ROUTINE_TEMPLATE)) {
+                throw e;
+            }
+            log.warn("이미 등록된 기본 제공 루틴을 동시에 저장하려 했습니다. memberId={}", memberId);
             throw new RoutineException(RoutineErrorCode.DUPLICATE_ROUTINE_TEMPLATE);
         }
     }
 
     /**
-     * 카테고리를 즉시 반영하고, 저장 중 무결성 오류를 도메인 예외로 바꾼다.
+     * 카테고리를 즉시 반영하고, 이름 중복만 도메인 예외로 바꾼다.
      *
      * @param memberId 요청 회원 ID
      * @param category 저장할 카테고리
-     * @throws RoutineException 같은 이름이 동시에 등록된 경우
+     * @throws RoutineException 같은 이름이 동시에 등록되어 유니크 제약을 위반한 경우
      */
     private void saveCategory(Long memberId, RoutineCategory category) {
         try {
             routineCategoryRepository.saveAndFlush(category);
-        } catch (DataIntegrityViolationException e) {
-            log.warn("카테고리 저장 중 무결성 제약을 위반했습니다. memberId={}, name={}",
+        } catch (DuplicateKeyException e) {
+            if (!violates(e, UK_ROUTINE_CATEGORY_MEMBER_NAME)) {
+                throw e;
+            }
+            log.warn("같은 이름의 카테고리를 동시에 저장하려 했습니다. memberId={}, name={}",
                     memberId, category.getName());
             throw new RoutineException(RoutineErrorCode.DUPLICATE_ROUTINE_CATEGORY_NAME);
         }
+    }
+
+    /**
+     * 무결성 예외가 특정 유니크 제약 때문인지 확인한다.
+     *
+     * <p>제약 이름으로 판별하는 이유는, 한 저장 경로에서 걸릴 수 있는 제약이 여럿이기 때문이다.
+     * 예를 들어 루틴 저장은 cascade로 반복 요일까지 함께 넣으므로
+     * {@code uk_member_routine_schedule_day}에도 걸릴 수 있는데, 그것까지 "이미 등록한 기본
+     * 제공 루틴입니다"로 응답하면 클라이언트가 엉뚱한 안내를 하게 된다. 해당 제약이 아니면
+     * 원래 예외를 그대로 올려 전역 예외 처리기가 500으로 다루게 둔다 — 우리가 예상하지 못한
+     * 무결성 위반은 사용자 입력 문제가 아니라 버그이므로 조용히 409로 덮으면 안 된다.
+     *
+     * <p>MySQL은 중복 키 메시지에 제약 이름을 담는다
+     * ({@code Duplicate entry '...' for key 'member_routine.uk_...'}). 예외 원인 사슬 전체를
+     * 훑는 것은 Spring이 드라이버 예외를 감싸면서 메시지를 다시 쓰기 때문이다.
+     *
+     * @param exception 저장 중 발생한 중복 키 예외
+     * @param constraintName 확인할 유니크 제약 이름
+     * @return 그 제약 위반이면 {@code true}
+     */
+    private static boolean violates(DuplicateKeyException exception, String constraintName) {
+        for (Throwable cause = exception; cause != null; cause = cause.getCause()) {
+            String message = cause.getMessage();
+            if (message != null && message.contains(constraintName)) {
+                return true;
+            }
+            if (cause.getCause() == cause) {
+                break;
+            }
+        }
+        return false;
     }
 }

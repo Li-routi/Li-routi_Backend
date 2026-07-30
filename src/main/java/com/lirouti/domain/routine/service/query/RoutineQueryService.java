@@ -101,7 +101,6 @@ public class RoutineQueryService {
             throw new RoutineException(RoutineErrorCode.ROUTINE_CATEGORY_ACCESS_DENIED);
         }
 
-        return routineTemplateRepository
-                .findByCategoryIdAndActiveTrueOrderByDisplayOrderAscIdAsc(categoryId);
+        return routineTemplateRepository.findActiveByCategoryId(categoryId);
     }
 }

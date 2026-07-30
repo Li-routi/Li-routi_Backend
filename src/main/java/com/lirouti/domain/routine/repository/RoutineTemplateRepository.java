@@ -11,10 +11,23 @@ public interface RoutineTemplateRepository extends JpaRepository<RoutineTemplate
     /**
      * 한 카테고리의 기본 제공 루틴을 노출 순서대로 조회한다.
      *
+     * <p>전체 조회와 마찬가지로 카테고리를 fetch join 한다. 응답이 카테고리 이름을 함께 내려
+     * 주는데, 지금은 호출부가 카테고리를 먼저 검증하며 조회해 둬서 영속성 컨텍스트에 이미 있고
+     * 추가 질의가 나가지 않는다. 다만 그건 호출 순서에 기댄 것이라, 이 메서드만 따로 쓰는 곳이
+     * 생기면 곧바로 지연 로딩 질의가 붙는다. 쿼리 자체를 자립적으로 둔다.
+     *
      * @param categoryId 카테고리 ID
      * @return 활성 기본 제공 루틴 목록
      */
-    List<RoutineTemplate> findByCategoryIdAndActiveTrueOrderByDisplayOrderAscIdAsc(Long categoryId);
+    @Query("""
+            select template
+            from RoutineTemplate template
+            join fetch template.category
+            where template.category.id = :categoryId
+              and template.active = true
+            order by template.displayOrder asc, template.id asc
+            """)
+    List<RoutineTemplate> findActiveByCategoryId(@Param("categoryId") Long categoryId);
 
     /**
      * 모든 카테고리의 기본 제공 루틴을 "카테고리 순서 → 카테고리 내 순서"로 조회한다.

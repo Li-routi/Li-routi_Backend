@@ -12,6 +12,7 @@ import static org.mockito.Mockito.when;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.enums.Role;
 import com.lirouti.domain.member.enums.SocialProvider;
+import com.lirouti.domain.member.repository.MemberRepository;
 import com.lirouti.domain.member.service.query.MemberQueryService;
 import com.lirouti.domain.routine.dto.request.RoutineReqDTO;
 import com.lirouti.domain.routine.dto.response.RoutineResDTO;
@@ -48,6 +49,8 @@ class RoutineCommandServiceTest {
 
     @Mock
     private MemberQueryService memberQueryService;
+    @Mock
+    private MemberRepository memberRepository;
     @Mock
     private RoutineCategoryRepository routineCategoryRepository;
     @Mock
