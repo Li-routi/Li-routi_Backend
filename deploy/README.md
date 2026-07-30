@@ -73,8 +73,11 @@ cd /opt/app
 ```bash
 # 로컬 PC의 레포 루트에서 실행 (<pem>·<서버IP>는 본인 값)
 scp -i <pem> deploy/docker-compose.prod.yml ubuntu@<서버IP>:/opt/app/docker-compose.yml
+scp -i <pem> deploy/Caddyfile               ubuntu@<서버IP>:/opt/app/Caddyfile
 scp -i <pem> deploy/backup.sh               ubuntu@<서버IP>:/opt/app/backup.sh
 ```
+
+> **compose 와 Caddyfile 은 배포 워크플로가 갱신하지 않는다.** `.env` 와 달리 이 둘은 서버에 있는 파일을 그대로 쓴다. 레포에서 고쳤다면 **머지 전에 다시 scp** 해야 반영된다.
 
 > 파일명 매핑 주의: `docker-compose.prod.yml` → 서버에선 **`docker-compose.yml`**. 배포 워크플로가 `cd /opt/app` 후 이 파일명 그대로를 쓴다.
 > `.env`는 올리지 않는다 — 배포 때 `ENV_FILE` 시크릿 내용으로 자동 생성된다(4번 참고).
@@ -137,6 +140,55 @@ cd /opt/app && docker compose logs -f app
   - `3306`(MySQL)·`6379`(Redis) — **열지 않는다**(compose 내부 네트워크 전용).
 - **S3 버킷**: `lirouti-prod-bucket`(미디어)·`lirouti-db-backup`(백업) 이름으로 생성(비공개). 서버 `.env`의 `AWS_S3_BUCKET`·`backup.sh`의 `BUCKET`을 이 이름과 일치시킨다.
 - **백업 cron** (매일 04:00 KST): `crontab -e` → `0 4 * * * /opt/app/backup.sh >> /opt/app/backup.log 2>&1`
+
+## 도메인 · HTTPS (Caddy)
+
+`Caddy(80/443) → app(8080)` 구성이다. Caddy 가 Let's Encrypt 인증서를 자동 발급·갱신하므로 인증서 관리 부담은 없다.
+
+### 순서를 지켜야 한다
+
+인증서 발급은 **DNS 와 방화벽이 먼저 맞아 있어야** 성공한다. 순서를 어기면 발급이 실패하고, Let's Encrypt 는 같은 도메인에 **주당 5회 실패 제한**이 있어 재시도를 반복하면 그 주 내내 막힌다.
+
+```
+1. 도메인 발급 → A 레코드를 서버 EIP 로 연결
+2. dig +short <도메인> 이 EIP 를 뱉는지 확인      ← 여기서 안 맞으면 진행 금지
+3. 보안그룹 인바운드 80 · 443 개방               ← 80 은 HTTP-01 챌린지에 필요
+4. ENV_FILE 에 LIROUTI_DOMAIN 추가
+5. Caddyfile · docker-compose.yml 을 서버로 scp
+6. 배포
+```
+
+4번을 빠뜨리면 배포 워크플로가 **시작 전에 막는다**(`Check LIROUTI_DOMAIN is set`). Caddy 가 뜨지 못한 채 앱만 올라가 80·443 이 먹통이 되는 상태를 피하려는 것이다.
+
+### 환경변수
+
+| 키 | 필수 | 설명 |
+| --- | --- | --- |
+| `LIROUTI_DOMAIN` | ✅ | 서비스 도메인. 없으면 배포가 중단된다 |
+| `LETSENCRYPT_EMAIL` | | 만료 임박·발급 실패 알림 주소. 없으면 익명 발급이라 알림이 오지 않는다 |
+
+### 8080 은 아직 열려 있다
+
+Caddy 를 붙였지만 `8080` 공개 매핑을 **일부러 남겨 뒀다.** 앱 클라이언트가 아직 `http://<EIP>:8080` 을 보고 있어서, 여기서 닫으면 앱이 서버에 못 붙는다.
+
+**앱이 `https://<도메인>` 으로 전환된 것을 확인한 뒤** `docker-compose.yml` 에서 한 줄만 바꾸고 다시 scp·배포한다.
+
+```yaml
+    ports:
+      - "127.0.0.1:8080:8080"   # 퍼블릭 IP 로는 닫히고, 배포 헬스체크(localhost)는 그대로 동작
+```
+
+`db` 가 이미 같은 방식이다.
+
+### 확인
+
+```bash
+curl -I https://<도메인>/health          # 200, 인증서 경고 없음
+curl -I http://<도메인>/health           # 308 → https 리다이렉트
+docker compose logs caddy | tail -20     # certificate obtained 류의 줄
+```
+
+인증서가 안 나오면 **재시작을 반복하지 말고** 원인부터 본다. 대개 A 레코드 미전파 아니면 80 번 미개방이다.
 
 ## 미디어 서빙 (#66)
 

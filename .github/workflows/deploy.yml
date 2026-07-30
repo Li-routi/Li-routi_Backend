@@ -135,6 +135,26 @@ jobs:
             echo "JPA_DDL_AUTO 우회 없음 (validate)"
           fi
 
+      # Caddy 는 LIROUTI_DOMAIN 없이 뜨지 못한다. 값이 비면 compose 가 빈 문자열을 넘기고
+      # Caddy 는 사이트 주소가 없는 설정으로 죽는데, 그 시점에는 이미 배포가 절반 진행돼
+      # 앱만 뜬 채 80·443 이 아무것도 응답하지 않는 상태가 된다.
+      #
+      # ddl-auto 검사와 달리 여기서는 막는다. 그쪽은 "동작하지만 위험한" 설정이라 드러내기만
+      # 하면 되지만, 이건 "배포하면 확실히 깨지는" 값이라 시작 전에 세우는 편이 낫다.
+      # 값 자체(도메인)는 비밀이 아니라 로그에 실어도 된다.
+      - name: Check LIROUTI_DOMAIN is set
+        env:
+          ENV_FILE: ${{ secrets.ENV_FILE }}
+        run: |
+          value="$(printf '%s\n' "$ENV_FILE" \
+            | sed -n 's/^[[:space:]]*LIROUTI_DOMAIN[[:space:]]*=//p' | tail -1 \
+            | tr -d '\r"'"'" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+          if [ -z "$value" ]; then
+            echo "::error::ENV_FILE에 LIROUTI_DOMAIN이 없습니다. Caddy가 뜨지 못해 80·443이 응답하지 않습니다. 시크릿에 LIROUTI_DOMAIN=<도메인>을 넣고 다시 배포하세요."
+            exit 1
+          fi
+          echo "LIROUTI_DOMAIN=$value"
+
       # ssh-action은 v1.2.3에 고정한다. v1.2.4부터 번들 drone-ssh가 1.8.2로 올라가면서
       # 입력(host/key)을 못 읽고 "no configuration file provided"로 죽는 회귀가 있어,
       # 1.8.2 직전 버전인 v1.2.3으로 내려 우회한다.
