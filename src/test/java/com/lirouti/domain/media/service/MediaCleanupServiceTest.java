@@ -283,6 +283,22 @@ class MediaCleanupServiceTest {
     }
 
     @Test
+    @DisplayName("지울 게 없어도 실행 사실이 집계된다 — 조용한 성공이 실패와 구분돼야 한다")
+    void sweepOrphans_NothingToDelete_StillCompletes() {
+        // given: 훑을 오브젝트가 하나도 없는 날
+        givenObjects();
+        MediaCleanupService service = service(sourceReferencing());
+
+        // when
+        int deleted = service.sweepOrphans(TODAY);
+
+        // then: 목록은 실제로 훑었고, 지운 것만 0이다
+        assertThat(deleted).isZero();
+        verify(s3Client).listObjectsV2(any(ListObjectsV2Request.class));
+        verify(s3Client, never()).deleteObjects(any(DeleteObjectsRequest.class));
+    }
+
+    @Test
     @DisplayName("권한이 없으면(403) 조용히 넘어가고 삭제를 시도하지 않는다")
     void sweepOrphans_AccessDenied_SkipsWithoutDeleting() {
         // given: IAM에 s3:ListBucket이 없는 현재 운영 상태

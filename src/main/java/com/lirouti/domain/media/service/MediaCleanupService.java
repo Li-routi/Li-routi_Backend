@@ -110,33 +110,62 @@ public class MediaCleanupService {
         LocalDate newest = today.minusDays(cleanupProperties.getGraceDays());
         LocalDate oldest = newest.minusDays(cleanupProperties.getCatchUpDays());
 
+        int scanned = 0;
         int deleted = 0;
+        int failedDates = 0;
+        boolean stoppedAtLimit = false;
+
+        outer:
         for (LocalDate date = oldest; !date.isAfter(newest); date = date.plusDays(1)) {
             for (Map.Entry<MediaPurpose, List<MediaReferenceSource>> entry : sourcesByPurpose.entrySet()) {
                 if (deleted >= cleanupProperties.getMaxDeletionsPerRun()) {
-                    log.warn("1회 삭제 상한({})에 도달해 정리를 중단합니다. 정상 운영에서는 닿지 않는 값이므로 "
-                                    + "참조처 조회가 비어 있지 않은지 확인하세요.",
-                            cleanupProperties.getMaxDeletionsPerRun());
-                    return deleted;
+                    stoppedAtLimit = true;
+                    break outer;
                 }
-                deleted += sweepDate(entry.getKey(), entry.getValue(), date,
+                SweepResult result = sweepDate(entry.getKey(), entry.getValue(), date,
                         cleanupProperties.getMaxDeletionsPerRun() - deleted);
+                scanned += result.scanned();
+                deleted += result.deleted();
+                if (result.failed()) {
+                    failedDates++;
+                }
             }
         }
 
-        if (deleted > 0) {
-            log.info("미참조 미디어 정리 완료. {}건{} ({} ~ {})",
-                    deleted, cleanupProperties.isDryRun() ? " (흉내내기)" : "", oldest, newest);
+        if (stoppedAtLimit) {
+            log.warn("1회 삭제 상한({})에 도달해 정리를 중단합니다. 정상 운영에서는 닿지 않는 값이므로 "
+                            + "참조처 조회가 비어 있지 않은지 확인하세요.",
+                    cleanupProperties.getMaxDeletionsPerRun());
         }
+
+        // 0건이어도 반드시 남긴다. 이 줄이 없으면 "돌았는데 지울 게 없었다"와 "아예 안 돌았다"를
+        // 운영에서 구분할 수 없다. 켠 직후 며칠은 이 로그로만 동작을 확인하게 되므로,
+        // 조용한 성공은 실패와 똑같아 보인다.
+        log.info("미참조 미디어 정리 {}. 대상 기간={} ~ {}, 훑은 오브젝트={}건, {}={}건{}",
+                failedDates > 0 ? "일부 실패" : "완료",
+                oldest, newest, scanned,
+                cleanupProperties.isDryRun() ? "삭제 예정" : "삭제",
+                deleted,
+                failedDates > 0 ? ", 훑지 못한 구간=%d개(위 오류 로그 확인)".formatted(failedDates) : "");
         return deleted;
     }
 
+    /**
+     * 한 구간을 훑은 결과.
+     *
+     * {@code failed}를 따로 두는 이유는 목록 조회가 막혔을 때와 훑었는데 지울 게 없을 때가
+     * 둘 다 "0건"으로 보이기 때문이다. 권한 문제를 정상 동작으로 오해하면 안 된다.
+     */
+    private record SweepResult(int scanned, int deleted, boolean failed) {
+    }
+
     /** 용도 하나 × 날짜 하나. 목록 → 대조 → 삭제를 페이지 단위로 반복한다. */
-    private int sweepDate(MediaPurpose purpose,
-                          List<MediaReferenceSource> sources,
-                          LocalDate date,
-                          int remainingBudget) {
+    private SweepResult sweepDate(MediaPurpose purpose,
+                                  List<MediaReferenceSource> sources,
+                                  LocalDate date,
+                                  int remainingBudget) {
         String prefix = "%s/%s/".formatted(purpose.getPathPrefix(), date.format(KEY_DATE_PATH));
+        int scanned = 0;
         int deleted = 0;
         String continuationToken = null;
 
@@ -146,12 +175,13 @@ public class MediaCleanupService {
                 page = listPage(prefix, continuationToken);
             } catch (S3Exception e) {
                 logS3Failure("목록 조회", prefix, e);
-                return deleted;
+                return new SweepResult(scanned, deleted, true);
             } catch (SdkException e) {
                 log.error("미디어 목록 조회에 실패했습니다. prefix={}", prefix, e);
-                return deleted;
+                return new SweepResult(scanned, deleted, true);
             }
 
+            scanned += page.contents().size();
             List<String> candidates = page.contents().stream()
                     .map(S3Object::key)
                     // 우리가 발급한 형식이 아닌 오브젝트는 손대지 않는다. 콘솔에서 사람이 올린
@@ -171,7 +201,7 @@ public class MediaCleanupService {
             continuationToken = Boolean.TRUE.equals(page.isTruncated()) ? page.nextContinuationToken() : null;
         } while (continuationToken != null && deleted < remainingBudget);
 
-        return deleted;
+        return new SweepResult(scanned, deleted, false);
     }
 
     private ListObjectsV2Response listPage(String prefix, String continuationToken) {
