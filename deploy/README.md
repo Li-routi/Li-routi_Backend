@@ -160,7 +160,9 @@ cd /opt/app && docker compose logs -f app
 
 ### 공개 미디어 — 버킷 정책으로 prefix만 연다
 
-[`deploy/bucket-policy-media.json`](./bucket-policy-media.json)을 S3 → 버킷 → 권한 → 버킷 정책에 붙여넣는다. `s3:GetObject`만, `challenge-verifications/*`만 허용한다. `ListBucket`은 주지 않으므로 **목록으로 훑는 것은 여전히 불가능**하고 key가 UUID라 추측도 안 된다.
+[`deploy/bucket-policy-media.json`](./bucket-policy-media.json)을 S3 → 버킷 → 권한 → 버킷 정책에 붙여넣는다. `s3:GetObject`만, `challenge-verifications/*`만 허용한다. 이 정책은 **익명 접근자**에게 적용되며 `ListBucket`을 주지 않으므로 **목록으로 훑는 것은 불가능**하고 key가 UUID라 추측도 안 된다.
+
+> **주체를 구분할 것.** 위 문장은 버킷 정책(익명 접근자) 이야기다. 앱이 쓰는 IAM 역할은 별개이며, 미참조 이미지 정리를 위해 `challenge-verifications/` 아래에 한해 `ListBucket`을 갖는다(아래 [미참조 미디어 정리] 절). 즉 **URL을 아는 외부인은 여전히 열거할 수 없고, 열거할 수 있는 것은 서버뿐이다.**
 
 > **퍼블릭 액세스 차단을 먼저 푼다.** S3 → 버킷 → 권한 → "퍼블릭 액세스 차단"에서 **`BlockPublicPolicy`·`RestrictPublicBuckets` 두 개를 끈다.** 켜져 있으면 정책을 붙여도 무시된다. 나머지 두 개(ACL 관련)는 켜둔 채로 둔다 — ACL은 쓰지 않는다.
 
@@ -202,6 +204,79 @@ cd /opt/app && docker compose logs -f app
 다만 **조직 SCP의 서비스 화이트리스트에 CloudFront가 없어**(아래 [SCP] 표) 지금은 시도할 수 없다. 화이트리스트에 추가되면 그때 옮기면 된다.
 
 공개 prefix 방식은 `AWS_S3_PUBLIC_BASE_URL` 축 위에 있어 **오리진 교체가 환경변수 한 줄**이다. 지금 선택이 나중을 막지 않는다.
+
+## 미참조 미디어 정리 (#19)
+
+업로드는 됐지만 **DB 어디서도 참조하지 않는 오브젝트**를 매일 새벽 4시(KST)에 지운다. presigned URL로 S3에 올린 뒤 저장 API를 호출하지 않으면 그 파일은 아무도 모르는 채 영원히 남는다 — 앱이 죽거나 사용자가 이탈하면 생기고, 당일 재인증으로 `image_url`을 덮어쓸 때도 이전 key가 남는다. 비용보다 **개인정보** 문제다.
+
+### 라이프사이클 규칙이 아니라 DB 대조인 이유
+
+S3 라이프사이클(“N일 지난 객체 자동 삭제”)이 가장 단순해 보이지만 **그대로 하면 살아 있는 사진이 지워진다.** 라이프사이클은 객체의 **나이만** 알고 “DB가 참조하는지”는 모르는데, 미참조 파일과 정상 인증 사진이 같은 날짜 prefix에 섞여 있다.
+
+그래서 **S3 목록과 DB를 대조**한다. key에 날짜 구간이 있어서(#39) 버킷 전체가 아니라 날짜 하나씩만 훑으면 된다.
+
+### 필요한 IAM 권한 — 이게 없으면 동작하지 않는다
+
+`deploy/iam-policy.json`에 두 개를 추가했다. **콘솔에서 역할 정책을 갱신해야 실제로 열린다.**
+
+| Sid | 액션 | 리소스 | 왜 |
+| --- | --- | --- | --- |
+| `MediaCleanupList` | `s3:ListBucket` | `arn:aws:s3:::lirouti-prod-bucket` (버킷 자체)<br>+ `Condition: s3:prefix = challenge-verifications/*` | 날짜 prefix 아래 오브젝트 목록을 얻는다 |
+| `MediaCleanupDelete` | `s3:DeleteObject` | `arn:aws:s3:::lirouti-prod-bucket/challenge-verifications/*` | 미참조 오브젝트를 지운다 |
+
+> `ListBucket`의 리소스는 **버킷 ARN이지 `/*`가 아니다.** 오브젝트 액션과 리소스 형태가 다르다 — `/*`를 붙이면 조용히 권한이 안 먹는다.
+
+**둘 다 `challenge-verifications/` 아래로 좁혀 뒀다.** 이 배치가 만지는 prefix가 거기 하나뿐이라 기능 손실이 없고, 앞으로 추가될 비공개 미디어(개인 루틴·그룹 채팅 사진)는 **앱 역할로도 열거·삭제할 수 없다.**
+
+정리 배치는 앱 안의 스케줄러라 앱과 같은 인스턴스 프로필을 쓴다. 즉 **앱이 침해되면 이 권한도 함께 넘어간다.** 배치를 별도 역할로 떼어내는 것이 이론상 더 안전하지만, 그러려면 배치를 앱 밖(Lambda·별도 컨테이너)으로 옮겨야 하고 지금은 그 실행 기반이 없다. 게다가 `DeleteObject`는 **탈퇴 시 사진 삭제가 앱 안에서 지워야 해서** 어차피 앱 역할에 남는다. 그래서 분리 대신 **리소스를 좁히는 쪽**으로 위험을 줄였다.
+
+`s3:DeleteObject`가 열리면 **탈퇴 시 사진 삭제(#70)도 같은 권한을 쓴다.** 한 번에 넓히는 게 낫다.
+
+### 켜는 순서 — 기본값은 “아무것도 안 함”이다
+
+되돌릴 수 없는 작업이라 두 단계로 잠가 두었다.
+
+```bash
+# 1단계. IAM 권한을 넓힌 뒤, 흉내내기로 켠다 (dry-run 기본값이 true라 값은 enabled만 주면 된다)
+MEDIA_CLEANUP_ENABLED=true
+
+# 2단계. 며칠 로그를 보고 삭제 예정 건수가 납득되면 실제 삭제로 전환
+MEDIA_CLEANUP_DRY_RUN=false
+```
+
+실행할 때마다 **지울 게 없어도** 요약 한 줄이 남는다. 이 줄이 안 보이면 배치가 돌지 않은 것이다.
+
+```
+미참조 미디어 정리 완료. 대상 기간=2026-07-16 ~ 2026-07-23, 훑은 오브젝트=0건, 삭제 예정=0건
+```
+
+지울 것이 있으면 건별 로그가 함께 찍힌다.
+
+```
+[흉내내기] 미참조 미디어 3건을 지웠을 것입니다. prefix=challenge-verifications/2026/07/23/, 예시=...
+미참조 미디어 정리 완료. 대상 기간=2026-07-16 ~ 2026-07-23, 훑은 오브젝트=12건, 삭제 예정=3건
+```
+
+목록 조회가 막히면 요약이 `일부 실패`로 바뀌고 훑지 못한 구간 수가 붙는다. **"훑었는데 없었다"와 "권한이 없어 못 훑었다"가 둘 다 0건으로 보이면 안 되므로 구분해 둔 것이다.**
+
+**건수가 예상보다 크면 켜지 말 것.** 참조처(`MediaReferenceSource`)가 빠졌다는 신호다. 그대로 `dry-run: false`로 넘기면 살아 있는 사진이 지워진다.
+
+### 조정할 수 있는 값
+
+| 환경변수 | 기본 | 뜻 |
+| --- | --- | --- |
+| `MEDIA_CLEANUP_ENABLED` | `false` | 배치 자체를 켤지 |
+| `MEDIA_CLEANUP_DRY_RUN` | `true` | 실제로 지울지, 로그만 남길지 |
+| `MEDIA_CLEANUP_GRACE_DAYS` | `7` | 업로드 후 며칠 지나야 대상이 되는지 |
+| `MEDIA_CLEANUP_CATCH_UP_DAYS` | `7` | 배치를 거른 날을 며칠까지 소급해 훑을지 |
+| `MEDIA_CLEANUP_MAX_DELETIONS_PER_RUN` | `1000` | 1회 삭제 상한(폭주 방지) |
+
+### 지우지 않는 것들
+
+- **참조처가 없는 용도** — `MediaReferenceSource` 구현체가 담당하지 않는 prefix는 목록조차 훑지 않는다. 지금 `profiles/`가 그렇다. 나중에 프로필 업로드를 붙이는 사람이 참조처를 등록하지 않으면 **아무것도 안 지운다**(안전한 방향으로 실패한다).
+- **우리가 발급하지 않은 형식** — 콘솔에서 사람이 올린 파일처럼 `{UUID}.{확장자}`가 아닌 오브젝트는 남긴다.
+- **탈퇴·신고로 숨겨진 인증의 사진** — 행이 남아 있으면 파일도 살아 있는 것으로 본다. 탈퇴 회원 사진 삭제는 별개 정책이다(#70).
+- **날짜 없는 옛 key** — #39 이전에 발급된 `challenge-verifications/{UUID}.jpg`는 날짜 prefix 목록에 안 잡힌다. 수가 적고 전부 정상 저장된 것들이라 둔다.
 
 ## AWS 조직·접근 구조
 
@@ -264,13 +339,17 @@ LiRouti는 **umc 계정 하나에만** 있고 다른 계정과 리소스를 공�
   - 여기서 **customer-managed 키(CMK)를 쓰면 IAM 정책만으로는 부족하다.** KMS는 키 정책(key policy)이 IAM 위임을 허용해야 IAM 쪽 권한이 효력을 갖는다. 허용 문구가 없으면 권한을 붙여도 S3 PUT에서 `AccessDenied`가 난다. CMK를 쓸 경우 키 정책에 `lirouti-ec2-role`의 ARN을 직접 넣거나, 계정 위임(`arn:aws:iam::<계정>:root` 허용) 문구가 있는지 확인한다.
   - AWS 관리형 키(`aws/s3`)는 키 정책이 이미 계정 위임을 허용하므로 이 문제가 없다.
 - **미디어 버킷은 `challenge-verifications/` prefix만 공개 읽기로 연다**(#66). 나머지 prefix와 백업 버킷은 비공개 그대로다. 근거와 절차는 아래 [미디어 서빙] 절을 볼 것.
-- **라이프사이클 규칙은 지금 걸지 않는다.** 스테이징용 prefix가 아직 없어서, 현재 유일한 prefix(`challenge-verifications/`)에 자동 삭제를 걸면 정상 인증 사진이 지워진다. prefix 구조는 #39, 고아 파일 정리는 #19에서 다룬다.
+- **라이프사이클 규칙은 걸지 않는다.** 라이프사이클은 객체의 나이만 알고 DB가 참조하는지는 모르는데, 미참조 파일과 정상 인증 사진이 같은 날짜 prefix에 섞여 있다. 자동 삭제를 걸면 정상 인증 사진이 지워진다. 고아 파일은 **S3 목록과 DB를 대조**해 지운다 — 아래 [미참조 미디어 정리 (#19)] 절.
 
 ### 2) 정책 생성
 
 IAM → 정책 → 정책 생성 → JSON 탭에 [`deploy/iam-policy.json`](./iam-policy.json)의 내용을 붙여넣는다. 이름은 `lirouti-app-s3`.
 
-오브젝트 수준(`버킷/*`)으로만 허용해 버킷 자체는 건드리지 못하게 한다. `s3:DeleteObject`와 `s3:ListBucket`은 지금 앱이 쓰지 않아 뺐다(삭제는 #19에서 필요해지면 추가).
+미디어 버킷에는 `PutObject`·`GetObject`(업로드·검증·서빙, 버킷 전체)에 더해 **`ListBucket`·`DeleteObject`(미참조 이미지 정리)** 를 허용하되, 뒤의 둘은 **`challenge-verifications/` 아래로만** 좁힌다. 백업 버킷은 `PutObject`만 준다 — 백업은 쓰기만 하면 되고, 읽기·삭제까지 주면 앱 침해 시 백업을 지울 수 있다.
+
+> **`ListBucket`만 리소스가 버킷 ARN(`arn:aws:s3:::lirouti-prod-bucket`)이고 나머지는 오브젝트(`/*`)다.** 버킷 수준 액션과 오브젝트 수준 액션은 리소스 형태가 다르다. `ListBucket`에 `/*`를 붙이면 **오류 없이 조용히 권한이 안 먹는다.** prefix 제한은 리소스가 아니라 `Condition`의 `s3:prefix`로 건다.
+
+> 이 두 권한을 붙였다고 정리 배치가 바로 도는 것은 아니다. 앱 쪽 기본값이 꺼짐이라 `MEDIA_CLEANUP_ENABLED=true`까지 넣어야 시작한다. 순서와 근거는 아래 [미참조 미디어 정리] 절을 볼 것.
 
 > ⚠️ **앱이 백업을 덮어쓸 수 있다 — 버킷 버전 관리로 막아야 한다.**
 >
@@ -349,7 +428,7 @@ grep -q "AccessDenied" /tmp/ls.out || { echo "거부됐지만 사유가 AccessDe
 echo "② OK"
 ```
 
-올린 테스트 객체는 인스턴스 역할로 지울 수 없으므로(DeleteObject 미부여) 콘솔에서 지운다.
+올린 테스트 객체는 인스턴스 역할로 지울 수 없으므로 콘솔에서 지운다. 백업 버킷에는 `DeleteObject`가 없고, 미디어 버킷은 `challenge-verifications/` 아래에만 있어서 그 밖의 경로(`iam-check/` 등)는 역할로 못 지운다.
 
 > ⚠️ **`aws sts get-caller-identity`를 건너뛰지 않는다.** AWS 자격증명 체인은 환경변수 → 공유 credential 파일 → instance profile 순으로 본다. 호스트에 `AWS_ACCESS_KEY_ID` 같은 변수나 `~/.aws/credentials`가 남아 있으면 **역할이 안 붙었는데도 ②가 성공해버린다.**
 > (2026-07-27 실측: 이 서버는 `AWS_*` 환경변수 0개, `~/.aws` 없음 — 현재는 문제없다.)
@@ -395,7 +474,7 @@ echo "③ OK"
 | 미디어 버킷 `PutObject` | 성공 | ✅ |
 | 미디어 버킷 `GetObject` | 성공 | ✅ 내용까지 일치 (#22가 쓸 권한) |
 | 백업 버킷 `GetObject` | **거부** | ✅ `403 Forbidden` (Put만 부여했으므로) |
-| 미디어 버킷 `DeleteObject` | **거부** | ✅ `AccessDenied` |
+| 미디어 버킷 `DeleteObject` | **거부** | ✅ `AccessDenied` <br>⚠️ 미참조 정리 도입 전 기록이다. 지금은 `challenge-verifications/` 아래만 **허용**이고 그 밖의 경로는 여전히 거부다 |
 
 앱 상태도 함께 확인했다 — 컨테이너 `running`, `GET /api/challenges` 200, 재시작 후 로그에 자격증명·S3 오류 0건.
 
