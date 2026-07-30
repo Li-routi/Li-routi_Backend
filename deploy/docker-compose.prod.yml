@@ -22,7 +22,11 @@ services:
       - --innodb-buffer-pool-size=256M
     volumes:
       - dbdata:/var/lib/mysql
-    # ports 매핑 없음 — MySQL은 compose 내부 네트워크(db:3306)에서만 접근. 호스트 미노출.
+    # 운영 트래픽은 compose 내부 네트워크(db:3306)로만 흐른다. 아래 매핑은 127.0.0.1 에만
+    # 바인딩하므로 퍼블릭 IP·보안그룹으로는 열리지 않고, SSH 터널(로컬 GUI 도구)로만 닿는다.
+    # 0.0.0.0 또는 포트만 적는 형태("3306:3306")로 바꾸면 인터넷에 DB가 노출된다.
+    ports:
+      - "127.0.0.1:3306:3306"
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD}"]
       interval: 10s
