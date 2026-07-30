@@ -135,6 +135,44 @@ jobs:
             echo "JPA_DDL_AUTO 우회 없음 (validate)"
           fi
 
+      # Caddy 는 LIROUTI_DOMAIN 없이 뜨지 못한다. 값이 비면 compose 가 빈 문자열을 넘기고
+      # Caddy 는 사이트 주소가 없는 설정으로 죽는데, 그 시점에는 이미 배포가 절반 진행돼
+      # 앱만 뜬 채 80·443 이 아무것도 응답하지 않는 상태가 된다.
+      #
+      # ddl-auto 검사와 달리 여기서는 막는다. 그쪽은 "동작하지만 위험한" 설정이라 드러내기만
+      # 하면 되지만, 이건 "배포하면 확실히 깨지는" 값이라 시작 전에 세우는 편이 낫다.
+      # 값 자체(도메인)는 비밀이 아니라 로그에 실어도 된다.
+      - name: Check Caddy env vars are set
+        id: caddy_env
+        env:
+          ENV_FILE: ${{ secrets.ENV_FILE }}
+        run: |
+          read_var() {
+            printf '%s\n' "$ENV_FILE" \
+              | sed -n "s/^[[:space:]]*$1[[:space:]]*=//p" | tail -1 \
+              | tr -d '\r"'"'" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'
+          }
+          domain="$(read_var LIROUTI_DOMAIN)"
+          email="$(read_var LETSENCRYPT_EMAIL)"
+
+          if [ -z "$domain" ]; then
+            echo "::error::ENV_FILE에 LIROUTI_DOMAIN이 없습니다. Caddy가 뜨지 못해 80·443이 응답하지 않습니다."
+            exit 1
+          fi
+          # 도메인 형식까지 본다. 빈 값만 막으면 오타가 그대로 통과해 인증서 발급이 실패하는데,
+          # 그 실패는 계정·도메인당 시간당 5회 제한을 갉아먹는다.
+          if ! printf '%s' "$domain" | grep -qE '^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)+$'; then
+            echo "::error::LIROUTI_DOMAIN 형식이 올바르지 않습니다: $domain"
+            exit 1
+          fi
+          # 선택 설정이 아니다. 비면 인자 없는 email 지시어가 되어 Caddy 가 설정 파싱에서 죽는다.
+          if [ -z "$email" ]; then
+            echo "::error::ENV_FILE에 LETSENCRYPT_EMAIL이 없습니다. 값이 비면 Caddy가 설정 파싱에서 실패해 뜨지 않습니다(선택 설정이 아닙니다)."
+            exit 1
+          fi
+          echo "domain=$domain" >> "$GITHUB_OUTPUT"
+          echo "LIROUTI_DOMAIN=$domain"
+
       # ssh-action은 v1.2.3에 고정한다. v1.2.4부터 번들 drone-ssh가 1.8.2로 올라가면서
       # 입력(host/key)을 못 읽고 "no configuration file provided"로 죽는 회귀가 있어,
       # 1.8.2 직전 버전인 v1.2.3으로 내려 우회한다.
@@ -144,11 +182,13 @@ jobs:
         env:
           IMAGE_TAG: ${{ github.sha }}
           ENV_FILE: ${{ secrets.ENV_FILE }}
+          # https 확인용. 시크릿이 아니라 앞 단계가 파싱해 둔 값이다.
+          LIROUTI_DOMAIN: ${{ steps.caddy_env.outputs.domain }}
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ubuntu
           key: ${{ secrets.SERVER_SSH_KEY }}
-          envs: IMAGE_TAG,ENV_FILE
+          envs: IMAGE_TAG,ENV_FILE,LIROUTI_DOMAIN
           script: |
             set -e
             cd /opt/app
@@ -185,6 +225,25 @@ jobs:
               fi
               sleep 3
             done
+            # 앱이 떴다고 서비스가 뜬 것은 아니다. 위 확인은 localhost:8080 을 직접 치므로
+            # Caddy 가 죽어 80·443 이 먹통이어도 통과한다. 실제 사용자가 쓰는 경로로 한 번 더 본다.
+            #
+            # 실패해도 배포를 되돌리지는 않는다. 앱 자체는 정상이고, 첫 발급은 수십 초 걸릴 수
+            # 있으며, 여기서 롤백하면 정상 배포까지 되돌리게 된다. 대신 조용히 지나가지 않도록
+            # 경고와 Caddy 로그를 남긴다 — 인증서 문제는 사람이 봐야 풀린다.
+            echo "checking https://${LIROUTI_DOMAIN}/health"
+            https_ok=""
+            for i in $(seq 1 20); do
+              if curl -fsS -o /dev/null --max-time 5 "https://${LIROUTI_DOMAIN}/health"; then
+                https_ok=1; echo "https is ready"; break
+              fi
+              sleep 3
+            done
+            if [ -z "$https_ok" ]; then
+              echo "::warning::https://${LIROUTI_DOMAIN}/health 가 응답하지 않습니다. 앱은 정상이지만 Caddy 또는 인증서 발급에 문제가 있을 수 있습니다. 아래 로그를 확인하세요. 발급 실패가 반복되면 재배포를 멈출 것 — Let's Encrypt 인증 실패는 계정·도메인당 시간당 5회로 제한됩니다."
+              docker compose logs --tail=50 caddy || true
+            fi
+
             # 배포마다 새 :<커밋sha> 이미지가 쌓이는데, prune -f는 태그가 붙은 이미지를 지우지 않아
             # 디스크(30GB)가 계속 찬다. -a로 사용 중이 아닌 이미지까지 정리한다.
             # 실행 중인 컨테이너가 쓰는 이미지(app 현재 버전·db·redis)는 대상이 아니라 안전하고,

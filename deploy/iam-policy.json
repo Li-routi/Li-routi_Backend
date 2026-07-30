@@ -11,6 +11,23 @@
       "Resource": "arn:aws:s3:::lirouti-prod-bucket/*"
     },
     {
+      "Sid": "MediaCleanupList",
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::lirouti-prod-bucket",
+      "Condition": {
+        "StringLike": {
+          "s3:prefix": "challenge-verifications/*"
+        }
+      }
+    },
+    {
+      "Sid": "MediaCleanupDelete",
+      "Effect": "Allow",
+      "Action": "s3:DeleteObject",
+      "Resource": "arn:aws:s3:::lirouti-prod-bucket/challenge-verifications/*"
+    },
+    {
       "Sid": "BackupObjectWrite",
       "Effect": "Allow",
       "Action": "s3:PutObject",

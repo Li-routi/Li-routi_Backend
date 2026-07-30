@@ -3,6 +3,7 @@ package com.lirouti.domain.group.service.command;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -36,6 +37,7 @@ import org.mockito.InjectMocks;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("GroupRoutineAssignmentCommandService 테스트")
@@ -278,6 +280,133 @@ class GroupRoutineAssignmentCommandServiceTest {
         );
     }
 
+    @Test
+    @DisplayName("오늘 일정 수정은 미확정 할당만 갱신하고 확정 이력을 보존하며 누락 할당을 생성한다")
+    void synchronizeRoutineAssignmentsToday_TodaySchedule_ReconcilesActiveMembers() {
+        // given
+        LocalDateTime now = LocalDateTime.of(2026, 7, 23, 9, 30);
+        givenNow(now);
+        givenRoutine(now.toLocalDate().getDayOfWeek());
+
+        GroupMember completedMember = mock(GroupMember.class);
+        GroupMember missedMember = mock(GroupMember.class);
+        GroupMember missingMember = mock(GroupMember.class);
+        Member completedUser = mock(Member.class);
+        Member missedUser = mock(Member.class);
+        Member missingUser = mock(Member.class);
+        when(groupMemberRepository.findAllByGroupIdAndStatus(10L, GroupMemberStatus.ACTIVE))
+                .thenReturn(List.of(groupMember, completedMember, missedMember, missingMember));
+        when(groupMember.getMember()).thenReturn(member);
+        when(member.getId()).thenReturn(1L);
+        when(completedMember.getMember()).thenReturn(completedUser);
+        when(completedUser.getId()).thenReturn(2L);
+        when(missedMember.getMember()).thenReturn(missedUser);
+        when(missedUser.getId()).thenReturn(3L);
+        when(missingMember.getMember()).thenReturn(missingUser);
+        when(missingUser.getId()).thenReturn(4L);
+
+        com.lirouti.domain.group.entity.GroupRoutineAssignment pending = assignment(
+                201L, member, GroupRoutineAssignmentStatus.PENDING
+        );
+        com.lirouti.domain.group.entity.GroupRoutineAssignment completed = assignment(
+                202L, completedUser, GroupRoutineAssignmentStatus.COMPLETED
+        );
+        com.lirouti.domain.group.entity.GroupRoutineAssignment missed = assignment(
+                203L, missedUser, GroupRoutineAssignmentStatus.MISSED
+        );
+        when(assignmentRepository.findAllByGroupRoutineIdAndAssignedDateForUpdate(
+                100L, now.toLocalDate()
+        )).thenReturn(List.of(pending, completed, missed));
+
+        // when
+        int result = assignmentCommandService.synchronizeRoutineAssignmentsToday(groupRoutine);
+
+        // then
+        assertThat(result).isEqualTo(4);
+        verify(assignmentRepository).rescheduleAssignmentsIfMutable(
+                List.of(201L),
+                LocalTime.of(9, 0),
+                LocalTime.of(10, 0),
+                GroupRoutineAssignmentStatus.IN_PROGRESS,
+                List.of(
+                        GroupRoutineAssignmentStatus.PENDING,
+                        GroupRoutineAssignmentStatus.IN_PROGRESS
+                )
+        );
+        verify(assignmentRepository).insertIfAbsent(
+                100L,
+                4L,
+                now.toLocalDate(),
+                LocalTime.of(9, 0),
+                LocalTime.of(10, 0),
+                GroupRoutineAssignmentStatus.IN_PROGRESS.name()
+        );
+        verify(assignmentRepository, never()).deleteAll(org.mockito.ArgumentMatchers.anyList());
+    }
+
+    @Test
+    @DisplayName("오늘 요일이 제거되면 미확정 할당만 삭제하고 완료·미이행 이력을 보존한다")
+    void synchronizeRoutineAssignmentsToday_RemovedToday_DeletesOnlyMutableAssignments() {
+        // given
+        LocalDateTime now = LocalDateTime.of(2026, 7, 23, 9, 30);
+        givenNow(now);
+        DayOfWeek anotherDay = now.toLocalDate().plusDays(1).getDayOfWeek();
+        when(groupRoutine.getSchedules()).thenReturn(List.of(schedule));
+        when(schedule.getRepeatDay()).thenReturn(anotherDay);
+        when(groupRoutine.getId()).thenReturn(100L);
+        when(groupRoutine.getGroup()).thenReturn(group);
+        when(group.getId()).thenReturn(10L);
+
+        GroupMember completedMember = mock(GroupMember.class);
+        GroupMember missedMember = mock(GroupMember.class);
+        Member completedUser = mock(Member.class);
+        Member missedUser = mock(Member.class);
+        when(groupMemberRepository.findAllByGroupIdAndStatus(10L, GroupMemberStatus.ACTIVE))
+                .thenReturn(List.of(groupMember, completedMember, missedMember));
+        when(groupMember.getMember()).thenReturn(member);
+        when(member.getId()).thenReturn(1L);
+        when(completedMember.getMember()).thenReturn(completedUser);
+        when(completedUser.getId()).thenReturn(2L);
+        when(missedMember.getMember()).thenReturn(missedUser);
+        when(missedUser.getId()).thenReturn(3L);
+
+        com.lirouti.domain.group.entity.GroupRoutineAssignment pending = assignment(
+                201L, member, GroupRoutineAssignmentStatus.PENDING
+        );
+        com.lirouti.domain.group.entity.GroupRoutineAssignment completed = assignment(
+                202L, completedUser, GroupRoutineAssignmentStatus.COMPLETED
+        );
+        com.lirouti.domain.group.entity.GroupRoutineAssignment missed = assignment(
+                203L, missedUser, GroupRoutineAssignmentStatus.MISSED
+        );
+        when(assignmentRepository.findAllByGroupRoutineIdAndAssignedDateForUpdate(
+                100L, now.toLocalDate()
+        )).thenReturn(List.of(pending, completed, missed));
+
+        // when
+        int result = assignmentCommandService.synchronizeRoutineAssignmentsToday(groupRoutine);
+
+        // then
+        assertThat(result).isEqualTo(2);
+        verify(assignmentRepository).deleteAll(List.of(pending));
+        verify(assignmentRepository).flush();
+        verify(assignmentRepository, never()).rescheduleAssignmentsIfMutable(
+                org.mockito.ArgumentMatchers.anyList(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.anyList()
+        );
+        verify(assignmentRepository, never()).insertIfAbsent(
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any()
+        );
+    }
+
     private void givenRoutine(DayOfWeek repeatDay) {
         when(groupRoutine.getSchedules()).thenReturn(List.of(schedule));
         when(schedule.getRepeatDay()).thenReturn(repeatDay);
@@ -292,5 +421,23 @@ class GroupRoutineAssignmentCommandServiceTest {
     private void givenNow(LocalDateTime now) {
         when(clock.instant()).thenReturn(now.atZone(KST).toInstant());
         when(clock.getZone()).thenReturn(KST);
+    }
+
+    private com.lirouti.domain.group.entity.GroupRoutineAssignment assignment(
+            Long id,
+            Member assignedMember,
+            GroupRoutineAssignmentStatus status
+    ) {
+        com.lirouti.domain.group.entity.GroupRoutineAssignment target =
+                com.lirouti.domain.group.entity.GroupRoutineAssignment.builder()
+                        .groupRoutine(groupRoutine)
+                        .member(assignedMember)
+                        .assignedDate(LocalDate.of(2026, 7, 23))
+                        .scheduledStartTime(LocalTime.of(9, 0))
+                        .scheduledEndTime(LocalTime.of(10, 0))
+                        .status(status)
+                        .build();
+        ReflectionTestUtils.setField(target, "id", id);
+        return target;
     }
 }

@@ -86,4 +86,19 @@ public class GroupRoutineSchedule extends BaseEntity {
         this.startTime = startTime;
         this.endTime = endTime;
     }
+
+    /**
+     * 반복 요일은 유지하고 해당 요일의 수행 시간 범위를 변경한다.
+     *
+     * @param startTime 변경할 수행 시작 시각
+     * @param endTime 변경할 수행 마감 시각
+     * @throws IllegalArgumentException 시작·종료 시각이 없거나 유효한 선후 관계가 아닌 경우
+     */
+    public void updateTimeRange(LocalTime startTime, LocalTime endTime) {
+        if (startTime == null || endTime == null || !startTime.isBefore(endTime)) {
+            throw new IllegalArgumentException("시작 시간은 종료 시간보다 빨라야 합니다.");
+        }
+        this.startTime = startTime;
+        this.endTime = endTime;
+    }
 }

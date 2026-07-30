@@ -6,7 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.lirouti.domain.group.entity.Group;
 import com.lirouti.domain.group.entity.GroupRoutine;
 import com.lirouti.domain.group.entity.GroupRoutineSchedule;
-import com.lirouti.domain.group.entity.RoutineCategory;
+import com.lirouti.domain.routine.entity.RoutineCategory;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import java.time.DayOfWeek;
@@ -102,6 +102,51 @@ class GroupRoutineRepositoryTest {
         // when & then
         assertThatThrownBy(() -> groupRoutineRepository.saveAndFlush(routine))
                 .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    @DisplayName("수정 대상 루틴은 요청 그룹 범위에서만 잠금 조회한다")
+    void findByIdAndGroupIdForUpdate_RoutineScope_ReturnsOnlyMatchingGroup() {
+        // given
+        Group targetGroup = group();
+        Group otherGroup = group();
+        GroupRoutine routine = groupRoutineRepository.saveAndFlush(
+                routine(targetGroup, category(), "잠금 조회")
+        );
+        em.clear();
+
+        // when
+        GroupRoutine found = groupRoutineRepository
+                .findByIdAndGroupIdForUpdate(routine.getId(), targetGroup.getId())
+                .orElseThrow();
+
+        // then
+        assertThat(found.getId()).isEqualTo(routine.getId());
+        assertThat(groupRoutineRepository.findByIdAndGroupIdForUpdate(
+                routine.getId(), otherGroup.getId()
+        )).isEmpty();
+    }
+
+    @Test
+    @DisplayName("수정 제목 중복 검사는 자기 자신을 제외한다")
+    void existsByGroupIdAndTitleAndIdNot_ExcludesTargetRoutine() {
+        // given
+        Group group = group();
+        RoutineCategory category = category();
+        GroupRoutine target = groupRoutineRepository.saveAndFlush(
+                routine(group, category, "유지 제목")
+        );
+        GroupRoutine other = groupRoutineRepository.saveAndFlush(
+                routine(group, category, "다른 제목")
+        );
+
+        // when & then
+        assertThat(groupRoutineRepository.existsByGroupIdAndTitleAndIdNot(
+                group.getId(), "유지 제목", target.getId()
+        )).isFalse();
+        assertThat(groupRoutineRepository.existsByGroupIdAndTitleAndIdNot(
+                group.getId(), "유지 제목", other.getId()
+        )).isTrue();
     }
 
     private Group group() {

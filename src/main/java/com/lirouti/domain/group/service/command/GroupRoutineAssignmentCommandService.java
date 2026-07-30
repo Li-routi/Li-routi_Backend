@@ -15,9 +15,13 @@ import com.lirouti.domain.group.service.GroupValidationService;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -27,6 +31,15 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class GroupRoutineAssignmentCommandService {
+    private static final Set<GroupRoutineAssignmentStatus> TERMINAL_STATUSES = EnumSet.of(
+            GroupRoutineAssignmentStatus.COMPLETED,
+            GroupRoutineAssignmentStatus.MISSED
+    );
+    private static final List<GroupRoutineAssignmentStatus> MUTABLE_STATUSES = List.of(
+            GroupRoutineAssignmentStatus.PENDING,
+            GroupRoutineAssignmentStatus.IN_PROGRESS
+    );
+
     private final GroupRoutineAssignmentRepository groupRoutineAssignmentRepository;
     private final GroupRoutineScheduleRepository groupRoutineScheduleRepository;
     private final GroupMemberRepository groupMemberRepository;
@@ -47,6 +60,84 @@ public class GroupRoutineAssignmentCommandService {
                         + "routineId={}, assignedDate={}, assignmentCount={}",
                 groupRoutine.getId(), today, assignmentCount);
         return assignmentCount;
+    }
+
+    /**
+     * 수정된 반복 일정에 맞춰 오늘의 미확정 할당을 ACTIVE 구성원 기준으로 동기화한다.
+     * 완료·미이행 상태는 확정 이력으로 간주해 시간 스냅샷과 상태를 그대로 보존한다.
+     *
+     * @param groupRoutine 수정된 그룹 루틴
+     * @return 동기화 후 ACTIVE 구성원이 오늘 조회할 수 있는 해당 루틴 할당 수
+     */
+    @Transactional
+    public int synchronizeRoutineAssignmentsToday(GroupRoutine groupRoutine) {
+        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDate today = now.toLocalDate();
+        GroupRoutineSchedule todaySchedule = findSchedule(groupRoutine, today);
+
+        List<GroupRoutineAssignment> existingAssignments = groupRoutineAssignmentRepository
+                .findAllByGroupRoutineIdAndAssignedDateForUpdate(groupRoutine.getId(), today);
+        Map<Long, GroupMember> activeMembersByMemberId = groupMemberRepository
+                .findAllByGroupIdAndStatus(
+                        groupRoutine.getGroup().getId(),
+                        GroupMemberStatus.ACTIVE
+                ).stream()
+                .collect(Collectors.toMap(
+                        groupMember -> groupMember.getMember().getId(),
+                        Function.identity()
+                ));
+
+        List<GroupRoutineAssignment> assignmentsToDelete = existingAssignments.stream()
+                .filter(assignment -> !isTerminal(assignment))
+                .filter(assignment -> todaySchedule == null
+                        || !activeMembersByMemberId.containsKey(assignment.getMember().getId()))
+                .toList();
+        if (!assignmentsToDelete.isEmpty()) {
+            groupRoutineAssignmentRepository.deleteAll(assignmentsToDelete);
+            groupRoutineAssignmentRepository.flush();
+        }
+
+        if (todaySchedule == null) {
+            int preservedCount = (int) existingAssignments.stream()
+                    .filter(this::isTerminal)
+                    .filter(assignment -> activeMembersByMemberId
+                            .containsKey(assignment.getMember().getId()))
+                    .count();
+            log.debug("수정된 반복 일정에 오늘 요일이 없어 미확정 할당을 제거했습니다. "
+                            + "routineId={}, assignedDate={}, preservedCount={}",
+                    groupRoutine.getId(), today, preservedCount);
+            return preservedCount;
+        }
+
+        List<Long> mutableAssignmentIds = existingAssignments.stream()
+                .filter(assignment -> !isTerminal(assignment))
+                .filter(assignment -> activeMembersByMemberId
+                        .containsKey(assignment.getMember().getId()))
+                .map(GroupRoutineAssignment::getId)
+                .toList();
+        if (!mutableAssignmentIds.isEmpty()) {
+            groupRoutineAssignmentRepository.rescheduleAssignmentsIfMutable(
+                    mutableAssignmentIds,
+                    todaySchedule.getStartTime(),
+                    todaySchedule.getEndTime(),
+                    initialStatus(today, todaySchedule, now),
+                    MUTABLE_STATUSES
+            );
+        }
+
+        Set<Long> assignedMemberIds = existingAssignments.stream()
+                .map(assignment -> assignment.getMember().getId())
+                .collect(Collectors.toSet());
+        activeMembersByMemberId.forEach((memberId, groupMember) -> {
+            if (!assignedMemberIds.contains(memberId)) {
+                insertAssignment(todaySchedule, groupMember, today, now);
+            }
+        });
+
+        log.debug("수정된 반복 일정의 오늘 할당 동기화를 완료했습니다. "
+                        + "routineId={}, assignedDate={}, assignmentCount={}",
+                groupRoutine.getId(), today, activeMembersByMemberId.size());
+        return activeMembersByMemberId.size();
     }
 
     /**
@@ -194,10 +285,7 @@ public class GroupRoutineAssignmentCommandService {
      * @return 할당 대상 수, 반복 요일이 아니면 0
      */
     private int assignRoutineToActiveMembers(GroupRoutine groupRoutine, LocalDate assignedDate) {
-        GroupRoutineSchedule schedule = groupRoutine.getSchedules().stream()
-                .filter(candidate -> candidate.getRepeatDay() == assignedDate.getDayOfWeek())
-                .findFirst()
-                .orElse(null);
+        GroupRoutineSchedule schedule = findSchedule(groupRoutine, assignedDate);
         if (schedule == null) {
             log.debug("생성일에 해당하는 그룹 루틴 일정이 없어 할당을 생략합니다. "
                             + "routineId={}, assignedDate={}",
@@ -243,13 +331,27 @@ public class GroupRoutineAssignmentCommandService {
             GroupMember groupMember,
             LocalDate assignedDate
     ) {
+        return insertAssignment(
+                schedule,
+                groupMember,
+                assignedDate,
+                LocalDateTime.now(clock)
+        );
+    }
+
+    private int insertAssignment(
+            GroupRoutineSchedule schedule,
+            GroupMember groupMember,
+            LocalDate assignedDate,
+            LocalDateTime referenceTime
+    ) {
         groupRoutineAssignmentRepository.insertIfAbsent(
                 schedule.getGroupRoutine().getId(),
                 groupMember.getMember().getId(),
                 assignedDate,
                 schedule.getStartTime(),
                 schedule.getEndTime(),
-                initialStatus(assignedDate, schedule).name()
+                initialStatus(assignedDate, schedule, referenceTime).name()
         );
         return 1;
     }
@@ -263,17 +365,31 @@ public class GroupRoutineAssignmentCommandService {
      */
     private GroupRoutineAssignmentStatus initialStatus(
             LocalDate assignedDate,
-            GroupRoutineSchedule schedule
+            GroupRoutineSchedule schedule,
+            LocalDateTime referenceTime
     ) {
-        LocalDateTime now = LocalDateTime.now(clock);
         LocalDateTime scheduledStart = assignedDate.atTime(schedule.getStartTime());
         LocalDateTime scheduledEnd = assignedDate.atTime(schedule.getEndTime());
-        if (now.isBefore(scheduledStart)) {
+        if (referenceTime.isBefore(scheduledStart)) {
             return GroupRoutineAssignmentStatus.PENDING;
         }
-        if (now.isBefore(scheduledEnd)) {
+        if (referenceTime.isBefore(scheduledEnd)) {
             return GroupRoutineAssignmentStatus.IN_PROGRESS;
         }
         return GroupRoutineAssignmentStatus.MISSED;
+    }
+
+    private GroupRoutineSchedule findSchedule(
+            GroupRoutine groupRoutine,
+            LocalDate assignedDate
+    ) {
+        return groupRoutine.getSchedules().stream()
+                .filter(candidate -> candidate.getRepeatDay() == assignedDate.getDayOfWeek())
+                .findFirst()
+                .orElse(null);
+    }
+
+    private boolean isTerminal(GroupRoutineAssignment assignment) {
+        return TERMINAL_STATUSES.contains(assignment.getStatus());
     }
 }

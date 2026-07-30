@@ -73,6 +73,22 @@ jobs:
           fi
           echo "✅ 마이그레이션 버전 중복 없음"
 
+      # Caddyfile은 서버에서만 파싱되므로, 문법이 깨져도 배포가 절반 진행된 뒤에야 드러난다.
+      # 그 시점엔 앱만 뜬 채 80·443이 먹통이고 배포 자체는 성공으로 끝난다.
+      #
+      # 실제로 그 버그를 한 번 냈다 — LETSENCRYPT_EMAIL을 선택 설정으로 두었는데, 값이 비면
+      # 인자 없는 email 지시어가 되어 Caddy가 파싱에서 죽는다. 리뷰에서 지적받아 이 명령으로
+      # 재현했고, 그래서 같은 명령을 CI에 넣는다.
+      #
+      # 값이 비어도 통과하는 것을 막으려고 더미 값을 넣어 돌린다 — 실제 값은 배포 시점의
+      # ENV_FILE에서 오고, 그쪽 비어 있음은 deploy.yml이 따로 막는다.
+      - name: Validate Caddyfile
+        run: |
+          docker run --rm -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            -e LIROUTI_DOMAIN=example.com \
+            -e LETSENCRYPT_EMAIL=ci@example.com \
+            caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile
+
       # fail-fast 필수 값(JWT_SECRET 등)은 build.gradle의 test 태스크가 더미로 주입하므로 env 불필요.
       # DB/Redis는 application.yaml 기본값(localhost:3306 / 6379)이 위 서비스 컨테이너에 붙는다.
       - name: Build & test

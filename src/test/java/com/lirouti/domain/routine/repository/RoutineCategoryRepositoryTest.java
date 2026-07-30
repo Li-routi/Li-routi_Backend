@@ -1,8 +1,8 @@
-package com.lirouti.domain.group.repository;
+package com.lirouti.domain.routine.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.lirouti.domain.group.entity.RoutineCategory;
+import com.lirouti.domain.routine.entity.RoutineCategory;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.DisplayName;

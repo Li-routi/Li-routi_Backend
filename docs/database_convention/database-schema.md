@@ -75,6 +75,7 @@ Flyway 도입 전부터 쓰던 DB(개인 로컬·운영)에는 이력 테이블�
 
 - `member_consumable`: 회원이 추적하는 개별 소모품
 - `member_housework_routine`: 회원별 집안일 주기
+- `member_routine`: 회원이 등록한 개인 루틴
 - `member_challenge`: 회원별 챌린지 참여 상태와 연속 참여일
 - `member_order`: 회원 주문
 - `notification`: 회원에게 전달할 알림
@@ -90,6 +91,8 @@ Flyway 도입 전부터 쓰던 DB(개인 로컬·운영)에는 이력 테이블�
 - `consumable_category`: 소모품 분류와 기본 사용 주기
 - `housework_template`: 공통 집안일 템플릿과 기본 주기
 - `challenge`: 앱이 제공하는 챌린지. 회원이 직접 생성할 수 없다.
+- `routine_template`: 카테고리별 기본 제공 루틴
+- `routine_category`: 루틴 카테고리. 앱이 제공하는 고정 카테고리와 회원이 추가한 사용자 카테고리를 함께 담는 예외적인 테이블이다(`member_id`로 구분).
 - `product`: 판매 상품. 선택적으로 `consumable_category`에 속한다.
 - `notification_type`: 알림 코드, 제목·본문 템플릿, 대상 유형
 
@@ -115,7 +118,9 @@ Flyway 도입 전부터 쓰던 DB(개인 로컬·운영)에는 이력 테이블�
 - `member_order`은 반드시 하나의 `member`에 속한다. `order_detail`, `payment`은 주문을 참조한다.
 - `product`는 선택적으로 `consumable_category`에 속한다. `order_detail`은 상품을 반드시 참조하며, `consumable_purchase_log`의 상품 참조는 선택 사항이다.
 - `notification`은 `member`와 `notification_type`을 반드시 참조한다. 단, 알림 유형 외래 키 컬럼의 실제 이름은 `id2`다. 코드와 향후 마이그레이션에서 이를 `notification_type_id`로 혼동하지 않도록 주의한다.
-- `member_routine`은 현재 어느 테이블과도 외래 키로 연결되지 않으며 `member_id`도 없다. 이름만으로 회원 소유 엔티티라고 가정하지 않는다.
+- `member_routine`은 `member`와 `routine_category`를 반드시 참조하고, `routine_template`은 선택적으로 참조한다. 집안일과 같은 구조다 — 템플릿 없이 회원이 직접 만든 루틴도 허용한다.
+- `routine_category`는 `member`를 선택적으로 참조한다. 참조가 없으면 앱이 제공하는 고정 카테고리다. 마스터 데이터인데 회원 소유 행이 섞여 있는 유일한 테이블이므로, 조회할 때 항상 "고정 + 요청 회원의 것"으로 범위를 좁혀야 한다.
+- `routine_template`은 반드시 하나의 `routine_category`에 속한다. 고정 카테고리에만 붙는다.
 
 ## 주요 비즈니스 흐름
 
@@ -328,17 +333,96 @@ Flyway 도입 전부터 쓰던 DB(개인 로컬·운영)에는 이력 테이블�
 | canceled_at | DATETIME(6) | Y | 완료 취소 시각 |
 | created_at / updated_at / deleted_at | DATETIME(6) | N / Y / Y | 생성·수정·소프트 삭제 시각 |
 
-### `member_routine`
+## 개인 루틴 테이블
 
-회원 소유로 보이는 일반 루틴 테이블이다. 제공된 DDL에는 `member_id` 외래 키가 없어, 현재 회원과의 직접 관계는 정의되지 않는다.
+개인 루틴은 회원 혼자 수행하는 루틴이다. 그룹 루틴(`group_routine`)과 카테고리 마스터
+(`routine_category`)를 공유하지만, 담당자가 본인 한 명이고 요일별 시간 범위 대신 마감 시각만
+갖는다는 점이 다르다.
+
+### `routine_category`
+
+루틴 카테고리 마스터다. 개인 루틴과 그룹 루틴이 함께 쓴다.
+
+`member_id`가 두 종류를 가른다. `NULL`이면 앱이 제공하는 **고정 카테고리**이고
+(운동, 건강, 자기계발, 생활정리, 마음관리, 취미 — `R__seed_routine.sql`이 관리),
+값이 있으면 그 회원만 쓰는 **사용자 카테고리**다. 회원당 최대 5개까지 추가할 수 있다.
 
 | 컬럼 | 타입 | NULL | 설명 |
 | --- | --- | --- | --- |
 | id | BIGINT | N | 기본 키 |
-| title | VARCHAR(100) | N | 루틴 제목 |
-| next_due_date | DATE | Y | 다음 예정일 |
+| member_id | BIGINT | Y | 소유 회원, `member.id` FK. `NULL`이면 고정 카테고리 |
+| name | VARCHAR(100) | N | 카테고리 이름 |
+| color | ENUM | Y | 색상 칩. 고정 카테고리와 "색 없음"은 `NULL` |
+| display_order | INT | N | 노출 순서. 사용자 카테고리는 0이라 생성 순서(id)로 정렬된다 |
 | active | TINYINT(1) | N | 사용 여부, 기본값 `1` |
-| created_at / updated_at / deleted_at | DATETIME(6) | N / N / Y | 생성·수정·소프트 삭제 시각 |
+| created_at / updated_at | DATETIME(6) | N / N | 생성·수정 시각 |
+
+유니크: `uk_routine_category_member_name` (`member_id`, `name`)
+
+MySQL은 유니크 키에서 `NULL`을 서로 다른 값으로 취급하므로 이 제약은 고정 카테고리끼리의 이름
+중복을 막지 못한다. 고정 카테고리는 시드가 고정 id로만 넣으므로 실제로 중복이 생길 경로가 없다.
+"사용자가 고정 카테고리와 같은 이름을 만들 수 없다"는 규칙도 소유자가 달라 이 제약에 걸리지
+않으므로 애플리케이션에서 검증한다.
+
+### `routine_template`
+
+카테고리마다 미리 보여 주는 기본 제공 루틴이다. 회원이 만들 수 없는 마스터 데이터이며
+`R__seed_routine.sql`이 단일 진실 공급원이다. 시간·요일 컬럼이 없다 — 마감 시각과 반복 요일은
+회원이 고르는 값이라 `member_routine`에 있다.
+
+| 컬럼 | 타입 | NULL | 설명 |
+| --- | --- | --- | --- |
+| id | BIGINT | N | 기본 키 |
+| category_id | BIGINT | N | 노출 카테고리, `routine_category.id` FK |
+| name | VARCHAR(20) | N | 기본 루틴 이름 |
+| display_order | INT | N | 카테고리 안에서의 노출 순서 |
+| active | TINYINT(1) | N | 노출 여부, 기본값 `1` |
+| created_at / updated_at | DATETIME(6) | N / N | 생성·수정 시각 |
+
+유니크: `uk_routine_template_category_name` (`category_id`, `name`)
+
+### `member_routine`
+
+회원이 등록한 개인 루틴이다. 활성 루틴은 회원당 최대 30개다.
+
+`routine_template_id`가 있으면 기본 제공 루틴을 고른 것이고, `NULL`이면 직접 추가했거나
+기본 루틴의 이름을 바꾼 것이다. **기본 루틴의 이름을 바꾸면 원본 선택이 해제되어** 같은
+카테고리의 사용자 루틴이 된다(`MemberRoutine` 생성자가 참조를 뗀다). 사용자 루틴끼리는
+같은 이름을 허용하므로 이름에 유니크 제약이 없다.
+
+`deleted_at`이 없다. 삭제 API가 아직 없어 소프트 삭제 정책이 정해지지 않았고,
+활성 루틴 개수는 `active`로 센다.
+
+| 컬럼 | 타입 | NULL | 설명 |
+| --- | --- | --- | --- |
+| id | BIGINT | N | 기본 키 |
+| member_id | BIGINT | N | 소유 회원, `member.id` FK |
+| category_id | BIGINT | N | 소속 카테고리, `routine_category.id` FK |
+| routine_template_id | BIGINT | Y | 원본 기본 루틴, `routine_template.id` FK |
+| name | VARCHAR(20) | N | 루틴 이름. 앞뒤 공백 제거 후 1~20자 |
+| end_time | TIME | N | 마감 시각. 기본값 23:59 |
+| alarm_time | TIME | Y | 알람 시각. "없음"이면 `NULL` |
+| active | TINYINT(1) | N | 활성 여부, 기본값 `1` |
+| created_at / updated_at | DATETIME(6) | N / N | 생성·수정 시각 |
+
+유니크: `uk_member_routine_member_template` (`member_id`, `routine_template_id`)
+— 같은 기본 루틴을 두 번 고를 수 없다. `NULL`인 직접 추가 루틴은 이 제약에 걸리지 않는다.
+
+인덱스: `idx_member_routine_member_active` (`member_id`, `active`)
+
+### `member_routine_schedule`
+
+개인 루틴이 반복되는 요일이다. 최소 1개이며 기본값은 매일이다. 그룹 루틴의 일정과 달리
+요일마다 시간 범위를 두지 않는다 — 마감 시각은 루틴 단위로 한 번만 정한다.
+
+| 컬럼 | 타입 | NULL | 설명 |
+| --- | --- | --- | --- |
+| id | BIGINT | N | 기본 키 |
+| member_routine_id | BIGINT | N | 대상 루틴, `member_routine.id` FK |
+| repeat_day | ENUM | N | 반복 요일(`MONDAY`~`SUNDAY`) |
+| created_at / updated_at | DATETIME(6) | N / N | 생성·수정 시각 |
+
+유니크: `uk_member_routine_schedule_day` (`member_routine_id`, `repeat_day`)
 
 ## 챌린지 테이블
 
@@ -552,13 +636,32 @@ Flyway 도입 전부터 쓰던 DB(개인 로컬·운영)에는 이력 테이블�
 
 #### 리프는 항상 UUID다
 
-파일명에 클라이언트가 보낸 값을 쓰지 않는다(경로 조작 방지). UUID라 다른 회원의 미디어 경로를 유추할 수 없고, 공개 prefix에 `s3:ListBucket`을 주지 않으므로 열거도 불가능하다.
+파일명에 클라이언트가 보낸 값을 쓰지 않는다(경로 조작 방지). UUID라 다른 회원의 미디어 경로를 유추할 수 없고, 공개 prefix의 버킷 정책이 **익명 접근자에게** `s3:ListBucket`을 주지 않으므로 외부에서 열거하는 것도 불가능하다.
+
+> 열거할 수 있는 것은 **서버뿐이다.** 앱의 IAM 역할은 미참조 이미지 정리를 위해 `challenge-verifications/` 아래에 한해 `ListBucket`을 갖는다. 버킷 정책(익명)과 IAM 역할(서버)은 서로 다른 주체이므로 혼동하지 않는다.
 
 #### 날짜는 "업로드일"이다
 
 presigned URL 발급 시점의 KST 날짜다. **인증일(`verified_date`)과 다를 수 있다** — 23:59에 발급받아 00:01에 인증하면 경로는 어제, DB는 오늘이 된다. 발급이 인증보다 먼저 일어나므로 인증일을 경로에 담는 것은 불가능하다. **경로의 날짜를 업무 판정에 쓰지 않는다.** 판정은 항상 DB 컬럼을 본다.
 
 날짜를 넣는 이유는 **미참조 이미지 정리(#19)** 다. 날짜 prefix가 있으면 `ListObjects(prefix=".../2026/07/29/")`로 하루치만 훑을 수 있다. 없으면 용도 전체를 스캔해야 한다. 프로필도 교체 시 이전 사진이 고아가 되므로 같은 규칙을 적용해, 정리 로직이 용도마다 갈리지 않게 한다.
+
+#### 정리 배치가 "쓰이는 중"을 판단하는 방법 (#19)
+
+미참조 정리는 S3 목록과 **DB를 대조**한다. 그래서 **미디어 key를 담는 컬럼이 새로 생기면 그 사실을 정리 쪽에 알려줘야 한다.** 알려주지 않으면 그 컬럼이 가리키는 파일이 지워진다.
+
+알리는 방법은 `MediaReferenceSource` 구현체다. 어떤 용도(prefix)를 책임지는지, 후보 key 중 어느 것이 쓰이는지를 답한다. **어떤 구현체도 담당하지 않는 용도는 정리 대상에서 아예 빠진다** — 담당자가 없다는 건 "무엇이 참조되는지 아무도 모른다"는 뜻이라, 안전한 쪽(안 지움)으로 실패하게 만들었다.
+
+현재 미디어 key를 담는 컬럼은 둘뿐이다.
+
+| 테이블·컬럼 | 담당 구현체 | 비고 |
+| --- | --- | --- |
+| `challenge_verification.image_url` | `ChallengeMediaReferenceSource` | 정리의 실제 대상 |
+| `challenge.image_url` | `ChallengeMediaReferenceSource` | 지금은 전부 `NULL`. 대표 이미지를 채울 때를 대비해 미리 포함 |
+
+**탈퇴·신고로 숨겨진 인증의 사진도 "쓰이는 중"으로 친다.** 행이 남아 있으면 파일도 살아 있는 것이다. 탈퇴 회원 사진을 지우는 것은 별개 정책이다(#70).
+
+`profiles/`는 현재 담당 구현체가 없다 — `MediaPurpose`에는 있지만 발급된 적이 없고 그 key를 담는 컬럼도 없다. **프로필 업로드를 구현할 때 컬럼을 추가하면서 참조처도 함께 등록해야 한다.**
 
 #### 범위 식별자는 "누가 볼 수 있는가"의 단위다
 

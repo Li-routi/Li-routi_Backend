@@ -6,11 +6,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.lirouti.domain.group.entity.Group;
 import com.lirouti.domain.group.entity.GroupRoutine;
 import com.lirouti.domain.group.entity.GroupRoutineAssignment;
-import com.lirouti.domain.group.entity.RoutineCategory;
 import com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.enums.Role;
 import com.lirouti.domain.member.enums.SocialProvider;
+import com.lirouti.domain.routine.entity.RoutineCategory;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import java.time.LocalDate;
@@ -258,6 +258,72 @@ class GroupRoutineAssignmentRepositoryTest {
                 .get()
                 .extracting(GroupRoutineAssignment::getStatus)
                 .isEqualTo(GroupRoutineAssignmentStatus.MISSED);
+    }
+
+    @Test
+    @DisplayName("일정 수정은 미확정 할당만 갱신하고 완료 할당을 보존한다")
+    void rescheduleAssignmentsIfMutable_MixedStatuses_UpdatesOnlyMutable() {
+        // given
+        AssignmentFixture fixture = assignmentFixture("수정 상태", "reschedule-status");
+        Member completedMember = Member.builder()
+                .email("reschedule-completed@example.com")
+                .nickname("완료회원")
+                .socialProvider(SocialProvider.GOOGLE)
+                .role(Role.ROLE_USER)
+                .socialId("reschedule-completed-social")
+                .build();
+        em.persist(completedMember);
+        LocalDate assignedDate = LocalDate.of(2026, 7, 23);
+        GroupRoutineAssignment pending = groupRoutineAssignmentRepository.saveAndFlush(
+                assignment(
+                        fixture.routine(),
+                        fixture.member(),
+                        assignedDate,
+                        GroupRoutineAssignmentStatus.PENDING
+                )
+        );
+        GroupRoutineAssignment completed = groupRoutineAssignmentRepository.saveAndFlush(
+                GroupRoutineAssignment.builder()
+                        .groupRoutine(fixture.routine())
+                        .member(completedMember)
+                        .assignedDate(assignedDate)
+                        .scheduledStartTime(LocalTime.of(9, 0))
+                        .scheduledEndTime(LocalTime.of(10, 0))
+                        .status(GroupRoutineAssignmentStatus.COMPLETED)
+                        .build()
+        );
+
+        // when
+        int updated = groupRoutineAssignmentRepository.rescheduleAssignmentsIfMutable(
+                java.util.List.of(pending.getId(), completed.getId()),
+                LocalTime.of(18, 0),
+                LocalTime.of(19, 0),
+                GroupRoutineAssignmentStatus.IN_PROGRESS,
+                java.util.List.of(
+                        GroupRoutineAssignmentStatus.PENDING,
+                        GroupRoutineAssignmentStatus.IN_PROGRESS
+                )
+        );
+        em.clear();
+
+        // then
+        assertThat(updated).isEqualTo(1);
+        assertThat(groupRoutineAssignmentRepository.findById(pending.getId()))
+                .get()
+                .satisfies(assignment -> {
+                    assertThat(assignment.getScheduledStartTime()).isEqualTo(LocalTime.of(18, 0));
+                    assertThat(assignment.getScheduledEndTime()).isEqualTo(LocalTime.of(19, 0));
+                    assertThat(assignment.getStatus())
+                            .isEqualTo(GroupRoutineAssignmentStatus.IN_PROGRESS);
+                });
+        assertThat(groupRoutineAssignmentRepository.findById(completed.getId()))
+                .get()
+                .satisfies(assignment -> {
+                    assertThat(assignment.getScheduledStartTime()).isEqualTo(LocalTime.of(9, 0));
+                    assertThat(assignment.getScheduledEndTime()).isEqualTo(LocalTime.of(10, 0));
+                    assertThat(assignment.getStatus())
+                            .isEqualTo(GroupRoutineAssignmentStatus.COMPLETED);
+                });
     }
 
     private GroupRoutineAssignment assignment(

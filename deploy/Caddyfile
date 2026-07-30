@@ -1,0 +1,44 @@
+# Caddy 리버스 프록시 — TLS 종단, 앱은 내부 네트워크로만 노출한다.
+#
+# 서버 배치: /opt/app/Caddyfile  (docker-compose.yml 과 같은 폴더)
+#   scp deploy/Caddyfile ubuntu@<서버IP>:/opt/app/Caddyfile
+#
+# 인증서는 Let's Encrypt 에서 자동 발급·갱신된다. 두 가지 전제가 있다.
+#   1. 그 도메인의 A 레코드가 이 서버 EIP 를 가리킬 것
+#   2. 인터넷에서 80 · 443 이 열려 있을 것 (80 은 HTTP-01 챌린지에 쓰인다)
+#
+# 발급이 실패하면 원인을 고치기 전에 재시작을 반복하지 않는다. Let's Encrypt 는
+# 인증 실패를 계정·도메인 조합마다 시간당 5회로 제한하고, 12분에 하나씩 회복된다.
+# (주당 5회는 이것과 다른 제한이다 — 같은 도메인 조합의 인증서를 중복 발급할 때 걸린다)
+
+{
+	# 만료 임박·발급 실패 알림 주소.
+	#
+	# 값이 비면 Caddy 가 아예 뜨지 못한다 — 인자 없는 email 지시어가 되어
+	# "wrong argument count" 로 설정 파싱에서 죽는다. 실제 Caddy 로 확인했다.
+	# 그래서 이 값은 선택이 아니라 필수이며, 배포 워크플로가 비어 있는지 먼저 막는다.
+	email {$LETSENCRYPT_EMAIL}
+}
+
+{$LIROUTI_DOMAIN} {
+	encode zstd gzip
+
+	# app 은 compose 내부 네트워크 이름이다. 호스트 포트를 거치지 않으므로
+	# 나중에 8080 매핑을 127.0.0.1 로 좁히거나 아예 없애도 이 경로는 그대로 동작한다.
+	reverse_proxy app:8080 {
+		# 앱이 원래 요청의 scheme·host 를 알아야 Swagger 와 리다이렉트가 https 로 나간다.
+		# 앱 쪽 server.forward-headers-strategy=framework 와 짝이다 — 한쪽만 있으면 소용없다.
+		#
+		# header_up 은 클라이언트가 보낸 같은 이름의 헤더를 이 값으로 덮어쓴다.
+		# 즉 Caddy 를 거친 요청의 X-Forwarded-* 는 위조할 수 없다.
+		# 다만 그 보장은 Caddy 를 거친 경로에만 해당한다 — 8080 이 공개로 열려 있는 동안에는
+		# 앱에 직접 요청해 이 헤더를 위조할 수 있다(README 의 8080 차단 절 참고).
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Forwarded-Host {host}
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

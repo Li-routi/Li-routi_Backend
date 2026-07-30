@@ -12,12 +12,12 @@ import com.lirouti.domain.group.dto.response.GroupResDTO;
 import com.lirouti.domain.group.entity.Group;
 import com.lirouti.domain.group.entity.GroupMember;
 import com.lirouti.domain.group.entity.GroupRoutine;
-import com.lirouti.domain.group.entity.RoutineCategory;
 import com.lirouti.domain.group.exception.GroupException;
 import com.lirouti.domain.group.exception.code.error.GroupErrorCode;
 import com.lirouti.domain.group.repository.GroupRoutineRepository;
-import com.lirouti.domain.group.repository.RoutineCategoryRepository;
 import com.lirouti.domain.group.service.GroupValidationService;
+import com.lirouti.domain.routine.entity.RoutineCategory;
+import com.lirouti.domain.routine.repository.RoutineCategoryRepository;
 import java.time.DayOfWeek;
 import java.time.LocalTime;
 import java.util.List;
@@ -30,9 +30,10 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
-@DisplayName("GroupCommandService 그룹 루틴 생성 테스트")
+@DisplayName("GroupCommandService 그룹 루틴 명령 테스트")
 class GroupCommandServiceTest {
     private static final Long GROUP_ID = 10L;
+    private static final Long ROUTINE_ID = 20L;
     private static final Long OWNER_ID = 1L;
 
     @Mock
@@ -177,6 +178,88 @@ class GroupCommandServiceTest {
                 .hasMessage("assignment failure");
     }
 
+    @Test
+    @DisplayName("OWNER가 루틴과 전체 일정을 수정하고 오늘 할당 수를 반환한다")
+    void updateRoutine_Owner_UpdatesRoutineAndReturnsAssignmentCount() {
+        // given
+        GroupRoutine routine = existingRoutine();
+        when(groupValidationService.validateGroupOwner(GROUP_ID, OWNER_ID))
+                .thenReturn(ownerMembership);
+        when(groupRoutineRepository.findByIdAndGroupIdForUpdate(ROUTINE_ID, GROUP_ID))
+                .thenReturn(Optional.of(routine));
+        givenActiveCategory();
+        when(groupRoutineRepository.existsByGroupIdAndTitleAndIdNot(
+                GROUP_ID, "수정 루틴", ROUTINE_ID
+        )).thenReturn(false);
+        givenResponseReferences();
+        when(assignmentCommandService.synchronizeRoutineAssignmentsToday(routine)).thenReturn(2);
+
+        // when
+        GroupResDTO.RoutineUpdateResult result = groupCommandService.updateRoutine(
+                GROUP_ID,
+                ROUTINE_ID,
+                OWNER_ID,
+                updateRequest()
+        );
+
+        // then
+        assertThat(result.assignmentCount()).isEqualTo(2);
+        assertThat(result.title()).isEqualTo("수정 루틴");
+        assertThat(result.schedules())
+                .extracting(GroupResDTO.RoutineSchedule::repeatDay)
+                .containsExactly(DayOfWeek.TUESDAY);
+        assertThat(routine.getCategory()).isSameAs(category);
+        assertThat(routine.getTitle()).isEqualTo("수정 루틴");
+        verify(groupValidationService).validateGroupOwner(GROUP_ID, OWNER_ID);
+        verify(groupRoutineRepository).saveAndFlush(routine);
+        verify(assignmentCommandService).synchronizeRoutineAssignmentsToday(routine);
+    }
+
+    @Test
+    @DisplayName("대상 그룹에 속한 루틴이 없으면 수정하지 않는다")
+    void updateRoutine_RoutineNotFound_ThrowsGroupException() {
+        // given
+        when(groupValidationService.validateGroupOwner(GROUP_ID, OWNER_ID))
+                .thenReturn(ownerMembership);
+        when(groupRoutineRepository.findByIdAndGroupIdForUpdate(ROUTINE_ID, GROUP_ID))
+                .thenReturn(Optional.empty());
+
+        // when & then
+        assertThatThrownBy(() -> groupCommandService.updateRoutine(
+                GROUP_ID, ROUTINE_ID, OWNER_ID, updateRequest()
+        )).isInstanceOf(GroupException.class)
+                .extracting("code")
+                .isEqualTo(GroupErrorCode.GROUP_ROUTINE_NOT_FOUND);
+        verify(routineCategoryRepository, never()).findByIdAndActiveTrue(any());
+        verify(assignmentCommandService, never())
+                .synchronizeRoutineAssignmentsToday(any(GroupRoutine.class));
+    }
+
+    @Test
+    @DisplayName("다른 루틴과 제목이 중복되면 수정하지 않는다")
+    void updateRoutine_DuplicateTitle_ThrowsGroupException() {
+        // given
+        GroupRoutine routine = existingRoutine();
+        when(groupValidationService.validateGroupOwner(GROUP_ID, OWNER_ID))
+                .thenReturn(ownerMembership);
+        when(groupRoutineRepository.findByIdAndGroupIdForUpdate(ROUTINE_ID, GROUP_ID))
+                .thenReturn(Optional.of(routine));
+        givenActiveCategory();
+        when(groupRoutineRepository.existsByGroupIdAndTitleAndIdNot(
+                GROUP_ID, "수정 루틴", ROUTINE_ID
+        )).thenReturn(true);
+
+        // when & then
+        assertThatThrownBy(() -> groupCommandService.updateRoutine(
+                GROUP_ID, ROUTINE_ID, OWNER_ID, updateRequest()
+        )).isInstanceOf(GroupException.class)
+                .extracting("code")
+                .isEqualTo(GroupErrorCode.DUPLICATE_GROUP_ROUTINE_TITLE);
+        verify(groupRoutineRepository, never()).saveAndFlush(any(GroupRoutine.class));
+        verify(assignmentCommandService, never())
+                .synchronizeRoutineAssignmentsToday(any(GroupRoutine.class));
+    }
+
     private GroupReqDTO.CreateRoutine request() {
         return new GroupReqDTO.CreateRoutine(
                 3L,
@@ -188,5 +271,29 @@ class GroupCommandServiceTest {
                         LocalTime.of(21, 0)
                 ))
         );
+    }
+
+    private GroupReqDTO.UpdateRoutine updateRequest() {
+        return new GroupReqDTO.UpdateRoutine(
+                3L,
+                "수정 루틴",
+                "수정된 설명입니다.",
+                List.of(new GroupReqDTO.RoutineSchedule(
+                        DayOfWeek.TUESDAY,
+                        LocalTime.of(18, 0),
+                        LocalTime.of(19, 0)
+                ))
+        );
+    }
+
+    private GroupRoutine existingRoutine() {
+        GroupRoutine routine = GroupRoutine.builder()
+                .group(group)
+                .category(category)
+                .title("기존 루틴")
+                .description("기존 설명")
+                .build();
+        routine.addSchedule(DayOfWeek.MONDAY, LocalTime.of(9, 0), LocalTime.of(10, 0));
+        return routine;
     }
 }
