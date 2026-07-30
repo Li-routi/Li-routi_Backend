@@ -26,9 +26,13 @@ import com.lirouti.domain.media.enums.MediaPurpose;
 import com.lirouti.domain.media.service.MediaService;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.repository.MemberRepository;
+import com.lirouti.global.properties.ChallengeReportProperties;
+import com.lirouti.global.util.TimeUtil;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ChallengeCommandService {
@@ -39,6 +43,7 @@ public class ChallengeCommandService {
     private final ChallengeVerificationReportRepository challengeVerificationReportRepository;
     private final ChallengeVerificationLikeRepository challengeVerificationLikeRepository;
     private final MemberRepository memberRepository;
+    private final ChallengeReportProperties challengeReportProperties;
     // 인증 저장의 트랜잭션 경계는 이 빈에 있다. 자기 호출로는 트랜잭션이 걸리지 않아 분리했다.
     private final ChallengeVerificationCommandService challengeVerificationCommandService;
     // 미디어 key의 발급 규칙·공개 URL 조립은 media 도메인이 소유한다. DB를 다루지 않는 유틸성 서비스다.
@@ -146,16 +151,48 @@ public class ChallengeCommandService {
                 .reporter(reporter)
                 .reason(request.reason())
                 .build();
+        ChallengeVerificationReport saved;
         try {
             // saveAndFlush로 제약 위반을 이 자리에서 잡는다. 커밋 시점까지 미루면
             // 트랜잭션 밖에서 터져 도메인 코드로 바꿀 수 없다.
             //
             // 두 예외를 모두 잡는 이유는 인증 저장과 같다. 같은 유니크 키로 INSERT가 겹칠 때
             // InnoDB가 중복 키 오류 대신 데드락으로 판정해 CannotAcquireLockException을 줄 수 있다.
-            return ChallengeConverter.toReport(challengeVerificationReportRepository.saveAndFlush(report));
+            saved = challengeVerificationReportRepository.saveAndFlush(report);
         } catch (DataIntegrityViolationException | CannotAcquireLockException e) {
             throw new ChallengeException(ChallengeErrorCode.ALREADY_REPORTED);
         }
+
+        hideIfReportedEnough(verification);
+        return ChallengeConverter.toReport(saved);
+    }
+
+    /**
+     * 신고가 임계값만큼 쌓였으면 전체 회원에게 가린다(#60).
+     *
+     * <p><b>세는 시점을 조회가 아니라 신고 때로 둔다.</b> 피드에서 매번
+     * {@code having count(*) >= N}으로 세면 읽기 경로가 무거워진다. 신고는 드물고 조회는
+     * 잦으므로 쓰기 시점 계산이 맞다.
+     *
+     * <p><b>동시성은 문제되지 않는다.</b> 두 신고가 동시에 임계값을 넘겨 hidden_at을 두 번 써도
+     * 결과가 같고, 엔티티가 이미 가려진 경우 덮어쓰지 않는다. 반대로 상대의 미커밋 INSERT를
+     * 못 봐 숨김이 한 박자 늦어질 수는 있으나 다음 신고에서 걸린다. 그래서 이 판정을 위해
+     * 행 잠금을 걸지 않는다 — 신고 한 건 때문에 인증 행을 잠그는 비용이 더 크다.
+     *
+     * <p>가려도 인증 행과 스트릭은 그대로다. 막는 것은 노출뿐이다.
+     */
+    private void hideIfReportedEnough(ChallengeVerification verification) {
+        if (verification.isHidden()) {
+            return;
+        }
+        long reportCount = challengeVerificationReportRepository
+                .countByChallengeVerificationId(verification.getId());
+        if (reportCount < challengeReportProperties.getHideThreshold()) {
+            return;
+        }
+        verification.hide(LocalDateTime.now(TimeUtil.KST));
+        log.warn("신고 누적으로 인증을 전체 숨김 처리했습니다. verificationId={}, 신고={}건, 임계값={}",
+                verification.getId(), reportCount, challengeReportProperties.getHideThreshold());
     }
 
     /**

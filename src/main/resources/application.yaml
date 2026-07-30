@@ -108,6 +108,14 @@ aws:
 server:
   forward-headers-strategy: framework
 
+# 신고 누적 자동 숨김. 데모 전까지의 임시 조치다.
+challenge:
+  report:
+    # 이 수만큼 신고가 쌓이면 인증을 전체 회원에게 가린다.
+    # 코드가 아니라 여기 두는 이유는 (1) 적정값이 사용자 수에 따라 달라지고
+    # (2) 한 번 가려진 것을 되살릴 관리자 API 가 없어 이 값을 올리는 것이 유일한 복구 수단이기 때문이다.
+    hide-threshold: ${CHALLENGE_REPORT_HIDE_THRESHOLD:3}
+
 # 미참조 미디어 정리. 업로드는 됐지만 DB 어디서도 참조하지 않는 오브젝트를 지운다.
 # S3 목록과 DB를 대조하는 방식이라 s3:ListBucket·s3:DeleteObject 권한이 필요하다.
 media:

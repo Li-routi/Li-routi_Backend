@@ -1,6 +1,7 @@
 package com.lirouti.domain.challenge.repository;
 
 import static com.lirouti.domain.challenge.repository.ChallengeQuerySupport.activeMember;
+import static com.lirouti.domain.challenge.repository.ChallengeQuerySupport.notHidden;
 
 import java.util.List;
 
@@ -42,6 +43,7 @@ public class ChallengeVerificationRepositoryImpl implements ChallengeVerificatio
                 .where(
                         memberChallenge.challenge.id.eq(challengeId),
                         activeMember(member),
+                        notHidden(verification),
                         notReportedBy(viewerId),
                         cursorLt(cursor)
                 )
@@ -89,6 +91,7 @@ public class ChallengeVerificationRepositoryImpl implements ChallengeVerificatio
                 .where(
                         verification.memberChallenge.id.eq(memberChallengeId),
                         verification.participationRound.eq(participationRound),
+                        notHidden(verification),
                         cursorLt(cursor)
                 )
                 .orderBy(verification.id.desc())
