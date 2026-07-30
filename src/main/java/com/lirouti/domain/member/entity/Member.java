@@ -102,4 +102,10 @@ public class Member extends BaseEntity {
         this.isActive = false;
         this.deletedAt = withdrawnAt;
     }
+
+    // 프로필 내 닉네임 수정 및 온보딩 완료 처리
+    public void updateProfile(String nickname) {
+        this.nickname = nickname;
+        this.onboardingCompleted = true;
+    }
 }

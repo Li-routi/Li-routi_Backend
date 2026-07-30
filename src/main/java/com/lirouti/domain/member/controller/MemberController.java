@@ -1,14 +1,12 @@
 package com.lirouti.domain.member.controller;
 
+import com.lirouti.domain.member.dto.response.MemberResDTO;
+import com.lirouti.domain.member.service.query.MemberQueryService;
 import org.springframework.http.HttpHeaders;
+
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.util.StringUtils;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import com.lirouti.domain.auth.exception.AuthException;
 import com.lirouti.domain.auth.exception.code.error.AuthErrorCode;
@@ -27,6 +25,26 @@ import lombok.RequiredArgsConstructor;
 @RequestMapping("/api/members")
 public class MemberController implements MemberControllerDocs {
     private final MemberCommandService memberCommandService;
+    private final MemberQueryService memberQueryService;
+
+    @Override
+    @GetMapping("/me")
+    public ApiResponse<MemberResDTO.MemberInfo> getMyInfo(
+            @AuthenticationPrincipal CustomUserDetails userDetails
+    ) {
+        MemberResDTO.MemberInfo response = memberQueryService.getMemberInfo(userDetails.getMemberId());
+        return ApiResponse.onSuccess(MemberSuccessCode.MEMBER_INFO_FETCH_SUCCESS, response);
+    }
+
+    @Override
+    @PatchMapping("/me/profile")
+    public ApiResponse<MemberResDTO.MemberInfo> updateProfile(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @Valid @RequestBody MemberReqDTO.UpdateProfile request
+    ) {
+        MemberResDTO.MemberInfo response = memberCommandService.updateProfile(userDetails.getMemberId(), request);
+        return ApiResponse.onSuccess(MemberSuccessCode.MEMBER_PROFILE_UPDATE_SUCCESS, response);
+    }
 
     @Override
     @PostMapping("/logout")
