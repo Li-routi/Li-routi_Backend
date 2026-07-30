@@ -1,7 +1,10 @@
 package com.lirouti.domain.group.entity;
 
+import java.time.LocalDateTime;
+
 import com.lirouti.domain.group.enums.GroupStatus;
 import com.lirouti.global.entity.BaseEntity;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -36,6 +39,9 @@ public class Group extends BaseEntity {
     @Column(name = "invite_code", nullable = false, unique = true, length = 7)
     private String inviteCode;
 
+    @Column(name = "invite_code_expires_at")
+    private LocalDateTime inviteCodeExpiresAt;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private GroupStatus status;
@@ -49,6 +55,12 @@ public class Group extends BaseEntity {
 
     public void updateName(String name) {
         this.name = name;
+    }
+
+    // 기존 초대코드를 무효화하고 새 코드와 말소 시각을 저장
+    public void issueInviteCode(String inviteCode, LocalDateTime expiresAt) {
+        this.inviteCode = inviteCode;
+        this.inviteCodeExpiresAt = expiresAt;
     }
 
     /**

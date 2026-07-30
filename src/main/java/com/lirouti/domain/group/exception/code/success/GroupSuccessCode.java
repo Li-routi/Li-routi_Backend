@@ -17,6 +17,16 @@ public enum GroupSuccessCode implements BaseSuccessCode {
             HttpStatus.CREATED,
             "그룹 루틴 생성에 성공했습니다.",
             "GROUP201_1"
+    ),
+    GROUP_INVITE_CODE_FETCH_SUCCESS(
+            HttpStatus.OK,
+            "그룹 초대코드 조회에 성공했습니다.",
+            "GROUP200_2"
+    ),
+    GROUP_INVITE_CODE_ISSUE_SUCCESS(
+            HttpStatus.CREATED,
+            "그룹 초대코드 발급에 성공했습니다.",
+            "GROUP201_2"
     );
 
     private final HttpStatus httpStatus;
