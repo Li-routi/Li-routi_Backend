@@ -1,12 +1,29 @@
 package com.lirouti.domain.group.controller;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.matchesPattern;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.ZoneId;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.lirouti.domain.group.entity.Group;
 import com.lirouti.domain.group.entity.GroupMember;
@@ -19,21 +36,9 @@ import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.enums.Role;
 import com.lirouti.domain.member.enums.SocialProvider;
 import com.lirouti.global.auth.CustomUserDetails;
+
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
-import java.time.LocalDate;
-import java.time.LocalTime;
-import java.time.ZoneId;
-import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.http.MediaType;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.transaction.annotation.Transactional;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -354,6 +359,96 @@ class GroupControllerTest {
                 .andExpect(content().string(containsString("/api/groups/{groupId}/routines")))
                 .andExpect(content().string(containsString("그룹 루틴 생성")))
                 .andExpect(content().string(containsString("201")));
+    }
+
+    @Test
+    @DisplayName("OWNER가 초대코드를 발급하면 201과 코드 및 말소 시각을 반환한다")
+    void issueInviteCode_Owner_ReturnsCreatedResult() throws Exception {
+        // given
+        Group group = group("IC00001");
+        Member owner = member();
+        membership(owner, group, GroupMemberRole.OWNER);
+        em.flush();
+
+        // when & then
+        mockMvc.perform(post("/api/groups/{groupId}/invite-code", group.getId())
+                        .with(user(principal(owner))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.isSuccess").value(true))
+                .andExpect(jsonPath("$.code").value("GROUP201_2"))
+                .andExpect(jsonPath("$.result.inviteCode", matchesPattern("[A-Z0-9]{7}")))
+                .andExpect(jsonPath("$.result.expiresAt").isNotEmpty());
+    }
+
+    @Test
+    @DisplayName("초대코드를 재발급한 후 조회하면 새 코드를 반환한다")
+    void reissueInviteCode_ThenGet_ReturnsNewCode() throws Exception {
+        // given
+        Group group = group("IC00004");
+        Member owner = member();
+        membership(owner, group, GroupMemberRole.OWNER);
+        em.flush();
+
+        mockMvc.perform(post("/api/groups/{groupId}/invite-code", group.getId())
+                        .with(user(principal(owner))))
+                .andExpect(status().isCreated());
+        em.refresh(group);
+        String firstIssuedCode = group.getInviteCode();
+
+        // when
+        mockMvc.perform(post("/api/groups/{groupId}/invite-code", group.getId())
+                        .with(user(principal(owner))))
+                .andExpect(status().isCreated());
+        em.refresh(group);
+        String reissuedCode = group.getInviteCode();
+
+        // then
+        org.assertj.core.api.Assertions.assertThat(reissuedCode)
+                .isNotEqualTo(firstIssuedCode);
+        em.clear();
+        mockMvc.perform(get("/api/groups/{groupId}/invite-code", group.getId())
+                        .with(user(principal(owner))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("GROUP200_2"))
+                .andExpect(jsonPath("$.result.inviteCode").value(reissuedCode))
+                .andExpect(jsonPath("$.result.expiresAt").isNotEmpty());
+    }
+
+    @Test
+    @DisplayName("만료된 초대코드를 조회해도 자동 재발급하지 않는다")
+    void getInviteCode_ExpiredCode_ReturnsStoredCode() throws Exception {
+        // given
+        Group group = group("IC00002");
+        group.issueInviteCode("EXP1234", LocalDateTime.of(2020, 1, 1, 0, 0));
+        Member owner = member();
+        membership(owner, group, GroupMemberRole.OWNER);
+        em.flush();
+        em.clear();
+
+        // when & then
+        mockMvc.perform(get("/api/groups/{groupId}/invite-code", group.getId())
+                        .with(user(principal(owner))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.isSuccess").value(true))
+                .andExpect(jsonPath("$.code").value("GROUP200_2"))
+                .andExpect(jsonPath("$.result.inviteCode").value("EXP1234"))
+                .andExpect(jsonPath("$.result.expiresAt").value("2020-01-01T00:00:00"));
+    }
+
+    @Test
+    @DisplayName("일반 구성원은 초대코드를 발급할 수 없다")
+    void issueInviteCode_RegularMember_ReturnsOwnerAccessDenied() throws Exception {
+        // given
+        Group group = group("IC00003");
+        Member regularMember = member();
+        membership(regularMember, group, GroupMemberRole.MEMBER);
+        em.flush();
+
+        // when & then
+        mockMvc.perform(post("/api/groups/{groupId}/invite-code", group.getId())
+                        .with(user(principal(regularMember))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("GROUP403_3"));
     }
 
     private String validRequest(Long categoryId, String title) {
