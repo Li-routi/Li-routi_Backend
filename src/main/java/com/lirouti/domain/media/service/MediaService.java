@@ -4,8 +4,11 @@ import java.io.IOException;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.time.format.ResolverStyle;
 import java.util.Arrays;
 import java.util.UUID;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.springframework.http.HttpStatus;
@@ -60,11 +63,20 @@ public class MediaService {
      * UUID는 randomUUID()가 만드는 소문자 16진수로 고정한다.
      */
     private static final Pattern ISSUED_KEY_BODY = Pattern.compile(
-            "(?:\\d{4}/\\d{2}/\\d{2}/)?"
+            "(?<date>\\d{4}/\\d{2}/\\d{2}/)?"
                     + "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
 
-    /** key의 날짜 구간. 스트릭·인증일과 같은 KST 기준을 쓴다(#39). */
-    private static final DateTimeFormatter KEY_DATE_PATH = DateTimeFormatter.ofPattern("yyyy/MM/dd");
+    /**
+     * key의 날짜 구간. 스트릭·인증일과 같은 KST 기준을 쓴다(#39).
+     *
+     * 생성과 검증이 같은 포맷터를 쓴다 — 두 벌이면 규칙이 갈린다.
+     * STRICT + uuuu 조합인 이유: 검증에서 2026/02/30 · 2025/13/99 처럼 달력에 없는 날짜를
+     * 걸러내야 한다. 기본(SMART) 해석은 일자를 그 달의 마지막 날로 맞춰버려 통과시킨다.
+     * STRICT 에서는 연도 패턴이 yyyy(era 기준)면 era 없이 파싱할 수 없어 uuuu 를 쓴다.
+     */
+    private static final DateTimeFormatter KEY_DATE_PATH = DateTimeFormatter
+            .ofPattern("uuuu/MM/dd")
+            .withResolverStyle(ResolverStyle.STRICT);
 
     private final S3Presigner s3Presigner;
     // 업로드된 바이트를 실제로 읽어 검증하기 위한 클라이언트(#22). presigner와 달리 S3를 호출한다.
@@ -251,7 +263,35 @@ public class MediaService {
         }
         String baseName = fileName.substring(0, extensionSeparator);
         String extension = fileName.substring(extensionSeparator + 1);
-        return ISSUED_KEY_BODY.matcher(baseName).matches() && isExtensionAllowedFor(purpose, extension);
+
+        Matcher matcher = ISSUED_KEY_BODY.matcher(baseName);
+        if (!matcher.matches() || !isExtensionAllowedFor(purpose, extension)) {
+            return false;
+        }
+        return isValidDatePathOrAbsent(matcher.group("date"));
+    }
+
+    /**
+     * 날짜 구간이 달력에 실제로 있는 날인지 본다(#39).
+     *
+     * 정규식은 자릿수만 보므로 2026/02/30 · 2025/13/99 도 통과한다. 그런 key는 서버가 발급한
+     * 적이 없으니 보통 업로드 확인(#22)에서 걸리지만, 그 검증은 킬 스위치로 끌 수 있다
+     * (AWS_S3_BYTE_VALIDATION_ENABLED). 꺼진 동안에는 존재하지 않는 오브젝트를 가리키는 key가
+     * 그대로 저장되어 피드에 깨진 이미지로 남는다.
+     *
+     * 날짜가 없는 형태(날짜 도입 전 발급)는 통과시킨다.
+     */
+    private static boolean isValidDatePathOrAbsent(String datePathWithSlash) {
+        if (datePathWithSlash == null) {
+            return true;
+        }
+        try {
+            // 정규식이 잡은 구간은 끝에 '/'가 붙어 있다.
+            LocalDate.parse(datePathWithSlash.substring(0, datePathWithSlash.length() - 1), KEY_DATE_PATH);
+            return true;
+        } catch (DateTimeParseException e) {
+            return false;
+        }
     }
 
     /** 그 용도가 허용하는 카테고리의 형식들만 확장자로 인정한다(사진 전용 용도에 mp4 key 방지). */

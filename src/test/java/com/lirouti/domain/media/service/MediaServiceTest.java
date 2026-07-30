@@ -463,18 +463,52 @@ class MediaServiceTest {
 
     // ── key 구조 (#39) ──
 
+    private static final java.time.ZoneId KST = java.time.ZoneId.of("Asia/Seoul");
+    private static final java.time.format.DateTimeFormatter KEY_DATE_PATH =
+            java.time.format.DateTimeFormatter.ofPattern("yyyy/MM/dd");
+
     @Test
     @DisplayName("발급한 key에 KST 날짜 구간이 들어간다")
     void issuePresignedUrl_KeyContainsKstDatePath() {
         mockPresign();
 
+        // 호출 전후로 날짜를 읽는다. KST 자정이 그 사이에 지나면 두 값이 달라지므로
+        // 한쪽만 기대하면 간헐적으로 실패한다.
+        java.time.LocalDate before = java.time.LocalDate.now(KST);
         String key = mediaService.issuePresignedUrl(new MediaReqDTO.PresignedUrl(
                 MediaPurpose.CHALLENGE_VERIFICATION, "image/jpeg", 1024L)).mediaKey();
+        java.time.LocalDate after = java.time.LocalDate.now(KST);
 
-        String expectedDatePath = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Seoul"))
-                .format(java.time.format.DateTimeFormatter.ofPattern("yyyy/MM/dd"));
-        assertThat(key).startsWith("challenge-verifications/" + expectedDatePath + "/");
+        assertThat(key).satisfiesAnyOf(
+                k -> assertThat(k).startsWith("challenge-verifications/" + before.format(KEY_DATE_PATH) + "/"),
+                k -> assertThat(k).startsWith("challenge-verifications/" + after.format(KEY_DATE_PATH) + "/"));
         assertThat(key).endsWith(".jpg");
+    }
+
+    @ParameterizedTest
+    @DisplayName("달력에 없는 날짜가 든 key는 거부한다 — 정규식은 자릿수만 보기 때문")
+    @ValueSource(strings = {
+            "challenge-verifications/2026/02/30/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg", // 2월 30일
+            "challenge-verifications/2025/13/99/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg", // 13월 99일
+            "challenge-verifications/2025/02/29/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg", // 평년의 2월 29일
+            "challenge-verifications/2026/00/10/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg"  // 0월
+    })
+    void validateMediaKey_ImpossibleDate_ThrowsInvalidMediaKey(String mediaKey) {
+        assertThatThrownBy(() ->
+                mediaService.validateMediaKey(mediaKey, MediaPurpose.CHALLENGE_VERIFICATION))
+                .isInstanceOf(MediaException.class)
+                .hasFieldOrPropertyWithValue("code", MediaErrorCode.INVALID_MEDIA_KEY);
+    }
+
+    @Test
+    @DisplayName("윤년의 2월 29일은 통과한다 — 실재하는 날짜는 막지 않는다")
+    void validateMediaKey_LeapDay_Passes() {
+        String leapDayKey =
+                "challenge-verifications/2028/02/29/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg";
+
+        assertThatCode(() ->
+                mediaService.validateMediaKey(leapDayKey, MediaPurpose.CHALLENGE_VERIFICATION))
+                .doesNotThrowAnyException();
     }
 
     @Test
