@@ -2,6 +2,8 @@ package com.lirouti.domain.media.service;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.UUID;
 import java.util.regex.Pattern;
@@ -18,6 +20,7 @@ import com.lirouti.domain.media.enums.MediaPurpose;
 import com.lirouti.domain.media.exception.MediaException;
 import com.lirouti.domain.media.exception.code.error.MediaErrorCode;
 import com.lirouti.global.properties.S3Properties;
+import com.lirouti.global.util.TimeUtil;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -47,9 +50,21 @@ import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignReques
 @Service
 @RequiredArgsConstructor
 public class MediaService {
-    // generateMediaKey가 UUID.randomUUID()로 만드는 형태. 소문자 16진수 고정이다.
-    private static final Pattern ISSUED_KEY_UUID =
-            Pattern.compile("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
+    /**
+     * 용도 prefix 뒤에 올 수 있는 부분의 형태(#39).
+     *
+     * {@code (yyyy/MM/dd/)?UUID} 두 가지를 모두 받는다. 날짜 도입 전에 발급된
+     * {@code prefix/UUID} 형태가 이미 저장돼 있고, 형식이 바뀌기 전에 발급된 key가 바뀐 뒤에
+     * 저장될 수도 있다(presigned URL 유효 시간이 5분이라 창은 좁다).
+     *
+     * UUID는 randomUUID()가 만드는 소문자 16진수로 고정한다.
+     */
+    private static final Pattern ISSUED_KEY_BODY = Pattern.compile(
+            "(?:\\d{4}/\\d{2}/\\d{2}/)?"
+                    + "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
+
+    /** key의 날짜 구간. 스트릭·인증일과 같은 KST 기준을 쓴다(#39). */
+    private static final DateTimeFormatter KEY_DATE_PATH = DateTimeFormatter.ofPattern("yyyy/MM/dd");
 
     private final S3Presigner s3Presigner;
     // 업로드된 바이트를 실제로 읽어 검증하기 위한 클라이언트(#22). presigner와 달리 S3를 호출한다.
@@ -115,7 +130,8 @@ public class MediaService {
      * 클라이언트가 보낸 key가 그 용도로 발급한 key의 형식인지 검증한다.
      *
      * key는 서버가 발급하지만 업로드 후 요청 본문으로 되돌아오므로 그대로 믿을 수 없다.
-     * 다른 용도의 경로나 임의 문자열이 저장되지 않도록 발급 규칙({@code prefix/UUID.확장자})과 대조한다.
+     * 다른 용도의 경로나 임의 문자열이 저장되지 않도록 발급 규칙과 대조한다. 날짜가 붙은 현재 형태와
+     * 날짜 도입 전의 flat 형태를 모두 받는다(#39, ISSUED_KEY_BODY 참고).
      * 실제 오브젝트가 업로드됐는지, 그 바이트가 정말 이미지인지는 확인하지 않는다(#22·#19 범위).
      */
     public void validateMediaKey(String mediaKey, MediaPurpose purpose) {
@@ -235,7 +251,7 @@ public class MediaService {
         }
         String baseName = fileName.substring(0, extensionSeparator);
         String extension = fileName.substring(extensionSeparator + 1);
-        return ISSUED_KEY_UUID.matcher(baseName).matches() && isExtensionAllowedFor(purpose, extension);
+        return ISSUED_KEY_BODY.matcher(baseName).matches() && isExtensionAllowedFor(purpose, extension);
     }
 
     /** 그 용도가 허용하는 카테고리의 형식들만 확장자로 인정한다(사진 전용 용도에 mp4 key 방지). */
@@ -292,12 +308,27 @@ public class MediaService {
     }
 
     /**
-     * key는 추측할 수 없어야 한다. UUID를 사용해 다른 사용자의 미디어 경로를 유추하지 못하게 한다.
-     * 클라이언트가 보낸 파일명은 신뢰하지 않고 사용하지 않는다(경로 조작 방지).
+     * {@code {용도}/{yyyy}/{MM}/{dd}/{UUID}.{확장자}} 형태로 만든다(#39).
+     *
+     * 리프는 UUID다. key는 추측할 수 없어야 하고, 클라이언트가 보낸 파일명은 신뢰하지 않는다
+     * (경로 조작 방지).
+     *
+     * <p>날짜를 넣는 이유는 미참조 이미지 정리(#19)다. 날짜 prefix가 있으면 하루치만 훑어
+     * 고아 파일을 찾을 수 있고, 없으면 용도 전체를 스캔해야 한다.
+     *
+     * <p><b>이 날짜는 "업로드일"이다.</b> 발급은 인증보다 먼저 일어나므로 인증일을 담을 수 없다.
+     * 23:59에 발급받아 00:01에 인증하면 경로는 어제, DB는 오늘이 된다.
+     * <b>업무 판정에 경로의 날짜를 쓰지 않는다</b> — 판정은 항상 DB 컬럼을 본다.
+     *
+     * <p>공개 용도에는 challengeId·memberId 같은 식별자를 넣지 않는다. 공개 prefix는 경로가
+     * URL에 그대로 노출되므로(#66) 식별자를 넣으면 URL만 보고 누가 무엇을 했는지 알 수 있다.
+     * 비공개 용도의 접근 범위 식별자 규칙은 database-schema.md에 정의돼 있다(해당 미디어가
+     * 생길 때 구현한다).
      */
     private String generateMediaKey(MediaPurpose purpose, MediaContentType contentType) {
-        return "%s/%s.%s".formatted(
+        return "%s/%s/%s.%s".formatted(
                 purpose.getPathPrefix(),
+                LocalDate.now(TimeUtil.KST).format(KEY_DATE_PATH),
                 UUID.randomUUID(),
                 contentType.getExtension()
         );
