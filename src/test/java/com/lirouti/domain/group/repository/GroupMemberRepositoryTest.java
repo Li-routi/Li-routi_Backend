@@ -11,6 +11,7 @@ import com.lirouti.domain.member.enums.Role;
 import com.lirouti.domain.member.enums.SocialProvider;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.DisplayName;
@@ -32,7 +33,7 @@ class GroupMemberRepositoryTest {
     private EntityManager em;
 
     @Test
-    @DisplayName("대상 그룹의 ACTIVE 구성원만 조회한다")
+    @DisplayName("대상 그룹의 ACTIVE 구성원 중 활성 계정만 조회한다")
     void findAllByGroupIdAndStatus_ActiveOnly_ReturnsScopedMembers() {
         // given
         Group target = group("A000001");
@@ -41,9 +42,16 @@ class GroupMemberRepositoryTest {
         GroupMember active = membership(member(), target, GroupMemberRole.MEMBER);
         GroupMember left = membership(member(), target, GroupMemberRole.MEMBER);
         GroupMember kicked = membership(member(), target, GroupMemberRole.MEMBER);
+        Member withdrawnMember = member();
+        membership(withdrawnMember, target, GroupMemberRole.MEMBER);
         membership(member(), other, GroupMemberRole.MEMBER);
         left.leave();
         kicked.kick();
+        withdrawnMember.withdraw(
+                "withdrawn-group-member@example.com",
+                "withdrawn-group-member-social-id",
+                LocalDateTime.of(2026, 7, 30, 12, 0)
+        );
         em.flush();
         em.clear();
 
