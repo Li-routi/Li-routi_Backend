@@ -1,6 +1,6 @@
-package com.lirouti.domain.group.repository;
+package com.lirouti.domain.routine.repository;
 
-import com.lirouti.domain.group.entity.RoutineCategory;
+import com.lirouti.domain.routine.entity.RoutineCategory;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 

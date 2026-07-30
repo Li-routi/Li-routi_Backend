@@ -1,4 +1,4 @@
-package com.lirouti.domain.group.entity;
+package com.lirouti.domain.routine.entity;
 
 import com.lirouti.global.entity.BaseEntity;
 import jakarta.persistence.Column;

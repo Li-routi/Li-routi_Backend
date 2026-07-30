@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 
+import com.lirouti.domain.routine.entity.RoutineCategory;
 import java.time.DayOfWeek;
 import java.time.LocalTime;
 import org.junit.jupiter.api.DisplayName;
