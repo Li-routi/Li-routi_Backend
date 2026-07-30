@@ -205,7 +205,8 @@ class ChallengeQueryServiceTest {
         when(challengeRepository.countVerificationPosts(1L)).thenReturn(80L);
         when(challengeRepository.countTodayCompletions(eq(1L), any(LocalDate.class))).thenReturn(456L);
 
-        // 비로그인 조회(memberId == null) → participating은 false.
+        // memberId == null 이면 participating 은 false. 컨트롤러는 인증이 필수라 null 을 넘기지
+        // 않지만(#77), 서비스가 null 을 견디는 것은 의도이므로 그 계약을 여기서 검증한다.
         ChallengeResDTO.Detail result = challengeQueryService.getChallenge(1L, null);
 
         assertThat(result.participantCount()).isEqualTo(1234L);

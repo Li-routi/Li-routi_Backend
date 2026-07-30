@@ -207,10 +207,11 @@ class ChallengeControllerTest {
     }
 
     @Test
-    @DisplayName("POST는 인증이 필요하다 (GET만 공개) — 미인증은 403")
+    @DisplayName("정의되지 않은 POST도 미인증이면 403이다")
     void postChallenges_Unauthenticated_IsRejected() throws Exception {
-        // SecurityConfig가 GET만 permitAll하고 나머지는 authenticated. 커스텀 EntryPoint를 안 붙여
-        // Spring Security 기본 Http403ForbiddenEntryPoint가 미인증 요청에 403을 낸다.
+        // SecurityConfig가 PUBLIC_URIS 외 모든 요청을 authenticated로 두므로(#77) 메서드와
+        // 무관하게 막힌다. 커스텀 EntryPoint를 안 붙여 Spring Security 기본
+        // Http403ForbiddenEntryPoint가 미인증 요청에 403을 낸다(401이 아니다).
         mockMvc.perform(post("/api/challenges"))
                 .andExpect(status().isForbidden());
     }
