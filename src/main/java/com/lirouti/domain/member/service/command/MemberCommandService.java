@@ -134,7 +134,7 @@ public class MemberCommandService {
     // 프로필 수정
     @Transactional
     public MemberResDTO.MemberInfo updateProfile(Long memberId, MemberReqDTO.UpdateProfile request) {
-        Member member = memberRepository.findById(memberId)
+        Member member = memberRepository.findByIdForUpdate(memberId)
                 .orElseThrow(() -> {
                     log.warn("존재하지 않는 회원입니다.");
                     return new MemberException(MemberErrorCode.MEMBER_NOT_FOUND);
