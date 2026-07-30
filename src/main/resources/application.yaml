@@ -95,6 +95,19 @@ aws:
     # CloudFront 등을 붙이면 AWS_S3_PUBLIC_BASE_URL로 이 값을 덮어써 오리진을 바꾼다.
     public-base-url: ${AWS_S3_PUBLIC_BASE_URL:https://s3.${AWS_REGION:ap-northeast-2}.amazonaws.com/${AWS_S3_BUCKET}}
 
+# 프록시(Caddy) 뒤에서 원래 요청의 scheme·host 를 인식하게 한다.
+# 없으면 앱이 자기 주소를 http://app:8080 으로 알아, Swagger 의 "Try it out" 과
+# 리다이렉트 Location 이 http 로 새어 나간다. 프록시가 없는 로컬에서는 아무 영향이 없다.
+# Caddy 쪽 header_up X-Forwarded-Proto/Host 와 짝이다 — 한쪽만 있으면 소용없다.
+#
+# 주의: 이 전략은 X-Forwarded-* 를 보낸 주체를 따지지 않고 그대로 믿는다. 신뢰는 앞단이
+# 그 헤더를 덮어쓴다는 전제에서 나오는데, Caddy 는 그렇게 하지만 앱 포트(8080)가 공개로
+# 열려 있는 동안에는 그 경로를 우회해 헤더를 위조할 수 있다.
+# 전환기라 8080 을 아직 열어 둔 상태이므로, 앱 클라이언트가 https 로 옮겨가는 대로
+# 8080 을 127.0.0.1 로 좁혀야 이 설정의 전제가 실제로 성립한다(deploy/README.md).
+server:
+  forward-headers-strategy: framework
+
 # 미참조 미디어 정리. 업로드는 됐지만 DB 어디서도 참조하지 않는 오브젝트를 지운다.
 # S3 목록과 DB를 대조하는 방식이라 s3:ListBucket·s3:DeleteObject 권한이 필요하다.
 media:
