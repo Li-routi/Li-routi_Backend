@@ -173,14 +173,22 @@ public class MediaService {
         } catch (S3Exception e) {
             // 404뿐 아니라 403도 "업로드 안 됨"으로 본다.
             //
-            // 우리 정책은 s3:ListBucket을 일부러 주지 않는다(최소 권한). 그런데 S3는 ListBucket이
-            // 없는 주체에게는 오브젝트 존재 여부를 숨기려고 없는 key에도 NoSuchKey 대신
-            // AccessDenied(403)를 준다. 실측으로 확인한 동작이다(deploy/README.md).
+            // S3는 ListBucket이 없는 주체에게는 오브젝트 존재 여부를 숨기려고, 없는 key에도
+            // NoSuchKey 대신 AccessDenied(403)를 준다. 실측으로 확인한 동작이다(deploy/README.md).
             // 그래서 403을 500으로 돌리면 "업로드를 안 한 클라이언트"에게 서버 오류라고 알려주게 된다.
             //
             // 대신 이렇게 하면 진짜 권한 문제도 404로 보이는 맹점이 생긴다. 다만 그 경우
             // 정상 업로드된 key까지 전부 실패하므로 개별 요청이 아니라 전 요청이 404가 된다 —
             // 아래 로그가 몰려 찍히면 업로드 누락이 아니라 정책 문제로 봐야 한다.
+            //
+            // 이 분기의 전제가 바뀌는 중이다. 미참조 이미지 정리를 위해 IAM 역할에
+            // challenge-verifications/ 아래 ListBucket을 주기로 했고, 그게 콘솔에 반영되면
+            // 그 prefix의 없는 key는 403이 아니라 404를 준다. 그때부터 여기의 403은
+            // "업로드 누락"이 아니라 진짜 권한 문제만 뜻하므로 이 분기를 떼는 편이 진단에 낫다.
+            //
+            // 지금 떼지 않는 이유는 콘솔 반영 전까지는 여전히 403이 "없는 key"이기 때문이다.
+            // 먼저 떼면 그 사이 업로드를 거른 요청이 전부 500을 받는다. 권한 부착을 확인한 뒤
+            // 정리한다.
             int status = e.statusCode();
             if (status == HttpStatus.NOT_FOUND.value() || status == HttpStatus.FORBIDDEN.value()) {
                 log.warn("업로드된 오브젝트를 읽지 못했습니다(status={}). 업로드 누락으로 처리합니다."

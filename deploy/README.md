@@ -160,7 +160,9 @@ cd /opt/app && docker compose logs -f app
 
 ### 공개 미디어 — 버킷 정책으로 prefix만 연다
 
-[`deploy/bucket-policy-media.json`](./bucket-policy-media.json)을 S3 → 버킷 → 권한 → 버킷 정책에 붙여넣는다. `s3:GetObject`만, `challenge-verifications/*`만 허용한다. `ListBucket`은 주지 않으므로 **목록으로 훑는 것은 여전히 불가능**하고 key가 UUID라 추측도 안 된다.
+[`deploy/bucket-policy-media.json`](./bucket-policy-media.json)을 S3 → 버킷 → 권한 → 버킷 정책에 붙여넣는다. `s3:GetObject`만, `challenge-verifications/*`만 허용한다. 이 정책은 **익명 접근자**에게 적용되며 `ListBucket`을 주지 않으므로 **목록으로 훑는 것은 불가능**하고 key가 UUID라 추측도 안 된다.
+
+> **주체를 구분할 것.** 위 문장은 버킷 정책(익명 접근자) 이야기다. 앱이 쓰는 IAM 역할은 별개이며, 미참조 이미지 정리를 위해 `challenge-verifications/` 아래에 한해 `ListBucket`을 갖는다(아래 [미참조 미디어 정리] 절). 즉 **URL을 아는 외부인은 여전히 열거할 수 없고, 열거할 수 있는 것은 서버뿐이다.**
 
 > **퍼블릭 액세스 차단을 먼저 푼다.** S3 → 버킷 → 권한 → "퍼블릭 액세스 차단"에서 **`BlockPublicPolicy`·`RestrictPublicBuckets` 두 개를 끈다.** 켜져 있으면 정책을 붙여도 무시된다. 나머지 두 개(ACL 관련)는 켜둔 채로 둔다 — ACL은 쓰지 않는다.
 
@@ -219,10 +221,14 @@ S3 라이프사이클(“N일 지난 객체 자동 삭제”)이 가장 단순�
 
 | Sid | 액션 | 리소스 | 왜 |
 | --- | --- | --- | --- |
-| `MediaCleanupList` | `s3:ListBucket` | `arn:aws:s3:::lirouti-prod-bucket` (버킷 자체) | 날짜 prefix 아래 오브젝트 목록을 얻는다 |
-| `MediaCleanupDelete` | `s3:DeleteObject` | `arn:aws:s3:::lirouti-prod-bucket/*` | 미참조 오브젝트를 지운다 |
+| `MediaCleanupList` | `s3:ListBucket` | `arn:aws:s3:::lirouti-prod-bucket` (버킷 자체)<br>+ `Condition: s3:prefix = challenge-verifications/*` | 날짜 prefix 아래 오브젝트 목록을 얻는다 |
+| `MediaCleanupDelete` | `s3:DeleteObject` | `arn:aws:s3:::lirouti-prod-bucket/challenge-verifications/*` | 미참조 오브젝트를 지운다 |
 
 > `ListBucket`의 리소스는 **버킷 ARN이지 `/*`가 아니다.** 오브젝트 액션과 리소스 형태가 다르다 — `/*`를 붙이면 조용히 권한이 안 먹는다.
+
+**둘 다 `challenge-verifications/` 아래로 좁혀 뒀다.** 이 배치가 만지는 prefix가 거기 하나뿐이라 기능 손실이 없고, 앞으로 추가될 비공개 미디어(개인 루틴·그룹 채팅 사진)는 **앱 역할로도 열거·삭제할 수 없다.**
+
+정리 배치는 앱 안의 스케줄러라 앱과 같은 인스턴스 프로필을 쓴다. 즉 **앱이 침해되면 이 권한도 함께 넘어간다.** 배치를 별도 역할로 떼어내는 것이 이론상 더 안전하지만, 그러려면 배치를 앱 밖(Lambda·별도 컨테이너)으로 옮겨야 하고 지금은 그 실행 기반이 없다. 게다가 `DeleteObject`는 **탈퇴 시 사진 삭제가 앱 안에서 지워야 해서** 어차피 앱 역할에 남는다. 그래서 분리 대신 **리소스를 좁히는 쪽**으로 위험을 줄였다.
 
 `s3:DeleteObject`가 열리면 **탈퇴 시 사진 삭제(#70)도 같은 권한을 쓴다.** 한 번에 넓히는 게 낫다.
 
@@ -330,9 +336,9 @@ LiRouti는 **umc 계정 하나에만** 있고 다른 계정과 리소스를 공�
 
 IAM → 정책 → 정책 생성 → JSON 탭에 [`deploy/iam-policy.json`](./iam-policy.json)의 내용을 붙여넣는다. 이름은 `lirouti-app-s3`.
 
-미디어 버킷에는 `PutObject`·`GetObject`(업로드·검증·서빙)에 더해 **`ListBucket`·`DeleteObject`(미참조 이미지 정리 #19)** 를 허용한다. 백업 버킷은 `PutObject`만 준다 — 백업은 쓰기만 하면 되고, 읽기·삭제까지 주면 앱 침해 시 백업을 지울 수 있다.
+미디어 버킷에는 `PutObject`·`GetObject`(업로드·검증·서빙, 버킷 전체)에 더해 **`ListBucket`·`DeleteObject`(미참조 이미지 정리)** 를 허용하되, 뒤의 둘은 **`challenge-verifications/` 아래로만** 좁힌다. 백업 버킷은 `PutObject`만 준다 — 백업은 쓰기만 하면 되고, 읽기·삭제까지 주면 앱 침해 시 백업을 지울 수 있다.
 
-> **`ListBucket`만 리소스가 버킷 ARN(`arn:aws:s3:::lirouti-prod-bucket`)이고 나머지는 오브젝트(`/*`)다.** 버킷 수준 액션과 오브젝트 수준 액션은 리소스 형태가 다르다. `ListBucket`에 `/*`를 붙이면 **오류 없이 조용히 권한이 안 먹는다.**
+> **`ListBucket`만 리소스가 버킷 ARN(`arn:aws:s3:::lirouti-prod-bucket`)이고 나머지는 오브젝트(`/*`)다.** 버킷 수준 액션과 오브젝트 수준 액션은 리소스 형태가 다르다. `ListBucket`에 `/*`를 붙이면 **오류 없이 조용히 권한이 안 먹는다.** prefix 제한은 리소스가 아니라 `Condition`의 `s3:prefix`로 건다.
 
 > 이 두 권한을 붙였다고 정리 배치가 바로 도는 것은 아니다. 앱 쪽 기본값이 꺼짐이라 `MEDIA_CLEANUP_ENABLED=true`까지 넣어야 시작한다. 순서와 근거는 아래 [미참조 미디어 정리] 절을 볼 것.
 
@@ -413,7 +419,7 @@ grep -q "AccessDenied" /tmp/ls.out || { echo "거부됐지만 사유가 AccessDe
 echo "② OK"
 ```
 
-올린 테스트 객체는 인스턴스 역할로 지울 수 없으므로(DeleteObject 미부여) 콘솔에서 지운다.
+올린 테스트 객체는 인스턴스 역할로 지울 수 없으므로 콘솔에서 지운다. 백업 버킷에는 `DeleteObject`가 없고, 미디어 버킷은 `challenge-verifications/` 아래에만 있어서 그 밖의 경로(`iam-check/` 등)는 역할로 못 지운다.
 
 > ⚠️ **`aws sts get-caller-identity`를 건너뛰지 않는다.** AWS 자격증명 체인은 환경변수 → 공유 credential 파일 → instance profile 순으로 본다. 호스트에 `AWS_ACCESS_KEY_ID` 같은 변수나 `~/.aws/credentials`가 남아 있으면 **역할이 안 붙었는데도 ②가 성공해버린다.**
 > (2026-07-27 실측: 이 서버는 `AWS_*` 환경변수 0개, `~/.aws` 없음 — 현재는 문제없다.)
@@ -459,7 +465,7 @@ echo "③ OK"
 | 미디어 버킷 `PutObject` | 성공 | ✅ |
 | 미디어 버킷 `GetObject` | 성공 | ✅ 내용까지 일치 (#22가 쓸 권한) |
 | 백업 버킷 `GetObject` | **거부** | ✅ `403 Forbidden` (Put만 부여했으므로) |
-| 미디어 버킷 `DeleteObject` | **거부** | ✅ `AccessDenied` |
+| 미디어 버킷 `DeleteObject` | **거부** | ✅ `AccessDenied` <br>⚠️ 미참조 정리 도입 전 기록이다. 지금은 `challenge-verifications/` 아래만 **허용**이고 그 밖의 경로는 여전히 거부다 |
 
 앱 상태도 함께 확인했다 — 컨테이너 `running`, `GET /api/challenges` 200, 재시작 후 로그에 자격증명·S3 오류 0건.
 
