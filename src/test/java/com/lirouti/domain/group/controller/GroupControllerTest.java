@@ -23,6 +23,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.context.transaction.TestTransaction;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.lirouti.domain.group.entity.Group;
@@ -370,14 +371,19 @@ class GroupControllerTest {
         membership(owner, group, GroupMemberRole.OWNER);
         em.flush();
 
-        // when & then
-        mockMvc.perform(post("/api/groups/{groupId}/invite-code", group.getId())
-                        .with(user(principal(owner))))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.isSuccess").value(true))
-                .andExpect(jsonPath("$.code").value("GROUP201_2"))
-                .andExpect(jsonPath("$.result.inviteCode", matchesPattern("[A-Z0-9]{7}")))
-                .andExpect(jsonPath("$.result.expiresAt").isNotEmpty());
+        commitFixtureForRequiresNew();
+        try {
+            // when & then
+            mockMvc.perform(post("/api/groups/{groupId}/invite-code", group.getId())
+                            .with(user(principal(owner))))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.isSuccess").value(true))
+                    .andExpect(jsonPath("$.code").value("GROUP201_2"))
+                    .andExpect(jsonPath("$.result.inviteCode", matchesPattern("[A-Z0-9]{7}")))
+                    .andExpect(jsonPath("$.result.expiresAt").isNotEmpty());
+        } finally {
+            cleanupInviteFixture(group.getId(), owner.getId());
+        }
     }
 
     @Test
@@ -389,29 +395,34 @@ class GroupControllerTest {
         membership(owner, group, GroupMemberRole.OWNER);
         em.flush();
 
-        mockMvc.perform(post("/api/groups/{groupId}/invite-code", group.getId())
-                        .with(user(principal(owner))))
-                .andExpect(status().isCreated());
-        em.refresh(group);
-        String firstIssuedCode = group.getInviteCode();
+        commitFixtureForRequiresNew();
+        try {
+            mockMvc.perform(post("/api/groups/{groupId}/invite-code", group.getId())
+                            .with(user(principal(owner))))
+                    .andExpect(status().isCreated());
+            restartTestTransaction();
+            String firstIssuedCode = findInviteCode(group.getId());
 
-        // when
-        mockMvc.perform(post("/api/groups/{groupId}/invite-code", group.getId())
-                        .with(user(principal(owner))))
-                .andExpect(status().isCreated());
-        em.refresh(group);
-        String reissuedCode = group.getInviteCode();
+            // when
+            mockMvc.perform(post("/api/groups/{groupId}/invite-code", group.getId())
+                            .with(user(principal(owner))))
+                    .andExpect(status().isCreated());
+            restartTestTransaction();
+            String reissuedCode = findInviteCode(group.getId());
 
-        // then
-        org.assertj.core.api.Assertions.assertThat(reissuedCode)
-                .isNotEqualTo(firstIssuedCode);
-        em.clear();
-        mockMvc.perform(get("/api/groups/{groupId}/invite-code", group.getId())
-                        .with(user(principal(owner))))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("GROUP200_2"))
-                .andExpect(jsonPath("$.result.inviteCode").value(reissuedCode))
-                .andExpect(jsonPath("$.result.expiresAt").isNotEmpty());
+            // then
+            org.assertj.core.api.Assertions.assertThat(reissuedCode)
+                    .isNotEqualTo(firstIssuedCode);
+            em.clear();
+            mockMvc.perform(get("/api/groups/{groupId}/invite-code", group.getId())
+                            .with(user(principal(owner))))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.code").value("GROUP200_2"))
+                    .andExpect(jsonPath("$.result.inviteCode").value(reissuedCode))
+                    .andExpect(jsonPath("$.result.expiresAt").isNotEmpty());
+        } finally {
+            cleanupInviteFixture(group.getId(), owner.getId());
+        }
     }
 
     @Test
@@ -444,11 +455,16 @@ class GroupControllerTest {
         membership(regularMember, group, GroupMemberRole.MEMBER);
         em.flush();
 
-        // when & then
-        mockMvc.perform(post("/api/groups/{groupId}/invite-code", group.getId())
-                        .with(user(principal(regularMember))))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("GROUP403_3"));
+        commitFixtureForRequiresNew();
+        try {
+            // when & then
+            mockMvc.perform(post("/api/groups/{groupId}/invite-code", group.getId())
+                            .with(user(principal(regularMember))))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.code").value("GROUP403_3"));
+        } finally {
+            cleanupInviteFixture(group.getId(), regularMember.getId());
+        }
     }
 
     private String validRequest(Long categoryId, String title) {
@@ -472,6 +488,43 @@ class GroupControllerTest {
         Group group = Group.builder().name("컨트롤러 그룹").inviteCode(inviteCode).build();
         em.persist(group);
         return group;
+    }
+
+    private void commitFixtureForRequiresNew() {
+        TestTransaction.flagForCommit();
+        TestTransaction.end();
+        TestTransaction.start();
+    }
+
+    private void restartTestTransaction() {
+        TestTransaction.flagForRollback();
+        TestTransaction.end();
+        TestTransaction.start();
+    }
+
+    private String findInviteCode(Long groupId) {
+        em.clear();
+        return em.find(Group.class, groupId).getInviteCode();
+    }
+
+    private void cleanupInviteFixture(Long groupId, Long memberId) {
+        if (TestTransaction.isActive()) {
+            TestTransaction.flagForRollback();
+            TestTransaction.end();
+        }
+        TestTransaction.start();
+        em.clear();
+        em.createNativeQuery("DELETE FROM group_member WHERE group_id = :groupId")
+                .setParameter("groupId", groupId)
+                .executeUpdate();
+        em.createNativeQuery("DELETE FROM member_group WHERE id = :groupId")
+                .setParameter("groupId", groupId)
+                .executeUpdate();
+        em.createNativeQuery("DELETE FROM member WHERE id = :memberId")
+                .setParameter("memberId", memberId)
+                .executeUpdate();
+        TestTransaction.flagForCommit();
+        TestTransaction.end();
     }
 
     private Member member() {
