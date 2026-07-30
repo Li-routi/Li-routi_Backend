@@ -1,9 +1,13 @@
 package com.lirouti.domain.challenge.repository;
 
 import java.time.LocalDate;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import com.lirouti.domain.challenge.entity.ChallengeVerification;
 
@@ -35,4 +39,15 @@ public interface ChallengeVerificationRepository
             Long id,
             Long challengeId
     );
+
+    /**
+     * 후보 key 중 인증 사진으로 실제 쓰이고 있는 것만 고른다.
+     * 미참조 이미지 정리 배치가 이 결과로 삭제 대상을 판단한다.
+     *
+     * 정리 배치가 "지워도 되는가"를 이 결과로 판단하므로 <b>조건을 좁히면 안 된다.</b>
+     * 탈퇴 회원의 인증도, 신고로 숨겨진 인증도 행이 남아 있는 한 그 파일은 살아 있다.
+     * (탈퇴 회원 사진 삭제는 별도 정책이다)
+     */
+    @Query("select v.imageUrl from ChallengeVerification v where v.imageUrl in :keys")
+    List<String> findImageUrlsIn(@Param("keys") Collection<String> keys);
 }
