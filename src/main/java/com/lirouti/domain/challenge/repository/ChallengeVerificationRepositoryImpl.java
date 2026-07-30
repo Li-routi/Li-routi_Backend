@@ -58,8 +58,8 @@ public class ChallengeVerificationRepositoryImpl implements ChallengeVerificatio
      * 여러 건이면 행이 부풀어 limit이 어긋난다. NOT EXISTS는 유니크 제약
      * (challenge_verification_id, reporter_id)의 앞 두 컬럼을 그대로 타므로 인덱스도 쓴다.
      *
-     * viewerId가 null이면 조건을 걸지 않는다. 지금 피드는 로그인 필수라 null이 오지 않지만,
-     * 조건 자체는 비로그인 조회가 열려도 그대로 동작하게 둔다.
+     * viewerId가 null이면 조건을 걸지 않는다. 모든 챌린지 경로가 인증을 요구하므로(#77) null이
+     * 오지 않지만, 조건 자체는 그대로 둔다 — 방어를 전 계층에서 지우면 정책이 바뀔 때 NPE로 터진다.
      */
     private BooleanExpression notReportedBy(Long viewerId) {
         if (viewerId == null) {

@@ -23,9 +23,8 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
 /**
- * 챌린지 인증과 인증 피드.
- * 목록·상세(GET /api/challenges, /api/challenges/{id})와 달리 이 경로는 공개되어 있지 않다
- * — SecurityConfig가 챌린지의 중첩 경로를 인증 필요로 두므로 피드 조회도 로그인이 필요하다.
+ * 챌린지 인증과 인증 피드. 모든 경로에 로그인이 필요하다.
+ * 이 서비스에는 게스트 개념이 없어 공개 경로는 인증·문서·헬스체크뿐이다(#77).
  */
 @RestController
 @RequiredArgsConstructor
@@ -69,8 +68,8 @@ public class ChallengeVerificationController implements ChallengeVerificationCon
             @RequestParam(required = false) Long cursor,
             @RequestParam(required = false) Integer size
     ) {
-        // 피드(GET /)와 달리 경로를 나눈 것은 인증 필수를 경로 단위로 못박기 위해서다.
-        // ?mine=true 였다면 "mine=true인데 비로그인" 조합을 런타임에 막아야 한다.
+        // 피드(GET /)와 파라미터를 공유하지 않고 경로를 나눈 것은, 한 엔드포인트가 두 화면을
+        // 겸하면 응답 형태와 Swagger 설명이 섞이기 때문이다(#62).
         ChallengeResDTO.MyVerifications result = challengeQueryService
                 .getMyVerifications(userDetails.getMemberId(), challengeId, cursor, size);
         return ApiResponse.onSuccess(ChallengeSuccessCode.MY_VERIFICATION_FETCH_SUCCESS, result);

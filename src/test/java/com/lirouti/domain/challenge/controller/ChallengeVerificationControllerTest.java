@@ -112,7 +112,7 @@ class ChallengeVerificationControllerTest {
     }
 
     @Test
-    @DisplayName("피드 조회도 로그인이 필요하다(403) — 목록·상세와 달리 공개 경로가 아니다")
+    @DisplayName("피드 조회는 로그인이 필요하다(403)")
     void getFeed_Unauthenticated_IsRejected() throws Exception {
         mockMvc.perform(get("/api/challenges/{id}/verifications", 1L))
                 .andExpect(status().isForbidden());
