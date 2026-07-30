@@ -10,12 +10,12 @@ import org.springframework.http.HttpStatus;
 public enum RoutineErrorCode implements BaseErrorCode {
     INVALID_ROUTINE_NAME(
             HttpStatus.BAD_REQUEST,
-            "루틴 이름은 앞뒤 공백을 제외하고 1자 이상 20자 이하여야 합니다.",
+            "루틴 이름은 앞뒤 공백을 제외하고 1자 이상 20자 이하여야 하며 줄바꿈을 포함할 수 없습니다.",
             "ROUTINE400_1"
     ),
     INVALID_ROUTINE_CATEGORY_NAME(
             HttpStatus.BAD_REQUEST,
-            "카테고리 이름은 앞뒤 공백을 제외하고 1자 이상 10자 이하여야 합니다.",
+            "카테고리 이름은 앞뒤 공백을 제외하고 1자 이상 10자 이하여야 하며 줄바꿈을 포함할 수 없습니다.",
             "ROUTINE400_2"
     ),
     ROUTINE_TEMPLATE_CATEGORY_MISMATCH(

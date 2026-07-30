@@ -230,6 +230,41 @@ class RoutineCommandServiceTest {
     }
 
     @Test
+    @DisplayName("Controller를 거치지 않아도 줄바꿈이 든 루틴 이름을 거절한다")
+    void createRoutines_NameWithLineBreak_ThrowsInvalidName() {
+        // given — DTO를 직접 만들어 @AssertTrue 검증을 우회한 호출이다
+        givenActiveMember();
+        givenExistingRoutines(0, null);
+        givenCategories(health);
+        RoutineReqDTO.CreateRoutines request = new RoutineReqDTO.CreateRoutines(List.of(
+                item(HEALTH_CATEGORY_ID, null, "두\n줄 이름", null, null)
+        ));
+
+        // when & then
+        assertThatThrownBy(() -> routineCommandService.createRoutines(MEMBER_ID, request))
+                .isInstanceOf(RoutineException.class)
+                .extracting("code")
+                .isEqualTo(RoutineErrorCode.INVALID_ROUTINE_NAME);
+        verify(memberRoutineRepository, never()).saveAll(anyCollection());
+    }
+
+    @Test
+    @DisplayName("Controller를 거치지 않아도 줄바꿈이 든 카테고리 이름을 거절한다")
+    void createCategory_NameWithLineBreak_ThrowsInvalidName() {
+        // given
+        givenActiveMember();
+        RoutineReqDTO.CreateCategory request =
+                new RoutineReqDTO.CreateCategory("두\n줄", null);
+
+        // when & then
+        assertThatThrownBy(() -> routineCommandService.createCategory(MEMBER_ID, request))
+                .isInstanceOf(RoutineException.class)
+                .extracting("code")
+                .isEqualTo(RoutineErrorCode.INVALID_ROUTINE_CATEGORY_NAME);
+        verify(routineCategoryRepository, never()).saveAndFlush(any(RoutineCategory.class));
+    }
+
+    @Test
     @DisplayName("카테고리를 5개 가진 회원은 더 추가할 수 없다")
     void createCategory_AtLimit_ThrowsLimitExceeded() {
         // given

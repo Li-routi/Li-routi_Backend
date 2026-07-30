@@ -321,17 +321,17 @@ public class RoutineCommandService {
     }
 
     /**
-     * 루틴 이름을 앞뒤 공백을 제거한 형태로 정규화하고 길이를 검증한다.
+     * 루틴 이름을 앞뒤 공백을 제거한 형태로 정규화하고 길이와 줄바꿈을 검증한다.
      * Controller의 요청 검증과 별개로, 다른 호출 경로에서도 같은 규칙이 지켜지게 한다.
      *
      * @param memberId 요청 회원 ID
      * @param rawName 요청에 담긴 이름
      * @return 정규화된 이름
-     * @throws RoutineException 비었거나 길이 규칙을 벗어난 경우
+     * @throws RoutineException 비었거나 길이 규칙을 벗어나거나 줄바꿈을 포함한 경우
      */
     private String normalizedRoutineName(Long memberId, String rawName) {
         String name = rawName == null ? "" : rawName.trim();
-        if (name.isEmpty() || name.length() > MemberRoutine.MAX_NAME_LENGTH) {
+        if (name.isEmpty() || name.length() > MemberRoutine.MAX_NAME_LENGTH || hasLineBreak(name)) {
             log.warn("루틴 이름 검증에 실패했습니다. memberId={}, length={}", memberId, name.length());
             throw new RoutineException(RoutineErrorCode.INVALID_ROUTINE_NAME);
         }
@@ -339,20 +339,34 @@ public class RoutineCommandService {
     }
 
     /**
-     * 카테고리 이름을 앞뒤 공백을 제거한 형태로 정규화하고 길이를 검증한다.
+     * 카테고리 이름을 앞뒤 공백을 제거한 형태로 정규화하고 길이와 줄바꿈을 검증한다.
      *
      * @param memberId 요청 회원 ID
      * @param rawName 요청에 담긴 이름
      * @return 정규화된 이름
-     * @throws RoutineException 비었거나 길이 규칙을 벗어난 경우
+     * @throws RoutineException 비었거나 길이 규칙을 벗어나거나 줄바꿈을 포함한 경우
      */
     private String normalizedCategoryName(Long memberId, String rawName) {
         String name = rawName == null ? "" : rawName.trim();
-        if (name.isEmpty() || name.length() > RoutineCategory.MAX_MEMBER_CATEGORY_NAME_LENGTH) {
+        if (name.isEmpty()
+                || name.length() > RoutineCategory.MAX_MEMBER_CATEGORY_NAME_LENGTH
+                || hasLineBreak(name)) {
             log.warn("카테고리 이름 검증에 실패했습니다. memberId={}, length={}", memberId, name.length());
             throw new RoutineException(RoutineErrorCode.INVALID_ROUTINE_CATEGORY_NAME);
         }
         return name;
+    }
+
+    /**
+     * 이름에 줄바꿈이 들어 있는지 확인한다. 루틴과 카테고리 모두 목록에서 한 줄로 그려진다.
+     *
+     * <p>trim만으로는 걸러지지 않는다. 앞뒤 공백은 잘려도 가운데 줄바꿈은 남기 때문이다.
+     *
+     * @param name 정규화된 이름
+     * @return 줄바꿈을 포함하면 {@code true}
+     */
+    private static boolean hasLineBreak(String name) {
+        return name.indexOf('\n') >= 0 || name.indexOf('\r') >= 0;
     }
 
     /**

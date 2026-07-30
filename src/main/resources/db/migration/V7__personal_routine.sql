@@ -4,8 +4,14 @@
 -- 개인 루틴은 그 위에 기본 제공 루틴 마스터(routine_template)와 회원 소유 루틴
 -- (member_routine, member_routine_schedule)을 얹는다.
 --
--- V1·V2와 같은 이유로 IF NOT EXISTS를 쓰고, 제약·인덱스 이름과 컬럼 순서는 Hibernate가
--- 만드는 형태에 맞춘다(ddl-auto=validate가 엔티티와 대조하기 때문이다).
+-- 제약·인덱스 이름과 컬럼 순서는 Hibernate가 만드는 형태에 맞춘다
+-- (ddl-auto=validate가 엔티티와 대조하기 때문이다).
+--
+-- V1·V2와 달리 IF NOT EXISTS를 쓰지 않는다. 거기서 쓴 이유는 Flyway 도입 전
+-- ddl-auto=update로 이미 테이블이 만들어진 DB가 있어서, 그런 DB에서도 마이그레이션이
+-- 그냥 통과해야 했기 때문이다. 이 테이블들은 이 PR에서 엔티티와 함께 처음 생기므로
+-- 어느 DB에도 있을 수 없다. 그런데도 이미 있다면 누군가 손으로 만들었거나 스키마가
+-- 어긋난 상태이고, 그때는 조용히 넘어가는 것보다 마이그레이션이 실패해 드러나는 편이 낫다.
 --
 -- FK 의존 순서: routine_category → routine_template → member_routine → member_routine_schedule
 -- (routine_category는 V2가, member는 V1이 먼저 만들어 둔다)
@@ -53,7 +59,7 @@ ALTER TABLE `routine_category`
 --
 -- 시간·요일 컬럼이 없는 것은 의도적이다. 마감 시각(기본 23:59)과 반복 요일(기본 매일)은
 -- 회원이 고르는 값이라 member_routine에 있다.
-CREATE TABLE IF NOT EXISTS `routine_template` (
+CREATE TABLE `routine_template` (
   `active` bit(1) NOT NULL,
   `category_id` bigint NOT NULL,
   `created_at` datetime(6) NOT NULL,
@@ -77,7 +83,7 @@ CREATE TABLE IF NOT EXISTS `routine_template` (
 -- deleted_at을 두지 않았다. 삭제 API가 이 PR 범위 밖이라 소프트 삭제 정책이 정해지지
 -- 않았고, 정해지지 않은 컬럼을 미리 만들면 그 컬럼을 아무도 채우지 않는 상태가 오래 남는다.
 -- "활성 루틴 최대 30개" 규칙은 active로 센다.
-CREATE TABLE IF NOT EXISTS `member_routine` (
+CREATE TABLE `member_routine` (
   `active` bit(1) NOT NULL,
   `alarm_time` time DEFAULT NULL,
   `category_id` bigint NOT NULL,
@@ -107,7 +113,7 @@ CREATE TABLE IF NOT EXISTS `member_routine` (
 --
 -- 그룹 루틴 일정과 달리 시간 범위가 없다. 마감 시각은 루틴 단위로 한 번만 정하므로
 -- 이 테이블은 "어느 요일에 반복하는가"만 담는다.
-CREATE TABLE IF NOT EXISTS `member_routine_schedule` (
+CREATE TABLE `member_routine_schedule` (
   `created_at` datetime(6) NOT NULL,
   `id` bigint NOT NULL AUTO_INCREMENT,
   `member_routine_id` bigint NOT NULL,
