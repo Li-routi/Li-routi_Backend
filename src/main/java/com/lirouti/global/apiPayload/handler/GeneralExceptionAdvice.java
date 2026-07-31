@@ -1,5 +1,10 @@
 package com.lirouti.global.apiPayload.handler;
 
+import com.lirouti.global.apiPayload.ApiResponse;
+import com.lirouti.global.apiPayload.code.BaseErrorCode;
+import com.lirouti.global.apiPayload.code.GeneralErrorCode;
+import com.lirouti.global.apiPayload.exception.GeneralException;
+import com.lirouti.global.ratelimit.RateLimitExceededException;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -13,12 +18,6 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
-
-import com.lirouti.global.apiPayload.ApiResponse;
-import com.lirouti.global.apiPayload.code.BaseErrorCode;
-import com.lirouti.global.apiPayload.code.GeneralErrorCode;
-import com.lirouti.global.apiPayload.exception.GeneralException;
-import com.lirouti.global.ratelimit.RateLimitExceededException;
 
 import java.sql.SQLException;
 import java.util.function.Predicate;

@@ -1,13 +1,12 @@
 package com.lirouti.domain.challenge.dto.response;
 
+import com.lirouti.domain.challenge.enums.ChallengeCategory;
+import com.lirouti.domain.challenge.enums.RoutineCycle;
+import lombok.Builder;
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
-
-import com.lirouti.domain.challenge.enums.ChallengeCategory;
-import com.lirouti.domain.challenge.enums.RoutineCycle;
-
-import lombok.Builder;
 
 public final class ChallengeResDTO {
     private ChallengeResDTO() {

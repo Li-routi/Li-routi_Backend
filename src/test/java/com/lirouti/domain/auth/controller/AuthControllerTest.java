@@ -1,12 +1,13 @@
 package com.lirouti.domain.auth.controller;
 
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-
+import com.lirouti.domain.auth.dto.request.AuthReqDTO;
+import com.lirouti.domain.auth.dto.response.AuthResDTO;
+import com.lirouti.domain.auth.exception.code.success.AuthSuccessCode;
+import com.lirouti.domain.auth.service.AuthService;
+import com.lirouti.domain.member.enums.SocialProvider;
+import com.lirouti.global.apiPayload.code.GeneralErrorCode;
+import com.lirouti.global.auth.filter.JwtAuthFilter;
+import com.lirouti.global.auth.filter.JwtExceptionFilter;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,14 +19,10 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
-import com.lirouti.domain.auth.dto.request.AuthReqDTO;
-import com.lirouti.domain.auth.dto.response.AuthResDTO;
-import com.lirouti.domain.auth.exception.code.success.AuthSuccessCode;
-import com.lirouti.domain.auth.service.AuthService;
-import com.lirouti.domain.member.enums.SocialProvider;
-import com.lirouti.global.apiPayload.code.GeneralErrorCode;
-import com.lirouti.global.auth.filter.JwtAuthFilter;
-import com.lirouti.global.auth.filter.JwtExceptionFilter;
+import static org.mockito.Mockito.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(AuthController.class)
 @AutoConfigureMockMvc(addFilters = false) // 필터를 비활성화하여 테스트 환경에서 JWT 인증을 우회

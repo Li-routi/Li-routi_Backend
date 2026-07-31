@@ -1,8 +1,8 @@
 package com.lirouti.domain.media.dto.response;
 
-import java.time.Instant;
-
 import lombok.Builder;
+
+import java.time.Instant;
 
 public final class MediaResDTO {
     private MediaResDTO() {

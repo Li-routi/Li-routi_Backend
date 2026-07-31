@@ -1,23 +1,13 @@
 package com.lirouti.domain.challenge.service.query;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyList;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isNull;
-import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.Mockito.lenient;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.stream.IntStream;
-
+import com.lirouti.domain.challenge.dto.response.ChallengeResDTO;
+import com.lirouti.domain.challenge.entity.Challenge;
+import com.lirouti.domain.challenge.entity.MemberChallenge;
+import com.lirouti.domain.challenge.enums.ChallengeCategory;
+import com.lirouti.domain.challenge.exception.ChallengeException;
+import com.lirouti.domain.challenge.exception.code.error.ChallengeErrorCode;
+import com.lirouti.domain.challenge.repository.ChallengeRepository;
+import com.lirouti.domain.challenge.repository.MemberChallengeRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -28,14 +18,17 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
-import com.lirouti.domain.challenge.dto.response.ChallengeResDTO;
-import com.lirouti.domain.challenge.entity.Challenge;
-import com.lirouti.domain.challenge.entity.MemberChallenge;
-import com.lirouti.domain.challenge.enums.ChallengeCategory;
-import com.lirouti.domain.challenge.exception.ChallengeException;
-import com.lirouti.domain.challenge.exception.code.error.ChallengeErrorCode;
-import com.lirouti.domain.challenge.repository.ChallengeRepository;
-import com.lirouti.domain.challenge.repository.MemberChallengeRepository;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.stream.IntStream;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("ChallengeQueryService 테스트")

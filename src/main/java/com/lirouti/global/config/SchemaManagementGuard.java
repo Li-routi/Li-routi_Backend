@@ -1,14 +1,13 @@
 package com.lirouti.global.config;
 
-import java.util.Locale;
-
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.annotation.Profile;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
-import lombok.extern.slf4j.Slf4j;
+import java.util.Locale;
 
 /**
  * 운영에서 {@code ddl-auto} 우회가 방치되지 않도록 기동 시 경고를 남긴다(#49).

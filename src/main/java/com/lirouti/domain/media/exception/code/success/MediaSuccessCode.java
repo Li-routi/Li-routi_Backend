@@ -1,11 +1,9 @@
 package com.lirouti.domain.media.exception.code.success;
 
-import org.springframework.http.HttpStatus;
-
 import com.lirouti.global.apiPayload.code.BaseSuccessCode;
-
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import org.springframework.http.HttpStatus;
 
 @Getter
 @AllArgsConstructor

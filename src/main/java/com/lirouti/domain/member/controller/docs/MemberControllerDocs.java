@@ -2,10 +2,8 @@ package com.lirouti.domain.member.controller.docs;
 
 import com.lirouti.domain.member.dto.request.MemberReqDTO;
 import com.lirouti.domain.member.dto.response.MemberResDTO;
-import com.lirouti.global.auth.CustomUserDetails;
 import com.lirouti.global.apiPayload.ApiResponse;
 import com.lirouti.global.auth.CustomUserDetails;
-
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;

@@ -1,5 +1,8 @@
 package com.lirouti.domain.media.service;
 
+import com.lirouti.domain.media.enums.MediaContentType;
+import com.lirouti.domain.media.enums.MediaPurpose;
+
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -7,9 +10,6 @@ import java.time.format.ResolverStyle;
 import java.util.Arrays;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
-import com.lirouti.domain.media.enums.MediaContentType;
-import com.lirouti.domain.media.enums.MediaPurpose;
 
 /**
  * S3 미디어 key의 형식 규칙. <b>발급·검증·정리가 모두 이 한 곳을 본다.</b>

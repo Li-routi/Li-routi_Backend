@@ -1,16 +1,14 @@
 package com.lirouti.domain.member.repository;
 
-import java.util.Optional;
-
+import com.lirouti.domain.member.entity.Member;
+import com.lirouti.domain.member.enums.SocialProvider;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import com.lirouti.domain.member.entity.Member;
-import com.lirouti.domain.member.enums.SocialProvider;
-
-import jakarta.persistence.LockModeType;
+import java.util.Optional;
 
 public interface MemberRepository extends JpaRepository<Member, Long> {
     Optional<Member> findBySocialProviderAndSocialId(

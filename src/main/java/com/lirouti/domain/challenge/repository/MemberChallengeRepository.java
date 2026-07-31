@@ -1,14 +1,12 @@
 package com.lirouti.domain.challenge.repository;
 
-import java.util.Optional;
-
+import com.lirouti.domain.challenge.entity.MemberChallenge;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 
-import com.lirouti.domain.challenge.entity.MemberChallenge;
-
-import jakarta.persistence.LockModeType;
+import java.util.Optional;
 
 public interface MemberChallengeRepository
         extends JpaRepository<MemberChallenge, Long>, MemberChallengeRepositoryCustom {

@@ -1,9 +1,7 @@
 package com.lirouti.global.apiPayload.handler;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
+import com.lirouti.global.apiPayload.ApiResponse;
+import com.lirouti.global.apiPayload.code.GeneralErrorCode;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
@@ -11,8 +9,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
-import com.lirouti.global.apiPayload.ApiResponse;
-import com.lirouti.global.apiPayload.code.GeneralErrorCode;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 @DisplayName("GeneralExceptionAdvice 테스트")
 class GeneralExceptionAdviceTest {

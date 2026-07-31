@@ -1,9 +1,9 @@
 package com.lirouti.domain.media.enums;
 
-import java.util.Set;
-
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+
+import java.util.Set;
 
 /**
  * 미디어의 용도. S3 key의 최상위 경로가 되어 용도별로 객체를 분리하고,

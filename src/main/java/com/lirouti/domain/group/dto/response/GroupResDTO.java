@@ -1,15 +1,14 @@
 package com.lirouti.domain.group.dto.response;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus;
+import lombok.Builder;
+
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
-
-import com.fasterxml.jackson.annotation.JsonFormat;
-import com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus;
-
-import lombok.Builder;
 
 public final class GroupResDTO {
     private GroupResDTO() {

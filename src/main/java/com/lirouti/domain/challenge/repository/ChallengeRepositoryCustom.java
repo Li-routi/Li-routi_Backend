@@ -1,11 +1,11 @@
 package com.lirouti.domain.challenge.repository;
 
+import com.lirouti.domain.challenge.entity.Challenge;
+import com.lirouti.domain.challenge.enums.ChallengeCategory;
+
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
-
-import com.lirouti.domain.challenge.entity.Challenge;
-import com.lirouti.domain.challenge.enums.ChallengeCategory;
 
 public interface ChallengeRepositoryCustom {
 

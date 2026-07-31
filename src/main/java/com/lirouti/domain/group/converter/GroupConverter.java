@@ -1,8 +1,5 @@
 package com.lirouti.domain.group.converter;
 
-import java.util.Comparator;
-import java.util.List;
-
 import com.lirouti.domain.group.dto.request.GroupReqDTO;
 import com.lirouti.domain.group.dto.response.GroupResDTO;
 import com.lirouti.domain.group.entity.Group;
@@ -10,6 +7,9 @@ import com.lirouti.domain.group.entity.GroupRoutine;
 import com.lirouti.domain.group.entity.GroupRoutineSchedule;
 import com.lirouti.domain.group.repository.GroupRoutineAssignmentRepositoryCustom.TodayAssignmentProjection;
 import com.lirouti.domain.routine.entity.RoutineCategory;
+
+import java.util.Comparator;
+import java.util.List;
 
 public final class GroupConverter {
     private GroupConverter() {

@@ -1,10 +1,5 @@
 package com.lirouti.domain.auth.client;
 
-import java.util.List;
-import java.util.concurrent.ExecutionException;
-
-import org.springframework.stereotype.Component;
-
 import com.google.api.client.json.webtoken.JsonWebSignature;
 import com.google.api.client.json.webtoken.JsonWebToken;
 import com.google.auth.oauth2.TokenVerifier;
@@ -14,8 +9,11 @@ import com.lirouti.domain.auth.exception.code.error.AuthErrorCode;
 import com.lirouti.domain.auth.model.SocialUserInfo;
 import com.lirouti.domain.member.enums.SocialProvider;
 import com.lirouti.global.properties.GoogleOAuthProperties;
-
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Component;
+
+import java.util.List;
+import java.util.concurrent.ExecutionException;
 
 @Slf4j
 @Component

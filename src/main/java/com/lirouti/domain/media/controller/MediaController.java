@@ -1,10 +1,5 @@
 package com.lirouti.domain.media.controller;
 
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
-
 import com.lirouti.domain.media.controller.docs.MediaControllerDocs;
 import com.lirouti.domain.media.dto.request.MediaReqDTO;
 import com.lirouti.domain.media.dto.response.MediaResDTO;
@@ -12,9 +7,12 @@ import com.lirouti.domain.media.exception.code.success.MediaSuccessCode;
 import com.lirouti.domain.media.service.MediaService;
 import com.lirouti.global.apiPayload.ApiResponse;
 import com.lirouti.global.ratelimit.RateLimit;
-
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequiredArgsConstructor

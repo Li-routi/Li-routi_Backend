@@ -1,11 +1,5 @@
 package com.lirouti.domain.auth.service;
 
-import java.time.Duration;
-import java.util.Date;
-
-import org.springframework.stereotype.Service;
-import org.springframework.util.StringUtils;
-
 import com.lirouti.domain.auth.converter.AuthConverter;
 import com.lirouti.domain.auth.dto.response.AuthResDTO;
 import com.lirouti.domain.auth.exception.AuthException;
@@ -18,9 +12,13 @@ import com.lirouti.global.properties.JwtProperties;
 import com.lirouti.global.util.JwtUtil;
 import com.lirouti.global.util.RedisUtil;
 import com.lirouti.global.util.TokenHashUtil;
-
 import io.jsonwebtoken.Claims;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
+
+import java.time.Duration;
+import java.util.Date;
 
 @Slf4j
 @Service

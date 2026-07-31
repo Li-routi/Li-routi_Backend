@@ -1,15 +1,14 @@
 package com.lirouti.domain.challenge.repository;
 
-import java.util.List;
-
 import com.lirouti.domain.challenge.entity.Challenge;
 import com.lirouti.domain.challenge.entity.QChallenge;
 import com.lirouti.domain.challenge.entity.QMemberChallenge;
 import com.lirouti.domain.challenge.enums.ChallengeCategory;
 import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.jpa.impl.JPAQueryFactory;
-
 import lombok.RequiredArgsConstructor;
+
+import java.util.List;
 
 @RequiredArgsConstructor
 public class MemberChallengeRepositoryImpl implements MemberChallengeRepositoryCustom {

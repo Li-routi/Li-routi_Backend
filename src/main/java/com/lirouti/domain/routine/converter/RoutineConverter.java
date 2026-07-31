@@ -157,4 +157,12 @@ public final class RoutineConverter {
                 ? EVERY_DAY
                 : request.repeatDays();
     }
+
+    /**
+     * 개인 루틴 목록을 응답으로 변환한다.
+     * 홈 화면의 '오늘의 루틴' 탭처럼 생성 결과가 아닌 단순 조회 목록을 응답으로 할 때 사용한다.
+     */
+    public static List<RoutineResDTO.Routine> toRoutineList(List<MemberRoutine> routines) {
+        return routines.stream().map(RoutineConverter::toRoutine).toList();
+    }
 }

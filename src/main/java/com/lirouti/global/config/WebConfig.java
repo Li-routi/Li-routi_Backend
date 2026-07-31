@@ -1,15 +1,13 @@
 package com.lirouti.global.config;
 
+import com.lirouti.global.properties.RateLimitProperties;
+import com.lirouti.global.ratelimit.RateLimitInterceptor;
+import com.lirouti.global.ratelimit.RateLimiter;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
-
-import com.lirouti.global.properties.RateLimitProperties;
-import com.lirouti.global.ratelimit.RateLimitInterceptor;
-import com.lirouti.global.ratelimit.RateLimiter;
-
-import lombok.RequiredArgsConstructor;
 
 /**
  * Spring MVC 인터셉터 등록.
