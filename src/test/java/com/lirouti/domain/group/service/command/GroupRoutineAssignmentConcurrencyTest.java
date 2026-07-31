@@ -1,7 +1,5 @@
 package com.lirouti.domain.group.service.command;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
 import com.lirouti.domain.group.entity.Group;
 import com.lirouti.domain.group.entity.GroupRoutine;
 import com.lirouti.domain.group.entity.GroupRoutineAssignment;
@@ -17,6 +15,13 @@ import com.lirouti.domain.member.enums.SocialProvider;
 import com.lirouti.domain.member.repository.MemberRepository;
 import com.lirouti.domain.routine.entity.RoutineCategory;
 import com.lirouti.domain.routine.repository.RoutineCategoryRepository;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -25,12 +30,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest
 @DisplayName("그룹 루틴 할당 상태 동시성 테스트")

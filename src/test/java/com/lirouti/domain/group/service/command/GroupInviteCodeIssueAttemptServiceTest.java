@@ -1,18 +1,12 @@
 package com.lirouti.domain.group.service.command;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
-import java.time.Clock;
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
-
+import com.lirouti.domain.group.dto.response.GroupResDTO;
+import com.lirouti.domain.group.entity.Group;
+import com.lirouti.domain.group.entity.GroupMember;
+import com.lirouti.domain.group.exception.GroupException;
+import com.lirouti.domain.group.exception.code.error.GroupErrorCode;
+import com.lirouti.domain.group.repository.GroupRepository;
+import com.lirouti.domain.group.service.GroupValidationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -22,13 +16,15 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 
-import com.lirouti.domain.group.entity.Group;
-import com.lirouti.domain.group.entity.GroupMember;
-import com.lirouti.domain.group.dto.response.GroupResDTO;
-import com.lirouti.domain.group.exception.GroupException;
-import com.lirouti.domain.group.exception.code.error.GroupErrorCode;
-import com.lirouti.domain.group.repository.GroupRepository;
-import com.lirouti.domain.group.service.GroupValidationService;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("GroupInviteCodeIssueAttemptService 테스트")

@@ -1,13 +1,13 @@
 package com.lirouti.global.ratelimit;
 
-import java.time.Duration;
-import java.util.List;
-
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Component;
+
+import java.time.Duration;
+import java.util.List;
 
 /**
  * Redis 카운터 기반 요청 빈도 제한(#23).

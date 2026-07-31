@@ -1,15 +1,13 @@
 package com.lirouti.domain.media.scheduler;
 
-import java.time.Clock;
-import java.time.LocalDate;
-
+import com.lirouti.domain.media.service.MediaCleanupService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-import com.lirouti.domain.media.service.MediaCleanupService;
-
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import java.time.Clock;
+import java.time.LocalDate;
 
 @Slf4j
 @Component

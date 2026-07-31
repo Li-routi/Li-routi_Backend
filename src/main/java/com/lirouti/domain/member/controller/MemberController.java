@@ -1,24 +1,21 @@
 package com.lirouti.domain.member.controller;
 
-import com.lirouti.domain.member.dto.response.MemberResDTO;
-import com.lirouti.domain.member.service.query.MemberQueryService;
-import org.springframework.http.HttpHeaders;
-
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.util.StringUtils;
-import org.springframework.web.bind.annotation.*;
-
 import com.lirouti.domain.auth.exception.AuthException;
 import com.lirouti.domain.auth.exception.code.error.AuthErrorCode;
 import com.lirouti.domain.member.controller.docs.MemberControllerDocs;
 import com.lirouti.domain.member.dto.request.MemberReqDTO;
+import com.lirouti.domain.member.dto.response.MemberResDTO;
 import com.lirouti.domain.member.exception.code.success.MemberSuccessCode;
 import com.lirouti.domain.member.service.command.MemberCommandService;
+import com.lirouti.domain.member.service.query.MemberQueryService;
 import com.lirouti.global.apiPayload.ApiResponse;
 import com.lirouti.global.auth.CustomUserDetails;
-
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.util.StringUtils;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequiredArgsConstructor

@@ -3,10 +3,11 @@ package com.lirouti.domain.routine.dto.response;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.lirouti.domain.routine.enums.RoutineCategoryColor;
 import io.swagger.v3.oas.annotations.media.Schema;
+import lombok.Builder;
+
 import java.time.DayOfWeek;
 import java.time.LocalTime;
 import java.util.List;
-import lombok.Builder;
 
 public final class RoutineResDTO {
     private RoutineResDTO() {

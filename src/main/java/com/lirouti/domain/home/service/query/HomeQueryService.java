@@ -1,8 +1,5 @@
 package com.lirouti.domain.home.service.query;
 
-import com.lirouti.domain.challenge.dto.response.ChallengeResDTO;
-import com.lirouti.domain.challenge.service.query.ChallengeQueryService;
-import com.lirouti.domain.group.dto.response.GroupResDTO;
 import com.lirouti.domain.group.service.query.GroupQueryService;
 import com.lirouti.domain.home.converter.HomeConverter;
 import com.lirouti.domain.home.dto.response.HomeResDTO;
@@ -12,8 +9,6 @@ import com.lirouti.domain.routine.service.query.RoutineQueryService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.List;
 
 @Service
 @RequiredArgsConstructor

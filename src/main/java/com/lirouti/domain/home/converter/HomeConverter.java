@@ -1,6 +1,5 @@
 package com.lirouti.domain.home.converter;
 
-import com.lirouti.domain.challenge.dto.response.ChallengeResDTO;
 import com.lirouti.domain.group.dto.response.GroupResDTO;
 import com.lirouti.domain.home.dto.response.HomeResDTO;
 import com.lirouti.domain.member.entity.Member;

@@ -1,19 +1,11 @@
 package com.lirouti.domain.media.service;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.Mockito.when;
-
-import java.net.URI;
-import java.time.Duration;
-import java.time.Instant;
-
+import com.lirouti.domain.media.dto.request.MediaReqDTO;
+import com.lirouti.domain.media.dto.response.MediaResDTO;
+import com.lirouti.domain.media.enums.MediaPurpose;
+import com.lirouti.domain.media.exception.MediaException;
+import com.lirouti.domain.media.exception.code.error.MediaErrorCode;
+import com.lirouti.global.properties.S3Properties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -23,27 +15,23 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-
-import com.lirouti.domain.media.dto.request.MediaReqDTO;
-import com.lirouti.domain.media.dto.response.MediaResDTO;
-import com.lirouti.domain.media.enums.MediaPurpose;
-import com.lirouti.domain.media.exception.MediaException;
-import com.lirouti.domain.media.exception.code.error.MediaErrorCode;
-import com.lirouti.global.properties.S3Properties;
-
-import software.amazon.awssdk.services.s3.model.PutObjectRequest;
-import java.io.ByteArrayInputStream;
 import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.http.AbortableInputStream;
-import software.amazon.awssdk.services.s3.model.GetObjectRequest;
-import software.amazon.awssdk.services.s3.model.GetObjectResponse;
-import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
-import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.*;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.PresignedPutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
+
+import java.io.ByteArrayInputStream;
+import java.net.URI;
+import java.time.Duration;
+import java.time.Instant;
+
+import static org.assertj.core.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("MediaService 테스트")

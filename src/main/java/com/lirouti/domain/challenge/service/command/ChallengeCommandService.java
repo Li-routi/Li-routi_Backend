@@ -1,13 +1,5 @@
 package com.lirouti.domain.challenge.service.command;
 
-import java.time.LocalDateTime;
-import java.util.List;
-
-import org.springframework.dao.CannotAcquireLockException;
-import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import com.lirouti.domain.challenge.converter.ChallengeConverter;
 import com.lirouti.domain.challenge.dto.request.ChallengeReqDTO;
 import com.lirouti.domain.challenge.dto.response.ChallengeResDTO;
@@ -17,17 +9,19 @@ import com.lirouti.domain.challenge.entity.ChallengeVerificationReport;
 import com.lirouti.domain.challenge.entity.MemberChallenge;
 import com.lirouti.domain.challenge.exception.ChallengeException;
 import com.lirouti.domain.challenge.exception.code.error.ChallengeErrorCode;
-import com.lirouti.domain.challenge.repository.ChallengeRepository;
-import com.lirouti.domain.challenge.repository.ChallengeVerificationLikeRepository;
-import com.lirouti.domain.challenge.repository.ChallengeVerificationReportRepository;
-import com.lirouti.domain.challenge.repository.ChallengeVerificationRepository;
-import com.lirouti.domain.challenge.repository.MemberChallengeRepository;
+import com.lirouti.domain.challenge.repository.*;
 import com.lirouti.domain.media.enums.MediaPurpose;
 import com.lirouti.domain.media.service.MediaService;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.repository.MemberRepository;
-
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.CannotAcquireLockException;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor

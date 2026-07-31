@@ -1,9 +1,5 @@
 package com.lirouti.domain.group.entity;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.mock;
-
 import com.lirouti.domain.group.enums.GroupMemberRole;
 import com.lirouti.domain.group.enums.GroupMemberStatus;
 import com.lirouti.domain.group.exception.GroupException;
@@ -11,6 +7,10 @@ import com.lirouti.domain.group.exception.code.error.GroupErrorCode;
 import com.lirouti.domain.member.entity.Member;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
 
 @DisplayName("GroupMember 테스트")
 class GroupMemberTest {

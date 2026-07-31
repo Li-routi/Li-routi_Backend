@@ -1,25 +1,23 @@
 package com.lirouti.domain.member.service.command;
 
-import java.time.LocalDateTime;
-import java.util.UUID;
-
+import com.lirouti.domain.auth.service.TokenService;
+import com.lirouti.domain.member.converter.MemberConverter;
+import com.lirouti.domain.member.dto.request.MemberReqDTO;
 import com.lirouti.domain.member.dto.response.MemberResDTO;
+import com.lirouti.domain.member.entity.Member;
+import com.lirouti.domain.member.enums.SocialProvider;
+import com.lirouti.domain.member.event.MemberWithdrawnEvent;
+import com.lirouti.domain.member.exception.MemberException;
+import com.lirouti.domain.member.exception.code.error.MemberErrorCode;
+import com.lirouti.domain.member.repository.MemberRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.lirouti.domain.auth.service.TokenService;
-import com.lirouti.domain.member.converter.MemberConverter;
-import com.lirouti.domain.member.dto.request.MemberReqDTO;
-import com.lirouti.domain.member.entity.Member;
-import com.lirouti.domain.member.event.MemberWithdrawnEvent;
-import com.lirouti.domain.member.enums.SocialProvider;
-import com.lirouti.domain.member.exception.MemberException;
-import com.lirouti.domain.member.exception.code.error.MemberErrorCode;
-import com.lirouti.domain.member.repository.MemberRepository;
-
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Slf4j
 @Service

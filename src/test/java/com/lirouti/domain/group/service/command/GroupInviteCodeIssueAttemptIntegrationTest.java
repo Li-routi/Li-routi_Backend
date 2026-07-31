@@ -1,15 +1,16 @@
 package com.lirouti.domain.group.service.command;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.when;
-
-import java.util.Optional;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
-
+import com.lirouti.domain.group.dto.response.GroupResDTO;
+import com.lirouti.domain.group.entity.Group;
+import com.lirouti.domain.group.entity.GroupMember;
+import com.lirouti.domain.group.enums.GroupMemberRole;
+import com.lirouti.domain.group.repository.GroupRepository;
+import com.lirouti.domain.member.entity.Member;
+import com.lirouti.domain.member.enums.Role;
+import com.lirouti.domain.member.enums.SocialProvider;
+import com.lirouti.domain.member.repository.MemberRepository;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -22,18 +23,15 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import com.lirouti.domain.group.dto.response.GroupResDTO;
-import com.lirouti.domain.group.entity.Group;
-import com.lirouti.domain.group.entity.GroupMember;
-import com.lirouti.domain.group.enums.GroupMemberRole;
-import com.lirouti.domain.group.repository.GroupRepository;
-import com.lirouti.domain.member.entity.Member;
-import com.lirouti.domain.member.enums.Role;
-import com.lirouti.domain.member.enums.SocialProvider;
-import com.lirouti.domain.member.repository.MemberRepository;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.PersistenceContext;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.when;
 
 @SpringBootTest
 @DisplayName("그룹 초대코드 발급 트랜잭션 통합 테스트")

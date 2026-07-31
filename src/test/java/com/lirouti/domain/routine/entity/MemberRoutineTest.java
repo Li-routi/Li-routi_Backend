@@ -1,18 +1,19 @@
 package com.lirouti.domain.routine.entity;
 
+import com.lirouti.domain.member.entity.Member;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+
+import java.time.DayOfWeek;
+import java.time.LocalTime;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
-
-import com.lirouti.domain.member.entity.Member;
-import java.time.DayOfWeek;
-import java.time.LocalTime;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 
 @DisplayName("MemberRoutine 테스트")
 class MemberRoutineTest {

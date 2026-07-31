@@ -1,12 +1,11 @@
 package com.lirouti.domain.group.service.query;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
-import java.time.LocalDateTime;
-
+import com.lirouti.domain.group.dto.response.GroupResDTO;
+import com.lirouti.domain.group.entity.Group;
+import com.lirouti.domain.group.entity.GroupMember;
+import com.lirouti.domain.group.exception.GroupException;
+import com.lirouti.domain.group.exception.code.error.GroupErrorCode;
+import com.lirouti.domain.group.service.GroupValidationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -15,12 +14,12 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import com.lirouti.domain.group.dto.response.GroupResDTO;
-import com.lirouti.domain.group.entity.Group;
-import com.lirouti.domain.group.entity.GroupMember;
-import com.lirouti.domain.group.exception.GroupException;
-import com.lirouti.domain.group.exception.code.error.GroupErrorCode;
-import com.lirouti.domain.group.service.GroupValidationService;
+import java.time.LocalDateTime;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("GroupInviteCodeQueryService 테스트")

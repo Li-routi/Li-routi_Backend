@@ -1,9 +1,5 @@
 package com.lirouti.domain.challenge.repository;
 
-import static com.lirouti.domain.challenge.repository.ChallengeQuerySupport.activeMember;
-
-import java.util.List;
-
 import com.lirouti.domain.challenge.entity.ChallengeVerification;
 import com.lirouti.domain.challenge.entity.QChallengeVerification;
 import com.lirouti.domain.challenge.entity.QChallengeVerificationReport;
@@ -12,8 +8,11 @@ import com.lirouti.domain.member.entity.QMember;
 import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.jpa.JPAExpressions;
 import com.querydsl.jpa.impl.JPAQueryFactory;
-
 import lombok.RequiredArgsConstructor;
+
+import java.util.List;
+
+import static com.lirouti.domain.challenge.repository.ChallengeQuerySupport.activeMember;
 
 @RequiredArgsConstructor
 public class ChallengeVerificationRepositoryImpl implements ChallengeVerificationRepositoryCustom {

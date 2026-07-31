@@ -1,10 +1,7 @@
 package com.lirouti.domain.member.event;
 
-import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-
 import com.lirouti.domain.auth.service.TokenService;
+import com.lirouti.global.config.RetryConfig;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -13,7 +10,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.data.redis.RedisConnectionFailureException;
 
-import com.lirouti.global.config.RetryConfig;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("MemberWithdrawnEventListener 테스트")

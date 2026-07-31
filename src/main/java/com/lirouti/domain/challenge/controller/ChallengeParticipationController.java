@@ -1,20 +1,14 @@
 package com.lirouti.domain.challenge.controller;
 
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
-
 import com.lirouti.domain.challenge.controller.docs.ChallengeParticipationControllerDocs;
 import com.lirouti.domain.challenge.dto.response.ChallengeResDTO;
 import com.lirouti.domain.challenge.exception.code.success.ChallengeSuccessCode;
 import com.lirouti.domain.challenge.service.command.ChallengeCommandService;
 import com.lirouti.global.apiPayload.ApiResponse;
 import com.lirouti.global.auth.CustomUserDetails;
-
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequiredArgsConstructor

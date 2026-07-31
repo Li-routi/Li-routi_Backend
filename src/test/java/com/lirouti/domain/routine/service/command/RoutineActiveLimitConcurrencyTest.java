@@ -1,7 +1,5 @@
 package com.lirouti.domain.routine.service.command;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.enums.Role;
 import com.lirouti.domain.member.enums.SocialProvider;
@@ -10,6 +8,13 @@ import com.lirouti.domain.routine.dto.request.RoutineReqDTO;
 import com.lirouti.domain.routine.entity.MemberRoutine;
 import com.lirouti.domain.routine.exception.RoutineException;
 import com.lirouti.domain.routine.exception.code.error.RoutineErrorCode;
+import com.lirouti.domain.routine.repository.MemberRoutineRepository;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
 
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -18,12 +23,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * 활성 루틴 상한이 동시 요청에서도 지켜지는지 검증한다.

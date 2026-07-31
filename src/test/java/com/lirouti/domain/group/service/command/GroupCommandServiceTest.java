@@ -1,12 +1,5 @@
 package com.lirouti.domain.group.service.command;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
 import com.lirouti.domain.group.dto.request.GroupReqDTO;
 import com.lirouti.domain.group.dto.response.GroupResDTO;
 import com.lirouti.domain.group.entity.Group;
@@ -18,16 +11,22 @@ import com.lirouti.domain.group.repository.GroupRoutineRepository;
 import com.lirouti.domain.group.service.GroupValidationService;
 import com.lirouti.domain.routine.entity.RoutineCategory;
 import com.lirouti.domain.routine.repository.RoutineCategoryRepository;
-import java.time.DayOfWeek;
-import java.time.LocalTime;
-import java.util.List;
-import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.time.DayOfWeek;
+import java.time.LocalTime;
+import java.util.List;
+import java.util.Optional;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("GroupCommandService 그룹 루틴 명령 테스트")

@@ -1,9 +1,9 @@
 package com.lirouti.domain.challenge.repository;
 
-import java.util.List;
-
 import com.lirouti.domain.challenge.entity.Challenge;
 import com.lirouti.domain.challenge.enums.ChallengeCategory;
+
+import java.util.List;
 
 public interface MemberChallengeRepositoryCustom {
 

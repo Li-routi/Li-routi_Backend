@@ -1,20 +1,18 @@
 package com.lirouti.domain.auth.client;
 
-import org.springframework.http.HttpHeaders;
-import org.springframework.stereotype.Component;
-import org.springframework.web.client.RestClient;
-import org.springframework.web.client.RestClientException;
-import org.springframework.web.client.RestClientResponseException;
-
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.lirouti.domain.auth.exception.AuthException;
 import com.lirouti.domain.auth.exception.code.error.AuthErrorCode;
 import com.lirouti.domain.auth.model.SocialUserInfo;
 import com.lirouti.domain.member.enums.SocialProvider;
 import com.lirouti.global.properties.KakaoOAuthProperties;
-
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpHeaders;
+import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
 
 @Slf4j
 @Component

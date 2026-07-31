@@ -1,8 +1,8 @@
 package com.lirouti.domain.media.converter;
 
-import java.time.Instant;
-
 import com.lirouti.domain.media.dto.response.MediaResDTO;
+
+import java.time.Instant;
 
 public final class MediaConverter {
     private MediaConverter() {

@@ -1,11 +1,10 @@
 package com.lirouti.domain.challenge.repository;
 
+import com.lirouti.domain.challenge.entity.ChallengeVerificationLike;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-
-import com.lirouti.domain.challenge.entity.ChallengeVerificationLike;
 
 public interface ChallengeVerificationLikeRepository
         extends JpaRepository<ChallengeVerificationLike, Long>, ChallengeVerificationLikeRepositoryCustom {

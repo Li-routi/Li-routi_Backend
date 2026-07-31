@@ -2,12 +2,13 @@ package com.lirouti.domain.auth.service;
 
 import com.lirouti.global.util.RedisUtil;
 import com.lirouti.global.util.TokenHashUtil;
-import java.security.SecureRandom;
-import java.time.Duration;
-import java.util.Base64;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+
+import java.security.SecureRandom;
+import java.time.Duration;
+import java.util.Base64;
 
 @Slf4j
 @Service

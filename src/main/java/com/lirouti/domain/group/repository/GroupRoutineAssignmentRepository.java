@@ -3,14 +3,15 @@ package com.lirouti.domain.group.repository;
 import com.lirouti.domain.group.entity.GroupRoutineAssignment;
 import com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus;
 import jakarta.persistence.LockModeType;
-import java.time.LocalDate;
-import java.time.LocalTime;
-import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.util.List;
 
 public interface GroupRoutineAssignmentRepository
         extends JpaRepository<GroupRoutineAssignment, Long>,

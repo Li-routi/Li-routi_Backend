@@ -1,9 +1,9 @@
 package com.lirouti.domain.media.service;
 
+import com.lirouti.domain.media.enums.MediaPurpose;
+
 import java.util.Collection;
 import java.util.Set;
-
-import com.lirouti.domain.media.enums.MediaPurpose;
 
 /**
  * 어떤 미디어 key가 <b>아직 쓰이고 있는지</b>를 답하는 쪽. 미참조 이미지 정리가 이걸 보고

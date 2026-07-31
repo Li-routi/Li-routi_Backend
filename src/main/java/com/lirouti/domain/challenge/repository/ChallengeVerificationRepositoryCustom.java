@@ -1,8 +1,8 @@
 package com.lirouti.domain.challenge.repository;
 
-import java.util.List;
-
 import com.lirouti.domain.challenge.entity.ChallengeVerification;
+
+import java.util.List;
 
 public interface ChallengeVerificationRepositoryCustom {
 

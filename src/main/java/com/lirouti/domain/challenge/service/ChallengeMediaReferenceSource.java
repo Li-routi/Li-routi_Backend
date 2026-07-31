@@ -1,18 +1,16 @@
 package com.lirouti.domain.challenge.service;
 
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.Set;
-
-import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
-
 import com.lirouti.domain.challenge.repository.ChallengeRepository;
 import com.lirouti.domain.challenge.repository.ChallengeVerificationRepository;
 import com.lirouti.domain.media.enums.MediaPurpose;
 import com.lirouti.domain.media.service.MediaReferenceSource;
-
 import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * 챌린지 도메인이 쓰고 있는 미디어 key를 미디어 정리 배치에 알려준다.

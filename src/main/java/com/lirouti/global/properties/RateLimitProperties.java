@@ -1,18 +1,17 @@
 package com.lirouti.global.properties;
 
-import java.time.Duration;
-import java.util.LinkedHashMap;
-import java.util.Map;
-
-import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.validation.annotation.Validated;
-
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import lombok.Getter;
 import lombok.Setter;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.validation.annotation.Validated;
+
+import java.time.Duration;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
  * 요청 빈도 제한 정책(#23).

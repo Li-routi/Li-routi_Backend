@@ -1,13 +1,13 @@
 package com.lirouti.domain.challenge.entity;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Nested;
+import static org.assertj.core.api.Assertions.assertThat;
 
 @DisplayName("MemberChallenge 스트릭 도메인 로직")
 class MemberChallengeStreakTest {

@@ -1,15 +1,5 @@
 package com.lirouti.domain.challenge.service.command;
 
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.ZonedDateTime;
-import java.util.Optional;
-
-import org.springframework.dao.CannotAcquireLockException;
-import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import com.lirouti.domain.challenge.converter.ChallengeConverter;
 import com.lirouti.domain.challenge.dto.request.ChallengeReqDTO;
 import com.lirouti.domain.challenge.dto.response.ChallengeResDTO;
@@ -21,8 +11,16 @@ import com.lirouti.domain.challenge.repository.ChallengeVerificationRepository;
 import com.lirouti.domain.challenge.repository.MemberChallengeRepository;
 import com.lirouti.domain.media.service.MediaService;
 import com.lirouti.global.util.TimeUtil;
-
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.CannotAcquireLockException;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZonedDateTime;
+import java.util.Optional;
 
 /**
  * 인증의 <b>저장 단계</b>만 담당한다. 트랜잭션 경계가 이 클래스에 있다.

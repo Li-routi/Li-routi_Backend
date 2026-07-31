@@ -1,8 +1,8 @@
 package com.lirouti.domain.auth.service;
 
-import com.lirouti.domain.auth.converter.AuthConverter;
 import com.lirouti.domain.auth.client.SocialAuthClient;
 import com.lirouti.domain.auth.client.SocialAuthClientFactory;
+import com.lirouti.domain.auth.converter.AuthConverter;
 import com.lirouti.domain.auth.dto.request.AuthReqDTO;
 import com.lirouti.domain.auth.dto.response.AuthResDTO;
 import com.lirouti.domain.auth.exception.AuthException;

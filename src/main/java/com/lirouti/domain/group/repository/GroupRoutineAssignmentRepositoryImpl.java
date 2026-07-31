@@ -9,9 +9,10 @@ import com.lirouti.domain.group.enums.GroupStatus;
 import com.lirouti.domain.routine.entity.QRoutineCategory;
 import com.querydsl.core.types.Projections;
 import com.querydsl.jpa.impl.JPAQueryFactory;
+import lombok.RequiredArgsConstructor;
+
 import java.time.LocalDate;
 import java.util.List;
-import lombok.RequiredArgsConstructor;
 
 @RequiredArgsConstructor
 public class GroupRoutineAssignmentRepositoryImpl

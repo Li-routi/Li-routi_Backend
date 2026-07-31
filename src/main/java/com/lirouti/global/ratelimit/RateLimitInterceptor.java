@@ -1,17 +1,15 @@
 package com.lirouti.global.ratelimit;
 
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.web.method.HandlerMethod;
-import org.springframework.web.servlet.HandlerInterceptor;
-
 import com.lirouti.global.auth.CustomUserDetails;
 import com.lirouti.global.properties.RateLimitProperties;
-
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.method.HandlerMethod;
+import org.springframework.web.servlet.HandlerInterceptor;
 
 /**
  * {@link RateLimit}이 붙은 핸들러에 사용자당 요청 빈도 제한을 적용한다(#23).

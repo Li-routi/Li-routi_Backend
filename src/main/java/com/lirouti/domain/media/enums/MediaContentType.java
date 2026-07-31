@@ -1,12 +1,12 @@
 package com.lirouti.domain.media.enums;
 
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+
 import java.util.Arrays;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.function.Predicate;
-
-import lombok.Getter;
-import lombok.RequiredArgsConstructor;
 
 /**
  * 업로드를 허용하는 미디어 형식. 허용 목록(allowlist)으로 관리하며, 목록에 없는 형식은 거부한다.

@@ -1,12 +1,5 @@
 package com.lirouti.domain.challenge.repository;
 
-import static com.lirouti.domain.challenge.repository.ChallengeQuerySupport.activeMember;
-import static com.querydsl.core.group.GroupBy.groupBy;
-
-import java.time.LocalDate;
-import java.util.List;
-import java.util.Map;
-
 import com.lirouti.domain.challenge.entity.Challenge;
 import com.lirouti.domain.challenge.entity.QChallenge;
 import com.lirouti.domain.challenge.entity.QChallengeVerification;
@@ -15,8 +8,14 @@ import com.lirouti.domain.challenge.enums.ChallengeCategory;
 import com.lirouti.domain.member.entity.QMember;
 import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.jpa.impl.JPAQueryFactory;
-
 import lombok.RequiredArgsConstructor;
+
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Map;
+
+import static com.lirouti.domain.challenge.repository.ChallengeQuerySupport.activeMember;
+import static com.querydsl.core.group.GroupBy.groupBy;
 
 @RequiredArgsConstructor
 public class ChallengeRepositoryImpl implements ChallengeRepositoryCustom {

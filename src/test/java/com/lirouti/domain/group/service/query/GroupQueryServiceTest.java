@@ -1,11 +1,5 @@
 package com.lirouti.domain.group.service.query;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.Mockito.when;
-
 import com.lirouti.domain.group.dto.response.GroupResDTO;
 import com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus;
 import com.lirouti.domain.group.repository.GroupRoutineAssignmentRepository;
@@ -14,18 +8,19 @@ import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.exception.MemberException;
 import com.lirouti.domain.member.exception.code.error.MemberErrorCode;
 import com.lirouti.domain.member.service.query.MemberQueryService;
-import java.time.Clock;
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.LocalTime;
-import java.time.ZoneId;
-import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.time.*;
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("GroupQueryService 테스트")
