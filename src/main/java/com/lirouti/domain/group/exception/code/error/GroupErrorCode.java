@@ -88,6 +88,16 @@ public enum GroupErrorCode implements BaseErrorCode {
             "그룹에 참여할 수 있는 활성 회원 수를 초과했습니다.",
             "GROUP409_8"
     ),
+    GROUP_ROUTINE_CATEGORY_LIMIT_EXCEEDED(
+            HttpStatus.CONFLICT,
+            "그룹에 추가할 수 있는 사용자 카테고리 수를 초과했습니다.",
+            "GROUP409_9"
+    ),
+    DUPLICATE_GROUP_ROUTINE_CATEGORY_NAME(
+            HttpStatus.CONFLICT,
+            "기본 또는 같은 그룹에 동일한 카테고리 이름이 이미 존재합니다.",
+            "GROUP409_10"
+    ),
     INVITE_CODE_ISSUE_FAILED(
             HttpStatus.INTERNAL_SERVER_ERROR,
             "초대코드 발급에 실패했습니다.",

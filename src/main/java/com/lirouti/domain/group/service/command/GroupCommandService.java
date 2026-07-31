@@ -4,30 +4,182 @@ import com.lirouti.domain.group.converter.GroupConverter;
 import com.lirouti.domain.group.dto.request.GroupReqDTO;
 import com.lirouti.domain.group.dto.response.GroupResDTO;
 import com.lirouti.domain.group.entity.Group;
+import com.lirouti.domain.group.entity.GroupMember;
 import com.lirouti.domain.group.entity.GroupRoutine;
 import com.lirouti.domain.group.entity.GroupRoutineCategory;
 import com.lirouti.domain.group.exception.GroupException;
 import com.lirouti.domain.group.exception.code.error.GroupErrorCode;
+import com.lirouti.domain.group.repository.GroupMemberRepository;
+import com.lirouti.domain.group.repository.GroupRepository;
 import com.lirouti.domain.group.repository.GroupRoutineCategoryRepository;
 import com.lirouti.domain.group.repository.GroupRoutineRepository;
 import com.lirouti.domain.group.service.GroupValidationService;
+import com.lirouti.domain.member.entity.Member;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.Validator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class GroupCommandService {
     private final GroupValidationService groupValidationService;
+    private final GroupRepository groupRepository;
+    private final GroupMemberRepository groupMemberRepository;
     private final GroupRoutineCategoryRepository groupRoutineCategoryRepository;
     private final GroupRoutineRepository groupRoutineRepository;
     private final GroupRoutineAssignmentCommandService assignmentCommandService;
+    private final GroupInviteCodeGenerator inviteCodeGenerator;
+    private final Validator validator;
+
+    /**
+     * 인증 회원을 OWNER로 하는 그룹과 사용자 카테고리·초기 루틴·오늘 할당을 한 번에 생성한다.
+     * 어느 저장 단계에서든 예외가 발생하면 이 트랜잭션에서 생성한 전체 데이터가 롤백된다.
+     */
+    @Transactional
+    public GroupResDTO.CreateResult createGroup(
+            Long memberId,
+            GroupReqDTO.CreateGroup request
+    ) {
+        validateCreateGroupRequest(request);
+        Member owner = groupValidationService
+                .lockActiveMemberAndValidateParticipationLimit(memberId);
+        GroupInviteCodeGenerator.GeneratedInviteCode inviteCode = inviteCodeGenerator.generate();
+
+        Group group = GroupConverter.toGroup(
+                request,
+                inviteCode.value(),
+                inviteCode.expiresAt()
+        );
+        groupRepository.saveAndFlush(group);
+
+        GroupMember ownerMembership = GroupConverter.toOwnerMembership(owner, group);
+        groupMemberRepository.saveAndFlush(ownerMembership);
+
+        List<GroupConverter.CreatedCategory> createdCategories =
+                createCustomCategories(group, request.customCategories());
+        Map<String, GroupRoutineCategory> customCategoriesByKey = createdCategories.stream()
+                .collect(Collectors.toMap(
+                        GroupConverter.CreatedCategory::clientKey,
+                        GroupConverter.CreatedCategory::category,
+                        (first, second) -> first,
+                        LinkedHashMap::new
+                ));
+
+        List<GroupConverter.CreatedRoutine> createdRoutines = new ArrayList<>();
+        for (GroupReqDTO.CreateGroupRoutine routineRequest : request.routines()) {
+            GroupRoutineCategory category = resolveInitialRoutineCategory(
+                    group,
+                    routineRequest,
+                    customCategoriesByKey,
+                    memberId
+            );
+            GroupRoutine routine = GroupConverter.toGroupRoutine(routineRequest, group, category);
+            saveGroupRoutine(routine);
+            int assignmentCount = assignmentCommandService
+                    .assignRoutineToActiveMembersToday(routine);
+            createdRoutines.add(new GroupConverter.CreatedRoutine(routine, assignmentCount));
+        }
+
+        log.info("그룹 통합 생성을 완료했습니다. groupId={}, ownerId={}, "
+                        + "categoryCount={}, routineCount={}, assignmentCount={}",
+                group.getId(), memberId, createdCategories.size(), createdRoutines.size(),
+                createdRoutines.stream()
+                        .mapToInt(GroupConverter.CreatedRoutine::assignmentCount)
+                        .sum());
+        return GroupConverter.toCreateResult(group, createdCategories, createdRoutines);
+    }
+
+    private void validateCreateGroupRequest(GroupReqDTO.CreateGroup request) {
+        if (request == null
+                || request.customCategories() == null
+                || request.routines() == null) {
+            throw new IllegalArgumentException("유효하지 않은 그룹 통합 생성 요청입니다.");
+        }
+        if (request.customCategories().size()
+                > GroupRoutineCategory.MAX_GROUP_CATEGORY_COUNT) {
+            throw new GroupException(GroupErrorCode.GROUP_ROUTINE_CATEGORY_LIMIT_EXCEEDED);
+        }
+        if (request.routines().size() > GroupRoutine.MAX_GROUP_ROUTINE_COUNT) {
+            throw new GroupException(GroupErrorCode.GROUP_ROUTINE_LIMIT_EXCEEDED);
+        }
+
+        Set<ConstraintViolation<GroupReqDTO.CreateGroup>> violations = validator.validate(request);
+        if (!violations.isEmpty()) {
+            log.warn("그룹 통합 생성 요청 검증에 실패했습니다. violationCount={}", violations.size());
+            throw new IllegalArgumentException("유효하지 않은 그룹 통합 생성 요청입니다.");
+        }
+    }
+
+    private List<GroupConverter.CreatedCategory> createCustomCategories(
+            Group group,
+            List<GroupReqDTO.CreateGroupCategory> requests
+    ) {
+        long existingCount = groupRoutineCategoryRepository
+                .countByGroupIdAndActiveTrue(group.getId());
+        if (existingCount + requests.size()
+                > GroupRoutineCategory.MAX_GROUP_CATEGORY_COUNT) {
+            throw new GroupException(GroupErrorCode.GROUP_ROUTINE_CATEGORY_LIMIT_EXCEEDED);
+        }
+
+        List<GroupConverter.CreatedCategory> created = new ArrayList<>(requests.size());
+        for (GroupReqDTO.CreateGroupCategory request : requests) {
+            if (groupRoutineCategoryRepository.existsUsableName(group.getId(), request.name())) {
+                log.warn("중복된 그룹 루틴 카테고리 이름을 차단했습니다. groupId={}, name={}",
+                        group.getId(), request.name());
+                throw new GroupException(GroupErrorCode.DUPLICATE_GROUP_ROUTINE_CATEGORY_NAME);
+            }
+            GroupRoutineCategory category = GroupConverter
+                    .toGroupRoutineCategory(request, group);
+            groupRoutineCategoryRepository.saveAndFlush(category);
+            created.add(new GroupConverter.CreatedCategory(request.clientKey(), category));
+        }
+        return created;
+    }
+
+    private GroupRoutineCategory resolveInitialRoutineCategory(
+            Group group,
+            GroupReqDTO.CreateGroupRoutine request,
+            Map<String, GroupRoutineCategory> customCategoriesByKey,
+            Long memberId
+    ) {
+        if (request.categoryKey() != null) {
+            GroupRoutineCategory category = customCategoriesByKey.get(request.categoryKey());
+            if (category == null) {
+                throw new GroupException(GroupErrorCode.ROUTINE_CATEGORY_NOT_FOUND);
+            }
+            if (!category.isUsableBy(group.getId())) {
+                throw new GroupException(GroupErrorCode.GROUP_ROUTINE_CATEGORY_ACCESS_DENIED);
+            }
+            return category;
+        }
+
+        GroupRoutineCategory category = getUsableCategory(
+                group.getId(),
+                request.categoryId(),
+                memberId,
+                null
+        );
+        if (!category.isFixed()) {
+            log.warn("통합 생성 categoryId로 사용자 카테고리 사용을 차단했습니다. "
+                            + "groupId={}, memberId={}, categoryId={}",
+                    group.getId(), memberId, request.categoryId());
+            throw new GroupException(GroupErrorCode.GROUP_ROUTINE_CATEGORY_ACCESS_DENIED);
+        }
+        return category;
+    }
 
     /**
      * ACTIVE OWNER 권한과 카테고리·제목을 검증한 뒤 루틴, 일정, 당일 할당을 생성한다.
