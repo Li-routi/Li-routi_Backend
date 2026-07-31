@@ -19,7 +19,6 @@ import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.enums.Role;
 import com.lirouti.domain.member.enums.SocialProvider;
 import com.lirouti.domain.routine.enums.RoutineCategoryColor;
-import jakarta.validation.Validator;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -33,7 +32,6 @@ import java.time.DayOfWeek;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -42,7 +40,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
-@DisplayName("GroupCommandService 그룹 통합 생성 테스트")
+@DisplayName("GroupCreationAttemptService 그룹 통합 생성 시도 테스트")
 class GroupCreationCommandServiceTest {
     private static final Long MEMBER_ID = 1L;
     private static final Long GROUP_ID = 10L;
@@ -63,11 +61,8 @@ class GroupCreationCommandServiceTest {
     private GroupRoutineAssignmentCommandService assignmentCommandService;
     @Mock
     private GroupInviteCodeGenerator inviteCodeGenerator;
-    @Mock
-    private Validator validator;
-
     @InjectMocks
-    private GroupCommandService groupCommandService;
+    private GroupCreationAttemptService groupCreationAttemptService;
 
     @Test
     @DisplayName("그룹과 OWNER 및 categoryKey로 연결된 카테고리·루틴·할당 결과를 생성한다")
@@ -85,7 +80,7 @@ class GroupCreationCommandServiceTest {
                 .thenReturn(1, 0);
 
         // when
-        GroupResDTO.CreateResult result = groupCommandService.createGroup(MEMBER_ID, request);
+        GroupResDTO.CreateResult result = groupCreationAttemptService.createOnce(MEMBER_ID, request);
 
         // then
         assertThat(result.groupId()).isEqualTo(GROUP_ID);
@@ -122,12 +117,11 @@ class GroupCreationCommandServiceTest {
     void createGroup_ParticipationLimitExceeded_DoesNotPersist() {
         // given
         GroupReqDTO.CreateGroup request = request();
-        when(validator.validate(request)).thenReturn(Set.of());
         when(groupValidationService.lockActiveMemberAndValidateParticipationLimit(MEMBER_ID))
                 .thenThrow(new GroupException(GroupErrorCode.GROUP_PARTICIPATION_LIMIT_EXCEEDED));
 
         // when & then
-        assertThatThrownBy(() -> groupCommandService.createGroup(MEMBER_ID, request))
+        assertThatThrownBy(() -> groupCreationAttemptService.createOnce(MEMBER_ID, request))
                 .isInstanceOf(GroupException.class)
                 .extracting("code")
                 .isEqualTo(GroupErrorCode.GROUP_PARTICIPATION_LIMIT_EXCEEDED);
@@ -162,7 +156,7 @@ class GroupCreationCommandServiceTest {
                 .thenReturn(java.util.Optional.of(otherCategory));
 
         // when & then
-        assertThatThrownBy(() -> groupCommandService.createGroup(MEMBER_ID, request))
+        assertThatThrownBy(() -> groupCreationAttemptService.createOnce(MEMBER_ID, request))
                 .isInstanceOf(GroupException.class)
                 .extracting("code")
                 .isEqualTo(GroupErrorCode.GROUP_ROUTINE_CATEGORY_ACCESS_DENIED);
@@ -185,7 +179,7 @@ class GroupCreationCommandServiceTest {
                 .thenReturn(true);
 
         // when & then
-        assertThatThrownBy(() -> groupCommandService.createGroup(MEMBER_ID, request))
+        assertThatThrownBy(() -> groupCreationAttemptService.createOnce(MEMBER_ID, request))
                 .isInstanceOf(GroupException.class)
                 .extracting("code")
                 .isEqualTo(GroupErrorCode.DUPLICATE_GROUP_ROUTINE_CATEGORY_NAME);
@@ -211,13 +205,12 @@ class GroupCreationCommandServiceTest {
                 .thenThrow(new IllegalStateException("assignment failure"));
 
         // when & then
-        assertThatThrownBy(() -> groupCommandService.createGroup(MEMBER_ID, request))
+        assertThatThrownBy(() -> groupCreationAttemptService.createOnce(MEMBER_ID, request))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("assignment failure");
     }
 
     private void givenValidRequest(GroupReqDTO.CreateGroup request, Member owner) {
-        when(validator.validate(request)).thenReturn(Set.of());
         when(groupValidationService.lockActiveMemberAndValidateParticipationLimit(MEMBER_ID))
                 .thenReturn(owner);
         when(inviteCodeGenerator.generate()).thenReturn(

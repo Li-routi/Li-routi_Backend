@@ -5,7 +5,6 @@ import com.lirouti.domain.group.exception.GroupException;
 import com.lirouti.domain.group.exception.code.error.GroupErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,9 +14,8 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class GroupInviteCodeCommandService {
     private static final int MAX_ISSUE_ATTEMPTS = 10;
-    private static final String INVITE_CODE_UNIQUE_CONSTRAINT = "UKmgt3kl7whp0n031hlo8x6jupi";
-
     private final GroupInviteCodeIssueAttemptService issueAttemptService;
+    private final GroupInviteCodeUniqueViolationDetector uniqueViolationDetector;
 
     @Transactional
     public GroupResDTO.InviteCode issueInviteCode(Long groupId, Long memberId) {
@@ -28,7 +26,7 @@ public class GroupInviteCodeCommandService {
                         groupId, memberId, result.expiresAt());
                 return result;
             } catch (DataIntegrityViolationException exception) {
-                if (!isInviteCodeUniqueViolation(exception)) {
+                if (!uniqueViolationDetector.isInviteCodeUniqueViolation(exception)) {
                     log.warn("초대코드 저장 중 초대코드 외 무결성 제약을 위반했습니다. "
                                     + "groupId={}, memberId={}",
                             groupId, memberId, exception);
@@ -45,26 +43,6 @@ public class GroupInviteCodeCommandService {
                         + "groupId={}, memberId={}, maxAttempts={}",
                 groupId, memberId, MAX_ISSUE_ATTEMPTS);
         throw issueFailedException();
-    }
-
-    // 초대코드 unique 제약 위반 여부를 확인한다.
-    private boolean isInviteCodeUniqueViolation(DataIntegrityViolationException exception) {
-        Throwable cause = exception;
-        while (cause != null) {
-            if (cause instanceof ConstraintViolationException constraintViolationException
-                    && constraintViolationException.getKind()
-                    == ConstraintViolationException.ConstraintKind.UNIQUE) {
-                return isInviteCodeConstraint(constraintViolationException.getConstraintName());
-            }
-            cause = cause.getCause();
-        }
-        return false;
-    }
-
-    private boolean isInviteCodeConstraint(String constraintName) {
-        return INVITE_CODE_UNIQUE_CONSTRAINT.equals(constraintName)
-                || constraintName != null
-                && constraintName.endsWith("." + INVITE_CODE_UNIQUE_CONSTRAINT);
     }
 
     private GroupException issueFailedException() {
