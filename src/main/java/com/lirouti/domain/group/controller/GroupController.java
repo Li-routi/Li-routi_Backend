@@ -25,6 +25,21 @@ public class GroupController implements GroupControllerDocs {
     private final GroupInviteCodeCommandService groupInviteCodeCommandService;
     private final GroupInviteCodeQueryService groupInviteCodeQueryService;
 
+    /** 모임방과 초기 카테고리·루틴·일정을 한 요청으로 생성한다. */
+    @Override
+    @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
+    public ApiResponse<GroupResDTO.CreateResult> createGroup(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @Valid @RequestBody GroupReqDTO.CreateGroup request
+    ) {
+        GroupResDTO.CreateResult result = groupCommandService.createGroup(
+                userDetails.getMemberId(),
+                request
+        );
+        return ApiResponse.onSuccess(GroupSuccessCode.GROUP_CREATE_SUCCESS, result);
+    }
+
     /**
      * 로그인 회원에게 오늘 할당된 활성 그룹의 루틴을 조회한다.
      *

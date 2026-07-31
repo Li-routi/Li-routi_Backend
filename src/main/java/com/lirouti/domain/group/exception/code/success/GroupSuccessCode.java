@@ -32,6 +32,11 @@ public enum GroupSuccessCode implements BaseSuccessCode {
             HttpStatus.CREATED,
             "그룹 초대코드 발급에 성공했습니다.",
             "GROUP201_2"
+    ),
+    GROUP_CREATE_SUCCESS(
+            HttpStatus.CREATED,
+            "모임방 생성에 성공했습니다.",
+            "GROUP201_3"
     );
 
     private final HttpStatus httpStatus;

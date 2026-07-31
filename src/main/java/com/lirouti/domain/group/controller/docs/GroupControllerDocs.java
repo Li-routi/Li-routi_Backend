@@ -13,6 +13,38 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 public interface GroupControllerDocs {
 
     /**
+     * 인증 회원을 OWNER로 하는 모임방과 초기 루틴을 통합 생성하는 API 명세다.
+     */
+    @Operation(
+            summary = "모임방 통합 생성",
+            description = """
+                    인증 회원을 ACTIVE OWNER로 등록하고 그룹 사용자 카테고리, 초기 그룹 루틴,
+                    반복 일정 및 생성 당일 OWNER 할당을 하나의 트랜잭션으로 저장합니다.
+                    초대코드와 만료 시각은 함께 저장하지만 생성 응답에는 포함하지 않습니다.
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "201", description = "모임방 통합 생성 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "400", description = "요청 값, 카테고리 참조 또는 일정 형식 오류"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401", description = "유효하지 않거나 만료된 인증 토큰"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "403", description = "미인증 또는 비활성 회원"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404", description = "회원 또는 기본 그룹 카테고리를 찾을 수 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "409", description = "활성 그룹 참여 상한 또는 카테고리 이름 충돌"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "500", description = "초대코드 unique 충돌 재시도 소진 또는 저장 실패")
+    })
+    ApiResponse<GroupResDTO.CreateResult> createGroup(
+            @Parameter(hidden = true) CustomUserDetails userDetails,
+            GroupReqDTO.CreateGroup request
+    );
+
+    /**
      * 로그인 회원에게 오늘 할당된 활성 그룹의 루틴 목록 조회 API 명세다.
      *
      * @param userDetails 인증 회원 정보
