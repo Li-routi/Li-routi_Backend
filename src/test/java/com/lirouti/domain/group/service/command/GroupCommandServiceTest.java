@@ -5,12 +5,12 @@ import com.lirouti.domain.group.dto.response.GroupResDTO;
 import com.lirouti.domain.group.entity.Group;
 import com.lirouti.domain.group.entity.GroupMember;
 import com.lirouti.domain.group.entity.GroupRoutine;
+import com.lirouti.domain.group.entity.GroupRoutineCategory;
 import com.lirouti.domain.group.exception.GroupException;
 import com.lirouti.domain.group.exception.code.error.GroupErrorCode;
 import com.lirouti.domain.group.repository.GroupRoutineRepository;
+import com.lirouti.domain.group.repository.GroupRoutineCategoryRepository;
 import com.lirouti.domain.group.service.GroupValidationService;
-import com.lirouti.domain.routine.entity.RoutineCategory;
-import com.lirouti.domain.routine.repository.RoutineCategoryRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -38,7 +38,7 @@ class GroupCommandServiceTest {
     @Mock
     private GroupValidationService groupValidationService;
     @Mock
-    private RoutineCategoryRepository routineCategoryRepository;
+    private GroupRoutineCategoryRepository groupRoutineCategoryRepository;
     @Mock
     private GroupRoutineRepository groupRoutineRepository;
     @Mock
@@ -46,7 +46,7 @@ class GroupCommandServiceTest {
     @Mock
     private Group group;
     @Mock
-    private RoutineCategory category;
+    private GroupRoutineCategory category;
     @Mock
     private GroupMember ownerMembership;
 
@@ -60,7 +60,8 @@ class GroupCommandServiceTest {
     }
 
     private void givenActiveCategory() {
-        when(routineCategoryRepository.findByIdAndActiveTrue(3L)).thenReturn(Optional.of(category));
+        when(groupRoutineCategoryRepository.findByIdAndActiveTrue(3L))
+                .thenReturn(Optional.of(category));
     }
 
     private void givenNoDuplicateTitle() {
@@ -117,7 +118,8 @@ class GroupCommandServiceTest {
     void createRoutine_CategoryNotFound_ThrowsGroupException() {
         // given
         givenValidatedOwner();
-        when(routineCategoryRepository.findByIdAndActiveTrue(3L)).thenReturn(Optional.empty());
+        when(groupRoutineCategoryRepository.findByIdAndActiveTrue(3L))
+                .thenReturn(Optional.empty());
 
         // when & then
         assertThatThrownBy(() -> groupCommandService.createRoutine(GROUP_ID, OWNER_ID, request()))
@@ -157,7 +159,7 @@ class GroupCommandServiceTest {
                 .isInstanceOf(GroupException.class)
                 .extracting("code")
                 .isEqualTo(GroupErrorCode.GROUP_OWNER_ACCESS_DENIED);
-        verify(routineCategoryRepository, never()).findByIdAndActiveTrue(any());
+        verify(groupRoutineCategoryRepository, never()).findByIdAndActiveTrue(any());
         verify(groupRoutineRepository, never()).saveAndFlush(any(GroupRoutine.class));
     }
 
@@ -229,7 +231,7 @@ class GroupCommandServiceTest {
         )).isInstanceOf(GroupException.class)
                 .extracting("code")
                 .isEqualTo(GroupErrorCode.GROUP_ROUTINE_NOT_FOUND);
-        verify(routineCategoryRepository, never()).findByIdAndActiveTrue(any());
+        verify(groupRoutineCategoryRepository, never()).findByIdAndActiveTrue(any());
         verify(assignmentCommandService, never())
                 .synchronizeRoutineAssignmentsToday(any(GroupRoutine.class));
     }

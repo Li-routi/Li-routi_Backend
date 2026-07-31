@@ -92,7 +92,8 @@ Flyway 도입 전부터 쓰던 DB(개인 로컬·운영)에는 이력 테이블�
 - `housework_template`: 공통 집안일 템플릿과 기본 주기
 - `challenge`: 앱이 제공하는 챌린지. 회원이 직접 생성할 수 없다.
 - `routine_template`: 카테고리별 기본 제공 루틴
-- `routine_category`: 루틴 카테고리. 앱이 제공하는 고정 카테고리와 회원이 추가한 사용자 카테고리를 함께 담는 예외적인 테이블이다(`member_id`로 구분).
+- `routine_category`: 개인 루틴 카테고리. 앱이 제공하는 고정 카테고리와 회원이 추가한 사용자 카테고리를 함께 담는다(`member_id`로 구분).
+- `group_routine_category`: 그룹 루틴 카테고리. 앱이 제공하는 고정 카테고리와 그룹별 사용자 카테고리를 함께 담는다(`group_id`로 구분).
 - `product`: 판매 상품. 선택적으로 `consumable_category`에 속한다.
 - `notification_type`: 알림 코드, 제목·본문 템플릿, 대상 유형
 
@@ -119,7 +120,8 @@ Flyway 도입 전부터 쓰던 DB(개인 로컬·운영)에는 이력 테이블�
 - `product`는 선택적으로 `consumable_category`에 속한다. `order_detail`은 상품을 반드시 참조하며, `consumable_purchase_log`의 상품 참조는 선택 사항이다.
 - `notification`은 `member`와 `notification_type`을 반드시 참조한다. 단, 알림 유형 외래 키 컬럼의 실제 이름은 `id2`다. 코드와 향후 마이그레이션에서 이를 `notification_type_id`로 혼동하지 않도록 주의한다.
 - `member_routine`은 `member`와 `routine_category`를 반드시 참조하고, `routine_template`은 선택적으로 참조한다. 집안일과 같은 구조다 — 템플릿 없이 회원이 직접 만든 루틴도 허용한다.
-- `routine_category`는 `member`를 선택적으로 참조한다. 참조가 없으면 앱이 제공하는 고정 카테고리다. 마스터 데이터인데 회원 소유 행이 섞여 있는 유일한 테이블이므로, 조회할 때 항상 "고정 + 요청 회원의 것"으로 범위를 좁혀야 한다.
+- `routine_category`는 `member`를 선택적으로 참조한다. 참조가 없으면 앱이 제공하는 고정 카테고리다. 조회할 때 항상 "고정 + 요청 회원의 것"으로 범위를 좁혀야 한다.
+- `group_routine_category`는 `member_group`을 선택적으로 참조한다. 참조가 없으면 앱이 제공하는 고정 그룹 카테고리다. 조회할 때 항상 "고정 + 요청 그룹의 것"으로 범위를 좁혀야 한다.
 - `routine_template`은 반드시 하나의 `routine_category`에 속한다. 고정 카테고리에만 붙는다.
 
 ## 주요 비즈니스 흐름
@@ -335,13 +337,12 @@ Flyway 도입 전부터 쓰던 DB(개인 로컬·운영)에는 이력 테이블�
 
 ## 개인 루틴 테이블
 
-개인 루틴은 회원 혼자 수행하는 루틴이다. 그룹 루틴(`group_routine`)과 카테고리 마스터
-(`routine_category`)를 공유하지만, 담당자가 본인 한 명이고 요일별 시간 범위 대신 마감 시각만
-갖는다는 점이 다르다.
+개인 루틴은 회원 혼자 수행하는 루틴이다. 그룹 루틴과 카테고리 테이블을 공유하지 않으며,
+요일별 시간 범위 대신 루틴 단위 마감 시각을 갖는다.
 
 ### `routine_category`
 
-루틴 카테고리 마스터다. 개인 루틴과 그룹 루틴이 함께 쓴다.
+개인 루틴 카테고리 마스터다. 그룹 루틴은 별도의 `group_routine_category`를 사용한다.
 
 `member_id`가 두 종류를 가른다. `NULL`이면 앱이 제공하는 **고정 카테고리**이고
 (운동, 건강, 자기계발, 생활정리, 마음관리, 취미 — `R__seed_routine.sql`이 관리),
@@ -423,6 +424,32 @@ MySQL은 유니크 키에서 `NULL`을 서로 다른 값으로 취급하므로 �
 | created_at / updated_at | DATETIME(6) | N / N | 생성·수정 시각 |
 
 유니크: `uk_member_routine_schedule_day` (`member_routine_id`, `repeat_day`)
+
+## 그룹 루틴 카테고리 테이블
+
+### `group_routine_category`
+
+그룹 루틴 전용 카테고리다. 개인 `routine_category`와 필드와 색상 정책은 같지만 소유자가
+회원이 아니라 그룹이다. `group_id`가 `NULL`이면 앱이 제공하는 고정 카테고리이고, 값이 있으면
+해당 그룹만 사용하는 사용자 카테고리다. 고정 목록은 `R__seed_group_routine_category.sql`이
+고정 id 1~6으로 관리한다.
+
+| 컬럼 | 타입 | NULL | 설명 |
+| --- | --- | --- | --- |
+| id | BIGINT | N | 기본 키 |
+| group_id | BIGINT | Y | 소유 그룹, `member_group.id` FK. `NULL`이면 고정 카테고리 |
+| name | VARCHAR(100) | N | 카테고리 이름 |
+| color | ENUM | Y | 색상 칩. 고정 카테고리와 "색 없음"은 `NULL` |
+| display_order | INT | N | 노출 순서 |
+| active | TINYINT(1) | N | 사용 여부 |
+| created_at / updated_at | DATETIME(6) | N / N | 생성·수정 시각 |
+
+유니크: `uk_group_routine_category_group_name` (`group_id`, `name`)
+
+인덱스: `idx_group_routine_category_group_active` (`group_id`, `active`)
+
+`group_routine.category_id`는 이 테이블을 참조한다. 고정 카테고리 또는 루틴과 같은 그룹의
+카테고리만 연결할 수 있으며, 소유 범위 검증은 애플리케이션에서 추가로 수행한다.
 
 ## 챌린지 테이블
 

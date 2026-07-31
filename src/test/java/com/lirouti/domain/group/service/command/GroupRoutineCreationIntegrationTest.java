@@ -12,8 +12,8 @@ import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.enums.Role;
 import com.lirouti.domain.member.enums.SocialProvider;
 import com.lirouti.domain.member.repository.MemberRepository;
-import com.lirouti.domain.routine.entity.RoutineCategory;
-import com.lirouti.domain.routine.repository.RoutineCategoryRepository;
+import com.lirouti.domain.group.entity.GroupRoutineCategory;
+import com.lirouti.domain.group.repository.GroupRoutineCategoryRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -44,7 +44,7 @@ class GroupRoutineCreationIntegrationTest {
     @Autowired
     private GroupMemberRepository groupMemberRepository;
     @Autowired
-    private RoutineCategoryRepository routineCategoryRepository;
+    private GroupRoutineCategoryRepository groupRoutineCategoryRepository;
     @Autowired
     private MemberRepository memberRepository;
     @Autowired
@@ -101,7 +101,8 @@ class GroupRoutineCreationIntegrationTest {
                 .name("롤백 그룹")
                 .inviteCode(suffix.substring(Math.max(0, suffix.length() - 7)))
                 .build());
-        RoutineCategory category = routineCategoryRepository.save(RoutineCategory.builder()
+        GroupRoutineCategory category = groupRoutineCategoryRepository.save(
+                GroupRoutineCategory.builder()
                 .name("롤백 카테고리-" + suffix)
                 .active(true)
                 .build());
@@ -115,7 +116,7 @@ class GroupRoutineCreationIntegrationTest {
 
     private void cleanup(Seed seed) {
         groupMemberRepository.deleteById(seed.membershipId());
-        routineCategoryRepository.deleteById(seed.categoryId());
+        groupRoutineCategoryRepository.deleteById(seed.categoryId());
         groupRepository.deleteById(seed.groupId());
         memberRepository.deleteById(seed.memberId());
     }

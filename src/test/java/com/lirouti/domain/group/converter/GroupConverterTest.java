@@ -4,7 +4,7 @@ import com.lirouti.domain.group.dto.request.GroupReqDTO;
 import com.lirouti.domain.group.dto.response.GroupResDTO;
 import com.lirouti.domain.group.entity.Group;
 import com.lirouti.domain.group.entity.GroupRoutine;
-import com.lirouti.domain.routine.entity.RoutineCategory;
+import com.lirouti.domain.group.entity.GroupRoutineCategory;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -25,7 +25,7 @@ class GroupConverterTest {
     @Mock
     private Group group;
     @Mock
-    private RoutineCategory category;
+    private GroupRoutineCategory category;
 
     @Test
     @DisplayName("요청을 루틴으로 변환하고 응답 일정은 월요일부터 정렬한다")

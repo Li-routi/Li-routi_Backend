@@ -3,7 +3,7 @@ package com.lirouti.domain.group.repository;
 import com.lirouti.domain.group.entity.Group;
 import com.lirouti.domain.group.entity.GroupRoutine;
 import com.lirouti.domain.group.entity.GroupRoutineSchedule;
-import com.lirouti.domain.routine.entity.RoutineCategory;
+import com.lirouti.domain.group.entity.GroupRoutineCategory;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.DisplayName;
@@ -38,7 +38,7 @@ class GroupRoutineRepositoryTest {
     void save_RoutineWithSchedules_PersistsRelationships() {
         // given
         Group group = group();
-        RoutineCategory category = category();
+        GroupRoutineCategory category = category();
         GroupRoutine routine = routine(group, category, "공동 정리");
         routine.addSchedule(DayOfWeek.MONDAY, LocalTime.of(9, 0), LocalTime.of(10, 0));
         routine.addSchedule(DayOfWeek.FRIDAY, LocalTime.of(20, 0), LocalTime.of(21, 0));
@@ -61,7 +61,7 @@ class GroupRoutineRepositoryTest {
     void save_DuplicateGroupAndTitle_ThrowsDataIntegrityViolation() {
         // given
         Group group = group();
-        RoutineCategory category = category();
+        GroupRoutineCategory category = category();
         groupRoutineRepository.saveAndFlush(routine(group, category, "중복 제목"));
 
         // when & then
@@ -133,7 +133,7 @@ class GroupRoutineRepositoryTest {
     void existsByGroupIdAndTitleAndIdNot_ExcludesTargetRoutine() {
         // given
         Group group = group();
-        RoutineCategory category = category();
+        GroupRoutineCategory category = category();
         GroupRoutine target = groupRoutineRepository.saveAndFlush(
                 routine(group, category, "유지 제목")
         );
@@ -160,9 +160,9 @@ class GroupRoutineRepositoryTest {
         return group;
     }
 
-    private RoutineCategory category() {
+    private GroupRoutineCategory category() {
         int value = sequence.incrementAndGet();
-        RoutineCategory category = RoutineCategory.builder()
+        GroupRoutineCategory category = GroupRoutineCategory.builder()
                 .name("루틴 카테고리" + value)
                 .active(true)
                 .build();
@@ -170,7 +170,11 @@ class GroupRoutineRepositoryTest {
         return category;
     }
 
-    private GroupRoutine routine(Group group, RoutineCategory category, String title) {
+    private GroupRoutine routine(
+            Group group,
+            GroupRoutineCategory category,
+            String title
+    ) {
         return GroupRoutine.builder()
                 .group(group)
                 .category(category)

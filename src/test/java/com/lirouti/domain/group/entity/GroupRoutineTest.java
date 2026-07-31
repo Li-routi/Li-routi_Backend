@@ -1,6 +1,5 @@
 package com.lirouti.domain.group.entity;
 
-import com.lirouti.domain.routine.entity.RoutineCategory;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -67,7 +66,7 @@ class GroupRoutineTest {
     void update_ValidValues_ChangesRoutineDetails() {
         // given
         GroupRoutine routine = routine();
-        RoutineCategory changedCategory = mock(RoutineCategory.class);
+        GroupRoutineCategory changedCategory = mock(GroupRoutineCategory.class);
 
         // when
         routine.update(changedCategory, "변경 루틴", "변경된 설명");
@@ -145,7 +144,7 @@ class GroupRoutineTest {
     private GroupRoutine routine() {
         return GroupRoutine.builder()
                 .group(mock(Group.class))
-                .category(mock(RoutineCategory.class))
+                .category(mock(GroupRoutineCategory.class))
                 .title("공동 루틴")
                 .description("설명")
                 .build();

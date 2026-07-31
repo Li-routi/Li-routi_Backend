@@ -13,8 +13,8 @@ import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.enums.Role;
 import com.lirouti.domain.member.enums.SocialProvider;
 import com.lirouti.domain.member.repository.MemberRepository;
-import com.lirouti.domain.routine.entity.RoutineCategory;
-import com.lirouti.domain.routine.repository.RoutineCategoryRepository;
+import com.lirouti.domain.group.entity.GroupRoutineCategory;
+import com.lirouti.domain.group.repository.GroupRoutineCategoryRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -44,7 +44,7 @@ class GroupRoutineUpdateIntegrationTest {
     @Autowired
     private GroupMemberRepository groupMemberRepository;
     @Autowired
-    private RoutineCategoryRepository routineCategoryRepository;
+    private GroupRoutineCategoryRepository groupRoutineCategoryRepository;
     @Autowired
     private MemberRepository memberRepository;
     @Autowired
@@ -110,11 +110,13 @@ class GroupRoutineUpdateIntegrationTest {
                 .name("수정 롤백 그룹")
                 .inviteCode(suffix.substring(Math.max(0, suffix.length() - 7)))
                 .build());
-        RoutineCategory originalCategory = routineCategoryRepository.save(RoutineCategory.builder()
+        GroupRoutineCategory originalCategory = groupRoutineCategoryRepository.save(
+                GroupRoutineCategory.builder()
                 .name("수정 전 카테고리-" + suffix)
                 .active(true)
                 .build());
-        RoutineCategory newCategory = routineCategoryRepository.save(RoutineCategory.builder()
+        GroupRoutineCategory newCategory = groupRoutineCategoryRepository.save(
+                GroupRoutineCategory.builder()
                 .name("수정 후 카테고리-" + suffix)
                 .active(true)
                 .build());
@@ -156,8 +158,8 @@ class GroupRoutineUpdateIntegrationTest {
     private void cleanup(Seed seed) {
         groupRoutineRepository.deleteById(seed.routineId());
         groupMemberRepository.deleteById(seed.membershipId());
-        routineCategoryRepository.deleteById(seed.newCategoryId());
-        routineCategoryRepository.deleteById(seed.originalCategoryId());
+        groupRoutineCategoryRepository.deleteById(seed.newCategoryId());
+        groupRoutineCategoryRepository.deleteById(seed.originalCategoryId());
         groupRepository.deleteById(seed.groupId());
         memberRepository.deleteById(seed.memberId());
     }

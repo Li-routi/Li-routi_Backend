@@ -3,10 +3,10 @@ package com.lirouti.domain.group.repository;
 import com.lirouti.domain.group.entity.QGroup;
 import com.lirouti.domain.group.entity.QGroupMember;
 import com.lirouti.domain.group.entity.QGroupRoutine;
+import com.lirouti.domain.group.entity.QGroupRoutineCategory;
 import com.lirouti.domain.group.entity.QGroupRoutineAssignment;
 import com.lirouti.domain.group.enums.GroupMemberStatus;
 import com.lirouti.domain.group.enums.GroupStatus;
-import com.lirouti.domain.routine.entity.QRoutineCategory;
 import com.querydsl.core.types.Projections;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import lombok.RequiredArgsConstructor;
@@ -22,7 +22,8 @@ public class GroupRoutineAssignmentRepositoryImpl
             QGroupRoutineAssignment.groupRoutineAssignment;
     private static final QGroupRoutine routine = QGroupRoutine.groupRoutine;
     private static final QGroup group = QGroup.group;
-    private static final QRoutineCategory category = QRoutineCategory.routineCategory;
+    private static final QGroupRoutineCategory category =
+            QGroupRoutineCategory.groupRoutineCategory;
     private static final QGroupMember groupMember = QGroupMember.groupMember;
 
     private final JPAQueryFactory queryFactory;

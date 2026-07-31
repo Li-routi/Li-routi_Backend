@@ -10,7 +10,7 @@ import com.lirouti.domain.group.repository.GroupRoutineAssignmentRepositoryCusto
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.enums.Role;
 import com.lirouti.domain.member.enums.SocialProvider;
-import com.lirouti.domain.routine.entity.RoutineCategory;
+import com.lirouti.domain.group.entity.GroupRoutineCategory;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.DisplayName;
@@ -155,7 +155,7 @@ class GroupRoutineAssignmentQueryRepositoryTest {
                 .name(name + " 그룹")
                 .inviteCode(inviteCode)
                 .build();
-        RoutineCategory category = RoutineCategory.builder()
+        GroupRoutineCategory category = GroupRoutineCategory.builder()
                 .name(name + " 카테고리")
                 .active(true)
                 .build();
@@ -202,6 +202,10 @@ class GroupRoutineAssignmentQueryRepositoryTest {
         return assignment;
     }
 
-    private record RoutineFixture(Group group, RoutineCategory category, GroupRoutine routine) {
+    private record RoutineFixture(
+            Group group,
+            GroupRoutineCategory category,
+            GroupRoutine routine
+    ) {
     }
 }

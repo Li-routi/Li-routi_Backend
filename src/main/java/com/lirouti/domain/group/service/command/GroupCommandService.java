@@ -6,12 +6,12 @@ import com.lirouti.domain.group.dto.response.GroupResDTO;
 import com.lirouti.domain.group.entity.Group;
 import com.lirouti.domain.group.entity.GroupMember;
 import com.lirouti.domain.group.entity.GroupRoutine;
+import com.lirouti.domain.group.entity.GroupRoutineCategory;
 import com.lirouti.domain.group.exception.GroupException;
 import com.lirouti.domain.group.exception.code.error.GroupErrorCode;
+import com.lirouti.domain.group.repository.GroupRoutineCategoryRepository;
 import com.lirouti.domain.group.repository.GroupRoutineRepository;
 import com.lirouti.domain.group.service.GroupValidationService;
-import com.lirouti.domain.routine.entity.RoutineCategory;
-import com.lirouti.domain.routine.repository.RoutineCategoryRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -26,7 +26,7 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class GroupCommandService {
     private final GroupValidationService groupValidationService;
-    private final RoutineCategoryRepository routineCategoryRepository;
+    private final GroupRoutineCategoryRepository groupRoutineCategoryRepository;
     private final GroupRoutineRepository groupRoutineRepository;
     private final GroupRoutineAssignmentCommandService assignmentCommandService;
 
@@ -50,7 +50,7 @@ public class GroupCommandService {
         GroupMember ownerMembership = groupValidationService.validateGroupOwner(groupId, memberId);
         Group group = ownerMembership.getGroup();
 
-        RoutineCategory category = routineCategoryRepository
+        GroupRoutineCategory category = groupRoutineCategoryRepository
                 .findByIdAndActiveTrue(request.categoryId())
                 .orElseThrow(() -> {
                     log.warn("활성 그룹 루틴 카테고리 조회에 실패했습니다. "
@@ -101,7 +101,7 @@ public class GroupCommandService {
                             groupId, routineId, memberId);
                     return new GroupException(GroupErrorCode.GROUP_ROUTINE_NOT_FOUND);
                 });
-        RoutineCategory category = routineCategoryRepository
+        GroupRoutineCategory category = groupRoutineCategoryRepository
                 .findByIdAndActiveTrue(request.categoryId())
                 .orElseThrow(() -> {
                     log.warn("활성 그룹 루틴 카테고리 조회에 실패했습니다. "

@@ -18,19 +18,19 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import com.lirouti.domain.group.entity.Group;
 import com.lirouti.domain.group.entity.GroupRoutine;
+import com.lirouti.domain.group.entity.GroupRoutineCategory;
 import com.lirouti.domain.group.entity.GroupRoutineAssignment;
 import com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus;
 import com.lirouti.domain.group.exception.GroupException;
 import com.lirouti.domain.group.repository.GroupRepository;
 import com.lirouti.domain.group.repository.GroupRoutineAssignmentRepository;
 import com.lirouti.domain.group.repository.GroupRoutineRepository;
+import com.lirouti.domain.group.repository.GroupRoutineCategoryRepository;
 import com.lirouti.domain.media.service.MediaService;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.enums.Role;
 import com.lirouti.domain.member.enums.SocialProvider;
 import com.lirouti.domain.member.repository.MemberRepository;
-import com.lirouti.domain.routine.entity.RoutineCategory;
-import com.lirouti.domain.routine.repository.RoutineCategoryRepository;
 import com.lirouti.domain.verification.dto.request.VerificationReqDTO;
 import com.lirouti.domain.verification.repository.GroupRoutineVerificationRepository;
 import com.lirouti.global.util.TimeUtil;
@@ -60,7 +60,7 @@ class GroupRoutineVerificationRollbackTest {
     @Autowired
     private GroupRepository groupRepository;
     @Autowired
-    private RoutineCategoryRepository routineCategoryRepository;
+    private GroupRoutineCategoryRepository groupRoutineCategoryRepository;
     @Autowired
     private GroupRoutineRepository groupRoutineRepository;
     @Autowired
@@ -86,8 +86,9 @@ class GroupRoutineVerificationRollbackTest {
                 .socialId("rollback-sid").build());
         Group group = groupRepository.save(
                 Group.builder().name("롤백그룹").inviteCode("RBK0001").build());
-        RoutineCategory category = routineCategoryRepository.save(
-                RoutineCategory.builder().name("롤백카테고리").active(true).build());
+        GroupRoutineCategory category = groupRoutineCategoryRepository.save(
+                GroupRoutineCategory.builder().group(group)
+                        .name("롤백카테고리").active(true).build());
         GroupRoutine routine = groupRoutineRepository.save(GroupRoutine.builder()
                 .group(group).category(category).title("아침 청소").description("설명").build());
 
@@ -113,7 +114,7 @@ class GroupRoutineVerificationRollbackTest {
                 .ifPresent(verificationRepository::delete);
         assignmentRepository.deleteById(assignmentId);
         groupRoutineRepository.deleteById(routineId);
-        routineCategoryRepository.deleteById(categoryId);
+        groupRoutineCategoryRepository.deleteById(categoryId);
         groupRepository.deleteById(groupId);
         memberRepository.deleteById(memberId);
     }
