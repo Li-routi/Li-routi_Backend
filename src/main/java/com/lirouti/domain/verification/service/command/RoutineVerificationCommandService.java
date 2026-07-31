@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.lirouti.domain.group.entity.GroupRoutineAssignment;
+import com.lirouti.domain.group.service.command.GroupRoutineAssignmentCommandService;
 import com.lirouti.domain.routine.entity.MemberRoutine;
 import com.lirouti.domain.verification.entity.GroupRoutineVerification;
 import com.lirouti.domain.verification.entity.MemberRoutineVerification;
@@ -35,16 +36,25 @@ import lombok.extern.slf4j.Slf4j;
 public class RoutineVerificationCommandService {
 
     private final GroupRoutineVerificationRepository groupRoutineVerificationRepository;
+    private final GroupRoutineAssignmentCommandService assignmentCommandService;
     private final MemberRoutineVerificationRepository memberRoutineVerificationRepository;
 
     /**
-     * 그룹 루틴 인증을 저장한다.
+     * 그룹 루틴 인증을 저장하고 할당을 완료로 넘긴다. <b>둘은 한 트랜잭션이어야 한다.</b>
      *
-     * <p>완료 처리는 이 메서드가 하지 않는다. 할당의 상태 전이는 그룹 도메인이 소유하며
-     * 시간대 제약·중복 완료 차단을 이미 담고 있다. 호출부가 이 저장 뒤에 그쪽을 부른다.
+     * <p>완료 판정 자체는 그룹 도메인이 소유한다 — 시간대 제약과 중복 완료 차단을 이미
+     * 담고 있어 인증 쪽에서 다시 구현하면 규칙이 두 벌이 된다. 여기서는 그것을 부르기만 한다.
+     *
+     * <p><b>트랜잭션을 나누면 할당이 영영 완료되지 못하는 상태가 생긴다.</b> 저장이 먼저
+     * 커밋된 뒤 완료 처리가 실패하면(수행 시간 밖 등) 인증 행만 남는다. 그 뒤에 다시
+     * 인증하려 하면 이미 있는 인증 행 때문에 409 가 나고, 유니크 제약이 재저장도 막는다.
+     * 결국 그 할당은 완료로 갈 방법이 없어진다.
+     *
+     * <p>한 트랜잭션으로 묶으면 완료 처리가 실패할 때 저장도 함께 되돌아가, 사용자가
+     * 수행 시간 안에 다시 인증할 수 있다. 사진 검증은 외부 호출이라 이 밖에 남는다.
      */
     @Transactional
-    public GroupRoutineVerification saveGroupRoutine(
+    public GroupRoutineVerification saveGroupRoutineAndComplete(
             GroupRoutineAssignment assignment,
             String mediaKey,
             String content,
@@ -56,7 +66,12 @@ public class RoutineVerificationCommandService {
                 .imageUrl(mediaKey)
                 .content(content)
                 .build();
-        return save(() -> groupRoutineVerificationRepository.saveAndFlush(verification));
+        GroupRoutineVerification saved =
+                save(() -> groupRoutineVerificationRepository.saveAndFlush(verification));
+
+        // 같은 트랜잭션에 참여한다(REQUIRED). 여기서 예외가 나면 위 저장도 함께 롤백된다.
+        assignmentCommandService.completeAssignment(assignment.getId(), verifiedAt);
+        return saved;
     }
 
     @Transactional

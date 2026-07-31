@@ -103,6 +103,28 @@ class GroupRoutineVerificationTest {
         return assignment;
     }
 
+    /** 수행 가능 시간대를 지정해 오늘자 할당을 만든다. */
+    private GroupRoutineAssignment assignmentInWindow(
+            Member member, GroupRoutineAssignmentStatus status, LocalTime start, LocalTime end) {
+        int n = seq.incrementAndGet();
+        Group group = Group.builder().name("그룹" + n).inviteCode("GRW" + n).build();
+        em.persist(group);
+        RoutineCategory category = RoutineCategory.builder().name("카테고리" + n).active(true).build();
+        em.persist(category);
+        GroupRoutine routine = GroupRoutine.builder()
+                .group(group).category(category).title("아침 청소").description("설명").build();
+        em.persist(routine);
+
+        GroupRoutineAssignment assignment = GroupRoutineAssignment.builder()
+                .groupRoutine(routine).member(member)
+                .assignedDate(LocalDate.now(TimeUtil.KST))
+                .scheduledStartTime(start).scheduledEndTime(end)
+                .status(status).build();
+        em.persist(assignment);
+        em.flush();
+        return assignment;
+    }
+
     private VerificationReqDTO.Verify request() {
         return new VerificationReqDTO.Verify(KEY, "청소 완료");
     }

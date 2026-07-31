@@ -8,7 +8,6 @@ import org.springframework.stereotype.Service;
 
 import com.lirouti.domain.group.entity.GroupRoutineAssignment;
 import com.lirouti.domain.group.repository.GroupRoutineAssignmentRepository;
-import com.lirouti.domain.group.service.command.GroupRoutineAssignmentCommandService;
 import com.lirouti.domain.media.enums.MediaPurpose;
 import com.lirouti.domain.media.service.MediaService;
 import com.lirouti.domain.routine.entity.MemberRoutine;
@@ -46,7 +45,6 @@ public class RoutineVerificationService {
     private final MediaService mediaService;
     private final MemberRoutineRepository memberRoutineRepository;
     private final GroupRoutineAssignmentRepository groupRoutineAssignmentRepository;
-    private final GroupRoutineAssignmentCommandService assignmentCommandService;
     private final GroupRoutineVerificationRepository groupRoutineVerificationRepository;
     private final MemberRoutineVerificationRepository memberRoutineVerificationRepository;
     private final RoutineVerificationCommandService commandService;
@@ -57,8 +55,8 @@ public class RoutineVerificationService {
      * <p>완료 처리는 그룹 도메인의 기존 메서드에 맡긴다. 시간대 제약("수행 가능 시간이 아니다")과
      * 중복 완료 차단을 이미 그쪽이 하고 있어, 인증에서 다시 구현하면 규칙이 두 벌이 된다.
      *
-     * <p><b>사진을 먼저 저장하고 완료 처리를 뒤에 부른다.</b> 순서를 뒤집으면 완료는 됐는데
-     * 사진 저장이 실패하는 경우가 생겨, 사진 없는 완료가 남는다. 사진이 필수라는 결정과 어긋난다.
+     * <p><b>저장과 완료 처리는 한 트랜잭션이다.</b> 나누면 저장이 커밋된 뒤 완료 처리가 실패할 때
+     * 인증 행만 남고, 그 뒤로 재시도가 409 와 유니크 제약에 막혀 그 할당이 영영 완료되지 못한다.
      */
     public VerificationResDTO.GroupRoutine verifyGroupRoutine(
             Long memberId,
@@ -73,9 +71,10 @@ public class RoutineVerificationService {
         LocalDate today = now.toLocalDate();
         LocalDateTime verifiedAt = now.toLocalDateTime();
 
+        // 그룹까지 조회 조건에 넣는다. 가져와서 뒤에서 비교하면 트랜잭션 밖에서 지연 로딩을
+        // 건드리게 되고(이 서비스는 트랜잭션 경계가 없다), 남의 할당인지도 응답으로 드러난다.
         GroupRoutineAssignment assignment = groupRoutineAssignmentRepository
-                .findByGroupRoutineIdAndMemberIdAndAssignedDate(routineId, memberId, today)
-                .filter(found -> found.getGroupRoutine().getGroup().getId().equals(groupId))
+                .findForVerification(routineId, groupId, memberId, today)
                 .orElseThrow(() -> {
                     log.warn("오늘 수행할 그룹 루틴 할당이 없습니다. memberId={}, groupId={}, routineId={}",
                             memberId, groupId, routineId);
@@ -87,11 +86,10 @@ public class RoutineVerificationService {
             throw new VerificationException(VerificationErrorCode.ALREADY_VERIFIED);
         }
 
-        GroupRoutineVerification saved = commandService.saveGroupRoutine(
+        // 저장과 완료 처리가 한 트랜잭션이다. 시간대 밖이거나 이미 완료면 그룹 도메인의
+        // 예외(409)가 나면서 저장도 함께 되돌아간다 — 인증 행만 남아 재시도가 막히는 것을 막는다.
+        GroupRoutineVerification saved = commandService.saveGroupRoutineAndComplete(
                 assignment, request.mediaKey(), request.content(), verifiedAt);
-
-        // 시간대 밖이거나 이미 완료면 여기서 그룹 도메인의 예외가 난다.
-        assignmentCommandService.completeAssignment(assignment.getId(), verifiedAt);
 
         return new VerificationResDTO.GroupRoutine(
                 saved.getId(), assignment.getId(), saved.getImageUrl(),
