@@ -111,15 +111,17 @@ public class AnthropicVerificationReviewClient {
                                         "description", "챌린지에 맞고 공개해도 문제없는 사진이면 true"),
                                 "rejection", Map.of(
                                         "type", "string",
-                                        "enum", List.of("MISMATCH", "UNSAFE"),
-                                        "description", "반려일 때만 채운다. "
-                                                + "MISMATCH=챌린지 내용과 맞지 않음, "
-                                                + "UNSAFE=선정적·폭력적이거나 타인의 개인정보가 드러남"),
+                                        "enum", List.of("MISMATCH", "UNSAFE", "NONE"),
+                                        "description", "MISMATCH=챌린지 내용과 맞지 않음, "
+                                                + "UNSAFE=선정적·폭력적이거나 타인의 개인정보가 드러남, "
+                                                + "NONE=통과(approved=true 일 때)"),
                                 "reason", Map.of(
                                         "type", "string",
                                         "description", "판단 근거를 한국어 한 문장으로. "
                                                 + "반려일 때 특히 구체적으로 적는다.")),
-                        "required", List.of("approved", "reason")));
+                        // rejection 을 필수로 둔다. 빠뜨리면 반려 종류를 알 수 없고, 그때
+                        // 안전한 쪽(UNSAFE)으로 접으면 정상 사진이 "공개 불가"로 잘못 안내된다.
+                        "required", List.of("approved", "rejection", "reason")));
     }
 
     /**
@@ -187,8 +189,15 @@ public class AnthropicVerificationReviewClient {
                 return VerificationReview.pass();
             }
             Map<String, Object> values = (Map<String, Object>) input;
+            Object rejection = values.get("rejection");
+            if (!ReviewRejection.isKnown(rejection)) {
+                // 스키마로 강제했는데도 왔다면 모델이나 API 계약이 바뀐 것이다.
+                // 조용히 UNSAFE 로 접으면 정상 사진이 "공개 불가"로 안내되므로 드러낸다.
+                log.warn("반려 종류를 알 수 없어 안전한 쪽으로 처리합니다. challenge={}, 값={}",
+                        challengeName, rejection);
+            }
             return VerificationReview.reject(
-                    ReviewRejection.from(values.get("rejection")),
+                    ReviewRejection.from(rejection),
                     trimReason(values.get("reason")));
         }
         // 도구를 강제했는데도 안 왔다면 모델이나 API 쪽이 바뀐 것이다. 막지 않고 드러낸다.
