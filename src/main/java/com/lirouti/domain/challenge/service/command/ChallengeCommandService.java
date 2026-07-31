@@ -9,6 +9,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.lirouti.domain.challenge.client.AnthropicVerificationReviewClient;
+import com.lirouti.domain.challenge.client.VerificationReview;
 import com.lirouti.domain.challenge.converter.ChallengeConverter;
 import com.lirouti.domain.challenge.dto.request.ChallengeReqDTO;
 import com.lirouti.domain.challenge.dto.response.ChallengeResDTO;
@@ -27,6 +29,7 @@ import com.lirouti.domain.media.enums.MediaPurpose;
 import com.lirouti.domain.media.service.MediaService;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.repository.MemberRepository;
+import com.lirouti.global.properties.AiReviewProperties;
 import com.lirouti.global.properties.ChallengeReportProperties;
 import com.lirouti.global.util.TimeUtil;
 
@@ -45,6 +48,8 @@ public class ChallengeCommandService {
     private final ChallengeVerificationLikeRepository challengeVerificationLikeRepository;
     private final MemberRepository memberRepository;
     private final ChallengeReportProperties challengeReportProperties;
+    private final AiReviewProperties aiReviewProperties;
+    private final AnthropicVerificationReviewClient reviewClient;
     // 인증 저장의 트랜잭션 경계는 이 빈에 있다. 자기 호출로는 트랜잭션이 걸리지 않아 분리했다.
     private final ChallengeVerificationCommandService challengeVerificationCommandService;
     // 미디어 key의 발급 규칙·공개 URL 조립은 media 도메인이 소유한다. DB를 다루지 않는 유틸성 서비스다.
@@ -97,8 +102,7 @@ public class ChallengeCommandService {
      * 저장·스트릭 갱신의 트랜잭션 경계는 {@link ChallengeVerificationCommandService#save}에 있다.
      * 자기 호출로는 트랜잭션이 걸리지 않아 빈을 나눴다(AuthService → MemberCommandService와 같은 모양).
      *
-     * 현재는 자가인증이다 — 형식과 바이트가 맞으면 그대로 통과한다. 사진이 챌린지 의도(이름·설명)에
-     * 맞는지 심사하는 로직은 아직 없으며 #40에서 아래 TODO 자리에 들어간다.
+     * 사진이 챌린지 의도에 맞는지는 AI 가 심사한다. 통과하지 못하면 422 로 반려하고 저장하지 않는다.
      */
     public ChallengeResDTO.Verification verify(
             Long memberId,
@@ -113,12 +117,58 @@ public class ChallengeCommandService {
         //    이 호출이 오브젝트 존재 확인도 겸한다 — 업로드하지 않은 key면 404로 걸린다.
         mediaService.validateUploadedBytes(request.mediaKey(), MediaPurpose.CHALLENGE_VERIFICATION);
 
-        // TODO(#40): 사진이 챌린지 의도(challenge.name + description)에 맞는지 AI 심사.
-        //  자리는 여기다 — ②와 같은 "트랜잭션 밖" 구간이라 그대로 추가하면 된다.
-        //  방식·제공자·임계값·반려 UX·판정결과 저장(스키마 영향)은 #40에서 확정한다.
+        // ③ 사진이 챌린지 의도에 맞는지 심사한다. ②와 같은 트랜잭션 밖 구간이다.
+        //    통과하지 못하면 저장도 스트릭도 없다. 심사기가 답을 못 주면 통과시킨다(아래 참고).
+        reviewPhoto(challengeId, request.mediaKey());
 
-        // ③ 저장·스트릭 갱신. 여기서부터가 트랜잭션이다.
+        // ④ 저장·스트릭 갱신. 여기서부터가 트랜잭션이다.
         return challengeVerificationCommandService.save(memberId, challengeId, request);
+    }
+
+    /**
+     * 사진이 챌린지 의도에 맞는지 심사한다. 맞지 않으면 422 로 막는다.
+     *
+     * <h3>심사기가 답을 못 주면 통과시킨다</h3>
+     * 장애·타임아웃·설정 꺼짐은 전부 통과다. 외부 API 하나가 인증 기능 전체를 멈추게 두지
+     * 않는다는 결정이다. 막는 쪽으로 두면 Anthropic 이 죽는 순간 아무도 인증을 못 하는데,
+     * 그때 어차피 킬 스위치를 켜서 통과시키게 된다. 그럴 거면 처음부터 통과시키고 로그로
+     * 드러내는 편이 정직하다.
+     *
+     * <p>부적절한 사진의 방어선이 이것 하나가 아니라는 점도 근거다 — 신고가 임계값만큼 쌓이면
+     * 전체 회원에게 가려진다.
+     *
+     * <p><b>대신 심사 없이 통과한 사실은 반드시 로그에 남는다.</b> 나중에 "이 기간 인증은
+     * 심사를 안 거쳤다"를 되짚을 수 있어야 한다.
+     *
+     * <h3>비활성 챌린지는 심사하지 않는다</h3>
+     * 판정 기준이 챌린지의 이름·설명이라 그것을 못 읽으면 물어볼 말이 없다. 참여·저장 단계에서
+     * 어차피 걸리므로 여기서 막지 않는다.
+     */
+    private void reviewPhoto(Long challengeId, String mediaKey) {
+        if (!aiReviewProperties.isEnabled()) {
+            log.debug("AI 심사가 꺼져 있어 건너뜁니다. mediaKey={}", mediaKey);
+            return;
+        }
+        Challenge challenge = challengeRepository.findByIdAndActiveTrue(challengeId).orElse(null);
+        if (challenge == null) {
+            log.warn("심사할 챌린지를 찾지 못해 건너뜁니다. challengeId={}", challengeId);
+            return;
+        }
+
+        VerificationReview review = mediaService
+                .loadForReview(mediaKey, aiReviewProperties.getMaxImageDimension())
+                .map(image -> reviewClient.review(challenge.getName(), challenge.getDescription(), image))
+                .orElseGet(VerificationReview::undecided);
+
+        if (!review.decided()) {
+            log.warn("AI 심사 없이 인증을 통과시켰습니다. challengeId={}, mediaKey={}", challengeId, mediaKey);
+            return;
+        }
+        if (!review.approved()) {
+            log.info("AI 심사에서 반려했습니다. challengeId={}, mediaKey={}, 사유={}",
+                    challengeId, mediaKey, review.reason());
+            throw new ChallengeException(ChallengeErrorCode.VERIFICATION_REJECTED_BY_REVIEW);
+        }
     }
 
     /**

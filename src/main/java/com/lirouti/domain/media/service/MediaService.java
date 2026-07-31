@@ -1,9 +1,16 @@
 package com.lirouti.domain.media.service;
 
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.Arrays;
+
+import javax.imageio.ImageIO;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
@@ -154,6 +161,84 @@ public class MediaService {
             log.warn("업로드된 바이트가 선언한 형식과 다릅니다. purpose={}, expected={}, mediaKey={}",
                     purpose, expected, mediaKey);
             throw new MediaException(MediaErrorCode.MEDIA_CONTENT_MISMATCH);
+        }
+    }
+
+    /**
+     * AI 심사에 보낼 이미지를 읽어 온다. 필요하면 긴 변을 줄인다.
+     *
+     * <p><b>줄이는 이유는 화질이 아니라 전송이다.</b> 심사 쪽은 긴 변이 일정 크기를 넘는
+     * 이미지를 어차피 자기가 축소해서 보므로, 원본을 그대로 보내면 판정은 같고 전송만 느려진다.
+     * 게다가 이미지 한 장에 크기 상한이 있어 큰 사진은 요청 자체가 거부된다.
+     *
+     * <p><b>원본은 건드리지 않는다.</b> S3 오브젝트는 그대로 두고, 줄인 바이트는 이 호출에만 쓴다.
+     *
+     * <p>디코딩할 수 없는 형식(WEBP 는 표준 ImageIO 로 못 읽는다)은 <b>원본 그대로 돌려준다.</b>
+     * 심사 쪽이 그 형식을 받아주므로 크기만 감당되면 그대로 보내도 된다.
+     *
+     * @return 읽지 못했으면 빈 값. 호출부는 이것을 "심사 못 함"으로 다루고 막지 않는다.
+     */
+    public Optional<MediaImage> loadForReview(String mediaKey, int maxDimension) {
+        byte[] original;
+        String mimeType;
+        try {
+            GetObjectRequest request = GetObjectRequest.builder()
+                    .bucket(s3Properties.getBucket())
+                    .key(mediaKey)
+                    .build();
+            try (ResponseInputStream<GetObjectResponse> response = s3Client.getObject(request)) {
+                original = response.readAllBytes();
+                mimeType = resolveTypeByExtension(mediaKey).getMimeType();
+            }
+        } catch (SdkException | IOException e) {
+            log.warn("심사용 이미지를 읽지 못했습니다. mediaKey={}", mediaKey, e);
+            return Optional.empty();
+        }
+
+        return Optional.of(downscale(original, mimeType, maxDimension, mediaKey));
+    }
+
+    /**
+     * 긴 변이 상한을 넘으면 비율을 지켜 줄이고 JPEG 으로 다시 쓴다.
+     *
+     * 실패하면 원본을 그대로 돌려준다. 줄이기는 최적화이지 검증이 아니라서, 여기서 막으면
+     * 디코딩 못 하는 형식 하나 때문에 심사가 통째로 사라진다.
+     */
+    private MediaImage downscale(byte[] original, String mimeType, int maxDimension, String mediaKey) {
+        try {
+            BufferedImage source = ImageIO.read(new java.io.ByteArrayInputStream(original));
+            if (source == null) {
+                // ImageIO 가 읽지 못하는 형식(WEBP 등). 심사 쪽이 받아주므로 원본을 보낸다.
+                return new MediaImage(original, mimeType);
+            }
+            int longEdge = Math.max(source.getWidth(), source.getHeight());
+            if (longEdge <= maxDimension) {
+                return new MediaImage(original, mimeType);
+            }
+
+            double ratio = (double) maxDimension / longEdge;
+            int width = Math.max(1, (int) Math.round(source.getWidth() * ratio));
+            int height = Math.max(1, (int) Math.round(source.getHeight() * ratio));
+
+            // 알파가 있는 PNG 를 그대로 JPEG 으로 쓰면 투명 부분이 검게 나온다. RGB 로 받는다.
+            BufferedImage scaled = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+            Graphics2D graphics = scaled.createGraphics();
+            try {
+                graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
+                        RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+                graphics.drawImage(source, 0, 0, width, height, java.awt.Color.WHITE, null);
+            } finally {
+                graphics.dispose();
+            }
+
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            if (!ImageIO.write(scaled, "jpg", out)) {
+                return new MediaImage(original, mimeType);
+            }
+            return new MediaImage(out.toByteArray(), MediaContentType.JPEG.getMimeType());
+        } catch (IOException | RuntimeException e) {
+            log.warn("심사용 이미지를 줄이지 못해 원본을 그대로 보냅니다. mediaKey={}", mediaKey, e);
+            return new MediaImage(original, mimeType);
         }
     }
 

@@ -26,6 +26,13 @@ public interface ChallengeVerificationControllerDocs {
                     사진·코멘트가 덮어써지고(reverified=true), 이때 스트릭은 오르지 않습니다.
                     어제 인증했으면 스트릭이 1 오르고, 그보다 오래됐거나 첫 인증이면 1부터 시작합니다.
 
+                    **사진이 챌린지 내용과 맞는지 AI가 심사합니다.** 맞지 않다고 판정되면 422로
+                    반려되고 사진은 저장되지 않으며 스트릭도 오르지 않습니다. 반려 사유는 응답
+                    message로 내려갑니다.
+
+                    심사기에 장애가 나면 심사를 건너뛰고 통과시킵니다. 외부 서비스 문제로 인증
+                    자체가 막히지 않게 한 것이라, 반려는 "판정을 받았고 맞지 않았다"일 때만 납니다.
+
                     응답 result: verificationId, challengeId, verifiedDate, verifiedAt,
                     imageUrl(조립된 공개 URL), content, currentStreak, reverified.
                     """
@@ -34,7 +41,8 @@ public interface ChallengeVerificationControllerDocs {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "인증 성공(덮어쓰기 포함)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "발급 규칙에 맞지 않는 미디어 key"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "인증 필요(미인증)"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "참여 중이 아님 / 동시 중복 요청")
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "참여 중이 아님 / 동시 중복 요청"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "422", description = "AI 심사에서 챌린지 내용과 맞지 않다고 판정")
     })
     ApiResponse<ChallengeResDTO.Verification> verify(
             CustomUserDetails userDetails,
