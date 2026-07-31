@@ -7,6 +7,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.DayOfWeek;
 import java.util.List;
+import java.util.Optional;
 
 public interface MemberRoutineRepository extends JpaRepository<MemberRoutine, Long> {
     /**
@@ -28,6 +29,14 @@ public interface MemberRoutineRepository extends JpaRepository<MemberRoutine, Lo
      * @param memberId 조회할 회원 ID
      * @return 이미 등록된 기본 제공 루틴 ID 목록
      */
+    /**
+     * 인증 요청이 그 회원의 활성 루틴인지 확인하며 조회한다.
+     *
+     * 소유자와 활성 여부를 조건에 넣어, 남의 루틴이나 꺼진 루틴에 인증하는 것을 막는다.
+     * id 만으로 찾아 뒤에서 비교하면 응답만으로 그 id 의 존재 여부가 드러난다.
+     */
+    Optional<MemberRoutine> findByIdAndMemberIdAndActiveTrue(Long id, Long memberId);
+
     @Query("""
             select routine.template.id
             from MemberRoutine routine

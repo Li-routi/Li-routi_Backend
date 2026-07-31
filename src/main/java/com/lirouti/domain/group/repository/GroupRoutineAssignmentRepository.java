@@ -12,6 +12,7 @@ import org.springframework.data.repository.query.Param;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Optional;
 
 public interface GroupRoutineAssignmentRepository
         extends JpaRepository<GroupRoutineAssignment, Long>,
@@ -70,6 +71,18 @@ public interface GroupRoutineAssignmentRepository
      * @return 해당 날짜의 할당 목록
      */
     List<GroupRoutineAssignment> findAllByMemberIdAndAssignedDate(Long memberId, LocalDate assignedDate);
+
+    /**
+     * 그 회원의 오늘자 할당 한 건. 인증 요청이 실제로 그 사람 몫인지 확인하는 데 쓴다.
+     *
+     * 세 값이 유니크 제약과 같은 축이라 그대로 인덱스를 탄다. 회원 조건을 조회에 넣는 이유는,
+     * id 로 찾아 뒤에서 비교하면 남의 할당인지 없는 할당인지가 응답으로 드러나기 때문이다.
+     */
+    Optional<GroupRoutineAssignment> findByGroupRoutineIdAndMemberIdAndAssignedDate(
+            Long groupRoutineId,
+            Long memberId,
+            LocalDate assignedDate
+    );
 
     /**
      * 한 루틴의 특정 날짜 할당을 ID 순서로 잠가 수정·완료·상태 전이 경합을 직렬화한다.
