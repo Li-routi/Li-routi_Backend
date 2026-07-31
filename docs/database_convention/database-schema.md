@@ -448,8 +448,10 @@ MySQL은 유니크 키에서 `NULL`을 서로 다른 값으로 취급하므로 �
 
 인덱스: `idx_group_routine_category_group_active` (`group_id`, `active`)
 
-`group_routine.category_id`는 이 테이블을 참조한다. 고정 카테고리 또는 루틴과 같은 그룹의
-카테고리만 연결할 수 있으며, 소유 범위 검증은 애플리케이션에서 추가로 수행한다.
+`group_routine.group_routine_category_id`는 이 테이블을 참조한다. 고정 카테고리 또는 루틴과
+같은 그룹의 카테고리만 연결할 수 있으며, 소유 범위 검증은 애플리케이션에서 추가로 수행한다.
+V10에서는 안전한 전환을 위해 기존 `category_id`와 개인 카테고리 FK를 함께 보존한다. 기존
+컬럼은 운영 데이터 검증이 끝난 뒤 후속 마이그레이션에서 제거한다.
 
 ## 챌린지 테이블
 

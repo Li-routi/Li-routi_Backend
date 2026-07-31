@@ -40,7 +40,7 @@ public class GroupRoutine extends BaseEntity {
     private Group group;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "category_id", nullable = false)
+    @JoinColumn(name = "group_routine_category_id", nullable = false)
     private GroupRoutineCategory category;
 
     @Column(nullable = false, length = 20)
