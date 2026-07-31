@@ -18,6 +18,11 @@ public enum GroupSuccessCode implements BaseSuccessCode {
             "그룹 루틴 수정에 성공했습니다.",
             "GROUP200_3"
     ),
+    GROUP_ROUTINE_CATEGORY_LIST_FETCH_SUCCESS(
+            HttpStatus.OK,
+            "그룹 루틴 카테고리 조회에 성공했습니다.",
+            "GROUP200_4"
+    ),
     GROUP_ROUTINE_CREATE_SUCCESS(
             HttpStatus.CREATED,
             "그룹 루틴 생성에 성공했습니다.",
@@ -37,6 +42,11 @@ public enum GroupSuccessCode implements BaseSuccessCode {
             HttpStatus.CREATED,
             "모임방 생성에 성공했습니다.",
             "GROUP201_3"
+    ),
+    GROUP_ROUTINE_CATEGORY_CREATE_SUCCESS(
+            HttpStatus.CREATED,
+            "그룹 루틴 카테고리 생성에 성공했습니다.",
+            "GROUP201_4"
     );
 
     private final HttpStatus httpStatus;

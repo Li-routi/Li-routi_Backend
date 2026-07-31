@@ -16,6 +16,26 @@ public final class GroupResDTO {
     private GroupResDTO() {
     }
 
+    /** 그룹에서 사용할 수 있는 카테고리와 추가 가능 개수다. */
+    @Builder
+    @Schema(name = "GroupRoutineCategoryList", description = "그룹 루틴 카테고리 목록")
+    public record CategoryList(
+            List<Category> categories,
+            int addableCount
+    ) {
+    }
+
+    /** 기본 또는 그룹 사용자 카테고리 한 건이다. */
+    @Builder
+    @Schema(name = "GroupRoutineCategory", description = "그룹 루틴 카테고리")
+    public record Category(
+            Long categoryId,
+            String name,
+            RoutineCategoryColor color,
+            boolean fixed
+    ) {
+    }
+
     /** 초대코드를 제외한 모임방 통합 생성 결과다. */
     @Builder
     @Schema(name = "GroupCreateResult", description = "모임방과 초기 그룹 루틴 통합 생성 결과")

@@ -73,6 +73,23 @@ class GroupRoutineCategoryRepositoryTest {
         assertThat(otherExists).isFalse();
     }
 
+    @Test
+    @DisplayName("비활성 카테고리 이름은 사용 가능한 이름 중복 검사에서 제외한다")
+    void existsUsableName_InactiveName_ReturnsFalse() {
+        // given
+        Group target = group("CAT3001");
+        category(target, "비활성 관리", false);
+        em.flush();
+        em.clear();
+
+        // when
+        boolean result = groupRoutineCategoryRepository
+                .existsUsableName(target.getId(), "비활성 관리");
+
+        // then
+        assertThat(result).isFalse();
+    }
+
     private Group group(String inviteCode) {
         Group group = Group.builder().name("카테고리 그룹").inviteCode(inviteCode).build();
         em.persist(group);

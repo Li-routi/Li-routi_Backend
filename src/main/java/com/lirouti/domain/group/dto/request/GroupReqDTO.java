@@ -22,6 +22,34 @@ public final class GroupReqDTO {
     private GroupReqDTO() {
     }
 
+    /** 그룹 설정에서 사용자 카테고리를 추가하는 요청이다. */
+    @Schema(name = "CreateGroupRoutineCategory", description = "그룹 사용자 카테고리 생성 요청")
+    public record CreateCategory(
+            @Schema(
+                    description = "카테고리 이름. 앞뒤 공백을 제거한 뒤 1~10자이며 줄바꿈을 포함할 수 없다",
+                    example = "아침 관리"
+            )
+            @NotBlank(message = "카테고리 이름은 필수입니다.")
+            @Size(
+                    max = GroupRoutineCategory.MAX_GROUP_CATEGORY_NAME_LENGTH,
+                    message = "카테고리 이름은 10자 이하여야 합니다."
+            )
+            String name,
+
+            @Schema(description = "색상 칩. 생략하면 색 없음으로 저장된다", example = "BLUE")
+            RoutineCategoryColor color
+    ) {
+        public CreateCategory {
+            name = name == null ? null : name.trim();
+        }
+
+        @AssertTrue(message = "카테고리 이름에는 줄바꿈을 포함할 수 없습니다.")
+        @JsonIgnore
+        public boolean isNameSingleLine() {
+            return name == null || !(name.contains("\n") || name.contains("\r"));
+        }
+    }
+
     /**
      * 그룹과 초기 카테고리·루틴을 한 번에 생성하는 요청이다.
      * 요청 전체만으로 판단 가능한 키 참조와 중복 규칙은 record의 검증 메서드가 담당한다.

@@ -8,6 +8,11 @@ import org.springframework.http.HttpStatus;
 @Getter
 @AllArgsConstructor
 public enum GroupErrorCode implements BaseErrorCode {
+    INVALID_GROUP_ROUTINE_CATEGORY_NAME(
+            HttpStatus.BAD_REQUEST,
+            "카테고리 이름은 앞뒤 공백 제거 후 1~10자의 한 줄이어야 합니다.",
+            "GROUP400_1"
+    ),
     GROUP_NOT_FOUND(
             HttpStatus.NOT_FOUND,
             "그룹을 찾을 수 없습니다.",

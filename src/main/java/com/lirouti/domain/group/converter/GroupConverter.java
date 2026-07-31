@@ -55,6 +55,41 @@ public final class GroupConverter {
                 .build();
     }
 
+    /** 그룹 카테고리 추가 요청을 그룹 소유의 활성 카테고리로 변환한다. */
+    public static GroupRoutineCategory toGroupRoutineCategory(
+            GroupReqDTO.CreateCategory request,
+            Group group
+    ) {
+        return GroupRoutineCategory.builder()
+                .group(group)
+                .name(request.name())
+                .color(request.color())
+                .displayOrder(0)
+                .active(true)
+                .build();
+    }
+
+    /** 조회된 카테고리와 남은 추가 가능 개수를 목록 응답으로 변환한다. */
+    public static GroupResDTO.CategoryList toCategoryList(
+            List<GroupRoutineCategory> categories,
+            int addableCount
+    ) {
+        return GroupResDTO.CategoryList.builder()
+                .categories(categories.stream().map(GroupConverter::toCategory).toList())
+                .addableCount(addableCount)
+                .build();
+    }
+
+    /** 그룹 루틴 카테고리 한 건을 응답으로 변환한다. */
+    public static GroupResDTO.Category toCategory(GroupRoutineCategory category) {
+        return GroupResDTO.Category.builder()
+                .categoryId(category.getId())
+                .name(category.getName())
+                .color(category.getColor())
+                .fixed(category.isFixed())
+                .build();
+    }
+
     /** 통합 생성 요청의 초기 루틴을 일정이 연결된 그룹 루틴으로 변환한다. */
     public static GroupRoutine toGroupRoutine(
             GroupReqDTO.CreateGroupRoutine request,

@@ -8,6 +8,7 @@ import com.lirouti.domain.group.service.command.GroupInviteCodeCommandService;
 import com.lirouti.domain.group.service.query.GroupInviteCodeQueryService;
 import com.lirouti.domain.group.service.query.GroupQueryService;
 import com.lirouti.domain.member.enums.Role;
+import com.lirouti.domain.routine.enums.RoutineCategoryColor;
 import com.lirouti.global.apiPayload.ApiResponse;
 import com.lirouti.global.auth.CustomUserDetails;
 import org.junit.jupiter.api.DisplayName;
@@ -27,6 +28,7 @@ import static org.mockito.Mockito.when;
 @DisplayName("GroupController 단위 테스트")
 class GroupControllerUnitTest {
     private static final Long MEMBER_ID = 1L;
+    private static final Long GROUP_ID = 10L;
 
     @Mock
     private GroupCommandService groupCommandService;
@@ -65,5 +67,50 @@ class GroupControllerUnitTest {
         assertThat(response.getCode()).isEqualTo(GroupSuccessCode.GROUP_CREATE_SUCCESS.getCode());
         assertThat(response.getResult()).isSameAs(result);
         verify(groupCommandService).createGroup(MEMBER_ID, request);
+    }
+
+    @Test
+    @DisplayName("그룹 카테고리 조회에 인증 회원 ID와 그룹 ID를 전달한다")
+    void getCategories_AuthenticatedMember_ReturnsCategoryList() {
+        // given
+        CustomUserDetails principal = new CustomUserDetails(MEMBER_ID, Role.ROLE_USER);
+        GroupResDTO.CategoryList result = GroupResDTO.CategoryList.builder()
+                .categories(List.of())
+                .addableCount(5)
+                .build();
+        when(groupQueryService.getCategories(GROUP_ID, MEMBER_ID)).thenReturn(result);
+
+        // when
+        ApiResponse<GroupResDTO.CategoryList> response =
+                groupController.getCategories(principal, GROUP_ID);
+
+        // then
+        assertThat(response.getCode()).isEqualTo(
+                GroupSuccessCode.GROUP_ROUTINE_CATEGORY_LIST_FETCH_SUCCESS.getCode());
+        assertThat(response.getResult()).isSameAs(result);
+        verify(groupQueryService).getCategories(GROUP_ID, MEMBER_ID);
+    }
+
+    @Test
+    @DisplayName("그룹 카테고리 생성에 인증 회원 ID와 그룹 ID 및 요청을 전달한다")
+    void createCategory_AuthenticatedOwner_ReturnsCategory() {
+        // given
+        CustomUserDetails principal = new CustomUserDetails(MEMBER_ID, Role.ROLE_USER);
+        GroupReqDTO.CreateCategory request =
+                new GroupReqDTO.CreateCategory("아침 관리", RoutineCategoryColor.BLUE);
+        GroupResDTO.Category result = GroupResDTO.Category.builder()
+                .categoryId(30L).name("아침 관리")
+                .color(RoutineCategoryColor.BLUE).fixed(false).build();
+        when(groupCommandService.createCategory(GROUP_ID, MEMBER_ID, request)).thenReturn(result);
+
+        // when
+        ApiResponse<GroupResDTO.Category> response =
+                groupController.createCategory(principal, GROUP_ID, request);
+
+        // then
+        assertThat(response.getCode()).isEqualTo(
+                GroupSuccessCode.GROUP_ROUTINE_CATEGORY_CREATE_SUCCESS.getCode());
+        assertThat(response.getResult()).isSameAs(result);
+        verify(groupCommandService).createCategory(GROUP_ID, MEMBER_ID, request);
     }
 }

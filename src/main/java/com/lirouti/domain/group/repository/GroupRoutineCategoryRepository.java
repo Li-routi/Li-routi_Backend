@@ -34,6 +34,7 @@ public interface GroupRoutineCategoryRepository
             from GroupRoutineCategory category
             left join category.group ownerGroup
             where category.name = :name
+              and category.active = true
               and (ownerGroup is null or ownerGroup.id = :groupId)
             """)
     boolean existsUsableName(@Param("groupId") Long groupId, @Param("name") String name);
