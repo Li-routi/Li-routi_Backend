@@ -3,6 +3,7 @@ package com.lirouti.domain.routine.service.query;
 import com.lirouti.domain.member.service.query.MemberQueryService;
 import com.lirouti.domain.routine.converter.RoutineConverter;
 import com.lirouti.domain.routine.dto.response.RoutineResDTO;
+import com.lirouti.domain.routine.entity.MemberRoutine;
 import com.lirouti.domain.routine.entity.RoutineCategory;
 import com.lirouti.domain.routine.entity.RoutineTemplate;
 import com.lirouti.domain.routine.exception.RoutineException;
@@ -10,6 +11,9 @@ import com.lirouti.domain.routine.exception.code.error.RoutineErrorCode;
 import com.lirouti.domain.routine.repository.MemberRoutineRepository;
 import com.lirouti.domain.routine.repository.RoutineCategoryRepository;
 import com.lirouti.domain.routine.repository.RoutineTemplateRepository;
+
+import java.time.DayOfWeek;
+import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -17,6 +21,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import static io.netty.util.concurrent.FastThreadLocal.size;
 
 @Slf4j
 @Service
@@ -102,5 +108,25 @@ public class RoutineQueryService {
         }
 
         return routineTemplateRepository.findActiveByCategoryId(categoryId);
+    }
+
+    /**
+     * 홈 화면 '오늘의 루틴' 탭에서 참조할 데이터
+     * 오늘 반복 요일에 해당하는 회원의 활성 개인 루틴을 조회한다.
+     *
+     * @param memberId: 조회를 요청한 회원 ID
+     * @return 마감 시각 순으로 정렬된 오늘의 개인 루틴 목록
+     */
+    @Transactional(readOnly = true)
+    public List<RoutineResDTO.Routine> getTodayRoutines(Long memberId) {
+        memberQueryService.getActiveMember(memberId);
+
+        DayOfWeek today = LocalDate.now().getDayOfWeek();
+        List<MemberRoutine> routines = memberRoutineRepository.findTodayActiveByMemberId(memberId, today);
+
+        log.debug("오늘의 개인 루틴 목록을 조회했습니다. memberId={}, today={}, routineCount={}",
+                memberId, today, routines, size());
+
+        return RoutineConverter.toRoutineList(routines);
     }
 }

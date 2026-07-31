@@ -1,6 +1,8 @@
 package com.lirouti.domain.routine.repository;
 
 import com.lirouti.domain.routine.entity.MemberRoutine;
+
+import java.time.DayOfWeek;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -33,4 +35,38 @@ public interface MemberRoutineRepository extends JpaRepository<MemberRoutine, Lo
               and routine.template is not null
             """)
     List<Long> findTemplateIdsByMemberId(@Param("memberId") Long memberId);
+
+    /**
+     * 홈 화면 '오늘의 루틴' 탭에 쓸, 오늘 반복 요일에 해당하는 회원의 활성 개인 루틴을 조회한다.
+     *
+     * <p>{@code schedules}를 왼쪽 fetch join으로 통째로 가져오는 이유는, 응답이 루틴별 전체
+     * 반복 요일 목록을 함께 내려 주기 때문이다({@code repeatDays}). 오늘 해당하는 루틴만
+     * 고르는 조건은 {@code exists} 서브쿼리로 따로 두어, 요일 필터와 fetch join이 같은
+     * 컬렉션 조인에 걸려 결과가 잘리는 문제를 피한다.
+     *
+     * @param memberId 조회할 회원 ID
+     * @param repeatDay 오늘에 해당하는 요일
+     * @return 마감 시각 순으로 정렬된 활성 개인 루틴 목록
+     */
+    @Query("""
+            select routine
+            from MemberRoutine routine
+            join fetch routine.category
+            left join fetch routine.template
+            left join fetch routine.schedules
+            where routine.member.id = :memberId
+                and routine.active = true
+                and exists (
+                    select 1
+                    from MemberRoutineSchedule schedule
+                    where schedule.memberRoutine = routine
+                        and schedule.repeatDay = :repeatDay
+                )
+                order by routine.endTime asc, routine.id asc
+            """)
+    List<MemberRoutine> findTodayActiveByMemberId(
+            @Param("memberId") Long memberId,
+            @Param("repeatDay")DayOfWeek repeatDay
+    );
+
 }

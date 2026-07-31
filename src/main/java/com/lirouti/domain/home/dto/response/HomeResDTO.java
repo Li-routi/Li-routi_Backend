@@ -1,7 +1,7 @@
 package com.lirouti.domain.home.dto.response;
 
-import com.lirouti.domain.challenge.dto.response.ChallengeResDTO;
 import com.lirouti.domain.group.dto.response.GroupResDTO;
+import com.lirouti.domain.routine.dto.response.RoutineResDTO;
 import lombok.Builder;
 
 import java.util.List;
@@ -39,7 +39,7 @@ public final class HomeResDTO {
      */
     @Builder
     public record MyRoutines(
-            List<ChallengeResDTO.MySummary> challenges,
+            List<RoutineResDTO.Routine> routines,
             boolean isEmpty
     ) {
     }

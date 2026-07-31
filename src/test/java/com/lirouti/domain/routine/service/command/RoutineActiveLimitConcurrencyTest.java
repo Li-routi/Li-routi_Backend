@@ -10,7 +10,7 @@ import com.lirouti.domain.routine.dto.request.RoutineReqDTO;
 import com.lirouti.domain.routine.entity.MemberRoutine;
 import com.lirouti.domain.routine.exception.RoutineException;
 import com.lirouti.domain.routine.exception.code.error.RoutineErrorCode;
-import com.lirouti.domain.routine.repository.MemberRoutineRepository;
+
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
