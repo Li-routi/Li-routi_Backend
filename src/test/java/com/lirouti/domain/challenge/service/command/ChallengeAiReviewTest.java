@@ -23,6 +23,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.lirouti.domain.challenge.client.AnthropicVerificationReviewClient;
+import com.lirouti.domain.challenge.client.ReviewRejection;
 import com.lirouti.domain.challenge.client.VerificationReview;
 import com.lirouti.domain.challenge.dto.request.ChallengeReqDTO;
 import com.lirouti.domain.challenge.entity.Challenge;
@@ -129,7 +130,7 @@ class ChallengeAiReviewTest {
     void verify_Rejected_IsBlocked() {
         // given
         when(reviewClient.review(any(), any(), any()))
-                .thenReturn(VerificationReview.reject("물이 아니라 커피로 보입니다."));
+                .thenReturn(VerificationReview.reject(ReviewRejection.MISMATCH, "물이 아니라 커피로 보입니다."));
         long before = savedCount();
 
         // when & then
@@ -167,6 +168,60 @@ class ChallengeAiReviewTest {
         // then
         assertThat(savedCount()).isEqualTo(before + 1);
         verify(reviewClient, never()).review(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("유해로 반려되면 다른 코드로 막는다 — 다시 찍으면 되는 것과 올리면 안 되는 것은 다르다")
+    void verify_RejectedAsUnsafe_UsesDistinctCode() {
+        // given
+        when(reviewClient.review(any(), any(), any()))
+                .thenReturn(VerificationReview.reject(ReviewRejection.UNSAFE, "노출이 과합니다."));
+
+        // when & then
+        assertThatThrownBy(() -> challengeCommandService.verify(memberId, challengeId, request()))
+                .isInstanceOf(ChallengeException.class)
+                .hasFieldOrPropertyWithValue("code", ChallengeErrorCode.VERIFICATION_REJECTED_AS_UNSAFE);
+    }
+
+    @Test
+    @DisplayName("반려되면 S3 오브젝트도 지운다 — 공개 prefix라 key를 아는 사람은 계속 볼 수 있다")
+    void verify_Rejected_DeletesObject() {
+        // given
+        when(reviewClient.review(any(), any(), any()))
+                .thenReturn(VerificationReview.reject(ReviewRejection.UNSAFE, "노출이 과합니다."));
+
+        // when
+        assertThatThrownBy(() -> challengeCommandService.verify(memberId, challengeId, request()))
+                .isInstanceOf(ChallengeException.class);
+
+        // then
+        verify(mediaService).deleteQuietly(KEY);
+    }
+
+    @Test
+    @DisplayName("통과하면 사진을 지우지 않는다")
+    void verify_Approved_KeepsObject() {
+        // given
+        when(reviewClient.review(any(), any(), any())).thenReturn(VerificationReview.pass());
+
+        // when
+        challengeCommandService.verify(memberId, challengeId, request());
+
+        // then
+        verify(mediaService, never()).deleteQuietly(any());
+    }
+
+    @Test
+    @DisplayName("심사기가 답을 못 줘 통과한 경우에도 사진을 지우지 않는다 — 장애는 반려가 아니다")
+    void verify_Undecided_KeepsObject() {
+        // given
+        when(reviewClient.review(any(), any(), any())).thenReturn(VerificationReview.undecided());
+
+        // when
+        challengeCommandService.verify(memberId, challengeId, request());
+
+        // then
+        verify(mediaService, never()).deleteQuietly(any());
     }
 
     @Test

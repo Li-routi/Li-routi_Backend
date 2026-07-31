@@ -38,6 +38,7 @@ import lombok.extern.slf4j.Slf4j;
 import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
@@ -301,6 +302,31 @@ public class MediaService {
             throw new IOException("JPEG 인코더를 찾지 못했습니다.");
         }
         return out.toByteArray();
+    }
+
+    /**
+     * 오브젝트를 지운다. 실패해도 예외를 던지지 않는다.
+     *
+     * <p>심사에서 반려된 사진을 그 자리에서 치우는 용도다. 반려는 저장을 안 하므로 DB 가
+     * 그 key 를 참조하지 않고, 그대로 두면 미참조 이미지 정리가 며칠 뒤에 가져간다.
+     * 굳이 지금 지우는 이유는 <b>반려된 사진이 유해한 것일 수 있기 때문</b>이다 —
+     * 공개 prefix 라 key 를 아는 사람은 그동안 계속 볼 수 있다.
+     *
+     * <p><b>실패해도 조용히 넘어간다.</b> 이 삭제가 실패했다고 반려 응답이 성공으로 바뀌면
+     * 안 되고, 못 지운 오브젝트는 미참조 이미지 정리가 결국 가져간다. 즉 이 메서드는
+     * "빨리 지우는" 최적화이지 유일한 삭제 경로가 아니다.
+     */
+    public void deleteQuietly(String mediaKey) {
+        try {
+            s3Client.deleteObject(DeleteObjectRequest.builder()
+                    .bucket(s3Properties.getBucket())
+                    .key(mediaKey)
+                    .build());
+            log.info("반려된 인증 사진을 삭제했습니다. mediaKey={}", mediaKey);
+        } catch (SdkException e) {
+            log.warn("반려된 인증 사진을 지우지 못했습니다. 미참조 정리가 나중에 가져갑니다. mediaKey={}",
+                    mediaKey, e);
+        }
     }
 
     /** 오브젝트 앞부분만 Range로 읽는다. 없으면 404, 그 밖의 실패는 500으로 바꾼다. */

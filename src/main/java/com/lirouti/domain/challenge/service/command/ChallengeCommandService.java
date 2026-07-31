@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.lirouti.domain.challenge.client.AnthropicVerificationReviewClient;
+import com.lirouti.domain.challenge.client.ReviewRejection;
 import com.lirouti.domain.challenge.client.VerificationReview;
 import com.lirouti.domain.challenge.converter.ChallengeConverter;
 import com.lirouti.domain.challenge.dto.request.ChallengeReqDTO;
@@ -176,13 +177,19 @@ public class ChallengeCommandService {
             return;
         }
         if (!review.approved()) {
-            // 사유는 로그에만 남는다. 응답 message 는 에러 코드의 고정 문장이다 —
+            // 사유 문장은 로그에만 남는다. 응답 message 는 에러 코드의 고정 문장이다 —
             // 이 프로젝트는 응답 메시지를 에러 코드로만 만들기 때문이다(exception_convention).
-            // 사유를 사용자에게 보여주려면 전역 예외 구조가 자유 문구를 실을 수 있어야 하는데,
-            // 그건 모든 도메인의 응답 계약을 바꾸는 일이라 이 PR 범위를 넘는다.
-            log.info("AI 심사에서 반려했습니다. challengeId={}, mediaKey={}, 사유={}",
-                    challengeId, mediaKey, review.reason());
-            throw new ChallengeException(ChallengeErrorCode.VERIFICATION_REJECTED_BY_REVIEW);
+            log.info("AI 심사에서 반려했습니다. challengeId={}, mediaKey={}, 종류={}, 사유={}",
+                    challengeId, mediaKey, review.rejection(), review.reason());
+
+            // 반려된 사진은 저장하지 않으므로 DB 가 이 key 를 참조하지 않는다. 그대로 두면
+            // 미참조 정리가 며칠 뒤에 가져가는데, 그동안 공개 prefix 라 key 를 아는 사람은
+            // 계속 볼 수 있다. 유해로 반려된 것일 수 있으므로 그 자리에서 치운다.
+            mediaService.deleteQuietly(mediaKey);
+
+            throw new ChallengeException(review.rejection() == ReviewRejection.UNSAFE
+                    ? ChallengeErrorCode.VERIFICATION_REJECTED_AS_UNSAFE
+                    : ChallengeErrorCode.VERIFICATION_REJECTED_BY_REVIEW);
         }
     }
 
