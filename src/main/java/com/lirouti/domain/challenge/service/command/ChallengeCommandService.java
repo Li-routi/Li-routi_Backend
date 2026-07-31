@@ -6,6 +6,7 @@ import java.util.List;
 import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.lirouti.domain.challenge.converter.ChallengeConverter;
@@ -131,7 +132,7 @@ public class ChallengeCommandService {
      * 먼저 조회해 판단하지 않는 이유는 조회와 저장 사이의 동시 요청을 막지 못하기 때문이다.
      * 제약 위반을 잡아 409로 바꾼다(인증 저장과 같은 방식).
      */
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public ChallengeResDTO.Report report(
             Long memberId,
             Long challengeId,
@@ -141,6 +142,11 @@ public class ChallengeCommandService {
         // 경로의 challengeId와 실제 인증의 챌린지가 맞는지까지 확인한다. 어긋나면 404다.
         ChallengeVerification verification = challengeVerificationRepository
                 .findByIdAndMemberChallengeChallengeId(verificationId, challengeId)
+                .orElseThrow(() -> new ChallengeException(ChallengeErrorCode.VERIFICATION_NOT_FOUND));
+
+        // 숨김 판정을 직렬화하기 위해 인증 행을 잠근다. 신고 INSERT 전에 잡아야 한다 —
+        // 저장 후에 잠그면 그 사이 다른 트랜잭션이 이미 세기를 마치고 지나갈 수 있다.
+        verification = challengeVerificationRepository.findByIdForUpdate(verificationId)
                 .orElseThrow(() -> new ChallengeException(ChallengeErrorCode.VERIFICATION_NOT_FOUND));
 
         // 신고자는 FK만 필요하므로 프록시 참조로 불필요한 회원 조회를 피한다(참여 생성과 같은 이유).
@@ -174,10 +180,18 @@ public class ChallengeCommandService {
      * {@code having count(*) >= N}으로 세면 읽기 경로가 무거워진다. 신고는 드물고 조회는
      * 잦으므로 쓰기 시점 계산이 맞다.
      *
-     * <p><b>동시성은 문제되지 않는다.</b> 두 신고가 동시에 임계값을 넘겨 hidden_at을 두 번 써도
-     * 결과가 같고, 엔티티가 이미 가려진 경우 덮어쓰지 않는다. 반대로 상대의 미커밋 INSERT를
-     * 못 봐 숨김이 한 박자 늦어질 수는 있으나 다음 신고에서 걸린다. 그래서 이 판정을 위해
-     * 행 잠금을 걸지 않는다 — 신고 한 건 때문에 인증 행을 잠그는 비용이 더 크다.
+     * <p><b>정확히 세려면 두 가지가 다 필요하다.</b>
+     *
+     * <p>하나는 <b>인증 행 잠금</b>이다. 잠금이 없으면 동시 신고가 각자 INSERT 하고 각자 세는데,
+     * 서로의 미커밋 INSERT 가 안 보여 전부 임계값 미만으로 판단한다. 정확히 임계값만큼만 동시에
+     * 들어오면 그 뒤로 신고가 없는 한 <b>영원히 가려지지 않는다.</b>
+     *
+     * <p>다른 하나는 <b>READ_COMMITTED</b>다. MySQL 기본값인 REPEATABLE READ 에서는 트랜잭션의
+     * 첫 조회 시점에 스냅샷이 고정되어, 잠금을 잡고 기다린 뒤에 세어도 그동안 커밋된 신고가
+     * 보이지 않는다. 잠금만으로는 순서만 정해질 뿐 값이 낡은 채다. 실측으로 확인했다 —
+     * 잠금만 넣었을 때 동시성 테스트가 그대로 실패했다.
+     *
+     * <p>신고는 드문 요청이라 이 잠금이 경합을 만들 일은 거의 없다.
      *
      * <p>가려도 인증 행과 스트릭은 그대로다. 막는 것은 노출뿐이다.
      */
