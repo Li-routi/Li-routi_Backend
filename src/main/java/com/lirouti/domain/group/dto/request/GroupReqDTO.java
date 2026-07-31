@@ -4,7 +4,6 @@ import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.lirouti.domain.group.entity.GroupRoutine;
 import com.lirouti.domain.group.entity.GroupRoutineCategory;
-import com.lirouti.domain.group.validation.ValidGroupCreationRequest;
 import com.lirouti.domain.routine.enums.RoutineCategoryColor;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
@@ -14,7 +13,10 @@ import java.time.DayOfWeek;
 import java.time.LocalTime;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 public final class GroupReqDTO {
     private GroupReqDTO() {
@@ -22,10 +24,9 @@ public final class GroupReqDTO {
 
     /**
      * 그룹과 초기 카테고리·루틴을 한 번에 생성하는 요청이다.
-     * 요청 전체의 키 참조와 중복 규칙은 {@link ValidGroupCreationRequest}가 검증한다.
+     * 요청 전체만으로 판단 가능한 키 참조와 중복 규칙은 record의 검증 메서드가 담당한다.
      */
     @Schema(name = "CreateGroup", description = "모임방과 초기 그룹 루틴 통합 생성 요청")
-    @ValidGroupCreationRequest
     public record CreateGroup(
             @Schema(description = "모임 이름. 앞뒤 공백을 제거한 뒤 1~20자", example = "아침 루틴 모임")
             @NotBlank(message = "모임 이름은 필수입니다.")
@@ -52,6 +53,89 @@ public final class GroupReqDTO {
     ) {
         public CreateGroup {
             name = name == null ? null : name.trim();
+        }
+
+        @AssertTrue(message = "사용자 카테고리 clientKey는 요청 안에서 중복될 수 없습니다.")
+        @JsonIgnore
+        public boolean isClientKeyUnique() {
+            if (customCategories == null) {
+                return true;
+            }
+            Set<String> keys = new HashSet<>();
+            return customCategories.stream()
+                    .filter(Objects::nonNull)
+                    .map(CreateGroupCategory::clientKey)
+                    .filter(CreateGroup::hasText)
+                    .allMatch(keys::add);
+        }
+
+        @AssertTrue(message = "카테고리 이름은 요청 내 사용자 카테고리와 중복될 수 없습니다.")
+        @JsonIgnore
+        public boolean isCategoryNameUnique() {
+            if (customCategories == null) {
+                return true;
+            }
+            Set<String> names = new HashSet<>();
+            return customCategories.stream()
+                    .filter(Objects::nonNull)
+                    .map(CreateGroupCategory::name)
+                    .filter(CreateGroup::hasText)
+                    .map(CreateGroup::normalizeName)
+                    .allMatch(names::add);
+        }
+
+        @AssertTrue(message = "기본 카테고리 ID 또는 사용자 카테고리 키 중 하나만 지정해야 합니다.")
+        @JsonIgnore
+        public boolean isCategoryReferenceExclusive() {
+            if (routines == null) {
+                return true;
+            }
+            return routines.stream()
+                    .filter(Objects::nonNull)
+                    .allMatch(routine -> (routine.categoryId() != null)
+                            != hasText(routine.categoryKey()));
+        }
+
+        @AssertTrue(message = "요청에 존재하지 않는 사용자 카테고리 키입니다.")
+        @JsonIgnore
+        public boolean isCategoryKeyResolvable() {
+            if (customCategories == null || routines == null) {
+                return true;
+            }
+            Set<String> keys = customCategories.stream()
+                    .filter(Objects::nonNull)
+                    .map(CreateGroupCategory::clientKey)
+                    .filter(CreateGroup::hasText)
+                    .collect(Collectors.toSet());
+
+            return routines.stream()
+                    .filter(Objects::nonNull)
+                    .map(CreateGroupRoutine::categoryKey)
+                    .filter(CreateGroup::hasText)
+                    .allMatch(keys::contains);
+        }
+
+        @AssertTrue(message = "루틴 제목은 요청 안에서 중복될 수 없습니다.")
+        @JsonIgnore
+        public boolean isRoutineTitleUnique() {
+            if (routines == null) {
+                return true;
+            }
+            Set<String> titles = new HashSet<>();
+            return routines.stream()
+                    .filter(Objects::nonNull)
+                    .map(CreateGroupRoutine::title)
+                    .filter(CreateGroup::hasText)
+                    .map(CreateGroup::normalizeName)
+                    .allMatch(titles::add);
+        }
+
+        private static boolean hasText(String value) {
+            return value != null && !value.isBlank();
+        }
+
+        private static String normalizeName(String value) {
+            return value.toLowerCase(Locale.ROOT);
         }
     }
 

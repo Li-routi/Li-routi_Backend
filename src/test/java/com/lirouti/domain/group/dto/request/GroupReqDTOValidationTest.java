@@ -1,6 +1,5 @@
-package com.lirouti.domain.group.validation;
+package com.lirouti.domain.group.dto.request;
 
-import com.lirouti.domain.group.dto.request.GroupReqDTO;
 import com.lirouti.domain.group.dto.response.GroupResDTO;
 import com.lirouti.domain.routine.enums.RoutineCategoryColor;
 import jakarta.validation.ConstraintViolation;
@@ -18,7 +17,7 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @DisplayName("그룹 통합 생성 요청 검증 테스트")
-class GroupCreationRequestValidatorTest {
+class GroupReqDTOValidationTest {
     private final Validator validator = Validation.buildDefaultValidatorFactory().getValidator();
 
     @Test
