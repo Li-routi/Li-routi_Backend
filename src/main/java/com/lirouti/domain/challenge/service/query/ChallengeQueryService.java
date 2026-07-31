@@ -69,8 +69,10 @@ public class ChallengeQueryService {
      * 인증(게시글) 단위 나열이므로 회차 중복을 제거하지 않는다. 같은 날 이탈 후 재참여해 다시
      * 인증한 두 건은 별개의 인증 이벤트다(database-schema.md).
      *
-     * viewerId(조회자)가 신고한 인증은 빠진다(#15). 신고는 삭제가 아니라 신고자 본인의 화면에서만
-     * 가리는 것이라, 같은 인증이 다른 회원의 피드에는 그대로 남는다.
+     * viewerId(조회자)가 신고한 인증은 빠진다. 신고가 적을 때는 신고자 본인에게만 가려지므로
+     * 같은 인증이 다른 회원의 피드에는 그대로 남는다.
+     *
+     * 신고가 임계값만큼 쌓이면 조회자가 누구든 빠진다 — 그건 이 조건이 아니라 hiddenAt 이 막는다.
      */
     @Transactional(readOnly = true)
     public ChallengeResDTO.Feed getVerificationFeed(
