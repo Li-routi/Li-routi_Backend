@@ -13,6 +13,7 @@ import com.lirouti.domain.routine.entity.RoutineTemplate;
 import com.lirouti.domain.routine.enums.RoutineCategoryColor;
 import com.lirouti.domain.routine.exception.RoutineException;
 import com.lirouti.domain.routine.exception.code.error.RoutineErrorCode;
+import com.lirouti.domain.routine.repository.MemberRoutineRepository;
 import com.lirouti.domain.routine.repository.RoutineCategoryRepository;
 import com.lirouti.domain.routine.repository.RoutineTemplateRepository;
 import org.junit.jupiter.api.BeforeEach;
