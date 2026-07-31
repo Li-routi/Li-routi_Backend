@@ -5,6 +5,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -33,5 +34,27 @@ public interface MemberRoutineVerificationRepository
     List<Long> findVerifiedRoutineIds(
             @Param("routineIds") Collection<Long> routineIds,
             @Param("verifiedDate") LocalDate verifiedDate
+    );
+
+    /**
+     * 그 루틴의 내 인증을 최신순으로 가져온다. 커서·정렬 키는 {@code verifiedDate} 가 아니라 id 다.
+     *
+     * <p>날짜로 정렬해도 하루 1건 제약 때문에 순서는 같지만, <b>커서로는 id 가 안전하다.</b>
+     * 날짜는 값이 같은 행이 생길 여지가 있고(제약이 풀리면) 그때 커서가 항목을 건너뛴다.
+     * 챌린지 피드가 id 를 커서로 쓰는 것과 같은 이유다.
+     *
+     * <p>{@code limit} 는 요청 크기보다 하나 크게 받는다. 초과분이 오는지로 다음 페이지 유무를
+     * 판단하기 위해서다(호출부의 sliceByCursor).
+     */
+    @Query("""
+            select v from MemberRoutineVerification v
+            where v.memberRoutine.id = :routineId
+              and (:cursor is null or v.id < :cursor)
+            order by v.id desc
+            """)
+    List<MemberRoutineVerification> findMineByCursor(
+            @Param("routineId") Long routineId,
+            @Param("cursor") Long cursor,
+            Limit limit
     );
 }

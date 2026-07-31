@@ -21,6 +21,8 @@ import software.amazon.awssdk.http.AbortableInputStream;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
+import software.amazon.awssdk.services.s3.presigner.model.PresignedGetObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PresignedPutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
 
@@ -30,6 +32,7 @@ import java.time.Duration;
 import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -42,6 +45,9 @@ class MediaServiceTest {
     private static final long MAX_VIDEO_SIZE = 50 * 1024 * 1024L;
     private static final String UPLOAD_URL = "https://lirouti-media.s3.amazonaws.com/signed";
     private static final Instant EXPIRES_AT = Instant.parse("2026-07-15T12:00:00Z");
+    // 업로드용(5분)과 일부러 다른 값을 쓴다. 둘을 바꿔 쓰면 테스트가 잡아야 한다.
+    private static final Duration VIEW_EXPIRATION = Duration.ofMinutes(15);
+    private static final String VIEW_URL = "https://lirouti-media.s3.amazonaws.com/signed-get";
 
     @Mock
     private S3Presigner s3Presigner;
@@ -59,6 +65,7 @@ class MediaServiceTest {
         s3Properties.setMaxImageSize(MAX_IMAGE_SIZE);
         s3Properties.setMaxVideoSize(MAX_VIDEO_SIZE);
         s3Properties.setPublicBaseUrl(PUBLIC_BASE_URL);
+        s3Properties.setViewUrlExpiration(VIEW_EXPIRATION);
 
         mediaService = new MediaService(s3Presigner, s3Client, s3Properties);
     }
@@ -529,5 +536,74 @@ class MediaServiceTest {
 
         assertThat(mediaService.resolvePublicUrl(dated)).isEqualTo(PUBLIC_BASE_URL + "/" + dated);
         assertThat(mediaService.resolvePublicUrl(legacy)).isEqualTo(PUBLIC_BASE_URL + "/" + legacy);
+    }
+
+    // ── 조회 URL: 용도에 따라 공개 주소와 서명 주소로 갈린다 ──
+    //
+    // 이 갈림이 틀리면 조용히 새거나 조용히 깨진다 — 비공개 사진에 공개 주소를 주면 403이고,
+    // 공개 사진에 서명을 붙이면 유효 시간이 지나 깨진다. 그래서 양쪽을 다 확인한다.
+
+    private void mockPresignGet() {
+        PresignedGetObjectRequest presigned = mock(PresignedGetObjectRequest.class);
+        try {
+            when(presigned.url()).thenReturn(URI.create(VIEW_URL).toURL());
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+        when(s3Presigner.presignGetObject(any(GetObjectPresignRequest.class))).thenReturn(presigned);
+    }
+
+    @Test
+    @DisplayName("공개 용도는 서명하지 않고 공개 주소를 그대로 준다")
+    void resolveViewUrl_PublicPurpose_ReturnsPublicUrlWithoutSigning() {
+        // given
+        String key = "challenge-verifications/2026/07/30/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg";
+
+        // when
+        String url = mediaService.resolveViewUrl(key, MediaPurpose.CHALLENGE_VERIFICATION);
+
+        // then: 서명을 부르지 않는 것 자체가 계약이다. 부르면 불필요한 만료가 생긴다.
+        assertThat(url).isEqualTo(PUBLIC_BASE_URL + "/" + key);
+        verify(s3Presigner, never()).presignGetObject(any(GetObjectPresignRequest.class));
+    }
+
+    @Test
+    @DisplayName("비공개 용도는 조회용 유효 시간으로 서명한 주소를 준다")
+    void resolveViewUrl_PrivatePurpose_SignsWithViewExpiration() {
+        // given
+        mockPresignGet();
+        String key = "member-routine-verifications/2026/07/30/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg";
+
+        // when
+        String url = mediaService.resolveViewUrl(key, MediaPurpose.MEMBER_ROUTINE_VERIFICATION);
+
+        // then
+        ArgumentCaptor<GetObjectPresignRequest> captor =
+                ArgumentCaptor.forClass(GetObjectPresignRequest.class);
+        verify(s3Presigner).presignGetObject(captor.capture());
+        GetObjectPresignRequest request = captor.getValue();
+
+        assertAll(
+                () -> assertThat(url).isEqualTo(VIEW_URL),
+                () -> assertThat(request.getObjectRequest().bucket()).isEqualTo(BUCKET),
+                () -> assertThat(request.getObjectRequest().key()).isEqualTo(key),
+                // 업로드용(5분)이 아니라 조회용(15분)을 써야 한다. 둘을 바꿔 쓰면 여기서 잡힌다.
+                () -> assertThat(request.signatureDuration()).isEqualTo(VIEW_EXPIRATION)
+        );
+    }
+
+    @Test
+    @DisplayName("서명 발급이 실패하면 조회를 실패시킨다 — 깨진 이미지로 넘기지 않는다")
+    void resolveViewUrl_PresignFails_ThrowsMediaException() {
+        // given
+        when(s3Presigner.presignGetObject(any(GetObjectPresignRequest.class)))
+                .thenThrow(SdkClientException.create("presign failed"));
+        String key = "group-routine-verifications/2026/07/30/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg";
+
+        // when & then
+        assertThatThrownBy(() ->
+                mediaService.resolveViewUrl(key, MediaPurpose.GROUP_ROUTINE_VERIFICATION))
+                .isInstanceOf(MediaException.class)
+                .hasFieldOrPropertyWithValue("code", MediaErrorCode.PRESIGNED_URL_ISSUE_FAILED);
     }
 }

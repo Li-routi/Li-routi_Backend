@@ -47,6 +47,7 @@ import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PresignedPutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
 
@@ -118,9 +119,58 @@ public class MediaService {
     }
 
     /**
+     * 저장된 key를 <b>그 용도에 맞는 방식</b>으로 읽을 수 있는 URL로 바꾼다.
+     *
+     * <p>공개 prefix 는 버킷 정책이 익명 읽기를 허용하므로 주소만 조립하면 되고, 비공개 prefix 는
+     * 서명이 있어야 열린다. 어느 쪽인지는 {@link MediaPurpose#isPublicRead()}가 안다.
+     *
+     * <p><b>호출부가 이 갈림을 알 필요가 없게 하는 것이 요점이다.</b> 조회 서비스마다
+     * "이건 공개니까 저 메서드, 저건 비공개니까 이 메서드"를 기억해야 하면, 새 용도가 늘 때
+     * 한 곳만 안 고쳐져 비공개 사진이 서명 없는 URL 로 나가거나 그 반대가 된다.
+     *
+     * <p><b>접근 권한은 여기서 보지 않는다.</b> 이 메서드는 "볼 자격이 있는 사람"에게 URL 을
+     * 만들어 줄 뿐이다. 누가 볼 수 있는지는 그 인증 행을 아는 조회 서비스가 판단한다 —
+     * 미디어 계층은 key 만 알아서 소유자·방 멤버를 알 수 없다.
+     */
+    public String resolveViewUrl(String mediaKey, MediaPurpose purpose) {
+        return purpose.isPublicRead() ? resolvePublicUrl(mediaKey) : presignViewUrl(mediaKey);
+    }
+
+    /**
+     * 비공개 오브젝트를 한시적으로 열어 주는 서명 URL 을 만든다.
+     *
+     * <p><b>S3 를 호출하지 않는다.</b> 서명은 자격 증명으로 로컬에서 계산하는 HMAC 이라
+     * 네트워크 왕복이 없다. 그래서 목록 응답에서 행마다 불러도 비용이 선형으로 얹히지 않는다 —
+     * 배치로 묶을 이유가 없다는 뜻이다.
+     *
+     * <p>실패하면 예외를 던져 조회 자체를 실패시킨다. 여기서 삼키고 null 을 내리면 화면에는
+     * 원인 없는 깨진 이미지만 남아, 설정 문제가 사용자 문제처럼 보인다.
+     */
+    private String presignViewUrl(String mediaKey) {
+        GetObjectRequest getObjectRequest = GetObjectRequest.builder()
+                .bucket(s3Properties.getBucket())
+                .key(mediaKey)
+                .build();
+
+        GetObjectPresignRequest presignRequest = GetObjectPresignRequest.builder()
+                .signatureDuration(s3Properties.getViewUrlExpiration())
+                .getObjectRequest(getObjectRequest)
+                .build();
+
+        try {
+            return s3Presigner.presignGetObject(presignRequest).url().toString();
+        } catch (RuntimeException e) {
+            log.error("미디어 조회 서명 URL 발급에 실패했습니다. mediaKey={}", mediaKey, e);
+            throw new MediaException(MediaErrorCode.PRESIGNED_URL_ISSUE_FAILED);
+        }
+    }
+
+    /**
      * 저장된 오브젝트 key를 클라이언트가 읽을 수 있는 공개 URL로 조립한다.
      * DB에는 key만 저장하므로 조회 응답을 만들 때마다 이 메서드를 거친다.
      * public-base-url은 필수 설정이라 null·빈 값은 부팅 시점에 걸러진다.
+     *
+     * <p>공개 prefix 전용이다. 비공개 용도까지 포함해 부를 곳은 {@link #resolveViewUrl}를 쓴다.
      */
     public String resolvePublicUrl(String mediaKey) {
         String base = s3Properties.getPublicBaseUrl();

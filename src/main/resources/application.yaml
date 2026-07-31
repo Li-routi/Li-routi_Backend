@@ -83,6 +83,10 @@ aws:
     bucket: ${AWS_S3_BUCKET}
     # 업로드용 서명 URL 유효 시간. 짧을수록 안전하다.
     presigned-url-expiration: ${AWS_S3_PRESIGNED_URL_EXPIRATION:PT5M}
+    # 비공개 미디어 조회용 서명 URL 유효 시간. 업로드용보다 길다 —
+    # 업로드는 발급 직후 PUT 한 번이지만, 조회 URL은 목록 응답에 실려 화면에 머무는 동안 쓰인다.
+    # 5분을 주면 잠깐 다른 앱을 보고 돌아왔을 때 사진이 전부 깨진다.
+    view-url-expiration: ${AWS_S3_VIEW_URL_EXPIRATION:PT15M}
     # 카테고리별 최대 업로드 용량(바이트). 사진 기본 10MB, 영상 기본 50MB.
     # 영상은 아직 켜져 있지 않지만(영상 형식 미등록), 켜질 때 바로 쓰도록 값을 둔다.
     max-image-size: ${AWS_S3_MAX_IMAGE_SIZE:10485760}
