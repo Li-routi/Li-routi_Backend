@@ -108,6 +108,22 @@ aws:
 server:
   forward-headers-strategy: framework
 
+# 인증 사진 AI 심사. 사진이 그 챌린지의 의도에 맞는지 Claude 에게 묻는다.
+ai:
+  review:
+    # 끄면 자가인증으로 되돌아간다(사진만 올리면 통과). 모델이 오작동해 정상 인증을 무더기로
+    # 반려할 때의 탈출구다 — 코드를 되돌리는 것보다 이 값을 끄고 재배포하는 편이 빠르다.
+    enabled: ${AI_REVIEW_ENABLED:true}
+    # 기본값을 두지 않는다. 미주입 시 부팅이 실패해야 키 없이 배포되는 것을 막는다.
+    api-key: ${ANTHROPIC_API_KEY}
+    model: ${AI_REVIEW_MODEL:claude-haiku-4-5-20251001}
+    # 인증 요청 하나가 이만큼 늦어질 수 있다. 사용자가 그 시간을 그대로 기다린다.
+    # 초과하면 심사를 못 한 것으로 보고 통과시킨다(fail-open) — 막히지는 않는다.
+    timeout: ${AI_REVIEW_TIMEOUT:PT20S}
+    # AI 에 보내기 전에 줄일 긴 변 픽셀. 이보다 큰 이미지는 심사 쪽이 어차피 축소해서 보므로
+    # 원본을 그대로 보내면 판정은 같고 전송만 느려진다. 원본은 S3 에 그대로 남는다.
+    max-image-dimension: ${AI_REVIEW_MAX_IMAGE_DIMENSION:1568}
+
 # 신고 누적 자동 숨김. 데모 전까지의 임시 조치다.
 challenge:
   report:

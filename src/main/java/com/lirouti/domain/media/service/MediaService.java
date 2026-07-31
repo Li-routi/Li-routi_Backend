@@ -1,5 +1,27 @@
 package com.lirouti.domain.media.service;
 
+import java.awt.Color;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.time.Duration;
+import java.time.LocalDate;
+import java.util.Arrays;
+import java.util.Iterator;
+
+import javax.imageio.ImageIO;
+import javax.imageio.ImageReadParam;
+import javax.imageio.ImageReader;
+import javax.imageio.stream.ImageInputStream;
+import java.util.Optional;
+import java.util.UUID;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+
 import com.lirouti.domain.media.converter.MediaConverter;
 import com.lirouti.domain.media.dto.request.MediaReqDTO;
 import com.lirouti.domain.media.dto.response.MediaResDTO;
@@ -18,6 +40,12 @@ import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
+import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
+import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.PresignedPutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
@@ -148,6 +176,170 @@ public class MediaService {
             log.warn("업로드된 바이트가 선언한 형식과 다릅니다. purpose={}, expected={}, mediaKey={}",
                     purpose, expected, mediaKey);
             throw new MediaException(MediaErrorCode.MEDIA_CONTENT_MISMATCH);
+        }
+    }
+
+    /**
+     * AI 심사에 보낼 이미지를 읽어 온다. 필요하면 긴 변을 줄인다.
+     *
+     * <p><b>줄이는 이유는 화질이 아니라 전송이다.</b> 심사 쪽은 긴 변이 일정 크기를 넘는
+     * 이미지를 어차피 자기가 축소해서 보므로, 원본을 그대로 보내면 판정은 같고 전송만 느려진다.
+     * 게다가 이미지 한 장에 크기 상한이 있어 큰 사진은 요청 자체가 거부된다.
+     *
+     * <p><b>원본은 건드리지 않는다.</b> S3 오브젝트는 그대로 두고, 줄인 바이트는 이 호출에만 쓴다.
+     *
+     * <p>디코딩할 수 없는 형식(WEBP 는 표준 ImageIO 로 못 읽는다)은 <b>원본 그대로 돌려준다.</b>
+     * 심사 쪽이 그 형식을 받아주므로 크기만 감당되면 그대로 보내도 된다.
+     *
+     * <h3>메모리 상한이 이 메서드의 핵심이다</h3>
+     * 이 서버는 힙이 768m 다. 전체 바이트를 올리고 전체를 디코딩하면 파일이 작아도
+     * 픽셀 수가 크면 터진다 — 디코딩은 {@code 가로 × 세로 × 4} 바이트를 잡으므로
+     * 1200만 화소 사진 한 장이 약 48MB 다. 인증이 몰리면 그것이 동시에 여러 벌 생긴다.
+     * 같은 클래스의 {@code readHead} 가 앞 12바이트만 읽는 것도 같은 이유였다.
+     *
+     * <p>그래서 두 겹으로 막는다.
+     * <ol>
+     *   <li>S3 응답의 {@code contentLength} 로 업로드 상한을 넘는 오브젝트를 먼저 거른다.
+     *       그 상한은 presigned URL 발급 때 이미 강제하므로, 넘는 것은 발급을 거치지 않고
+     *       버킷에 직접 쓰인 오브젝트다.</li>
+     *   <li>헤더에서 <b>크기만</b> 읽어 서브샘플링 배수를 정한 뒤 <b>줄여서 디코딩</b>한다.
+     *       전체를 펼쳤다가 줄이는 것이 아니라 처음부터 작게 읽으므로, 원본 화소 수와 무관하게
+     *       메모리가 목표 크기 근처로 묶인다.</li>
+     * </ol>
+     *
+     * @return 읽지 못했거나 상한을 넘으면 빈 값. 호출부는 이것을 "심사 못 함"으로 다루고 막지 않는다.
+     */
+    public Optional<MediaImage> loadForReview(String mediaKey, int maxDimension) {
+        byte[] original;
+        String mimeType;
+        try {
+            GetObjectRequest request = GetObjectRequest.builder()
+                    .bucket(s3Properties.getBucket())
+                    .key(mediaKey)
+                    .build();
+            try (ResponseInputStream<GetObjectResponse> response = s3Client.getObject(request)) {
+                long contentLength = response.response().contentLength();
+                if (contentLength > s3Properties.getMaxImageSize()) {
+                    log.warn("심사용 이미지가 업로드 상한을 넘어 심사를 건너뜁니다."
+                                    + " mediaKey={}, contentLength={}, max={}",
+                            mediaKey, contentLength, s3Properties.getMaxImageSize());
+                    return Optional.empty();
+                }
+                original = response.readAllBytes();
+                mimeType = resolveTypeByExtension(mediaKey).getMimeType();
+            }
+        } catch (SdkException | IOException e) {
+            log.warn("심사용 이미지를 읽지 못했습니다. mediaKey={}", mediaKey, e);
+            return Optional.empty();
+        }
+
+        return Optional.of(downscale(original, mimeType, maxDimension, mediaKey));
+    }
+
+    /**
+     * 긴 변이 상한을 넘으면 비율을 지켜 줄이고 JPEG 으로 다시 쓴다.
+     *
+     * 실패하면 원본을 그대로 돌려준다. 줄이기는 최적화이지 검증이 아니라서, 여기서 막으면
+     * 디코딩 못 하는 형식 하나 때문에 심사가 통째로 사라진다.
+     */
+    private MediaImage downscale(byte[] original, String mimeType, int maxDimension, String mediaKey) {
+        try (ImageInputStream input = ImageIO.createImageInputStream(new ByteArrayInputStream(original))) {
+            Iterator<ImageReader> readers = ImageIO.getImageReaders(input);
+            if (!readers.hasNext()) {
+                // ImageIO 가 읽지 못하는 형식(WEBP 등). 심사 쪽이 받아주므로 원본을 보낸다.
+                return new MediaImage(original, mimeType);
+            }
+            ImageReader reader = readers.next();
+            try {
+                reader.setInput(input);
+                // 여기까지는 헤더만 읽는다. 픽셀은 아직 메모리에 올라오지 않았다.
+                int sourceWidth = reader.getWidth(0);
+                int sourceHeight = reader.getHeight(0);
+                int longEdge = Math.max(sourceWidth, sourceHeight);
+                if (longEdge <= maxDimension) {
+                    return new MediaImage(original, mimeType);
+                }
+
+                BufferedImage source = readSubsampled(reader, longEdge, maxDimension);
+                return new MediaImage(toJpeg(source, sourceWidth, sourceHeight, maxDimension),
+                        MediaContentType.JPEG.getMimeType());
+            } finally {
+                reader.dispose();
+            }
+        } catch (IOException | RuntimeException e) {
+            log.warn("심사용 이미지를 줄이지 못해 원본을 그대로 보냅니다. mediaKey={}", mediaKey, e);
+            return new MediaImage(original, mimeType);
+        }
+    }
+
+    /**
+     * 목표 크기에 가깝게 <b>줄여서 디코딩</b>한다.
+     *
+     * 서브샘플링은 픽셀을 건너뛰며 읽으므로 전체를 펼치지 않는다. 배수는 목표보다 작아지지
+     * 않도록 내림으로 잡고, 남은 차이는 뒤에서 정확한 크기로 맞춘다 — 여기서 목표보다 작게
+     * 읽어 버리면 다시 키워야 해서 화질만 나빠진다.
+     */
+    private BufferedImage readSubsampled(ImageReader reader, int longEdge, int maxDimension)
+            throws IOException {
+        int step = Math.max(1, longEdge / maxDimension);
+        ImageReadParam param = reader.getDefaultReadParam();
+        param.setSourceSubsampling(step, step, 0, 0);
+        return reader.read(0, param);
+    }
+
+    /** 정확한 목표 크기로 맞춰 JPEG 으로 쓴다. */
+    private byte[] toJpeg(BufferedImage source, int sourceWidth, int sourceHeight, int maxDimension)
+            throws IOException {
+        double ratio = (double) maxDimension / Math.max(sourceWidth, sourceHeight);
+        int width = Math.max(1, (int) Math.round(sourceWidth * ratio));
+        int height = Math.max(1, (int) Math.round(sourceHeight * ratio));
+
+        // 알파가 있는 PNG 를 그대로 JPEG 으로 쓰면 투명 부분이 검게 나온다. 흰 배경에 얹는다.
+        BufferedImage scaled = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+        Graphics2D graphics = scaled.createGraphics();
+        try {
+            graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
+                    RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            graphics.drawImage(source, 0, 0, width, height, Color.WHITE, null);
+        } finally {
+            graphics.dispose();
+        }
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        if (!ImageIO.write(scaled, "jpg", out)) {
+            throw new IOException("JPEG 인코더를 찾지 못했습니다.");
+        }
+        return out.toByteArray();
+    }
+
+    /**
+     * 오브젝트를 지운다. 실패해도 예외를 던지지 않는다.
+     *
+     * <p>심사에서 반려된 사진을 그 자리에서 치우는 용도다. 반려는 저장을 안 하므로 DB 가
+     * 그 key 를 참조하지 않고, 그대로 두면 미참조 이미지 정리가 며칠 뒤에 가져간다.
+     * 굳이 지금 지우는 이유는 <b>반려된 사진이 유해한 것일 수 있기 때문</b>이다 —
+     * 공개 prefix 라 key 를 아는 사람은 그동안 계속 볼 수 있다.
+     *
+     * <p><b>다만 이것으로 노출을 막지는 못한다.</b> 사진은 심사 전에 이미 공개 prefix 에
+     * 올라가 있고 발급 응답이 그 공개 URL 을 함께 준다. 업로더는 심사 전에 그 URL 을 열거나
+     * 공유할 수 있고, 지운 뒤에도 이미 받아 간 사본은 회수되지 않는다.
+     * 제대로 막으려면 심사 전 사진을 비공개 staging 에 두고 통과한 뒤 승격해야 한다.
+     * 이 메서드는 그때까지의 <b>노출 시간을 줄이는</b> 조치다.
+     *
+     * <p><b>실패해도 조용히 넘어간다.</b> 이 삭제가 실패했다고 반려 응답이 성공으로 바뀌면
+     * 안 되고, 못 지운 오브젝트는 미참조 이미지 정리가 결국 가져간다. 즉 이 메서드는
+     * "빨리 지우는" 최적화이지 유일한 삭제 경로가 아니다.
+     */
+    public void deleteQuietly(String mediaKey) {
+        try {
+            s3Client.deleteObject(DeleteObjectRequest.builder()
+                    .bucket(s3Properties.getBucket())
+                    .key(mediaKey)
+                    .build());
+            log.info("반려된 인증 사진을 삭제했습니다. mediaKey={}", mediaKey);
+        } catch (SdkException e) {
+            log.warn("반려된 인증 사진을 지우지 못했습니다. 미참조 정리가 나중에 가져갑니다. mediaKey={}",
+                    mediaKey, e);
         }
     }
 
