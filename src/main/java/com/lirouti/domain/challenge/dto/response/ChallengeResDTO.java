@@ -98,7 +98,8 @@ public final class ChallengeResDTO {
 
     /**
      * 인증 신고 결과.
-     * 신고해도 인증은 삭제되지 않는다 — 신고자 본인의 피드에서만 이후 조회에서 빠진다.
+     * 신고해도 인증은 삭제되지 않는다 — 신고자 본인의 이후 조회에서 빠지고,
+     * 신고가 임계값만큼 쌓이면 전체 회원에게 가려진다.
      */
     @Builder
     public record Report(

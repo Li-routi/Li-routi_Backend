@@ -19,7 +19,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 /**
- * 인증 사진에 대한 신고. <b>신고자 본인의 피드에서만</b> 그 인증을 가리는 용도다.
+ * 인증 사진에 대한 신고. 신고자 본인의 피드에서 즉시 가리고,
+ * 임계값만큼 쌓이면 전체 회원에게 가린다(ChallengeVerification.hiddenAt).
  *
  * 신고해도 인증은 삭제되지 않고 다른 회원에게는 그대로 보인다(database-schema.md).
  * 신고 누적으로 전체에게 숨기는 처리는 이 범위에 없다 — 임계값 기반 자동 숨김은 #60에서 다룬다.
