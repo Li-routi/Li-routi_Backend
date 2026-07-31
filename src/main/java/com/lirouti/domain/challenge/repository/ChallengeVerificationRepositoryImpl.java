@@ -1,5 +1,10 @@
 package com.lirouti.domain.challenge.repository;
 
+import static com.lirouti.domain.challenge.repository.ChallengeQuerySupport.activeMember;
+import static com.lirouti.domain.challenge.repository.ChallengeQuerySupport.notHidden;
+
+import java.util.List;
+
 import com.lirouti.domain.challenge.entity.ChallengeVerification;
 import com.lirouti.domain.challenge.entity.QChallengeVerification;
 import com.lirouti.domain.challenge.entity.QChallengeVerificationReport;
@@ -8,11 +13,8 @@ import com.lirouti.domain.member.entity.QMember;
 import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.jpa.JPAExpressions;
 import com.querydsl.jpa.impl.JPAQueryFactory;
+
 import lombok.RequiredArgsConstructor;
-
-import java.util.List;
-
-import static com.lirouti.domain.challenge.repository.ChallengeQuerySupport.activeMember;
 
 @RequiredArgsConstructor
 public class ChallengeVerificationRepositoryImpl implements ChallengeVerificationRepositoryCustom {
@@ -41,6 +43,7 @@ public class ChallengeVerificationRepositoryImpl implements ChallengeVerificatio
                 .where(
                         memberChallenge.challenge.id.eq(challengeId),
                         activeMember(member),
+                        notHidden(verification),
                         notReportedBy(viewerId),
                         cursorLt(cursor)
                 )
@@ -50,7 +53,8 @@ public class ChallengeVerificationRepositoryImpl implements ChallengeVerificatio
     }
 
     /**
-     * 조회자가 신고한 인증을 제외한다(#15). 신고는 인증을 지우지 않고 신고자 본인에게만 가린다.
+     * 조회자가 신고한 인증을 제외한다. 신고는 인증을 지우지 않는다.
+     * 임계값만큼 쌓여 전체에게 가려지는 것은 이 조건이 아니라 notHidden 이 처리한다.
      *
      * 조인이 아니라 NOT EXISTS를 쓰는 이유는 두 가지다. 조인은 신고가 없는 인증을 걸러내려면
      * left join + is null이 되어 fetch join과 섞였을 때 읽기 어려워지고, 한 인증에 신고가
@@ -88,6 +92,7 @@ public class ChallengeVerificationRepositoryImpl implements ChallengeVerificatio
                 .where(
                         verification.memberChallenge.id.eq(memberChallengeId),
                         verification.participationRound.eq(participationRound),
+                        notHidden(verification),
                         cursorLt(cursor)
                 )
                 .orderBy(verification.id.desc())

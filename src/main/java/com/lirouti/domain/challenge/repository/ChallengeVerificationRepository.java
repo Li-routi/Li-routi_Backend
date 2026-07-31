@@ -10,6 +10,9 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
+import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.Lock;
+
 public interface ChallengeVerificationRepository
         extends JpaRepository<ChallengeVerification, Long>, ChallengeVerificationRepositoryCustom {
 
@@ -38,6 +41,20 @@ public interface ChallengeVerificationRepository
             Long id,
             Long challengeId
     );
+
+    /**
+     * 신고 누적 판정을 위해 인증 행을 잠그고 조회한다.
+     *
+     * 잠금 없이 "저장 후 세기"만 하면 동시 신고가 서로의 미커밋 INSERT 를 보지 못해
+     * 전부 임계값 미만으로 판단한다. 정확히 임계값만큼만 동시에 들어오면 그 뒤로 신고가
+     * 없는 한 영원히 가려지지 않는다. 처음에는 "다음 신고에서 걸린다"고 봤는데, 담합 신고는
+     * 오히려 동시에 몰리므로 그 가정이 성립하지 않는다.
+     *
+     * 신고는 드문 요청이라 이 잠금이 경합을 만들 일은 거의 없다.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select v from ChallengeVerification v where v.id = :verificationId")
+    Optional<ChallengeVerification> findByIdForUpdate(@Param("verificationId") Long verificationId);
 
     /**
      * 후보 key 중 인증 사진으로 실제 쓰이고 있는 것만 고른다.

@@ -1,5 +1,13 @@
 package com.lirouti.domain.challenge.repository;
 
+import static com.lirouti.domain.challenge.repository.ChallengeQuerySupport.activeMember;
+import static com.lirouti.domain.challenge.repository.ChallengeQuerySupport.notHidden;
+import static com.querydsl.core.group.GroupBy.groupBy;
+
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Map;
+
 import com.lirouti.domain.challenge.entity.Challenge;
 import com.lirouti.domain.challenge.entity.QChallenge;
 import com.lirouti.domain.challenge.entity.QChallengeVerification;
@@ -9,13 +17,6 @@ import com.lirouti.domain.member.entity.QMember;
 import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import lombok.RequiredArgsConstructor;
-
-import java.time.LocalDate;
-import java.util.List;
-import java.util.Map;
-
-import static com.lirouti.domain.challenge.repository.ChallengeQuerySupport.activeMember;
-import static com.querydsl.core.group.GroupBy.groupBy;
 
 @RequiredArgsConstructor
 public class ChallengeRepositoryImpl implements ChallengeRepositoryCustom {
@@ -73,7 +74,7 @@ public class ChallengeRepositoryImpl implements ChallengeRepositoryCustom {
             return Map.of();
         }
         // challenge_id별 인증 게시글 수. 인증(게시글) 단위이므로 회차 중복 제거를 하지 않는다.
-        // 탈퇴 회원의 인증은 제외한다.
+        // 탈퇴 회원의 인증과 신고 누적으로 가려진 인증은 제외한다.
         return queryFactory
                 .select(memberChallenge.challenge.id, verification.id.count())
                 .from(verification)
@@ -81,7 +82,8 @@ public class ChallengeRepositoryImpl implements ChallengeRepositoryCustom {
                 .join(memberChallenge.member, member)
                 .where(
                         memberChallenge.challenge.id.in(challengeIds),
-                        activeMember(member)
+                        activeMember(member),
+                        notHidden(verification)
                 )
                 .groupBy(memberChallenge.challenge.id)
                 .transform(groupBy(memberChallenge.challenge.id).as(verification.id.count()));
@@ -104,7 +106,7 @@ public class ChallengeRepositoryImpl implements ChallengeRepositoryCustom {
 
     @Override
     public long countVerificationPosts(Long challengeId) {
-        // 인증(게시글) 단위 집계. 회차 중복 제거를 하지 않는다. 탈퇴 회원의 인증은 제외한다.
+        // 인증(게시글) 단위 집계. 회차 중복 제거를 하지 않는다. 탈퇴 회원의 인증과 신고 누적으로 가려진 인증은 제외한다.
         // 목록의 배치 집계(countVerificationPostsByChallengeIds)와 같은 기준을 단건으로 센 것이다.
         Long count = queryFactory
                 .select(verification.id.count())
@@ -113,7 +115,8 @@ public class ChallengeRepositoryImpl implements ChallengeRepositoryCustom {
                 .join(memberChallenge.member, member)
                 .where(
                         memberChallenge.challenge.id.eq(challengeId),
-                        activeMember(member)
+                        activeMember(member),
+                        notHidden(verification)
                 )
                 .fetchOne();
         return (count != null) ? count : 0L;

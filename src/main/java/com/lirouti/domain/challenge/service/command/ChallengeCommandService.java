@@ -1,5 +1,14 @@
 package com.lirouti.domain.challenge.service.command;
 
+import java.time.LocalDateTime;
+import java.util.List;
+
+import org.springframework.dao.CannotAcquireLockException;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.lirouti.domain.challenge.converter.ChallengeConverter;
 import com.lirouti.domain.challenge.dto.request.ChallengeReqDTO;
 import com.lirouti.domain.challenge.dto.response.ChallengeResDTO;
@@ -14,7 +23,11 @@ import com.lirouti.domain.media.enums.MediaPurpose;
 import com.lirouti.domain.media.service.MediaService;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.repository.MemberRepository;
+import com.lirouti.global.properties.ChallengeReportProperties;
+import com.lirouti.global.util.TimeUtil;
+
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -23,6 +36,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ChallengeCommandService {
@@ -33,6 +47,7 @@ public class ChallengeCommandService {
     private final ChallengeVerificationReportRepository challengeVerificationReportRepository;
     private final ChallengeVerificationLikeRepository challengeVerificationLikeRepository;
     private final MemberRepository memberRepository;
+    private final ChallengeReportProperties challengeReportProperties;
     // 인증 저장의 트랜잭션 경계는 이 빈에 있다. 자기 호출로는 트랜잭션이 걸리지 않아 분리했다.
     private final ChallengeVerificationCommandService challengeVerificationCommandService;
     // 미디어 key의 발급 규칙·공개 URL 조립은 media 도메인이 소유한다. DB를 다루지 않는 유틸성 서비스다.
@@ -110,17 +125,18 @@ public class ChallengeCommandService {
     }
 
     /**
-     * 인증 신고. 신고자 본인의 피드에서만 그 인증이 가려진다 — 인증은 삭제되지 않고
-     * 다른 회원에게는 그대로 보인다(database-schema.md).
+     * 인증 신고. 인증은 삭제되지 않는다. 효과가 두 단계다 — 신고 즉시 신고자 본인의 조회에서
+     * 빠지고, 신고가 임계값만큼 쌓이면 전체 회원에게 가려진다(database-schema.md).
      *
-     * 자기 인증을 신고하는 것을 막지 않는다. 기획에 그런 제약이 없고, 막지 않아도 결과는
-     * "본인 피드에서 본인 사진이 안 보인다"뿐이라 해가 없다. 필요해지면 조건을 추가한다.
+     * 자기 인증을 신고하는 것을 막지 않는다. 기획에 그런 제약이 없다. 다만 자기 신고도 임계값
+     * 집계에 포함되므로 "본인 화면에서만 안 보인다"로 끝나지 않는다. 한 사람이 한 번만 신고할 수
+     * 있어 혼자서는 임계값을 채울 수 없다. 필요해지면 조건을 추가한다.
      *
      * 중복 신고는 UNIQUE(challenge_verification_id, reporter_id)가 막는다. "이미 신고했는지"를
      * 먼저 조회해 판단하지 않는 이유는 조회와 저장 사이의 동시 요청을 막지 못하기 때문이다.
      * 제약 위반을 잡아 409로 바꾼다(인증 저장과 같은 방식).
      */
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public ChallengeResDTO.Report report(
             Long memberId,
             Long challengeId,
@@ -132,6 +148,11 @@ public class ChallengeCommandService {
                 .findByIdAndMemberChallengeChallengeId(verificationId, challengeId)
                 .orElseThrow(() -> new ChallengeException(ChallengeErrorCode.VERIFICATION_NOT_FOUND));
 
+        // 숨김 판정을 직렬화하기 위해 인증 행을 잠근다. 신고 INSERT 전에 잡아야 한다 —
+        // 저장 후에 잠그면 그 사이 다른 트랜잭션이 이미 세기를 마치고 지나갈 수 있다.
+        verification = challengeVerificationRepository.findByIdForUpdate(verificationId)
+                .orElseThrow(() -> new ChallengeException(ChallengeErrorCode.VERIFICATION_NOT_FOUND));
+
         // 신고자는 FK만 필요하므로 프록시 참조로 불필요한 회원 조회를 피한다(참여 생성과 같은 이유).
         Member reporter = memberRepository.getReferenceById(memberId);
 
@@ -140,16 +161,56 @@ public class ChallengeCommandService {
                 .reporter(reporter)
                 .reason(request.reason())
                 .build();
+        ChallengeVerificationReport saved;
         try {
             // saveAndFlush로 제약 위반을 이 자리에서 잡는다. 커밋 시점까지 미루면
             // 트랜잭션 밖에서 터져 도메인 코드로 바꿀 수 없다.
             //
             // 두 예외를 모두 잡는 이유는 인증 저장과 같다. 같은 유니크 키로 INSERT가 겹칠 때
             // InnoDB가 중복 키 오류 대신 데드락으로 판정해 CannotAcquireLockException을 줄 수 있다.
-            return ChallengeConverter.toReport(challengeVerificationReportRepository.saveAndFlush(report));
+            saved = challengeVerificationReportRepository.saveAndFlush(report);
         } catch (DataIntegrityViolationException | CannotAcquireLockException e) {
             throw new ChallengeException(ChallengeErrorCode.ALREADY_REPORTED);
         }
+
+        hideIfReportedEnough(verification);
+        return ChallengeConverter.toReport(saved);
+    }
+
+    /**
+     * 신고가 임계값만큼 쌓였으면 전체 회원에게 가린다.
+     *
+     * <p><b>세는 시점을 조회가 아니라 신고 때로 둔다.</b> 피드에서 매번
+     * {@code having count(*) >= N}으로 세면 읽기 경로가 무거워진다. 신고는 드물고 조회는
+     * 잦으므로 쓰기 시점 계산이 맞다.
+     *
+     * <p><b>정확히 세려면 두 가지가 다 필요하다.</b>
+     *
+     * <p>하나는 <b>인증 행 잠금</b>이다. 잠금이 없으면 동시 신고가 각자 INSERT 하고 각자 세는데,
+     * 서로의 미커밋 INSERT 가 안 보여 전부 임계값 미만으로 판단한다. 정확히 임계값만큼만 동시에
+     * 들어오면 그 뒤로 신고가 없는 한 <b>영원히 가려지지 않는다.</b>
+     *
+     * <p>다른 하나는 <b>READ_COMMITTED</b>다. MySQL 기본값인 REPEATABLE READ 에서는 트랜잭션의
+     * 첫 조회 시점에 스냅샷이 고정되어, 잠금을 잡고 기다린 뒤에 세어도 그동안 커밋된 신고가
+     * 보이지 않는다. 잠금만으로는 순서만 정해질 뿐 값이 낡은 채다. 실측으로 확인했다 —
+     * 잠금만 넣었을 때 동시성 테스트가 그대로 실패했다.
+     *
+     * <p>신고는 드문 요청이라 이 잠금이 경합을 만들 일은 거의 없다.
+     *
+     * <p>가려도 인증 행과 스트릭은 그대로다. 막는 것은 노출뿐이다.
+     */
+    private void hideIfReportedEnough(ChallengeVerification verification) {
+        if (verification.isHidden()) {
+            return;
+        }
+        long reportCount = challengeVerificationReportRepository
+                .countByChallengeVerificationId(verification.getId());
+        if (reportCount < challengeReportProperties.getHideThreshold()) {
+            return;
+        }
+        verification.hide(LocalDateTime.now(TimeUtil.KST));
+        log.warn("신고 누적으로 인증을 전체 숨김 처리했습니다. verificationId={}, 신고={}건, 임계값={}",
+                verification.getId(), reportCount, challengeReportProperties.getHideThreshold());
     }
 
     /**

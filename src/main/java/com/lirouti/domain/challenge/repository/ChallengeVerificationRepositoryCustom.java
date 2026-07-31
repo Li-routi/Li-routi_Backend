@@ -20,8 +20,11 @@ public interface ChallengeVerificationRepositoryCustom {
      *
      * 참여 상태(active)도 조건에 넣지 않는다. 인증한 뒤 그만둔 사람의 인증도 남아 있는 게 맞다.
      *
-     * viewerId가 신고한 인증은 제외한다(#15). 신고는 인증을 지우지 않고 신고자 본인의 피드에서만
-     * 가리므로, 같은 인증이 다른 회원에게는 그대로 보인다. viewerId가 null이면 이 조건을 걸지 않는다.
+     * viewerId가 신고한 인증은 제외한다. 신고는 인증을 지우지 않는다. viewerId가 null이면
+     * 이 조건을 걸지 않는다.
+     *
+     * 신고가 임계값만큼 쌓여 전체에게 가려지는 것은 별개 조건(hiddenAt)이 처리하며,
+     * 그쪽은 조회자가 누구든 적용된다.
      */
     List<ChallengeVerification> findFeedByCursor(
             Long challengeId,

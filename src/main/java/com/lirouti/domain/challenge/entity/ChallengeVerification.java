@@ -60,6 +60,15 @@ public class ChallengeVerification extends BaseEntity {
     @Column(length = 255)
     private String content;
 
+    /**
+     * 신고가 임계값만큼 쌓여 전체 회원에게 가려진 시각. NULL 이면 노출 중이다.
+     *
+     * 소프트 삭제가 아니다. 행도 스트릭도 그대로 두고 노출만 막는다.
+     * 그래서 스트릭·오늘 완료자 수는 이 값을 보지 않는다 — 신고당했다고 달성이 취소되지는 않는다.
+     */
+    @Column(name = "hidden_at")
+    private LocalDateTime hiddenAt;
+
     @Builder
     private ChallengeVerification(
             MemberChallenge memberChallenge,
@@ -88,5 +97,22 @@ public class ChallengeVerification extends BaseEntity {
         this.imageUrl = imageUrl;
         this.content = content;
         this.verifiedAt = verifiedAt;
+    }
+
+    /**
+     * 신고 누적으로 전체 회원에게 가린다.
+     *
+     * 이미 가려져 있으면 시각을 덮어쓰지 않는다. 임계값을 넘긴 뒤에도 신고는 계속 들어오는데,
+     * 그때마다 갱신하면 "언제 가려졌는가"가 마지막 신고 시각으로 밀린다. 처음 가려진 시각이
+     * 남아야 나중에 오탐을 되짚을 수 있다.
+     */
+    public void hide(LocalDateTime hiddenAt) {
+        if (this.hiddenAt == null) {
+            this.hiddenAt = hiddenAt;
+        }
+    }
+
+    public boolean isHidden() {
+        return hiddenAt != null;
     }
 }
