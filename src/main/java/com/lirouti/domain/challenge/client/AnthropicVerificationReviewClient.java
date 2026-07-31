@@ -37,6 +37,7 @@ public class AnthropicVerificationReviewClient {
     private static final String ANTHROPIC_VERSION = "2023-06-01";
     private static final String REVIEW_TOOL = "submit_review";
     private static final int MAX_TOKENS = 300;
+    private static final String REFUSAL_STOP_REASON = "refusal";
 
     /** 반려 사유가 길면 화면이 깨진다. 한 문장 정도로 자른다. */
     private static final int MAX_REASON_LENGTH = 200;
@@ -107,12 +108,20 @@ public class AnthropicVerificationReviewClient {
                         "properties", Map.of(
                                 "approved", Map.of(
                                         "type", "boolean",
-                                        "description", "사진이 챌린지 의도에 맞으면 true"),
+                                        "description", "챌린지에 맞고 공개해도 문제없는 사진이면 true"),
+                                "rejection", Map.of(
+                                        "type", "string",
+                                        "enum", List.of("MISMATCH", "UNSAFE", "NONE"),
+                                        "description", "MISMATCH=챌린지 내용과 맞지 않음, "
+                                                + "UNSAFE=선정적·폭력적이거나 타인의 개인정보가 드러남, "
+                                                + "NONE=통과(approved=true 일 때)"),
                                 "reason", Map.of(
                                         "type", "string",
-                                        "description", "판단 근거를 사용자에게 보여줄 한국어 한 문장으로. "
+                                        "description", "판단 근거를 한국어 한 문장으로. "
                                                 + "반려일 때 특히 구체적으로 적는다.")),
-                        "required", List.of("approved", "reason")));
+                        // rejection 을 필수로 둔다. 빠뜨리면 반려 종류를 알 수 없고, 그때
+                        // 안전한 쪽(UNSAFE)으로 접으면 정상 사진이 "공개 불가"로 잘못 안내된다.
+                        "required", List.of("approved", "rejection", "reason")));
     }
 
     /**
@@ -127,16 +136,24 @@ public class AnthropicVerificationReviewClient {
                 ? name
                 : name + " (" + description + ")";
         return """
-                아래 사진이 다음 챌린지를 실제로 수행한 인증 사진으로 볼 수 있는지 판단해 주세요.
+                아래 사진을 두 가지 기준으로 심사해 주세요. 이 사진은 통과하면 다른 사용자들이
+                보는 공개 피드에 그대로 올라갑니다.
 
                 챌린지: %s
 
-                판단 기준
-                - 사진의 내용이 그 챌린지가 요구하는 행동·대상과 맞는지만 봅니다.
-                - 화질·구도·조명은 평가하지 않습니다.
-                - 애매하면 통과시킵니다. 명백히 무관하거나 부적절할 때만 반려하세요.
-                - 사람 얼굴이 나와도 그 자체는 문제가 아닙니다.
+                기준 1 — 챌린지와 맞는가 (반려 시 rejection=MISMATCH)
+                - 사진의 내용이 그 챌린지가 요구하는 행동·대상과 맞는지 봅니다.
+                - 화질·구도·조명은 평가하지 않습니다. 사람 얼굴이 나와도 그 자체는 문제가 아닙니다.
+                - 애매하면 통과시킵니다. 명백히 무관할 때만 반려하세요.
 
+                기준 2 — 공개해도 되는가 (반려 시 rejection=UNSAFE)
+                - 선정적이거나 노출이 과한 사진
+                - 폭력적이거나 혐오감을 주는 사진
+                - 타인의 신분증·연락처·주소 등 개인정보가 알아볼 수 있게 드러난 사진
+                - 이 기준은 기준 1과 반대로, **애매하면 반려**하세요. 공개 피드라 되돌릴 수 없습니다.
+                - 챌린지와 잘 맞더라도 이 기준에 걸리면 반려입니다.
+
+                두 기준 모두 통과할 때만 approved=true 입니다.
                 submit_review 도구로만 답하세요.
                 """.formatted(intent);
     }
@@ -145,6 +162,13 @@ public class AnthropicVerificationReviewClient {
     private VerificationReview parse(Map<String, Object> response, String challengeName) {
         if (response == null) {
             return undecidedWithLog("응답이 비어 있습니다", challengeName);
+        }
+        // 모델이 안전상 응답을 거부한 경우다. 이것을 "심사 못 함"으로 흘리면 통과가 되는데,
+        // 그러면 가장 걸러야 할 사진이 가장 확실하게 통과한다. 거부는 장애가 아니라 판단이다.
+        if (REFUSAL_STOP_REASON.equals(response.get("stop_reason"))) {
+            log.warn("모델이 안전상 심사를 거부해 반려합니다. challenge={}", challengeName);
+            return VerificationReview.reject(ReviewRejection.UNSAFE,
+                    "공개하기 어려운 사진으로 판단되었습니다.");
         }
         Object content = response.get("content");
         if (!(content instanceof List<?> blocks)) {
@@ -164,8 +188,17 @@ public class AnthropicVerificationReviewClient {
             if (decision) {
                 return VerificationReview.pass();
             }
-            Object reason = ((Map<String, Object>) input).get("reason");
-            return VerificationReview.reject(trimReason(reason));
+            Map<String, Object> values = (Map<String, Object>) input;
+            Object rejection = values.get("rejection");
+            if (!ReviewRejection.isKnown(rejection)) {
+                // 스키마로 강제했는데도 왔다면 모델이나 API 계약이 바뀐 것이다.
+                // 조용히 UNSAFE 로 접으면 정상 사진이 "공개 불가"로 안내되므로 드러낸다.
+                log.warn("반려 종류를 알 수 없어 안전한 쪽으로 처리합니다. challenge={}, 값={}",
+                        challengeName, rejection);
+            }
+            return VerificationReview.reject(
+                    ReviewRejection.from(rejection),
+                    trimReason(values.get("reason")));
         }
         // 도구를 강제했는데도 안 왔다면 모델이나 API 쪽이 바뀐 것이다. 막지 않고 드러낸다.
         return undecidedWithLog("도구 호출 결과가 없습니다", challengeName);

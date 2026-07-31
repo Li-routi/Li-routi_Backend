@@ -40,6 +40,13 @@ public enum ChallengeErrorCode implements BaseErrorCode {
             "챌린지 내용과 맞지 않는 사진입니다.",
             "CHALLENGE422_1"
     ),
+    // 선정적·폭력적이거나 타인의 개인정보가 드러난 사진. 위와 코드를 나눈 이유는 사용자에게
+    // "왜 막혔는지"를 다르게 알려야 하기 때문이다 — 다시 찍으면 되는 것과 올리면 안 되는 것은 다르다.
+    VERIFICATION_REJECTED_AS_UNSAFE(
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            "공개 피드에 올릴 수 없는 사진입니다.",
+            "CHALLENGE422_2"
+    ),
     VERIFICATION_NOT_FOUND(
             HttpStatus.NOT_FOUND,
             "인증을 찾을 수 없습니다.",
