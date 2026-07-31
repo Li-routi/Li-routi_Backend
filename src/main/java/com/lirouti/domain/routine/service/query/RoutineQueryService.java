@@ -2,6 +2,7 @@ package com.lirouti.domain.routine.service.query;
 
 import com.lirouti.domain.member.service.query.MemberQueryService;
 import com.lirouti.domain.routine.converter.RoutineConverter;
+import com.lirouti.global.util.TimeUtil;
 import com.lirouti.domain.routine.dto.response.RoutineResDTO;
 import com.lirouti.domain.routine.entity.MemberRoutine;
 import com.lirouti.domain.routine.entity.RoutineCategory;
@@ -32,6 +33,7 @@ public class RoutineQueryService {
     private final RoutineCategoryRepository routineCategoryRepository;
     private final RoutineTemplateRepository routineTemplateRepository;
     private final MemberRoutineRepository memberRoutineRepository;
+    private final RoutineCompletionSource completionSource;
 
     /**
      * 루틴 추가 화면의 카테고리 칩 목록을 조회한다.
@@ -121,12 +123,17 @@ public class RoutineQueryService {
     public List<RoutineResDTO.Routine> getTodayRoutines(Long memberId) {
         memberQueryService.getActiveMember(memberId);
 
-        DayOfWeek today = LocalDate.now().getDayOfWeek();
+        LocalDate todayDate = LocalDate.now(TimeUtil.KST);
+        DayOfWeek today = todayDate.getDayOfWeek();
         List<MemberRoutine> routines = memberRoutineRepository.findTodayActiveByMemberId(memberId, today);
 
-        log.debug("오늘의 개인 루틴 목록을 조회했습니다. memberId={}, today={}, routineCount={}",
-                memberId, today, routines, size());
+        // 루틴마다 "오늘 인증했나"를 따로 물으면 목록 크기만큼 쿼리가 나간다. 한 번에 받아 맞춘다.
+        Set<Long> completed = completionSource.findCompletedRoutineIds(
+                routines.stream().map(MemberRoutine::getId).toList(), todayDate);
 
-        return RoutineConverter.toRoutineList(routines);
+        log.debug("오늘의 개인 루틴 목록을 조회했습니다. memberId={}, today={}, routineCount={}, completed={}",
+                memberId, today, routines.size(), completed.size());
+
+        return RoutineConverter.toRoutineList(routines, completed);
     }
 }

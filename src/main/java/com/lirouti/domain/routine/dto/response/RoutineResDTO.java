@@ -179,7 +179,13 @@ public final class RoutineResDTO {
             @Schema(type = "string", description = "알람 시각(HH:mm). 설정하지 않았으면 null",
                     example = "08:00")
             @JsonFormat(pattern = "HH:mm")
-            LocalTime alarmTime
+            LocalTime alarmTime,
+
+            @Schema(
+                    description = "오늘 이 루틴을 인증했는지. 루틴 생성 응답에서는 항상 false다",
+                    example = "false"
+            )
+            boolean completedToday
     ) {
     }
 }
