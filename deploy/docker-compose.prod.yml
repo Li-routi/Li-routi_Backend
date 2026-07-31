@@ -78,6 +78,22 @@ services:
       # CloudFront 등을 붙이면 .env에 AWS_S3_PUBLIC_BASE_URL을 넣어 이 오리진을 덮어쓴다.
       AWS_S3_PUBLIC_BASE_URL: ${AWS_S3_PUBLIC_BASE_URL:-https://s3.${AWS_REGION:-ap-northeast-2}.amazonaws.com/${AWS_S3_BUCKET}}
       AWS_REGION: ${AWS_REGION:-ap-northeast-2}
+      # 인증 사진 AI 심사. 키는 fail-fast 필수값이라 기본값을 두지 않는다.
+      #
+      # 이 블록에 적지 않으면 .env 에 있어도 컨테이너에 들어가지 않는다 — compose 는 여기
+      # 나열한 것만 넘긴다. 실제로 그 실수를 한 적이 있다: ENV_FILE 에는 키가 있는데 앱에는
+      # 없어서, 미해결 플레이스홀더가 그대로 바인딩된 채 부팅됐고 심사가 조용히 꺼진 상태로
+      # 돌았다(fail-open 이라 전부 통과). 값을 추가할 때 이 목록도 함께 본다.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      AI_REVIEW_ENABLED: ${AI_REVIEW_ENABLED:-true}
+      AI_REVIEW_MODEL: ${AI_REVIEW_MODEL:-claude-haiku-4-5-20251001}
+      AI_REVIEW_TIMEOUT: ${AI_REVIEW_TIMEOUT:-PT20S}
+      AI_REVIEW_MAX_IMAGE_DIMENSION: ${AI_REVIEW_MAX_IMAGE_DIMENSION:-1568}
+      # 신고 누적 자동 숨김 임계값
+      CHALLENGE_REPORT_HIDE_THRESHOLD: ${CHALLENGE_REPORT_HIDE_THRESHOLD:-3}
+      # 미참조 미디어 정리
+      MEDIA_CLEANUP_ENABLED: ${MEDIA_CLEANUP_ENABLED:-false}
+      MEDIA_CLEANUP_DRY_RUN: ${MEDIA_CLEANUP_DRY_RUN:-true}
       # 운영 설정
       SPRING_PROFILES_ACTIVE: prod
       # 스키마는 Flyway(db/migration의 V__/R__)가 만든다. Hibernate는 엔티티와 맞는지 대조만 한다.

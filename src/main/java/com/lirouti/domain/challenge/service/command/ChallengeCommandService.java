@@ -194,6 +194,11 @@ public class ChallengeCommandService {
                     ? ChallengeErrorCode.VERIFICATION_REJECTED_AS_UNSAFE
                     : ChallengeErrorCode.VERIFICATION_REJECTED_BY_REVIEW);
         }
+
+        // 통과에도 한 줄 남긴다. 없으면 "심사가 돌고 있다"를 로그로 확인할 방법이 사라진다 —
+        // 반려·장애에만 찍히면 로그가 비어 있는 것이 "요청이 없었다"인지 "전부 통과했다"인지
+        // 구분되지 않는다. 실제로 그 구분이 안 돼 심사가 꺼진 채 도는 것을 한동안 몰랐다.
+        log.info("AI 심사를 통과했습니다. challengeId={}, mediaKey={}", challengeId, mediaKey);
     }
 
     /**

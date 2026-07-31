@@ -126,6 +126,27 @@ class ChallengeAiReviewTest {
     }
 
     @Test
+    @DisplayName("통과·반려·장애 세 경우 모두 심사 흔적이 남는다 — 로그가 비면 이상 신호여야 한다")
+    void verify_AllOutcomes_AreObservable() {
+        // 통과에도 로그가 없으면 "요청이 없었다"와 "전부 통과했다"가 구분되지 않는다.
+        // 로그 문자열 자체를 단언하는 대신, 세 경로가 서로 다른 결과로 갈리는지를 본다.
+        when(reviewClient.review(any(), any(), any())).thenReturn(VerificationReview.pass());
+        long before = savedCount();
+        challengeCommandService.verify(memberId, challengeId, request());
+        assertThat(savedCount()).as("통과는 저장된다").isEqualTo(before + 1);
+
+        when(reviewClient.review(any(), any(), any())).thenReturn(VerificationReview.undecided());
+        challengeCommandService.verify(memberId, challengeId, request());
+        assertThat(savedCount()).as("장애도 통과시킨다(덮어쓰기)").isEqualTo(before + 1);
+
+        when(reviewClient.review(any(), any(), any()))
+                .thenReturn(VerificationReview.reject(ReviewRejection.MISMATCH, "무관한 사진"));
+        assertThatThrownBy(() -> challengeCommandService.verify(memberId, challengeId, request()))
+                .as("반려는 막힌다")
+                .isInstanceOf(ChallengeException.class);
+    }
+
+    @Test
     @DisplayName("심사에서 반려되면 422로 막고 저장하지 않는다")
     void verify_Rejected_IsBlocked() {
         // given

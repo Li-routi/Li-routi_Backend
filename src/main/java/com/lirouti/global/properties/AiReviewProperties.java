@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.validation.annotation.Validated;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import lombok.Getter;
@@ -33,8 +34,25 @@ public class AiReviewProperties {
      */
     private boolean enabled = true;
 
-    /** Anthropic API 키. 기본값을 두지 않아 미주입 시 부팅이 실패한다. */
+    /**
+     * Anthropic API 키.
+     *
+     * <p><b>@NotBlank 만으로는 미주입을 잡지 못한다.</b> 기본값 없이 {@code ${ANTHROPIC_API_KEY}}
+     * 만 선언하면 부팅이 실패할 것 같지만, 해석되지 못한 플레이스홀더가 그 문자열 그대로
+     * 바인딩된다. 빈 값이 아니므로 검증을 통과하고 앱이 정상 부팅한다.
+     *
+     * <p>그러면 호출이 401 로 실패하고, 이 기능은 fail-open 이라 <b>심사가 꺼진 것과 같은
+     * 상태로 조용히 돌아간다.</b> 실제로 그렇게 배포된 적이 있다 — compose 의 environment 에
+     * 이 변수를 적지 않아 .env 에 있어도 컨테이너에 들어가지 않았다.
+     *
+     * <p>그래서 형식까지 본다. S3 버킷 이름에 같은 이유로 걸어 둔 검증과 같은 목적이다.
+     */
     @NotBlank(message = "Anthropic API 키는 필수입니다. ANTHROPIC_API_KEY 환경변수를 주입하세요.")
+    @Pattern(
+            regexp = "^sk-ant-[A-Za-z0-9_-]+$",
+            message = "Anthropic API 키 형식이 올바르지 않습니다. "
+                    + "ANTHROPIC_API_KEY 가 주입되지 않았거나(플레이스홀더가 그대로 남았거나) 값이 잘못됐습니다."
+    )
     private String apiKey;
 
     @NotBlank(message = "AI 심사 모델은 필수입니다.")
