@@ -2,6 +2,8 @@ package com.lirouti.domain.group.dto.response;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus;
+import com.lirouti.domain.routine.enums.RoutineCategoryColor;
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 
 import java.time.DayOfWeek;
@@ -12,6 +14,41 @@ import java.util.List;
 
 public final class GroupResDTO {
     private GroupResDTO() {
+    }
+
+    /** 초대코드를 제외한 모임방 통합 생성 결과다. */
+    @Builder
+    @Schema(name = "GroupCreateResult", description = "모임방과 초기 그룹 루틴 통합 생성 결과")
+    public record CreateResult(
+            Long groupId,
+            String name,
+            List<CreatedCategory> customCategories,
+            List<CreatedRoutine> routines,
+            int assignmentCount
+    ) {
+    }
+
+    /** 요청의 clientKey와 저장된 그룹 사용자 카테고리 ID를 연결해 반환한다. */
+    @Builder
+    public record CreatedCategory(
+            String clientKey,
+            Long categoryId,
+            String name,
+            RoutineCategoryColor color
+    ) {
+    }
+
+    /** 통합 생성으로 저장된 초기 그룹 루틴과 방장 할당 결과다. */
+    @Builder
+    public record CreatedRoutine(
+            Long routineId,
+            Long categoryId,
+            String categoryName,
+            String title,
+            String description,
+            List<RoutineSchedule> schedules,
+            int assignmentCount
+    ) {
     }
 
     /**

@@ -2,6 +2,11 @@ package com.lirouti.domain.group.dto.request;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.lirouti.domain.group.entity.GroupRoutine;
+import com.lirouti.domain.group.entity.GroupRoutineCategory;
+import com.lirouti.domain.group.validation.ValidGroupCreationRequest;
+import com.lirouti.domain.routine.enums.RoutineCategoryColor;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 
@@ -13,6 +18,112 @@ import java.util.Objects;
 
 public final class GroupReqDTO {
     private GroupReqDTO() {
+    }
+
+    /**
+     * 그룹과 초기 카테고리·루틴을 한 번에 생성하는 요청이다.
+     * 요청 전체의 키 참조와 중복 규칙은 {@link ValidGroupCreationRequest}가 검증한다.
+     */
+    @Schema(name = "CreateGroup", description = "모임방과 초기 그룹 루틴 통합 생성 요청")
+    @ValidGroupCreationRequest
+    public record CreateGroup(
+            @Schema(description = "모임 이름. 앞뒤 공백을 제거한 뒤 1~20자", example = "아침 루틴 모임")
+            @NotBlank(message = "모임 이름은 필수입니다.")
+            @Size(max = 20, message = "모임 이름은 20자 이하여야 합니다.")
+            String name,
+
+            @Schema(description = "이번 요청에서 함께 생성할 그룹 사용자 카테고리. 최대 5개")
+            @NotNull(message = "사용자 카테고리 목록은 필수입니다.")
+            @Size(
+                    max = GroupRoutineCategory.MAX_GROUP_CATEGORY_COUNT,
+                    message = "사용자 카테고리는 최대 5개까지 등록할 수 있습니다."
+            )
+            List<@NotNull(message = "사용자 카테고리는 null일 수 없습니다.") @Valid CreateGroupCategory>
+                    customCategories,
+
+            @Schema(description = "그룹 생성과 함께 등록할 초기 그룹 루틴. 1~30개")
+            @NotEmpty(message = "초기 그룹 루틴은 하나 이상 필요합니다.")
+            @Size(
+                    max = GroupRoutine.MAX_GROUP_ROUTINE_COUNT,
+                    message = "초기 그룹 루틴은 최대 30개까지 등록할 수 있습니다."
+            )
+            List<@NotNull(message = "초기 그룹 루틴은 null일 수 없습니다.") @Valid CreateGroupRoutine>
+                    routines
+    ) {
+        public CreateGroup {
+            name = name == null ? null : name.trim();
+        }
+    }
+
+    /** 같은 생성 요청 안에서만 사용되는 임시 키를 가진 그룹 사용자 카테고리다. */
+    @Schema(name = "CreateGroupCategory", description = "그룹 생성과 함께 추가할 사용자 카테고리")
+    public record CreateGroupCategory(
+            @Schema(description = "요청 안에서 루틴과 카테고리를 연결하는 임시 키", example = "morning")
+            @NotBlank(message = "사용자 카테고리 clientKey는 필수입니다.")
+            String clientKey,
+
+            @Schema(description = "앞뒤 공백을 제거한 1~10자의 한 줄 카테고리 이름", example = "아침 관리")
+            @NotBlank(message = "카테고리 이름은 필수입니다.")
+            @Size(
+                    max = GroupRoutineCategory.MAX_GROUP_CATEGORY_NAME_LENGTH,
+                    message = "카테고리 이름은 10자 이하여야 합니다."
+            )
+            String name,
+
+            @Schema(description = "색상 칩. 생략하면 색 없음으로 저장된다", example = "BLUE")
+            RoutineCategoryColor color
+    ) {
+        public CreateGroupCategory {
+            clientKey = clientKey == null ? null : clientKey.trim();
+            name = name == null ? null : name.trim();
+        }
+
+        @AssertTrue(message = "카테고리 이름에는 줄바꿈을 포함할 수 없습니다.")
+        @JsonIgnore
+        public boolean isNameSingleLine() {
+            return name == null || !(name.contains("\n") || name.contains("\r"));
+        }
+    }
+
+    /** 기본 카테고리 ID 또는 요청 내 사용자 카테고리 키를 참조하는 초기 그룹 루틴이다. */
+    @Schema(name = "CreateGroupRoutine", description = "그룹 생성과 함께 등록할 초기 그룹 루틴")
+    public record CreateGroupRoutine(
+            @Schema(description = "기본 제공 그룹 카테고리 ID. categoryKey와 함께 사용할 수 없다", example = "1")
+            @Positive(message = "기본 카테고리 ID는 양수여야 합니다.")
+            Long categoryId,
+
+            @Schema(description = "같은 요청의 사용자 카테고리 clientKey. categoryId와 함께 사용할 수 없다",
+                    example = "morning")
+            String categoryKey,
+
+            @NotBlank(message = "루틴 제목은 필수입니다.")
+            @Size(max = 20, message = "루틴 제목은 20자 이하여야 합니다.")
+            String title,
+
+            @NotBlank(message = "루틴 설명은 필수입니다.")
+            @Size(max = 255, message = "루틴 설명은 255자 이하여야 합니다.")
+            String description,
+
+            @NotEmpty(message = "하나 이상의 반복 일정이 필요합니다.")
+            @Size(max = 7, message = "반복 일정은 최대 7개까지 등록할 수 있습니다.")
+            List<@NotNull(message = "반복 일정은 null일 수 없습니다.") @Valid RoutineSchedule> schedules
+    ) {
+        public CreateGroupRoutine {
+            categoryKey = categoryKey == null ? null : categoryKey.trim();
+        }
+
+        @AssertTrue(message = "같은 요일의 일정을 중복해서 등록할 수 없습니다.")
+        @JsonIgnore
+        public boolean isScheduleDayUnique() {
+            if (schedules == null) {
+                return true;
+            }
+            return schedules.stream()
+                    .filter(Objects::nonNull)
+                    .map(RoutineSchedule::repeatDay)
+                    .filter(Objects::nonNull)
+                    .allMatch(new HashSet<>()::add);
+        }
     }
 
     /**
