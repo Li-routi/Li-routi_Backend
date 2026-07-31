@@ -291,6 +291,22 @@ docker compose logs caddy | tail -20     # certificate obtained 류의 줄
 
 배포 워크플로가 `ANTHROPIC_API_KEY` 존재를 **시작 전에** 확인한다. 값 자체는 비밀이라 로그에 찍지 않고 있는지만 본다.
 
+> ⚠️ **`.env`(=`ENV_FILE`)에 넣는 것만으로는 앱에 도달하지 않는다.** compose 의 `app` 서비스는 `environment:` 에 **나열한 것만** 컨테이너로 넘긴다. 새 환경변수를 추가할 때 `docker-compose.prod.yml` 의 그 목록도 함께 봐야 한다.
+>
+> 실제로 이 실수를 했다. `ENV_FILE` 에는 키가 있는데 compose 에 적지 않아 컨테이너에 들어가지 않았고, **해석되지 못한 플레이스홀더가 문자열 그대로 바인딩되어 앱이 정상 부팅했다.** 호출은 401 로 실패하고 fail-open 이라 전부 통과 — **심사가 꺼진 것과 같은 상태로 조용히 돌았다.**
+>
+> 지금은 키 형식을 검증해 그 경우 부팅이 실패한다. 같은 실수가 배포 시점에 바로 드러난다.
+
+### 심사가 실제로 돌고 있는지 확인하는 법
+
+로그가 **아예 없으면** 인증 요청이 없었던 것이다. 요청이 있었는데도 아래가 안 보이면 심사가 꺼졌거나 실패하는 중이다.
+
+```bash
+docker compose logs app | grep "AI 심사"
+docker exec app-app-1 printenv ANTHROPIC_API_KEY >/dev/null && echo "키 주입됨" || echo "키 없음"
+```
+
+
 ### 두 가지를 심사한다
 
 | 기준 | 반려 코드 | 판단 방향 |
