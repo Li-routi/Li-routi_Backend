@@ -94,17 +94,17 @@ class GroupRoutineAssignmentRepositoryTest {
         LocalDate assignedDate = LocalDate.of(2026, 7, 23);
 
         // when
-        groupRoutineAssignmentRepository.insertIfAbsent(
+        int firstInsertCount = groupRoutineAssignmentRepository.insertIfAbsent(
                 routine.getId(), member.getId(), assignedDate,
                 LocalTime.of(9, 0), LocalTime.of(10, 0),
                 GroupRoutineAssignmentStatus.PENDING.name()
         );
-        groupRoutineAssignmentRepository.insertIfAbsent(
+        int duplicateInsertCount = groupRoutineAssignmentRepository.insertIfAbsent(
                 routine.getId(), member.getId(), assignedDate,
                 LocalTime.of(18, 0), LocalTime.of(19, 0),
                 GroupRoutineAssignmentStatus.MISSED.name()
         );
-        groupRoutineAssignmentRepository.insertIfAbsent(
+        int nextDateInsertCount = groupRoutineAssignmentRepository.insertIfAbsent(
                 routine.getId(), member.getId(), assignedDate.plusDays(1),
                 LocalTime.of(18, 0), LocalTime.of(19, 0),
                 GroupRoutineAssignmentStatus.PENDING.name()
@@ -112,6 +112,9 @@ class GroupRoutineAssignmentRepositoryTest {
         em.clear();
 
         // then
+        assertThat(firstInsertCount).isEqualTo(1);
+        assertThat(duplicateInsertCount).isZero();
+        assertThat(nextDateInsertCount).isEqualTo(1);
         assertThat(groupRoutineAssignmentRepository
                 .findAllByMemberIdAndAssignedDate(member.getId(), assignedDate))
                 .singleElement()

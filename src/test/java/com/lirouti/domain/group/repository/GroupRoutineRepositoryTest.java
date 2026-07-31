@@ -150,6 +150,25 @@ class GroupRoutineRepositoryTest {
         )).isTrue();
     }
 
+    @Test
+    @DisplayName("그룹별 루틴 수는 다른 그룹의 루틴을 제외한다")
+    void countByGroupId_MultipleGroups_CountsTargetGroupOnly() {
+        // given
+        Group targetGroup = group();
+        Group otherGroup = group();
+        GroupRoutineCategory category = category();
+        groupRoutineRepository.save(routine(targetGroup, category, "대상 루틴 1"));
+        groupRoutineRepository.save(routine(targetGroup, category, "대상 루틴 2"));
+        groupRoutineRepository.saveAndFlush(routine(otherGroup, category, "다른 루틴"));
+        em.clear();
+
+        // when
+        long result = groupRoutineRepository.countByGroupId(targetGroup.getId());
+
+        // then
+        assertThat(result).isEqualTo(2);
+    }
+
     private Group group() {
         int value = sequence.incrementAndGet();
         Group group = Group.builder()

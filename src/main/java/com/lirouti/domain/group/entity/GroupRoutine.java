@@ -28,6 +28,9 @@ import java.util.Set;
         }
 )
 public class GroupRoutine extends BaseEntity {
+    /** 한 그룹에 등록할 수 있는 그룹 루틴 수. */
+    public static final int MAX_GROUP_ROUTINE_COUNT = 30;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

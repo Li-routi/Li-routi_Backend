@@ -43,6 +43,11 @@ public enum GroupErrorCode implements BaseErrorCode {
             "그룹 방장 권한이 필요합니다.",
             "GROUP403_3"
     ),
+    GROUP_ROUTINE_CATEGORY_ACCESS_DENIED(
+            HttpStatus.FORBIDDEN,
+            "해당 그룹에서 사용할 수 없는 루틴 카테고리입니다.",
+            "GROUP403_4"
+    ),
     OWNER_CANNOT_LEAVE(
             HttpStatus.CONFLICT,
             "방장은 권한을 위임하거나 그룹을 삭제하기 전까지 탈퇴할 수 없습니다.",
@@ -67,6 +72,21 @@ public enum GroupErrorCode implements BaseErrorCode {
             HttpStatus.CONFLICT,
             "이미 이행한 그룹 루틴 할당입니다.",
             "GROUP409_5"
+    ),
+    GROUP_PARTICIPATION_LIMIT_EXCEEDED(
+            HttpStatus.CONFLICT,
+            "참여할 수 있는 활성 그룹 수를 초과했습니다.",
+            "GROUP409_6"
+    ),
+    GROUP_ROUTINE_LIMIT_EXCEEDED(
+            HttpStatus.CONFLICT,
+            "그룹에 등록할 수 있는 루틴 수를 초과했습니다.",
+            "GROUP409_7"
+    ),
+    GROUP_MEMBER_LIMIT_EXCEEDED(
+            HttpStatus.CONFLICT,
+            "그룹에 참여할 수 있는 활성 회원 수를 초과했습니다.",
+            "GROUP409_8"
     ),
     INVITE_CODE_ISSUE_FAILED(
             HttpStatus.INTERNAL_SERVER_ERROR,

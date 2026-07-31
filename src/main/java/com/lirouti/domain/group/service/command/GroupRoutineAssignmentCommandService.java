@@ -321,7 +321,7 @@ public class GroupRoutineAssignmentCommandService {
      * @param schedule 할당할 일정
      * @param groupMember 할당 대상 그룹 구성원
      * @param assignedDate 할당 날짜
-     * @return 할당 대상 한 명을 나타내는 1
+     * @return 실제로 새로 삽입된 행 수. 이미 할당돼 있으면 0
      */
     private int insertAssignment(
             GroupRoutineSchedule schedule,
@@ -342,7 +342,7 @@ public class GroupRoutineAssignmentCommandService {
             LocalDate assignedDate,
             LocalDateTime referenceTime
     ) {
-        groupRoutineAssignmentRepository.insertIfAbsent(
+        return groupRoutineAssignmentRepository.insertIfAbsent(
                 schedule.getGroupRoutine().getId(),
                 groupMember.getMember().getId(),
                 assignedDate,
@@ -350,7 +350,6 @@ public class GroupRoutineAssignmentCommandService {
                 schedule.getEndTime(),
                 initialStatus(assignedDate, schedule, referenceTime).name()
         );
-        return 1;
     }
 
     /**

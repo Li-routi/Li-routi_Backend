@@ -56,12 +56,13 @@ class GroupCommandServiceTest {
     private void givenValidatedOwner() {
         when(groupValidationService.validateGroupOwner(GROUP_ID, OWNER_ID))
                 .thenReturn(ownerMembership);
-        when(ownerMembership.getGroup()).thenReturn(group);
+        when(groupValidationService.lockActiveGroupForUpdate(GROUP_ID)).thenReturn(group);
     }
 
     private void givenActiveCategory() {
         when(groupRoutineCategoryRepository.findByIdAndActiveTrue(3L))
                 .thenReturn(Optional.of(category));
+        when(category.isUsableBy(GROUP_ID)).thenReturn(true);
     }
 
     private void givenNoDuplicateTitle() {
@@ -145,6 +146,41 @@ class GroupCommandServiceTest {
                 .isEqualTo(GroupErrorCode.DUPLICATE_GROUP_ROUTINE_TITLE);
         verify(assignmentCommandService, never())
                 .assignRoutineToActiveMembersToday(any(GroupRoutine.class));
+    }
+
+    @Test
+    @DisplayName("그룹에 루틴이 30개 있으면 31번째 루틴을 생성하지 않는다")
+    void createRoutine_AtLimit_ThrowsLimitExceeded() {
+        // given
+        givenValidatedOwner();
+        when(groupRoutineRepository.countByGroupId(GROUP_ID))
+                .thenReturn((long) GroupRoutine.MAX_GROUP_ROUTINE_COUNT);
+
+        // when & then
+        assertThatThrownBy(() -> groupCommandService.createRoutine(GROUP_ID, OWNER_ID, request()))
+                .isInstanceOf(GroupException.class)
+                .extracting("code")
+                .isEqualTo(GroupErrorCode.GROUP_ROUTINE_LIMIT_EXCEEDED);
+        verify(groupValidationService).lockActiveGroupForUpdate(GROUP_ID);
+        verify(groupRoutineCategoryRepository, never()).findByIdAndActiveTrue(any());
+        verify(groupRoutineRepository, never()).saveAndFlush(any(GroupRoutine.class));
+    }
+
+    @Test
+    @DisplayName("다른 그룹의 카테고리로 루틴을 생성할 수 없다")
+    void createRoutine_OtherGroupCategory_ThrowsCategoryAccessDenied() {
+        // given
+        givenValidatedOwner();
+        when(groupRoutineCategoryRepository.findByIdAndActiveTrue(3L))
+                .thenReturn(Optional.of(category));
+        when(category.isUsableBy(GROUP_ID)).thenReturn(false);
+
+        // when & then
+        assertThatThrownBy(() -> groupCommandService.createRoutine(GROUP_ID, OWNER_ID, request()))
+                .isInstanceOf(GroupException.class)
+                .extracting("code")
+                .isEqualTo(GroupErrorCode.GROUP_ROUTINE_CATEGORY_ACCESS_DENIED);
+        verify(groupRoutineRepository, never()).saveAndFlush(any(GroupRoutine.class));
     }
 
     @Test
@@ -256,6 +292,30 @@ class GroupCommandServiceTest {
         )).isInstanceOf(GroupException.class)
                 .extracting("code")
                 .isEqualTo(GroupErrorCode.DUPLICATE_GROUP_ROUTINE_TITLE);
+        verify(groupRoutineRepository, never()).saveAndFlush(any(GroupRoutine.class));
+        verify(assignmentCommandService, never())
+                .synchronizeRoutineAssignmentsToday(any(GroupRoutine.class));
+    }
+
+    @Test
+    @DisplayName("다른 그룹의 카테고리로 루틴을 수정할 수 없다")
+    void updateRoutine_OtherGroupCategory_ThrowsCategoryAccessDenied() {
+        // given
+        GroupRoutine routine = existingRoutine();
+        when(groupValidationService.validateGroupOwner(GROUP_ID, OWNER_ID))
+                .thenReturn(ownerMembership);
+        when(groupRoutineRepository.findByIdAndGroupIdForUpdate(ROUTINE_ID, GROUP_ID))
+                .thenReturn(Optional.of(routine));
+        when(groupRoutineCategoryRepository.findByIdAndActiveTrue(3L))
+                .thenReturn(Optional.of(category));
+        when(category.isUsableBy(GROUP_ID)).thenReturn(false);
+
+        // when & then
+        assertThatThrownBy(() -> groupCommandService.updateRoutine(
+                GROUP_ID, ROUTINE_ID, OWNER_ID, updateRequest()
+        )).isInstanceOf(GroupException.class)
+                .extracting("code")
+                .isEqualTo(GroupErrorCode.GROUP_ROUTINE_CATEGORY_ACCESS_DENIED);
         verify(groupRoutineRepository, never()).saveAndFlush(any(GroupRoutine.class));
         verify(assignmentCommandService, never())
                 .synchronizeRoutineAssignmentsToday(any(GroupRoutine.class));
