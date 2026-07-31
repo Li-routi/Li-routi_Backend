@@ -33,6 +33,13 @@ public enum ChallengeErrorCode implements BaseErrorCode {
             "인증 처리 중 중복 요청이 감지되었습니다. 잠시 후 다시 시도해 주세요.",
             "CHALLENGE409_3"
     ),
+    // AI 심사에서 챌린지 의도와 맞지 않다고 판정된 경우. 사진은 저장되지 않고 스트릭도 오르지 않는다.
+    // 심사기가 답을 못 준 경우(장애·타임아웃)는 이 코드가 아니라 통과로 처리된다 — 그건 반려가 아니다.
+    VERIFICATION_REJECTED_BY_REVIEW(
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            "챌린지 내용과 맞지 않는 사진입니다.",
+            "CHALLENGE422_1"
+    ),
     VERIFICATION_NOT_FOUND(
             HttpStatus.NOT_FOUND,
             "인증을 찾을 수 없습니다.",

@@ -170,6 +170,12 @@ jobs:
             echo "::error::ENV_FILE에 LETSENCRYPT_EMAIL이 없습니다. 값이 비면 Caddy가 설정 파싱에서 실패해 뜨지 않습니다(선택 설정이 아닙니다)."
             exit 1
           fi
+          # AI 심사 키는 기본값 없이 선언돼 있어, 없으면 앱이 부팅 자체를 못 한다.
+          # 값은 비밀이라 출력하지 않는다 — 있는지만 본다.
+          if [ -z "$(read_var ANTHROPIC_API_KEY)" ]; then
+            echo "::error::ENV_FILE에 ANTHROPIC_API_KEY가 없습니다. 앱이 부팅하지 못합니다."
+            exit 1
+          fi
           echo "domain=$domain" >> "$GITHUB_OUTPUT"
           echo "LIROUTI_DOMAIN=$domain"
 
