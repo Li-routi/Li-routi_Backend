@@ -1,15 +1,21 @@
 package com.lirouti.domain.media.service;
 
+import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.Arrays;
+import java.util.Iterator;
 
 import javax.imageio.ImageIO;
+import javax.imageio.ImageReadParam;
+import javax.imageio.ImageReader;
+import javax.imageio.stream.ImageInputStream;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -176,7 +182,23 @@ public class MediaService {
      * <p>디코딩할 수 없는 형식(WEBP 는 표준 ImageIO 로 못 읽는다)은 <b>원본 그대로 돌려준다.</b>
      * 심사 쪽이 그 형식을 받아주므로 크기만 감당되면 그대로 보내도 된다.
      *
-     * @return 읽지 못했으면 빈 값. 호출부는 이것을 "심사 못 함"으로 다루고 막지 않는다.
+     * <h3>메모리 상한이 이 메서드의 핵심이다</h3>
+     * 이 서버는 힙이 768m 다. 전체 바이트를 올리고 전체를 디코딩하면 파일이 작아도
+     * 픽셀 수가 크면 터진다 — 디코딩은 {@code 가로 × 세로 × 4} 바이트를 잡으므로
+     * 1200만 화소 사진 한 장이 약 48MB 다. 인증이 몰리면 그것이 동시에 여러 벌 생긴다.
+     * 같은 클래스의 {@code readHead} 가 앞 12바이트만 읽는 것도 같은 이유였다.
+     *
+     * <p>그래서 두 겹으로 막는다.
+     * <ol>
+     *   <li>S3 응답의 {@code contentLength} 로 업로드 상한을 넘는 오브젝트를 먼저 거른다.
+     *       그 상한은 presigned URL 발급 때 이미 강제하므로, 넘는 것은 발급을 거치지 않고
+     *       버킷에 직접 쓰인 오브젝트다.</li>
+     *   <li>헤더에서 <b>크기만</b> 읽어 서브샘플링 배수를 정한 뒤 <b>줄여서 디코딩</b>한다.
+     *       전체를 펼쳤다가 줄이는 것이 아니라 처음부터 작게 읽으므로, 원본 화소 수와 무관하게
+     *       메모리가 목표 크기 근처로 묶인다.</li>
+     * </ol>
+     *
+     * @return 읽지 못했거나 상한을 넘으면 빈 값. 호출부는 이것을 "심사 못 함"으로 다루고 막지 않는다.
      */
     public Optional<MediaImage> loadForReview(String mediaKey, int maxDimension) {
         byte[] original;
@@ -187,6 +209,13 @@ public class MediaService {
                     .key(mediaKey)
                     .build();
             try (ResponseInputStream<GetObjectResponse> response = s3Client.getObject(request)) {
+                long contentLength = response.response().contentLength();
+                if (contentLength > s3Properties.getMaxImageSize()) {
+                    log.warn("심사용 이미지가 업로드 상한을 넘어 심사를 건너뜁니다."
+                                    + " mediaKey={}, contentLength={}, max={}",
+                            mediaKey, contentLength, s3Properties.getMaxImageSize());
+                    return Optional.empty();
+                }
                 original = response.readAllBytes();
                 mimeType = resolveTypeByExtension(mediaKey).getMimeType();
             }
@@ -205,41 +234,73 @@ public class MediaService {
      * 디코딩 못 하는 형식 하나 때문에 심사가 통째로 사라진다.
      */
     private MediaImage downscale(byte[] original, String mimeType, int maxDimension, String mediaKey) {
-        try {
-            BufferedImage source = ImageIO.read(new java.io.ByteArrayInputStream(original));
-            if (source == null) {
+        try (ImageInputStream input = ImageIO.createImageInputStream(new ByteArrayInputStream(original))) {
+            Iterator<ImageReader> readers = ImageIO.getImageReaders(input);
+            if (!readers.hasNext()) {
                 // ImageIO 가 읽지 못하는 형식(WEBP 등). 심사 쪽이 받아주므로 원본을 보낸다.
                 return new MediaImage(original, mimeType);
             }
-            int longEdge = Math.max(source.getWidth(), source.getHeight());
-            if (longEdge <= maxDimension) {
-                return new MediaImage(original, mimeType);
-            }
-
-            double ratio = (double) maxDimension / longEdge;
-            int width = Math.max(1, (int) Math.round(source.getWidth() * ratio));
-            int height = Math.max(1, (int) Math.round(source.getHeight() * ratio));
-
-            // 알파가 있는 PNG 를 그대로 JPEG 으로 쓰면 투명 부분이 검게 나온다. RGB 로 받는다.
-            BufferedImage scaled = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
-            Graphics2D graphics = scaled.createGraphics();
+            ImageReader reader = readers.next();
             try {
-                graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
-                        RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-                graphics.drawImage(source, 0, 0, width, height, java.awt.Color.WHITE, null);
-            } finally {
-                graphics.dispose();
-            }
+                reader.setInput(input);
+                // 여기까지는 헤더만 읽는다. 픽셀은 아직 메모리에 올라오지 않았다.
+                int sourceWidth = reader.getWidth(0);
+                int sourceHeight = reader.getHeight(0);
+                int longEdge = Math.max(sourceWidth, sourceHeight);
+                if (longEdge <= maxDimension) {
+                    return new MediaImage(original, mimeType);
+                }
 
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
-            if (!ImageIO.write(scaled, "jpg", out)) {
-                return new MediaImage(original, mimeType);
+                BufferedImage source = readSubsampled(reader, longEdge, maxDimension);
+                return new MediaImage(toJpeg(source, sourceWidth, sourceHeight, maxDimension),
+                        MediaContentType.JPEG.getMimeType());
+            } finally {
+                reader.dispose();
             }
-            return new MediaImage(out.toByteArray(), MediaContentType.JPEG.getMimeType());
         } catch (IOException | RuntimeException e) {
             log.warn("심사용 이미지를 줄이지 못해 원본을 그대로 보냅니다. mediaKey={}", mediaKey, e);
             return new MediaImage(original, mimeType);
         }
+    }
+
+    /**
+     * 목표 크기에 가깝게 <b>줄여서 디코딩</b>한다.
+     *
+     * 서브샘플링은 픽셀을 건너뛰며 읽으므로 전체를 펼치지 않는다. 배수는 목표보다 작아지지
+     * 않도록 내림으로 잡고, 남은 차이는 뒤에서 정확한 크기로 맞춘다 — 여기서 목표보다 작게
+     * 읽어 버리면 다시 키워야 해서 화질만 나빠진다.
+     */
+    private BufferedImage readSubsampled(ImageReader reader, int longEdge, int maxDimension)
+            throws IOException {
+        int step = Math.max(1, longEdge / maxDimension);
+        ImageReadParam param = reader.getDefaultReadParam();
+        param.setSourceSubsampling(step, step, 0, 0);
+        return reader.read(0, param);
+    }
+
+    /** 정확한 목표 크기로 맞춰 JPEG 으로 쓴다. */
+    private byte[] toJpeg(BufferedImage source, int sourceWidth, int sourceHeight, int maxDimension)
+            throws IOException {
+        double ratio = (double) maxDimension / Math.max(sourceWidth, sourceHeight);
+        int width = Math.max(1, (int) Math.round(sourceWidth * ratio));
+        int height = Math.max(1, (int) Math.round(sourceHeight * ratio));
+
+        // 알파가 있는 PNG 를 그대로 JPEG 으로 쓰면 투명 부분이 검게 나온다. 흰 배경에 얹는다.
+        BufferedImage scaled = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+        Graphics2D graphics = scaled.createGraphics();
+        try {
+            graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
+                    RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            graphics.drawImage(source, 0, 0, width, height, Color.WHITE, null);
+        } finally {
+            graphics.dispose();
+        }
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        if (!ImageIO.write(scaled, "jpg", out)) {
+            throw new IOException("JPEG 인코더를 찾지 못했습니다.");
+        }
+        return out.toByteArray();
     }
 
     /** 오브젝트 앞부분만 Range로 읽는다. 없으면 404, 그 밖의 실패는 500으로 바꾼다. */

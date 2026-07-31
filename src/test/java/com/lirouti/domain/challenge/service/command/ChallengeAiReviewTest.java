@@ -170,6 +170,25 @@ class ChallengeAiReviewTest {
     }
 
     @Test
+    @DisplayName("참여 중이 아니면 심사를 부르지 않고 409로 막는다 — 유료 호출을 아끼고 응답 코드도 맞춘다")
+    void verify_NotParticipating_SkipsReview() {
+        // given: 이 챌린지에 참여하지 않은 회원
+        Member outsider = Member.builder()
+                .email("outsider@ex.com").nickname("outsider")
+                .socialProvider(SocialProvider.GOOGLE).role(Role.ROLE_USER)
+                .socialId("outsider-sid").build();
+        em.persist(outsider);
+        em.flush();
+
+        // when & then
+        assertThatThrownBy(() ->
+                challengeCommandService.verify(outsider.getId(), challengeId, request()))
+                .isInstanceOf(ChallengeException.class)
+                .hasFieldOrPropertyWithValue("code", ChallengeErrorCode.NOT_PARTICIPATING);
+        verify(reviewClient, never()).review(any(), any(), any());
+    }
+
+    @Test
     @DisplayName("판정 기준으로 챌린지 이름과 설명을 넘긴다 — 카테고리로는 물과 우유를 못 가른다")
     void verify_PassesChallengeIntent() {
         // given

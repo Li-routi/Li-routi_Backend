@@ -117,11 +117,22 @@ public class ChallengeCommandService {
         //    이 호출이 오브젝트 존재 확인도 겸한다 — 업로드하지 않은 key면 404로 걸린다.
         mediaService.validateUploadedBytes(request.mediaKey(), MediaPurpose.CHALLENGE_VERIFICATION);
 
-        // ③ 사진이 챌린지 의도에 맞는지 심사한다. ②와 같은 트랜잭션 밖 구간이다.
+        // ③ 참여 중인지 먼저 본다. 심사는 유료 외부 호출이라, 참여하지도 않은 요청에 그 값을
+        //    치르지 않는다. 응답 코드도 뒤바뀐다 — 이 확인이 없으면 미참여자가 409(참여 아님)
+        //    대신 422(심사 반려)를 받는다.
+        //
+        //    여기서는 잠금을 걸지 않는다. 경합 판정은 ⑤의 잠금 조회가 그대로 맡는다.
+        //    이 조회는 "부를 가치가 있는 요청인지" 거르는 용도라 그 사이 상태가 바뀌어도
+        //    최종 판정이 틀어지지 않는다.
+        memberChallengeRepository.findByMemberIdAndChallengeId(memberId, challengeId)
+                .filter(MemberChallenge::isParticipating)
+                .orElseThrow(() -> new ChallengeException(ChallengeErrorCode.NOT_PARTICIPATING));
+
+        // ④ 사진이 챌린지 의도에 맞는지 심사한다. ②와 같은 트랜잭션 밖 구간이다.
         //    통과하지 못하면 저장도 스트릭도 없다. 심사기가 답을 못 주면 통과시킨다(아래 참고).
         reviewPhoto(challengeId, request.mediaKey());
 
-        // ④ 저장·스트릭 갱신. 여기서부터가 트랜잭션이다.
+        // ⑤ 저장·스트릭 갱신. 여기서부터가 트랜잭션이다.
         return challengeVerificationCommandService.save(memberId, challengeId, request);
     }
 
@@ -165,6 +176,10 @@ public class ChallengeCommandService {
             return;
         }
         if (!review.approved()) {
+            // 사유는 로그에만 남는다. 응답 message 는 에러 코드의 고정 문장이다 —
+            // 이 프로젝트는 응답 메시지를 에러 코드로만 만들기 때문이다(exception_convention).
+            // 사유를 사용자에게 보여주려면 전역 예외 구조가 자유 문구를 실을 수 있어야 하는데,
+            // 그건 모든 도메인의 응답 계약을 바꾸는 일이라 이 PR 범위를 넘는다.
             log.info("AI 심사에서 반려했습니다. challengeId={}, mediaKey={}, 사유={}",
                     challengeId, mediaKey, review.reason());
             throw new ChallengeException(ChallengeErrorCode.VERIFICATION_REJECTED_BY_REVIEW);
