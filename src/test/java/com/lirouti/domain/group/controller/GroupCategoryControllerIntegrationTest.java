@@ -153,17 +153,18 @@ class GroupCategoryControllerIntegrationTest {
     }
 
     @Test
-    @DisplayName("기본 및 같은 그룹의 활성 카테고리 이름은 중복 생성할 수 없다")
+    @DisplayName("기본 및 같은 그룹이 사용한 활성·비활성 카테고리 이름은 중복 생성할 수 없다")
     void createCategory_DuplicateFixedOrGroupName_ReturnsConflict() throws Exception {
         // given
         Group group = group();
         Member owner = member();
         membership(group, owner, GroupMemberRole.OWNER);
         category(group, "아침 관리", true);
+        category(group, "비활성 관리", false);
         em.flush();
 
         // when & then
-        for (String name : new String[]{"운동", "아침 관리"}) {
+        for (String name : new String[]{"운동", "아침 관리", "비활성 관리"}) {
             mockMvc.perform(post("/api/groups/{groupId}/categories", group.getId())
                             .with(user(principal(owner)))
                             .contentType(MediaType.APPLICATION_JSON)

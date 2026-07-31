@@ -222,6 +222,7 @@ public final class GroupReqDTO {
     ) {
         public CreateGroupRoutine {
             categoryKey = categoryKey == null ? null : categoryKey.trim();
+            title = title == null ? null : title.trim();
         }
 
         @AssertTrue(message = "같은 요일의 일정을 중복해서 등록할 수 없습니다.")
@@ -263,6 +264,10 @@ public final class GroupReqDTO {
             @Size(max = 7, message = "반복 일정은 최대 7개까지 등록할 수 있습니다.")
             List<@NotNull(message = "반복 일정은 null일 수 없습니다.") @Valid RoutineSchedule> schedules
     ) {
+        public CreateRoutine {
+            title = title == null ? null : title.trim();
+        }
+
         /**
          * null 요소와 null 요일은 각 필드 제약에 맡기고, 입력된 요일의 중복만 검증한다.
          *
@@ -307,6 +312,10 @@ public final class GroupReqDTO {
             @Size(max = 7, message = "반복 일정은 최대 7개까지 등록할 수 있습니다.")
             List<@NotNull(message = "반복 일정은 null일 수 없습니다.") @Valid RoutineSchedule> schedules
     ) {
+        public UpdateRoutine {
+            title = title == null ? null : title.trim();
+        }
+
         /**
          * null 요소와 null 요일은 각 필드 제약에 맡기고, 입력된 요일의 중복만 검증한다.
          *

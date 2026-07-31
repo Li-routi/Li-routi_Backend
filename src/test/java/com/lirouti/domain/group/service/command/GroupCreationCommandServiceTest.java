@@ -175,7 +175,7 @@ class GroupCreationCommandServiceTest {
                 List.of(routine(null, "exercise", "아침 운동", DayOfWeek.MONDAY))
         );
         givenValidRequest(request, member());
-        when(groupRoutineCategoryRepository.existsUsableName(GROUP_ID, "운동"))
+        when(groupRoutineCategoryRepository.existsReservedName(GROUP_ID, "운동"))
                 .thenReturn(true);
 
         // when & then
@@ -227,7 +227,7 @@ class GroupCreationCommandServiceTest {
     }
 
     private void givenCategoryPersistence() {
-        when(groupRoutineCategoryRepository.existsUsableName(eq(GROUP_ID), anyString()))
+        when(groupRoutineCategoryRepository.existsReservedName(eq(GROUP_ID), anyString()))
                 .thenReturn(false);
         when(groupRoutineCategoryRepository.saveAndFlush(any(GroupRoutineCategory.class)))
                 .thenAnswer(invocation -> {

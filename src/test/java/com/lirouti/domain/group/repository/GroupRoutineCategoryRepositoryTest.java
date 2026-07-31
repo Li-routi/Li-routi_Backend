@@ -50,7 +50,7 @@ class GroupRoutineCategoryRepositoryTest {
 
     @Test
     @DisplayName("이름 중복 검사는 기본 카테고리와 요청 그룹 범위로 제한한다")
-    void existsUsableName_FixedOrOwnedName_ReturnsTrue() {
+    void existsReservedName_FixedOrOwnedName_ReturnsTrue() {
         // given
         Group target = group("CAT2001");
         Group other = group("CAT2002");
@@ -61,11 +61,11 @@ class GroupRoutineCategoryRepositoryTest {
 
         // when
         boolean fixedExists = groupRoutineCategoryRepository
-                .existsUsableName(target.getId(), "운동");
+                .existsReservedName(target.getId(), "운동");
         boolean ownedExists = groupRoutineCategoryRepository
-                .existsUsableName(target.getId(), "아침 관리");
+                .existsReservedName(target.getId(), "아침 관리");
         boolean otherExists = groupRoutineCategoryRepository
-                .existsUsableName(target.getId(), "다른 그룹 관리");
+                .existsReservedName(target.getId(), "다른 그룹 관리");
 
         // then
         assertThat(fixedExists).isTrue();
@@ -74,8 +74,8 @@ class GroupRoutineCategoryRepositoryTest {
     }
 
     @Test
-    @DisplayName("비활성 카테고리 이름은 사용 가능한 이름 중복 검사에서 제외한다")
-    void existsUsableName_InactiveName_ReturnsFalse() {
+    @DisplayName("같은 그룹의 비활성 카테고리 이름도 재사용하지 못하도록 예약한다")
+    void existsReservedName_InactiveName_ReturnsTrue() {
         // given
         Group target = group("CAT3001");
         category(target, "비활성 관리", false);
@@ -84,10 +84,10 @@ class GroupRoutineCategoryRepositoryTest {
 
         // when
         boolean result = groupRoutineCategoryRepository
-                .existsUsableName(target.getId(), "비활성 관리");
+                .existsReservedName(target.getId(), "비활성 관리");
 
         // then
-        assertThat(result).isFalse();
+        assertThat(result).isTrue();
     }
 
     private Group group(String inviteCode) {

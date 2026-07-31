@@ -28,14 +28,13 @@ public interface GroupRoutineCategoryRepository
 
     long countByGroupIdAndActiveTrue(Long groupId);
 
-    /** 고정 카테고리 또는 해당 그룹 카테고리에 같은 이름이 존재하는지 확인한다. */
+    /** 활성 여부와 관계없이 고정 카테고리 또는 해당 그룹이 예약한 이름인지 확인한다. */
     @Query("""
             select count(category) > 0
             from GroupRoutineCategory category
             left join category.group ownerGroup
             where category.name = :name
-              and category.active = true
               and (ownerGroup is null or ownerGroup.id = :groupId)
             """)
-    boolean existsUsableName(@Param("groupId") Long groupId, @Param("name") String name);
+    boolean existsReservedName(@Param("groupId") Long groupId, @Param("name") String name);
 }

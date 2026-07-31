@@ -54,7 +54,7 @@ class GroupCategoryCommandServiceTest {
     void createCategory_ActiveOwner_CreatesNormalizedCategory() {
         // given
         when(categoryRepository.countByGroupIdAndActiveTrue(GROUP_ID)).thenReturn(1L);
-        when(categoryRepository.existsUsableName(GROUP_ID, "아침 관리")).thenReturn(false);
+        when(categoryRepository.existsReservedName(GROUP_ID, "아침 관리")).thenReturn(false);
         when(categoryRepository.saveAndFlush(any(GroupRoutineCategory.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -123,11 +123,11 @@ class GroupCategoryCommandServiceTest {
     }
 
     @Test
-    @DisplayName("기본 또는 같은 그룹의 활성 카테고리 이름과 중복되면 거절한다")
-    void createCategory_DuplicateUsableName_ThrowsDuplicate() {
+    @DisplayName("기본 또는 같은 그룹이 사용한 카테고리 이름과 중복되면 거절한다")
+    void createCategory_DuplicateReservedName_ThrowsDuplicate() {
         // given
         when(categoryRepository.countByGroupIdAndActiveTrue(GROUP_ID)).thenReturn(0L);
-        when(categoryRepository.existsUsableName(GROUP_ID, "운동")).thenReturn(true);
+        when(categoryRepository.existsReservedName(GROUP_ID, "운동")).thenReturn(true);
 
         // when & then
         assertThatThrownBy(() -> commandService.createCategory(

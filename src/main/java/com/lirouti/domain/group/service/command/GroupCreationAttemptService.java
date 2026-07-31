@@ -110,8 +110,8 @@ public class GroupCreationAttemptService {
 
         List<GroupConverter.CreatedCategory> created = new ArrayList<>(requests.size());
         for (GroupReqDTO.CreateGroupCategory request : requests) {
-            if (groupRoutineCategoryRepository.existsUsableName(group.getId(), request.name())) {
-                log.warn("중복된 그룹 루틴 카테고리 이름을 차단했습니다. groupId={}, name={}",
+            if (groupRoutineCategoryRepository.existsReservedName(group.getId(), request.name())) {
+                log.warn("예약된 그룹 루틴 카테고리 이름을 차단했습니다. groupId={}, name={}",
                         group.getId(), request.name());
                 throw new GroupException(GroupErrorCode.DUPLICATE_GROUP_ROUTINE_CATEGORY_NAME);
             }

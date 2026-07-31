@@ -63,8 +63,8 @@ public class GroupCommandService {
                     groupId, memberId, categoryCount);
             throw new GroupException(GroupErrorCode.GROUP_ROUTINE_CATEGORY_LIMIT_EXCEEDED);
         }
-        if (groupRoutineCategoryRepository.existsUsableName(groupId, name)) {
-            log.warn("중복된 그룹 카테고리 이름을 차단했습니다. groupId={}, memberId={}, name={}",
+        if (groupRoutineCategoryRepository.existsReservedName(groupId, name)) {
+            log.warn("예약된 그룹 카테고리 이름을 차단했습니다. groupId={}, memberId={}, name={}",
                     groupId, memberId, name);
             throw new GroupException(GroupErrorCode.DUPLICATE_GROUP_ROUTINE_CATEGORY_NAME);
         }

@@ -40,14 +40,14 @@ class GroupReqDTOValidationTest {
     }
 
     @Test
-    @DisplayName("모임명과 카테고리 키·이름은 생성 시 앞뒤 공백을 제거한다")
+    @DisplayName("모임명과 카테고리 키·이름 및 루틴 제목은 생성 시 앞뒤 공백을 제거한다")
     void construct_TrimmedValues_NormalizesRequest() {
         // given & when
         GroupReqDTO.CreateGroupCategory category = category("  morning  ", "  아침 관리  ");
         GroupReqDTO.CreateGroupRoutine routine = routine(
                 null,
                 "  morning  ",
-                "침구 정리",
+                "  침구 정리  ",
                 schedules()
         );
         GroupReqDTO.CreateGroup request = new GroupReqDTO.CreateGroup(
@@ -61,6 +61,7 @@ class GroupReqDTOValidationTest {
         assertThat(category.clientKey()).isEqualTo("morning");
         assertThat(category.name()).isEqualTo("아침 관리");
         assertThat(routine.categoryKey()).isEqualTo("morning");
+        assertThat(routine.title()).isEqualTo("침구 정리");
         assertThat(validator.validate(request)).isEmpty();
     }
 
@@ -284,7 +285,7 @@ class GroupReqDTOValidationTest {
                 List.of(),
                 List.of(
                         routine(1L, null, "Morning", schedules()),
-                        routine(1L, null, "morning", schedules(DayOfWeek.TUESDAY))
+                        routine(1L, null, " morning ", schedules(DayOfWeek.TUESDAY))
                 )
         );
 
