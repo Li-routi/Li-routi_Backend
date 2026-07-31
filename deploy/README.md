@@ -299,11 +299,23 @@ docker compose logs caddy | tail -20     # certificate obtained 류의 줄
 
 ### 심사가 실제로 돌고 있는지 확인하는 법
 
-로그가 **아예 없으면** 인증 요청이 없었던 것이다. 요청이 있었는데도 아래가 안 보이면 심사가 꺼졌거나 실패하는 중이다.
+**인증을 한 번 하고** 아래를 본다. 심사는 통과·반려·장애 세 경우 모두 로그를 남기므로, 인증했는데 아무것도 안 찍히면 그 자체가 이상 신호다.
 
 ```bash
 docker compose logs app | grep "AI 심사"
-docker exec app-app-1 printenv ANTHROPIC_API_KEY >/dev/null && echo "키 주입됨" || echo "키 없음"
+```
+
+| 찍히는 줄 | 뜻 |
+| --- | --- |
+| `AI 심사를 통과했습니다` | 정상 동작 |
+| `AI 심사에서 반려했습니다` | 정상 동작(판정이 반려) |
+| `AI 심사 없이 인증을 통과시켰습니다` | ⚠️ **심사기가 답을 못 줬다.** 키·네트워크·크레딧을 확인한다 |
+| `AI 심사가 꺼져 있어 건너뜁니다` | `AI_REVIEW_ENABLED=false` 상태(DEBUG 레벨) |
+
+키가 컨테이너에 들어갔는지는 서비스 이름으로 확인한다. 컨테이너 이름(`app-app-1`)은 compose 프로젝트 이름과 인덱스에 따라 달라진다.
+
+```bash
+docker compose exec -T app printenv ANTHROPIC_API_KEY >/dev/null && echo "키 주입됨" || echo "키 없음"
 ```
 
 
