@@ -134,6 +134,16 @@ public final class RoutineConverter {
 
     /** 저장된 개인 루틴 한 건을 응답으로 변환하고 반복 요일을 월요일부터의 순서로 정렬한다. */
     private static RoutineResDTO.Routine toRoutine(MemberRoutine routine) {
+        return toRoutine(routine, false);
+    }
+
+    /**
+     * 완료 여부까지 담아 변환한다.
+     *
+     * 완료 집합을 인자로 받는 이유는 루틴마다 따로 묻지 않기 위해서다. 목록 크기만큼
+     * 쿼리가 나가면 홈 화면 한 번에 수십 건이 된다.
+     */
+    private static RoutineResDTO.Routine toRoutine(MemberRoutine routine, boolean completedToday) {
         List<DayOfWeek> repeatDays = routine.getSchedules().stream()
                 .map(MemberRoutineSchedule::getRepeatDay)
                 .sorted(Comparator.comparingInt(DayOfWeek::getValue))
@@ -148,6 +158,7 @@ public final class RoutineConverter {
                 .endTime(routine.getEndTime())
                 .repeatDays(repeatDays)
                 .alarmTime(routine.getAlarmTime())
+                .completedToday(completedToday)
                 .build();
     }
 
@@ -163,6 +174,20 @@ public final class RoutineConverter {
      * 홈 화면의 '오늘의 루틴' 탭처럼 생성 결과가 아닌 단순 조회 목록을 응답으로 할 때 사용한다.
      */
     public static List<RoutineResDTO.Routine> toRoutineList(List<MemberRoutine> routines) {
-        return routines.stream().map(RoutineConverter::toRoutine).toList();
+        return toRoutineList(routines, Set.of());
+    }
+
+    /**
+     * 완료 여부까지 담아 목록을 변환한다.
+     *
+     * @param completedRoutineIds 오늘 인증이 있는 루틴 id. 한 번에 조회해 넘긴다
+     */
+    public static List<RoutineResDTO.Routine> toRoutineList(
+            List<MemberRoutine> routines,
+            Set<Long> completedRoutineIds
+    ) {
+        return routines.stream()
+                .map(routine -> toRoutine(routine, completedRoutineIds.contains(routine.getId())))
+                .toList();
     }
 }

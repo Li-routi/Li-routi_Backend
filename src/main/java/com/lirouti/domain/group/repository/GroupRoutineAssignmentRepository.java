@@ -12,6 +12,7 @@ import org.springframework.data.repository.query.Param;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Optional;
 
 public interface GroupRoutineAssignmentRepository
         extends JpaRepository<GroupRoutineAssignment, Long>,
@@ -70,6 +71,33 @@ public interface GroupRoutineAssignmentRepository
      * @return 해당 날짜의 할당 목록
      */
     List<GroupRoutineAssignment> findAllByMemberIdAndAssignedDate(Long memberId, LocalDate assignedDate);
+
+    /**
+     * 그 회원의 오늘자 할당 한 건. 인증 요청이 실제로 그 사람 몫인지 확인하는 데 쓴다.
+     *
+     * <p>회원과 그룹을 <b>조회 조건에 넣는다.</b> 가져와서 뒤에서 비교하면 남의 할당인지
+     * 없는 할당인지가 응답으로 드러난다.
+     *
+     * <p>루틴과 그룹을 <b>함께 가져온다.</b> 둘 다 지연 로딩이라, 트랜잭션 밖에서 이 결과의
+     * 연관을 건드리면 LazyInitializationException 이 난다. 호출부(인증)는 트랜잭션 경계를
+     * 갖지 않으므로 여기서 채워 보낸다.
+     */
+    @Query("""
+            select assignment
+            from GroupRoutineAssignment assignment
+            join fetch assignment.groupRoutine routine
+            join fetch routine.group groupEntity
+            where routine.id = :groupRoutineId
+              and groupEntity.id = :groupId
+              and assignment.member.id = :memberId
+              and assignment.assignedDate = :assignedDate
+            """)
+    Optional<GroupRoutineAssignment> findForVerification(
+            @Param("groupRoutineId") Long groupRoutineId,
+            @Param("groupId") Long groupId,
+            @Param("memberId") Long memberId,
+            @Param("assignedDate") LocalDate assignedDate
+    );
 
     /**
      * 한 루틴의 특정 날짜 할당을 ID 순서로 잠가 수정·완료·상태 전이 경합을 직렬화한다.

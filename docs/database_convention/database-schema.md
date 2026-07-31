@@ -631,7 +631,10 @@ MySQL은 유니크 키에서 `NULL`을 서로 다른 값으로 취급하므로 �
 
 ## 인증(verification) 도메인 — 설계안 (합의 필요)
 
-> **이 절은 아직 구현되지 않았다.** 새 테이블 2개와 도메인 이동이 걸려 있어 코드보다 먼저 올린다.
+> **3단계(그룹·개인 인증)가 구현됐다.** 남은 것은 챌린지 인증의 도메인 이동(2단계)과
+> 비공개 미디어 서빙이다. 그래서 **지금 그룹·개인 인증 사진은 저장되지만 조회할 수 없다** —
+> 서명 발급이 없고 버킷 정책도 `challenge-verifications/` 하나만 열려 있다.
+>
 > 기획 확인이 필요했던 7가지는 아래 [확정된 정책]에 정리했다. 남은 미결은 탈퇴·삭제 처리 하나다.
 
 인증은 지금 챌린지에만 있다. 그룹 루틴·개인 루틴에도 사진 인증이 필요하고, **사진을 올리는 방식은 셋이 같지만 저장 후 처리가 다르다.** 인증을 별도 도메인으로 빼고 대상별 차이를 그 위에 얹는다.
@@ -653,8 +656,12 @@ MySQL은 유니크 키에서 `NULL`을 서로 다른 값으로 취급하므로 �
 | 테이블 | 유니크 키 | 근거 |
 | --- | --- | --- |
 | `challenge_verification` (기존) | `(member_challenge_id, participation_round, verified_date)` | 회차마다 다시 셀 수 있어야 한다 |
-| `group_routine_verification` (신규) | `(group_routine_assignment_id)` | **할당 1건에 인증 1건.** 할당이 이미 `(루틴, 회원, 날짜)`로 유니크하므로 그 위에 얹으면 된다 |
-| `member_routine_verification` (신규) | `(member_routine_id, verified_date)` | 날짜별 행이 없으므로 **인증 자체가 완료 기록**이다 |
+| `group_routine_verification` | `(group_routine_assignment_id)` | **할당 1건에 인증 1건.** 할당이 이미 `(루틴, 회원, 날짜)`로 유니크하므로 그 위에 얹으면 된다 |
+| `member_routine_verification` | `(member_routine_id, verified_date)` | 날짜별 행이 없으므로 **인증 자체가 완료 기록**이다 |
+
+두 테이블은 `V9__routine_verification.sql` 로 들어갔다. `member_routine_verification` 에는
+`(verified_date, member_routine_id)` 인덱스를 하나 더 뒀다 — 루틴 목록에 "오늘 완료"를 붙일 때
+루틴마다 묻지 않고 그날치를 한 번에 가져오는 경로다.
 
 `group_routine_verification`이 할당을 참조하는 것이 이 설계의 핵심이다. 그룹은 "완료 여부"를 이미 `status`로 들고 있으므로, 인증 행은 **그 완료에 붙는 증빙**이지 완료 그 자체가 아니다. 반면 개인 루틴은 인증 행이 곧 완료다.
 
@@ -669,6 +676,10 @@ MySQL은 유니크 키에서 `NULL`을 서로 다른 값으로 취급하므로 �
 범위 식별자를 경로에 넣는 근거는 위 [범위 식별자] 절과 같다. **공개 용도에는 식별자를 넣지 않지만 비공개 용도에는 넣는다** — 비공개는 경로가 URL로 노출되지 않고, 접근 판정과 일괄 정리에 그 값이 필요하다.
 
 > ⚠️ **presigned GET이 아직 없다.** 업로드용 PUT 서명만 구현돼 있다. 이것이 없으면 그룹·개인 인증 사진을 올려도 아무도 볼 수 없다. **1단계에서 먼저 만든다.**
+>
+> ⚠️ **지금 발급되는 key 에는 범위 식별자가 빠져 있다.** 실제로는 `group-routine-verifications/{yyyy}/{MM}/{dd}/{UUID}.jpg` 형태로 만들어진다. 식별자를 넣으려면 presigned URL 발급 요청이 `groupId` 를 함께 받아야 하는데(`memberId` 는 서버가 알지만 `groupId` 는 아니다) 그건 클라이언트 변경이 딸린다.
+>
+> 지금 막히는 것은 없다 — 접근 판정은 mediaKey 로 인증 행을 찾아 소유자·방 멤버를 확인하면 되고, presigned GET 자체가 아직 없어 소비자도 없다. 식별자가 값어치를 갖는 것은 **그룹 해체 시 prefix 단위 정리**와 다층 방어이므로, **1단계에서 서빙과 함께 맞춘다.**
 
 ### AI 심사는 챌린지만
 
@@ -748,7 +759,7 @@ POST /api/groups/{gid}/routines/{rid}/verifications
 | 0 | 이 문서 합의 | 없음 |
 | 1 | presigned GET(비공개 미디어 서빙) | 새 API 추가 |
 | 2 | 챌린지 인증을 `verification` 도메인으로 이동 | **없음** — 테스트가 그대로 통과하는 것이 검증 |
-| 3 | 그룹·개인 인증 테이블·API | 새 기능 |
+| 3 | 그룹·개인 인증 테이블·API | 새 기능 ✅ **완료** |
 
 3단계에는 **PR #100(홈 메인)과의 조율**이 딸린다. 개인 루틴 완료 표시가 `RoutineResDTO.Routine`에 필드를 더하는데, 그쪽이 그 DTO를 홈 화면에 그대로 쓴다.
 
