@@ -228,10 +228,11 @@ public final class ChallengeConverter {
                 .build();
     }
 
-    // 참여 여부·집계 수치는 Service가 조회해 매개변수로 넘긴다.
+    // 참여 여부·주기 인증 여부·집계 수치는 Service가 조회해 매개변수로 넘긴다.
     public static ChallengeResDTO.Detail toDetail(
             Challenge challenge,
             boolean participating,
+            boolean verifiedInCurrentPeriod,
             long participantCount,
             long verificationPostCount,
             long todayCompletionCount
@@ -245,6 +246,7 @@ public final class ChallengeConverter {
                 .routineCycle(challenge.getRoutineCycle())
                 .reward(challenge.getReward())
                 .participating(participating)
+                .verifiedInCurrentPeriod(verifiedInCurrentPeriod)
                 .participantCount(participantCount)
                 .verificationPostCount(verificationPostCount)
                 .todayCompletionCount(todayCompletionCount)
