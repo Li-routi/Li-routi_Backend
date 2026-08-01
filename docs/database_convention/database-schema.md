@@ -711,7 +711,7 @@ MySQL은 유니크 키에서 `NULL`을 서로 다른 값으로 취급하므로 �
 | 그룹 루틴 | 그 방 멤버 전원 | `group-routine-verifications/` | `group-routine-verifications/{groupId}/` | **presigned GET** ✅ |
 | 개인 루틴 | 본인만 | `member-routine-verifications/` | `member-routine-verifications/{memberId}/` | **조회 경로 없음** ⚠️ |
 
-범위 식별자를 경로에 넣으려는 근거는 위 [범위 식별자] 절과 같다. **공개 용도에는 식별자를 넣지 않고 비공개 용도에만 넣는다** — 비공개는 경로가 URL로 노출되지 않고, 일괄 정리에 그 값이 필요하다. 아직 넣지 않은 이유는 아래 경고를 볼 것.
+범위 식별자를 경로에 넣으려는 근거는 아래 [범위 식별자는 "누가 볼 수 있는가"의 단위다](#범위-식별자는-누가-볼-수-있는가의-단위다) 절과 같다. **공개 용도에는 식별자를 넣지 않고 비공개 용도에만 넣는다** — 비공개는 경로가 URL로 노출되지 않고, 일괄 정리에 그 값이 필요하다. 아직 넣지 않은 이유는 바로 아래 경고를 볼 것.
 
 **presigned GET 이 구현됐다.** 조회 API 가 응답에 서명된 주소를 실어 내려준다.
 
@@ -885,12 +885,12 @@ presigned URL 발급 시점의 KST 날짜다. **인증일(`verified_date`)과 �
 
 `profiles/`는 현재 담당 구현체가 없다 — `MediaPurpose`에는 있지만 발급된 적이 없고 그 key를 담는 컬럼도 없다. **프로필 업로드를 구현할 때 컬럼을 추가하면서 참조처도 함께 등록해야 한다.**
 
-아래 두 용도는 [인증 도메인 설계안]에서 추가될 예정이며, 같은 규칙이 적용된다.
+아래 두 용도는 [인증(verification) 도메인](#인증verification-도메인--설계안-합의-필요)에서 **테이블·API 가 이미 추가됐다.** 다만 **아직 `MediaReferenceSource` 구현체가 없어 정리 배치가 이 둘을 훑지 않는다** — 담당자가 없는 용도는 대상에서 빠지므로(위 원칙) 지금은 그 사진들이 영영 지워지지 않는다. prefix 도 목표 형태이지 현재 형태가 아니다.
 
-| 용도 | prefix | 참조 컬럼 |
-| --- | --- | --- |
-| 그룹 루틴 인증 | `group-routine-verifications/{groupId}/` | `group_routine_verification.image_url` |
-| 개인 루틴 인증 | `member-routine-verifications/{memberId}/` | `member_routine_verification.image_url` |
+| 용도 | 지금 발급되는 prefix | 목표 prefix | 참조 컬럼 | 참조처 등록 |
+| --- | --- | --- | --- | --- |
+| 그룹 루틴 인증 | `group-routine-verifications/` | `group-routine-verifications/{groupId}/` | `group_routine_verification.image_url` | ❌ 미등록 |
+| 개인 루틴 인증 | `member-routine-verifications/` | `member-routine-verifications/{memberId}/` | `member_routine_verification.image_url` | ❌ 미등록 |
 
 #### 범위 식별자는 "누가 볼 수 있는가"의 단위다
 
@@ -902,7 +902,9 @@ presigned URL 발급 시점의 KST 날짜다. **인증일(`verified_date`)과 �
 | 그룹 루틴 인증 | 그 방 멤버 전원 | `groupId` |
 | 그룹 채팅 이미지 | 그 방 멤버 전원 | `groupId` |
 
-**그룹 경로에 작성자 `memberId`를 넣지 않는다.** 비공개 미디어는 CloudFront signed cookie로 서빙할 예정인데(`deploy/README.md`의 [미디어 서빙] 절), 쿠키는 경로 prefix로 범위를 잡는다. A가 올린 것도 B가 봐야 하므로 쿠키는 `group-chats/{groupId}/*`를 커버해야 하고, 그 아래를 `memberId`로 더 쪼개면 접근 제어에 기여하는 바가 없다. 반면 URL이 유출되면 "누가 올렸는지"까지 흘린다.
+**그룹 경로에 작성자 `memberId`를 넣지 않는다.** A가 올린 것도 B가 봐야 하므로 범위는 방 단위여야 하고, 그 아래를 `memberId`로 더 쪼개면 접근 제어에 기여하는 바가 없다. 반면 URL이 유출되면 "누가 올렸는지"까지 흘린다.
+
+> 이 근거는 원래 CloudFront signed cookie를 전제로 썼다(쿠키가 경로 prefix로 범위를 잡으므로). **실제 서빙은 presigned GET으로 구현했고**(조직 SCP에 CloudFront가 없다, `deploy/README.md`의 [미디어 서빙] 절) 서명이 오브젝트 단위라 경로가 범위를 정하지 않는다. 그래도 결론은 그대로다 — 작성자를 경로에 넣으면 URL이 새는 순간 그것까지 새고, 얻는 것은 없다.
 
 범위 식별자에는 두 번째 값어치가 있다. **그룹이 삭제될 때 prefix 하나로 정리된다.** 탈퇴 정책이 "혼자 있는 방은 삭제한다"이므로 그룹 삭제는 실제로 일어나는 흐름이다. `groupId`가 없으면 방이 사라진 뒤 그 방의 key를 DB에서 되짚어야 한다.
 
