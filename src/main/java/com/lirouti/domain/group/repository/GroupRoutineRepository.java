@@ -51,4 +51,16 @@ public interface GroupRoutineRepository extends JpaRepository<GroupRoutine, Long
      * @return 같은 제목의 다른 루틴이 존재하면 {@code true}
      */
     boolean existsByGroupIdAndTitleAndIdNot(Long groupId, String title, Long routineId);
+
+    /**
+     * 그 루틴이 그 그룹에 속하는지 확인한다. 조회 경로에서 잠금 없이 쓴다.
+     *
+     * <p>{@link #findByIdAndGroupIdForUpdate}와 조건은 같지만 행을 잠그지 않는다. 읽기만 하는데
+     * 잠그면 같은 루틴을 보는 요청끼리 직렬화된다.
+     *
+     * @param routineId 확인할 그룹 루틴 ID
+     * @param groupId 요청 대상 그룹 ID
+     * @return 그 그룹의 루틴이면 {@code true}
+     */
+    boolean existsByIdAndGroupId(Long routineId, Long groupId);
 }

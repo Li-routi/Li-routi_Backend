@@ -78,6 +78,10 @@ services:
       # CloudFront 등을 붙이면 .env에 AWS_S3_PUBLIC_BASE_URL을 넣어 이 오리진을 덮어쓴다.
       AWS_S3_PUBLIC_BASE_URL: ${AWS_S3_PUBLIC_BASE_URL:-https://s3.${AWS_REGION:-ap-northeast-2}.amazonaws.com/${AWS_S3_BUCKET}}
       AWS_REGION: ${AWS_REGION:-ap-northeast-2}
+      # 비공개 미디어(루틴 인증 사진) 조회용 서명 URL 유효 시간.
+      # 업로드용(5분)과 분리한 이유는 수명이 다르기 때문이다 — 조회 URL은 목록 응답에 실려
+      # 화면에 머무는 동안 계속 쓰인다. 짧으면 사진이 깨지고, 길면 유출 시 그만큼 오래 열린다.
+      AWS_S3_VIEW_URL_EXPIRATION: ${AWS_S3_VIEW_URL_EXPIRATION:-PT15M}
       # 인증 사진 AI 심사. 키는 fail-fast 필수값이라 기본값을 두지 않는다.
       #
       # 이 블록에 적지 않으면 .env 에 있어도 컨테이너에 들어가지 않는다 — compose 는 여기

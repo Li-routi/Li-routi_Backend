@@ -34,4 +34,5 @@ public interface MemberRoutineVerificationRepository
             @Param("routineIds") Collection<Long> routineIds,
             @Param("verifiedDate") LocalDate verifiedDate
     );
+
 }

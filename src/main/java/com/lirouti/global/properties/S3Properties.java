@@ -31,6 +31,19 @@ public class S3Properties {
     @NotNull(message = "presigned URL 유효 시간은 필수입니다.")
     private Duration presignedUrlExpiration;
 
+    /**
+     * 비공개 미디어를 <b>읽는</b> 서명 URL 의 유효 시간. 업로드용과 분리한 이유는 수명이 다르기 때문이다.
+     *
+     * <p>업로드 URL 은 발급 직후 PUT 한 번에 쓰이고 끝나 짧을수록 좋다. 반면 조회 URL 은 목록
+     * 응답에 실려 나가 화면에 머무는 동안 계속 쓰인다 — 업로드와 같은 5분을 주면 사용자가
+     * 잠깐 다른 앱을 보고 돌아왔을 때 사진이 전부 깨진다.
+     *
+     * <p>그렇다고 길게 잡으면 URL 하나가 유출됐을 때 그만큼 오래 열려 있다. 비공개 사진은
+     * 그 노출 창이 곧 위험이라, 화면 한 번 보는 시간 정도로 짧게 둔다.
+     */
+    @NotNull(message = "미디어 조회 서명 URL 유효 시간은 필수입니다.")
+    private Duration viewUrlExpiration;
+
     // 카테고리별 최대 업로드 용량(바이트). 사진과 영상은 파일 크기가 크게 달라 한도를 분리한다.
     @Positive(message = "최대 이미지 업로드 용량은 양수여야 합니다.")
     private long maxImageSize;
@@ -77,8 +90,21 @@ public class S3Properties {
         if (presignedUrlExpiration == null) {
             return true;
         }
-        return !presignedUrlExpiration.isZero()
-                && !presignedUrlExpiration.isNegative()
-                && presignedUrlExpiration.compareTo(MAX_PRESIGNED_EXPIRATION) <= 0;
+        return isWithinSigningLimit(presignedUrlExpiration);
+    }
+
+    /** 조회용 서명도 같은 SigV4 한도를 받는다. 발급 시점이 아니라 부팅 때 걸러야 하는 것도 같다. */
+    @AssertTrue(message = "미디어 조회 서명 URL 유효 시간은 1초 이상 7일 이하여야 합니다.")
+    public boolean isViewUrlExpirationInRange() {
+        if (viewUrlExpiration == null) {
+            return true;
+        }
+        return isWithinSigningLimit(viewUrlExpiration);
+    }
+
+    private static boolean isWithinSigningLimit(Duration duration) {
+        return !duration.isZero()
+                && !duration.isNegative()
+                && duration.compareTo(MAX_PRESIGNED_EXPIRATION) <= 0;
     }
 }
