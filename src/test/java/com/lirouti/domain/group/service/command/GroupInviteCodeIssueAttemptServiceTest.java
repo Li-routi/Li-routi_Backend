@@ -2,7 +2,6 @@ package com.lirouti.domain.group.service.command;
 
 import com.lirouti.domain.group.dto.response.GroupResDTO;
 import com.lirouti.domain.group.entity.Group;
-import com.lirouti.domain.group.entity.GroupMember;
 import com.lirouti.domain.group.repository.GroupRepository;
 import com.lirouti.domain.group.service.GroupValidationService;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,9 +32,6 @@ class GroupInviteCodeIssueAttemptServiceTest {
     private GroupRepository groupRepository;
     @Mock
     private GroupInviteCodeGenerator inviteCodeGenerator;
-    @Mock
-    private GroupMember ownerMembership;
-
     @InjectMocks
     private GroupInviteCodeIssueAttemptService issueAttemptService;
 
@@ -63,6 +59,8 @@ class GroupInviteCodeIssueAttemptServiceTest {
         assertThat(result.expiresAt()).isEqualTo(ISSUED_AT.plusMinutes(10));
         assertThat(group.getInviteCode()).isEqualTo(result.inviteCode());
         assertThat(group.getInviteCodeExpiresAt()).isEqualTo(result.expiresAt());
+        verify(groupValidationService).lockActiveGroupForUpdate(GROUP_ID);
+        verify(groupValidationService).validateGroupOwner(GROUP_ID, OWNER_ID);
         verify(groupRepository).saveAndFlush(group);
     }
 
@@ -85,6 +83,7 @@ class GroupInviteCodeIssueAttemptServiceTest {
     void issueOnce_NotOwner_PropagatesExceptionWithoutSave() {
         // given
         RuntimeException exception = new IllegalStateException("not owner");
+        when(groupValidationService.lockActiveGroupForUpdate(GROUP_ID)).thenReturn(group);
         when(groupValidationService.validateGroupOwner(GROUP_ID, OWNER_ID))
                 .thenThrow(exception);
 
@@ -96,9 +95,7 @@ class GroupInviteCodeIssueAttemptServiceTest {
     }
 
     private void givenOwnerGroup() {
-        when(groupValidationService.validateGroupOwner(GROUP_ID, OWNER_ID))
-                .thenReturn(ownerMembership);
-        when(ownerMembership.getGroup()).thenReturn(group);
+        when(groupValidationService.lockActiveGroupForUpdate(GROUP_ID)).thenReturn(group);
         when(inviteCodeGenerator.generate()).thenReturn(
                 new GroupInviteCodeGenerator.GeneratedInviteCode(
                         "NEW1234",

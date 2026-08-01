@@ -450,8 +450,15 @@ MySQL은 유니크 키에서 `NULL`을 서로 다른 값으로 취급하므로 �
 
 `group_routine.group_routine_category_id`는 이 테이블을 참조한다. 고정 카테고리 또는 루틴과
 같은 그룹의 카테고리만 연결할 수 있으며, 소유 범위 검증은 애플리케이션에서 추가로 수행한다.
-V10에서는 안전한 전환을 위해 기존 `category_id`와 개인 카테고리 FK를 함께 보존한다. 기존
-컬럼은 운영 데이터 검증이 끝난 뒤 후속 마이그레이션에서 제거한다.
+그룹 루틴 카테고리 전환은 MySQL DDL의 부분 적용 위험을 줄이기 위해 단계별로 수행한다.
+
+- V10: `group_routine_category` 테이블 생성
+- V11: 기본·그룹별 카테고리 backfill 및 `group_routine_category_id` 매핑
+- V12: 신규 FK와 NOT NULL 제약 적용, 기존 `category_id` nullable 전환
+- V13: `invite_code_expires_at` 기존 데이터 보정 및 NOT NULL 적용
+
+기존 `category_id`와 개인 카테고리 FK는 운영 데이터 검증이 끝날 때까지 유지하며, 후속
+마이그레이션에서 제거한다.
 
 ## 챌린지 테이블
 
@@ -776,7 +783,8 @@ POST /api/groups/{gid}/routines/{rid}/verifications
 ### 그 밖에 정해둘 것
 
 - **회차 개념이 없다.** 챌린지의 `participation_round`에 해당하는 것이 루틴에는 없다. 이탈 후 재참여 같은 흐름이 없으므로 그대로 두면 된다.
-- **마이그레이션은 V9·V10이 된다.** 파일을 만들기 직전에 `db/migration/`과 열린 PR을 함께 확인한다.
+- **마이그레이션 버전은 구현 직전에 확인한다.** `db/migration/`과 열린 PR을 확인하고 현재 마지막
+  versioned migration 다음 번호를 사용한다.
 - **staging prefix**: 심사 전 사진을 비공개에 두는 문제는 별도로 다루는데, 그룹·개인 인증은 **애초에 비공개 prefix**라 그 문제가 없다. 챌린지만 해당한다.
 
 ### 단계

@@ -3,7 +3,6 @@ package com.lirouti.domain.group.service.command;
 import com.lirouti.domain.group.converter.GroupConverter;
 import com.lirouti.domain.group.dto.response.GroupResDTO;
 import com.lirouti.domain.group.entity.Group;
-import com.lirouti.domain.group.entity.GroupMember;
 import com.lirouti.domain.group.repository.GroupRepository;
 import com.lirouti.domain.group.service.GroupValidationService;
 import lombok.RequiredArgsConstructor;
@@ -26,8 +25,8 @@ public class GroupInviteCodeIssueAttemptService {
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public GroupResDTO.InviteCode issueOnce(Long groupId, Long memberId) {
-        GroupMember ownerMembership = groupValidationService.validateGroupOwner(groupId, memberId);
-        Group group = ownerMembership.getGroup();
+        Group group = groupValidationService.lockActiveGroupForUpdate(groupId);
+        groupValidationService.validateGroupOwner(groupId, memberId);
         GroupInviteCodeGenerator.GeneratedInviteCode generatedInviteCode =
                 inviteCodeGenerator.generate();
 

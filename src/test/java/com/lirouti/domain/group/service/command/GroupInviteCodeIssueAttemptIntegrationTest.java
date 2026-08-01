@@ -63,6 +63,8 @@ class GroupInviteCodeIssueAttemptIntegrationTest {
         memberId = seed.memberId();
         when(groupRepository.findById(groupId)).thenAnswer(invocation ->
                 Optional.ofNullable(entityManager.find(Group.class, groupId)));
+        when(groupRepository.findByIdForUpdate(groupId)).thenAnswer(invocation ->
+                Optional.ofNullable(entityManager.find(Group.class, groupId)));
         when(groupRepository.existsByInviteCode(anyString())).thenReturn(false);
     }
 
