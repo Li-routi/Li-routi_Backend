@@ -101,19 +101,19 @@ class ChallengeVerificationControllerTest {
     }
 
     @Test
-    @DisplayName("인증 없이 인증하기를 요청하면 거부된다(403)")
+    @DisplayName("인증 없이 인증하기를 요청하면 거부된다(401)")
     void verify_Unauthenticated_IsRejected() throws Exception {
         mockMvc.perform(post("/api/challenges/{id}/verifications", 1L)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body(VALID_KEY, "hi")))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
-    @DisplayName("피드 조회는 로그인이 필요하다(403)")
+    @DisplayName("피드 조회는 로그인이 필요하다(401)")
     void getFeed_Unauthenticated_IsRejected() throws Exception {
         mockMvc.perform(get("/api/challenges/{id}/verifications", 1L))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -202,12 +202,12 @@ class ChallengeVerificationControllerTest {
 
     // ── 인증 신고 (#15) ──
     @Test
-    @DisplayName("인증 없이 신고를 요청하면 거부된다(403)")
+    @DisplayName("인증 없이 신고를 요청하면 거부된다(401)")
     void report_Unauthenticated_IsRejected() throws Exception {
         mockMvc.perform(post("/api/challenges/{cid}/verifications/{vid}/reports", 1L, 1L)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"reason\": \"부적절\"}"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -298,10 +298,10 @@ class ChallengeVerificationControllerTest {
     // ── 내 인증 목록 (#62) ──
 
     @Test
-    @DisplayName("인증 없이 내 인증 목록을 요청하면 거부된다(403)")
+    @DisplayName("인증 없이 내 인증 목록을 요청하면 거부된다(401)")
     void getMyVerifications_Unauthenticated_IsRejected() throws Exception {
         mockMvc.perform(get("/api/challenges/{id}/verifications/me", 1L))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
     }
 
     @Test

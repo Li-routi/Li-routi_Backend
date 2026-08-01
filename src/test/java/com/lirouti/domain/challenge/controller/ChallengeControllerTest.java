@@ -205,28 +205,28 @@ class ChallengeControllerTest {
     }
 
     @Test
-    @DisplayName("정의되지 않은 POST도 미인증이면 403이다")
+    @DisplayName("정의되지 않은 POST도 미인증이면 401이다")
     void postChallenges_Unauthenticated_IsRejected() throws Exception {
-        // SecurityConfig가 PUBLIC_URIS 외 모든 요청을 authenticated로 두므로(#77) 메서드와
-        // 무관하게 막힌다. 커스텀 EntryPoint를 안 붙여 Spring Security 기본
-        // Http403ForbiddenEntryPoint가 미인증 요청에 403을 낸다(401이 아니다).
+        // SecurityConfig가 PUBLIC_URIS 외 모든 요청을 authenticated로 두므로 메서드와
+        // 무관하게 막힌다. 미인증 응답은 AuthenticationEntryPointImpl이 401로 낸다 —
+        // 매핑되지 않은 경로라도 인증이 먼저 걸리므로 404가 아니라 401이다.
         mockMvc.perform(post("/api/challenges"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
-    @DisplayName("인증 없이 목록을 요청하면 거부된다(403) — 이 서비스에는 게스트가 없다")
+    @DisplayName("인증 없이 목록을 요청하면 거부된다(401) — 이 서비스에는 게스트가 없다")
     void getChallenges_Unauthenticated_IsRejected() throws Exception {
         mockMvc.perform(get("/api/challenges"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
-    @DisplayName("인증 없이 상세를 요청하면 거부된다(403)")
+    @DisplayName("인증 없이 상세를 요청하면 거부된다(401)")
     void getChallenge_Unauthenticated_IsRejected() throws Exception {
         Challenge c = persistChallenge();
 
         mockMvc.perform(get("/api/challenges/{id}", c.getId()))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
     }
 }

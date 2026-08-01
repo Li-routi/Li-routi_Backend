@@ -6,6 +6,9 @@ import com.lirouti.domain.auth.service.AuthService;
 import com.lirouti.domain.member.controller.MemberController;
 import com.lirouti.domain.member.service.command.MemberCommandService;
 import com.lirouti.domain.member.service.query.MemberQueryService;
+import com.lirouti.global.apiPayload.ApiErrorResponseWriter;
+import com.lirouti.global.auth.AccessDeniedHandlerImpl;
+import com.lirouti.global.auth.AuthenticationEntryPointImpl;
 import com.lirouti.global.auth.filter.JwtAuthFilter;
 import com.lirouti.global.auth.filter.JwtExceptionFilter;
 import com.lirouti.global.util.JwtUtil;
@@ -25,10 +28,13 @@ import org.springframework.test.web.servlet.ResultActions;
 import static org.mockito.Mockito.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest({AuthController.class, MemberController.class})
-@Import({SecurityConfig.class, JwtAuthFilter.class, JwtExceptionFilter.class})
+@Import({SecurityConfig.class, JwtAuthFilter.class, JwtExceptionFilter.class,
+        AuthenticationEntryPointImpl.class, AccessDeniedHandlerImpl.class,
+        ApiErrorResponseWriter.class})
 @DisplayName("SecurityConfig HTTP 접근 제어 테스트")
 class SecurityConfigTest {
     private static final String ACCESS_TOKEN = "access-token";
@@ -72,17 +78,35 @@ class SecurityConfigTest {
     }
 
     @Test
-    @DisplayName("인증 없이 회원 API에 접근하면 요청을 거부한다")
-    void memberApi_Anonymous_DeniesAccess() throws Exception {
+    @DisplayName("인증 없이 회원 API에 접근하면 401과 ApiResponse 본문을 준다")
+    void memberApi_Anonymous_Returns401WithBody() throws Exception {
         // given
         String endpoint = "/api/members/logout";
 
         // when
         ResultActions result = mockMvc.perform(post(endpoint));
 
-        // then
-        result.andExpect(status().isForbidden());
+        // then: 상태 코드와 본문 둘 다 계약이다.
+        // 403이면 클라이언트의 "401이면 재발급" 분기가 걸리지 않고,
+        // 본문이 비면 코드도 메시지도 없어 왜 막혔는지 알 수 없다.
+        result.andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.isSuccess").value(false))
+                .andExpect(jsonPath("$.code").value("COMMON401_1"))
+                .andExpect(jsonPath("$.message").isNotEmpty());
         verifyNoInteractions(memberCommandService);
+    }
+
+    @Test
+    @DisplayName("매핑되지 않은 경로는 404다 — 주소 오타가 서버 오류로 보이면 안 된다")
+    void unmappedPath_Returns404() throws Exception {
+        // when: 존재하지 않는 경로. 인증을 통과시켜 시큐리티가 아니라 라우팅에서 걸리게 한다
+        ResultActions result = mockMvc.perform(post("/api/v1/members/logout")
+                .with(user("member").roles("USER")));
+
+        // then
+        result.andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.isSuccess").value(false))
+                .andExpect(jsonPath("$.code").value("COMMON404_1"));
     }
 
     @Test

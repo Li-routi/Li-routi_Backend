@@ -2,7 +2,7 @@ package com.lirouti.global.auth.filter;
 
 import com.lirouti.domain.auth.exception.AuthException;
 import com.lirouti.domain.auth.exception.code.error.AuthErrorCode;
-import com.lirouti.global.apiPayload.ApiResponse;
+import com.lirouti.global.apiPayload.ApiErrorResponseWriter;
 import com.lirouti.global.apiPayload.code.BaseErrorCode;
 import com.lirouti.global.apiPayload.code.GeneralErrorCode;
 import com.lirouti.global.apiPayload.exception.GeneralException;
@@ -16,10 +16,8 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
-import tools.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
 
@@ -27,7 +25,7 @@ import java.io.IOException;
 @Component
 @RequiredArgsConstructor
 public class JwtExceptionFilter extends OncePerRequestFilter {
-    private final ObjectMapper objectMapper;
+    private final ApiErrorResponseWriter responseWriter;
 
     @Override
     protected void doFilterInternal(
@@ -71,15 +69,7 @@ public class JwtExceptionFilter extends OncePerRequestFilter {
             }
         };
 
-        setErrorResponse(response, errorCode);
+        responseWriter.write(response, errorCode);
     }
 
-    private void setErrorResponse(HttpServletResponse response, BaseErrorCode code) throws IOException {
-        response.setStatus(code.getHttpStatus().value());
-        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        response.setCharacterEncoding("UTF-8");
-
-        ApiResponse<Void> apiResponse = ApiResponse.onFailure(code);
-        response.getWriter().write(objectMapper.writeValueAsString(apiResponse));
-    }
 }
