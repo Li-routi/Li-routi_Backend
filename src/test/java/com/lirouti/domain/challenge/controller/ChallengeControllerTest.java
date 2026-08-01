@@ -186,7 +186,11 @@ class ChallengeControllerTest {
         mockMvc.perform(get("/api/challenges/{id}", c.getId())
                         .with(user(new CustomUserDetails(me.getId(), Role.ROLE_USER))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.result.participating").value(true));
+                .andExpect(jsonPath("$.result.participating").value(true))
+                // 인증하기 버튼을 그리는 두 값이 함께 나가는지 고정한다. 필드 이름이 클라이언트와의
+                // 계약이라, 판정 로직을 보는 서비스 테스트만으로는 직렬화 이름이 갈리는 변경을 못 잡는다.
+                // 참여만 하고 아직 인증한 적이 없으므로 false 다.
+                .andExpect(jsonPath("$.result.verifiedInCurrentPeriod").value(false));
     }
 
     @Test

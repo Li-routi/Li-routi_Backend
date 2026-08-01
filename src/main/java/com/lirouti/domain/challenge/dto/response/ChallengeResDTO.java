@@ -197,10 +197,25 @@ public final class ChallengeResDTO {
     ) {
     }
 
-    // 상세 화면
-    // participating: 조회자가 현재 참여 중인지. false면 '참여하기', true면 '인증하기' 버튼을 노출한다.
-    // reward: 챌린지 달성 시 부여되는 재화 수량. 목록 카드와 같은 값이다.
-    // verificationPostCount: 인증 게시글 수(상단 통계). participantCount와 함께 카드 상단에 쓰인다.
+    /**
+     * 상세 화면.
+     *
+     * <p>{@code participating}: 조회자가 현재 참여 중인지. {@code reward}: 달성 시 부여되는 재화
+     * 수량(목록 카드와 같은 값). {@code verificationPostCount}: 인증 게시글 수(상단 통계).
+     *
+     * <h3>인증하기 버튼은 두 값으로 그린다</h3>
+     * <pre>
+     * participating = false                              → "참여하기"
+     * participating = true,  verifiedInCurrentPeriod = false → "인증하기"
+     * participating = true,  verifiedInCurrentPeriod = true  → "완료" (비활성)
+     * </pre>
+     *
+     * <p>{@code verifiedInCurrentPeriod} 는 <b>"오늘 인증했는지"가 아니라 "현재 주기 구간에
+     * 인증했는지"</b>다. 이름을 그렇게 정한 이유는 확장 때문이다 — 지금 챌린지는 전부
+     * {@code DAILY} 라 결과가 "오늘"과 같지만, 주간·월간이 도입되면 같은 필드가 그대로
+     * "이번 주"·"이번 달"을 뜻하게 되어 <b>클라이언트를 고치지 않아도 된다.</b>
+     * 구간의 정의는 {@link RoutineCycle} 에 있다(주는 일요일 시작).
+     */
     @Builder
     public record Detail(
             Long challengeId,
@@ -211,6 +226,7 @@ public final class ChallengeResDTO {
             RoutineCycle routineCycle,
             int reward,
             boolean participating,
+            boolean verifiedInCurrentPeriod,
             long participantCount,
             long verificationPostCount,
             long todayCompletionCount

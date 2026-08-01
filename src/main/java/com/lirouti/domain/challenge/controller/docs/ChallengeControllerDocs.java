@@ -57,6 +57,20 @@ public interface ChallengeControllerDocs {
                     participating으로 '참여하기'/'인증하기' 버튼 상태를 정합니다.
 
                     응답 result: challengeId, name, description, imageUrl, category,
+                    ### 인증하기 버튼은 두 값으로 그립니다
+                    | participating | verifiedInCurrentPeriod | 버튼 |
+                    | --- | --- | --- |
+                    | false | - | 참여하기 |
+                    | true | false | 인증하기 |
+                    | true | true | 완료 (비활성) |
+
+                    `verifiedInCurrentPeriod`는 **"오늘 인증했는지"가 아니라 "현재 주기 구간에
+                    인증했는지"**입니다. 지금 챌린지는 전부 DAILY라 결과가 "오늘"과 같지만,
+                    주간·월간이 도입되면 같은 필드가 그대로 "이번 주"·"이번 달"을 뜻하므로
+                    **클라이언트를 고치지 않아도 됩니다.** 주는 일요일에 시작합니다(일~토, KST).
+
+                    참여 중이 아니면 항상 false입니다 — 이탈한 뒤에는 인증할 수 없기 때문입니다.
+
                     routineCycle(DAILY/WEEKLY/MONTHLY), reward(달성 시 부여되는 재화 수량),
                     participating(조회자 참여 여부), participantCount(참여자 수),
                     verificationPostCount(인증 게시글 수), todayCompletionCount(오늘 완료자 수).
