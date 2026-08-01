@@ -64,7 +64,8 @@ PREPARE stmt FROM @validation_sql;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
-CREATE TABLE IF NOT EXISTS `group_routine_category` (
+-- 신규 테이블이 이미 존재하면 예상하지 않은 스키마 드리프트이므로 즉시 실패한다.
+CREATE TABLE `group_routine_category` (
   `active` bit(1) NOT NULL,
   `display_order` int NOT NULL,
   `created_at` datetime(6) NOT NULL,
@@ -81,7 +82,7 @@ CREATE TABLE IF NOT EXISTS `group_routine_category` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- V10의 데이터 이관은 repeatable migration보다 먼저 실행되므로 기본 행을 여기서도 준비한다.
--- 실패 후 repair·재실행해도 고정 id가 중복되지 않도록 upsert한다.
+-- 기본 카테고리는 개인 카테고리와 동일한 고정 id로 준비한다.
 INSERT INTO group_routine_category
     (id, group_id, name, color, display_order, active, created_at, updated_at)
 VALUES
@@ -97,7 +98,7 @@ ON DUPLICATE KEY UPDATE
   active = seeded.active;
 
 -- 사용 중인 개인 사용자 카테고리를 그룹별로 복제한다. 개인 카테고리 원본은 그대로 보존한다.
--- (group_id, name) unique를 이용해 재실행 시 기존 복제 행을 갱신한다.
+-- (group_id, name) unique를 이용해 그룹별 동일 이름을 한 행으로 유지한다.
 INSERT INTO group_routine_category
     (group_id, name, color, display_order, active, created_at, updated_at)
 SELECT migrated.group_id,
@@ -181,7 +182,7 @@ PREPARE stmt FROM @validation_sql;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
--- 실패 후 repair·재실행 시 같은 FK를 다시 추가하지 않는다.
+-- 같은 이름의 FK가 이미 있는지 확인한 뒤 추가한다.
 SET @group_category_fk_count := (
     SELECT COUNT(*)
       FROM information_schema.referential_constraints

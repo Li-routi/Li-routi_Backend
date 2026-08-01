@@ -40,7 +40,7 @@ public enum GroupSuccessCode implements BaseSuccessCode {
     ),
     GROUP_CREATE_SUCCESS(
             HttpStatus.CREATED,
-            "모임방 생성에 성공했습니다.",
+            "그룹 생성에 성공했습니다.",
             "GROUP201_3"
     ),
     GROUP_ROUTINE_CATEGORY_CREATE_SUCCESS(
