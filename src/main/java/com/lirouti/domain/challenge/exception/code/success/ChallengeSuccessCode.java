@@ -64,6 +64,11 @@ public enum ChallengeSuccessCode implements BaseSuccessCode {
             HttpStatus.OK,
             "인증 좋아요 취소에 성공했습니다.",
             "CHALLENGE200_11"
+    ),
+    VERIFICATION_MEMO_UPDATE_SUCCESS(
+            HttpStatus.OK,
+            "인증 메모를 수정했습니다.",
+            "CHALLENGE200_12"
     );
 
     private final HttpStatus httpStatus;

@@ -27,6 +27,7 @@ import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.startsWith;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -357,5 +358,39 @@ class ChallengeVerificationControllerTest {
                         .with(user(principal(stranger))))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("CHALLENGE409_2"));
+    }
+
+    @Test
+    @DisplayName("메모 수정은 200과 바뀐 content를 돌려준다")
+    void updateMemo_Success() throws Exception {
+        Member me = persistMember();
+        Challenge c = persistChallenge();
+        ChallengeVerification v = persistVerification(me, c);
+        em.flush();
+
+        mockMvc.perform(patch("/api/challenges/{cid}/verifications/{vid}", c.getId(), v.getId())
+                        .with(user(principal(me)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"content": "고친 메모"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.verificationId").value(v.getId()))
+                .andExpect(jsonPath("$.result.content").value("고친 메모"));
+    }
+
+    @Test
+    @DisplayName("메모가 255자를 넘으면 400")
+    void updateMemo_TooLong_IsBadRequest() throws Exception {
+        Member me = persistMember();
+        Challenge c = persistChallenge();
+        ChallengeVerification v = persistVerification(me, c);
+        em.flush();
+
+        mockMvc.perform(patch("/api/challenges/{cid}/verifications/{vid}", c.getId(), v.getId())
+                        .with(user(principal(me)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\": \"%s\"}".formatted("가".repeat(256))))
+                .andExpect(status().isBadRequest());
     }
 }

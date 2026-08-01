@@ -96,6 +96,21 @@ public final class ChallengeResDTO {
     }
 
     /**
+     * 인증 메모 수정 결과.
+     *
+     * <p>바뀐 값만 돌려준다. 클라이언트가 재조회 없이 카드의 메모를 갈아끼우게 하기 위한 것이라
+     * 사진·스트릭처럼 안 바뀐 값은 싣지 않는다.
+     *
+     * <p>{@code content} 는 비웠으면 {@code null} 이다.
+     */
+    @Builder
+    public record MemoUpdate(
+            Long verificationId,
+            String content
+    ) {
+    }
+
+    /**
      * 인증 신고 결과.
      * 신고해도 인증은 삭제되지 않는다 — 신고자 본인의 이후 조회에서 빠지고,
      * 신고가 임계값만큼 쌓이면 전체 회원에게 가려진다.

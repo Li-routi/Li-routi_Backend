@@ -100,6 +100,23 @@ public class ChallengeVerification extends BaseEntity {
     }
 
     /**
+     * 메모만 고친다. <b>사진도 인증 시각도 건드리지 않는다.</b>
+     *
+     * <p>{@link #reverify} 를 재사용하지 않는 이유가 그것이다. 그쪽은 "사진을 다시 올렸다"는
+     * 뜻이라 {@code imageUrl} 과 {@code verifiedAt} 을 함께 바꾼다. 오타 하나 고치는데 인증
+     * 시각이 밀리면 피드의 순서와 "언제 인증했나"가 달라진다.
+     *
+     * <p><b>날짜 제한이 없다.</b> 사진은 그날 수행했다는 증거라 당일에만 교체할 수 있지만,
+     * 메모는 거기 덧붙이는 말이라 나중에 고쳐도 "그날 수행했다"가 흔들리지 않는다.
+     *
+     * <p>빈 문자열과 공백만 있는 값은 {@code null} 로 눕힌다. 처음 인증할 때도 선택 값이라
+     * 비어 있을 수 있는데, 나중에 지운 것만 빈 문자열로 남으면 "메모 없음"이 두 가지 모양이 된다.
+     */
+    public void updateContent(String content) {
+        this.content = (content == null || content.isBlank()) ? null : content;
+    }
+
+    /**
      * 신고 누적으로 전체 회원에게 가린다.
      *
      * 이미 가려져 있으면 시각을 덮어쓰지 않는다. 임계값을 넘긴 뒤에도 신고는 계속 들어오는데,

@@ -87,6 +87,14 @@ public final class ChallengeConverter {
      * 인증하기 결과. imageUrl은 저장된 key가 아니라 Service가 조립한 공개 URL을 받는다.
      * challenge 프록시의 id만 읽으므로 추가 조회가 없다.
      */
+    /** 메모 수정 결과. 바뀐 값만 담아 클라이언트가 재조회 없이 카드를 갱신하게 한다. */
+    public static ChallengeResDTO.MemoUpdate toMemoUpdate(ChallengeVerification verification) {
+        return ChallengeResDTO.MemoUpdate.builder()
+                .verificationId(verification.getId())
+                .content(verification.getContent())
+                .build();
+    }
+
     public static ChallengeResDTO.Verification toVerification(
             ChallengeVerification verification,
             String imageUrl,

@@ -323,6 +323,38 @@ public class ChallengeCommandService {
         return buildLikeResult(verificationId, false);
     }
 
+    /**
+     * 내 인증의 메모를 고친다. <b>사진과 인증 시각은 그대로다.</b>
+     *
+     * <p>사진을 바꾸는 것은 그날 다시 인증하는 것(재인증)이고 심사를 다시 거친다. 메모는 그
+     * 사진에 덧붙이는 말이라 심사 대상이 아니고 <b>날짜 제한도 없다</b> — 어제 쓴 오타를 오늘
+     * 고쳐도 "그날 수행했다"는 사실이 흔들리지 않는다.
+     *
+     * <p>남의 글·없는 글·가려진 글을 모두 404 로 묶는다. 셋을 구분해 알려주면 응답만으로
+     * 그 id 의 존재와 작성자가 드러난다. 조건을 전부 조회에 넣는 이유가 그것이다.
+     *
+     * <p>스트릭·좋아요·신고는 건드리지 않는다. 행이 사라지지 않고 인증일도 그대로라 그 셋이
+     * 참조하는 것이 하나도 바뀌지 않는다.
+     */
+    @Transactional
+    public ChallengeResDTO.MemoUpdate updateMemo(
+            Long memberId,
+            Long challengeId,
+            Long verificationId,
+            ChallengeReqDTO.UpdateMemo request
+    ) {
+        ChallengeVerification verification = challengeVerificationRepository
+                .findMineInChallenge(verificationId, challengeId, memberId)
+                .orElseThrow(() -> {
+                    log.warn("수정할 수 없는 인증입니다. memberId={}, challengeId={}, verificationId={}",
+                            memberId, challengeId, verificationId);
+                    return new ChallengeException(ChallengeErrorCode.VERIFICATION_NOT_FOUND);
+                });
+
+        verification.updateContent(request.content());
+        return ChallengeConverter.toMemoUpdate(verification);
+    }
+
     /** 경로의 challengeId와 인증의 챌린지가 맞는지까지 확인한다. 어긋나면 404다(신고와 같은 기준). */
     private ChallengeVerification findVerificationInChallenge(Long challengeId, Long verificationId) {
         return challengeVerificationRepository
