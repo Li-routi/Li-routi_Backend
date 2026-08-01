@@ -12,6 +12,106 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 @Tag(name = "Group", description = "그룹 및 그룹 루틴 API")
 public interface GroupControllerDocs {
 
+    @Operation(
+            summary = "그룹 루틴 카테고리 목록 조회",
+            description = """
+                    ACTIVE 그룹 구성원만 조회할 수 있습니다.
+                    기본 카테고리 6개와 해당 그룹의 활성 사용자 카테고리를 기존 노출 순서로 반환합니다.
+                    다른 그룹 및 비활성 카테고리는 포함하지 않습니다.
+                    addableCount는 그룹이 더 추가할 수 있는 사용자 카테고리 수입니다.
+
+                    ### 에러 코드
+
+                    | code | HTTP | 설명 |
+                    | --- | --- | --- |
+                    | `GROUP403_1` | 403 | 비활성 그룹 |
+                    | `GROUP403_2` | 403 | ACTIVE 그룹 구성원이 아님 |
+                    | `GROUP404_1` | 404 | 그룹을 찾을 수 없음 |
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200", description = "그룹 루틴 카테고리 조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "403", description = "미인증, 비활성 그룹 또는 ACTIVE 구성원이 아님"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404", description = "회원 또는 그룹을 찾을 수 없음")
+    })
+    ApiResponse<GroupResDTO.CategoryList> getCategories(
+            @Parameter(hidden = true) CustomUserDetails userDetails,
+            @Parameter(description = "그룹 ID", example = "1") Long groupId
+    );
+
+    @Operation(
+            summary = "그룹 루틴 카테고리 추가",
+            description = """
+                    ACTIVE OWNER만 그룹 전용 사용자 카테고리를 추가할 수 있습니다.
+                    그룹당 활성 사용자 카테고리는 최대 5개입니다. 이름은 앞뒤 공백 제거 후
+                    1~10자의 한 줄이어야 하며, 기본 카테고리 및 같은 그룹이 사용한 카테고리
+                    이름과 중복될 수 없습니다. 비활성 카테고리 이름도 재사용할 수 없으며,
+                    color는 선택값입니다.
+
+                    ### 에러 코드
+
+                    | code | HTTP | 설명 |
+                    | --- | --- | --- |
+                    | `COMMON400_1` | 400 | 요청 DTO 검증 실패 |
+                    | `GROUP400_1` | 400 | 서비스 경계의 이름 검증 실패 |
+                    | `GROUP403_3` | 403 | ACTIVE OWNER가 아님 |
+                    | `GROUP409_9` | 409 | 활성 사용자 카테고리 5개 상한 |
+                    | `GROUP409_10` | 409 | 기본 또는 같은 그룹 카테고리 이름 중복 |
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "201", description = "그룹 루틴 카테고리 생성 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "400", description = "요청 또는 이름 규칙 오류"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "403", description = "미인증, 비활성 그룹 또는 OWNER 권한 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404", description = "회원 또는 그룹을 찾을 수 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "409", description = "카테고리 상한 또는 이름 중복")
+    })
+    ApiResponse<GroupResDTO.Category> createCategory(
+            @Parameter(hidden = true) CustomUserDetails userDetails,
+            @Parameter(description = "그룹 ID", example = "1") Long groupId,
+            GroupReqDTO.CreateCategory request
+    );
+
+    /**
+     * 인증 회원을 OWNER로 하는 모임방과 초기 루틴을 통합 생성하는 API 명세다.
+     */
+    @Operation(
+            summary = "모임방 통합 생성",
+            description = """
+                    인증 회원을 ACTIVE OWNER로 등록하고 그룹 사용자 카테고리, 초기 그룹 루틴,
+                    반복 일정 및 생성 당일 OWNER 할당을 하나의 트랜잭션으로 저장합니다.
+                    초대코드와 만료 시각은 함께 저장하지만 생성 응답에는 포함하지 않습니다.
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "201", description = "모임방 통합 생성 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "400", description = "요청 값, 카테고리 참조 또는 일정 형식 오류"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401", description = "유효하지 않거나 만료된 인증 토큰"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "403", description = "미인증 또는 비활성 회원"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404", description = "회원 또는 기본 그룹 카테고리를 찾을 수 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "409", description = "활성 그룹 참여 상한 또는 카테고리 이름 충돌"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "500", description = "초대코드 unique 충돌 재시도 소진 또는 저장 실패")
+    })
+    ApiResponse<GroupResDTO.CreateResult> createGroup(
+            @Parameter(hidden = true) CustomUserDetails userDetails,
+            GroupReqDTO.CreateGroup request
+    );
+
     /**
      * 로그인 회원에게 오늘 할당된 활성 그룹의 루틴 목록 조회 API 명세다.
      *

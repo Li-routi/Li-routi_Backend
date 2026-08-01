@@ -19,13 +19,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.lirouti.domain.group.entity.Group;
 import com.lirouti.domain.group.entity.GroupRoutine;
+import com.lirouti.domain.group.entity.GroupRoutineCategory;
 import com.lirouti.domain.group.entity.GroupRoutineAssignment;
 import com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus;
 import com.lirouti.domain.media.service.MediaService;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.enums.Role;
 import com.lirouti.domain.member.enums.SocialProvider;
-import com.lirouti.domain.routine.entity.RoutineCategory;
 import com.lirouti.domain.verification.dto.request.VerificationReqDTO;
 import com.lirouti.domain.verification.dto.response.VerificationResDTO;
 import com.lirouti.domain.verification.exception.VerificationException;
@@ -85,7 +85,8 @@ class GroupRoutineVerificationTest {
         int n = seq.incrementAndGet();
         Group group = Group.builder().name("그룹" + n).inviteCode("GRV" + n).build();
         em.persist(group);
-        RoutineCategory category = RoutineCategory.builder().name("카테고리" + n).active(true).build();
+        GroupRoutineCategory category = GroupRoutineCategory.builder()
+                .group(group).name("카테고리" + n).active(true).build();
         em.persist(category);
         GroupRoutine routine = GroupRoutine.builder()
                 .group(group).category(category).title("아침 청소").description("설명").build();
@@ -109,7 +110,8 @@ class GroupRoutineVerificationTest {
         int n = seq.incrementAndGet();
         Group group = Group.builder().name("그룹" + n).inviteCode("GRW" + n).build();
         em.persist(group);
-        RoutineCategory category = RoutineCategory.builder().name("카테고리" + n).active(true).build();
+        GroupRoutineCategory category = GroupRoutineCategory.builder()
+                .group(group).name("카테고리" + n).active(true).build();
         em.persist(category);
         GroupRoutine routine = GroupRoutine.builder()
                 .group(group).category(category).title("아침 청소").description("설명").build();

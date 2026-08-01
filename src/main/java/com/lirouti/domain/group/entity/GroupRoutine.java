@@ -1,6 +1,5 @@
 package com.lirouti.domain.group.entity;
 
-import com.lirouti.domain.routine.entity.RoutineCategory;
 import com.lirouti.global.entity.BaseEntity;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -29,6 +28,9 @@ import java.util.Set;
         }
 )
 public class GroupRoutine extends BaseEntity {
+    /** 한 그룹에 등록할 수 있는 그룹 루틴 수. */
+    public static final int MAX_GROUP_ROUTINE_COUNT = 30;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -38,8 +40,8 @@ public class GroupRoutine extends BaseEntity {
     private Group group;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "category_id", nullable = false)
-    private RoutineCategory category;
+    @JoinColumn(name = "group_routine_category_id", nullable = false)
+    private GroupRoutineCategory category;
 
     @Column(nullable = false, length = 20)
     private String title;
@@ -54,12 +56,17 @@ public class GroupRoutine extends BaseEntity {
      * 검증된 그룹과 카테고리에 속하는 그룹 루틴을 생성한다.
      *
      * @param group 루틴이 속한 그룹
-     * @param category 앱에서 관리하는 루틴 카테고리
+     * @param category 앱 또는 소속 그룹이 관리하는 그룹 루틴 카테고리
      * @param title 그룹 내에서 구분되는 루틴 제목
      * @param description 루틴 설명
      */
     @Builder
-    private GroupRoutine(Group group, RoutineCategory category, String title, String description) {
+    private GroupRoutine(
+            Group group,
+            GroupRoutineCategory category,
+            String title,
+            String description
+    ) {
         this.group = group;
         this.category = category;
         this.title = title;
@@ -90,12 +97,12 @@ public class GroupRoutine extends BaseEntity {
      * 검증된 카테고리와 루틴 기본 정보를 변경한다.
      * 루틴이 속한 그룹은 수정 대상이 아니므로 기존 연관관계를 유지한다.
      *
-     * @param category 변경할 루틴 카테고리
+     * @param category 변경할 그룹 루틴 카테고리
      * @param title 변경할 루틴 제목
      * @param description 변경할 루틴 설명
      * @throws IllegalArgumentException 필수값이 없거나 길이 제약을 벗어난 경우
      */
-    public void update(RoutineCategory category, String title, String description) {
+    public void update(GroupRoutineCategory category, String title, String description) {
         if (category == null) {
             throw new IllegalArgumentException("루틴 카테고리는 필수입니다.");
         }

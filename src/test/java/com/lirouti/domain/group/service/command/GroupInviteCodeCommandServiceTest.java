@@ -28,6 +28,8 @@ class GroupInviteCodeCommandServiceTest {
 
     @Mock
     private GroupInviteCodeIssueAttemptService issueAttemptService;
+    @Mock
+    private GroupInviteCodeUniqueViolationDetector uniqueViolationDetector;
 
     @InjectMocks
     private GroupInviteCodeCommandService groupInviteCodeCommandService;
@@ -40,6 +42,8 @@ class GroupInviteCodeCommandServiceTest {
         when(issueAttemptService.issueOnce(GROUP_ID, OWNER_ID))
                 .thenThrow(inviteCodeUniqueViolation())
                 .thenReturn(result);
+        when(uniqueViolationDetector.isInviteCodeUniqueViolation(any()))
+                .thenReturn(true);
 
         // when
         GroupResDTO.InviteCode actual = groupInviteCodeCommandService
@@ -72,6 +76,8 @@ class GroupInviteCodeCommandServiceTest {
         // given
         when(issueAttemptService.issueOnce(GROUP_ID, OWNER_ID))
                 .thenThrow(inviteCodeUniqueViolation());
+        when(uniqueViolationDetector.isInviteCodeUniqueViolation(any()))
+                .thenReturn(true);
 
         // when & then
         assertThatThrownBy(() -> groupInviteCodeCommandService

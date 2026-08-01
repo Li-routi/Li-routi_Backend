@@ -12,11 +12,13 @@ import com.lirouti.domain.group.repository.GroupRepository;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.exception.MemberException;
 import com.lirouti.domain.member.exception.code.error.MemberErrorCode;
+import com.lirouti.domain.member.repository.MemberRepository;
 import com.lirouti.domain.member.service.query.MemberQueryService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -38,6 +40,8 @@ class GroupValidationServiceTest {
     @Mock
     private GroupMemberRepository groupMemberRepository;
     @Mock
+    private MemberRepository memberRepository;
+    @Mock
     private MemberQueryService memberQueryService;
     @Mock
     private Member member;
@@ -52,6 +56,126 @@ class GroupValidationServiceTest {
 
     @InjectMocks
     private GroupValidationService groupValidationService;
+
+    @Test
+    @DisplayName("회원 행을 잠근 뒤 ACTIVE 그룹 참여 수가 6개 미만이면 참여할 수 있다")
+    void lockActiveMemberAndValidateParticipationLimit_UnderLimit_ReturnsLockedMember() {
+        // given
+        when(memberRepository.findByIdForUpdate(MEMBER_ID)).thenReturn(Optional.of(member));
+        when(member.getIsActive()).thenReturn(true);
+        when(groupMemberRepository.countByMemberIdAndStatusAndGroupStatus(
+                MEMBER_ID, GroupMemberStatus.ACTIVE, GroupStatus.ACTIVE
+        )).thenReturn(5L);
+
+        // when
+        Member result = groupValidationService
+                .lockActiveMemberAndValidateParticipationLimit(MEMBER_ID);
+
+        // then
+        assertThat(result).isSameAs(member);
+        verify(memberRepository).findByIdForUpdate(MEMBER_ID);
+    }
+
+    @Test
+    @DisplayName("ACTIVE 그룹에 이미 6개 참여 중이면 추가 참여를 거부한다")
+    void lockActiveMemberAndValidateParticipationLimit_AtLimit_ThrowsLimitExceeded() {
+        // given
+        when(memberRepository.findByIdForUpdate(MEMBER_ID)).thenReturn(Optional.of(member));
+        when(member.getIsActive()).thenReturn(true);
+        when(groupMemberRepository.countByMemberIdAndStatusAndGroupStatus(
+                MEMBER_ID, GroupMemberStatus.ACTIVE, GroupStatus.ACTIVE
+        )).thenReturn(6L);
+
+        // when & then
+        assertThatThrownBy(() -> groupValidationService
+                .lockActiveMemberAndValidateParticipationLimit(MEMBER_ID))
+                .isInstanceOf(GroupException.class)
+                .extracting("code")
+                .isEqualTo(GroupErrorCode.GROUP_PARTICIPATION_LIMIT_EXCEEDED);
+    }
+
+    @Test
+    @DisplayName("활성 그룹 행을 비관적 쓰기 잠금으로 조회한다")
+    void lockActiveGroupForUpdate_ActiveGroup_ReturnsLockedGroup() {
+        // given
+        when(groupRepository.findByIdForUpdate(GROUP_ID)).thenReturn(Optional.of(group));
+        when(group.getStatus()).thenReturn(GroupStatus.ACTIVE);
+
+        // when
+        Group result = groupValidationService.lockActiveGroupForUpdate(GROUP_ID);
+
+        // then
+        assertThat(result).isSameAs(group);
+        verify(groupRepository).findByIdForUpdate(GROUP_ID);
+    }
+
+    @Test
+    @DisplayName("그룹 행을 잠근 뒤 활성 그룹원이 6명 미만이면 가입할 수 있다")
+    void lockActiveGroupAndValidateMemberLimit_UnderLimit_ReturnsLockedGroup() {
+        // given
+        when(groupRepository.findByIdForUpdate(GROUP_ID)).thenReturn(Optional.of(group));
+        when(group.getStatus()).thenReturn(GroupStatus.ACTIVE);
+        when(groupMemberRepository.countActiveMembersByGroupId(
+                GROUP_ID, GroupMemberStatus.ACTIVE
+        )).thenReturn(5L);
+
+        // when
+        Group result = groupValidationService.lockActiveGroupAndValidateMemberLimit(GROUP_ID);
+
+        // then
+        assertThat(result).isSameAs(group);
+    }
+
+    @Test
+    @DisplayName("활성 그룹원이 이미 6명이면 추가 가입을 거부한다")
+    void lockActiveGroupAndValidateMemberLimit_AtLimit_ThrowsLimitExceeded() {
+        // given
+        when(groupRepository.findByIdForUpdate(GROUP_ID)).thenReturn(Optional.of(group));
+        when(group.getStatus()).thenReturn(GroupStatus.ACTIVE);
+        when(groupMemberRepository.countActiveMembersByGroupId(
+                GROUP_ID, GroupMemberStatus.ACTIVE
+        )).thenReturn(6L);
+
+        // when & then
+        assertThatThrownBy(() -> groupValidationService
+                .lockActiveGroupAndValidateMemberLimit(GROUP_ID))
+                .isInstanceOf(GroupException.class)
+                .extracting("code")
+                .isEqualTo(GroupErrorCode.GROUP_MEMBER_LIMIT_EXCEEDED);
+    }
+
+    @Test
+    @DisplayName("가입 제한은 그룹과 회원을 모두 잠근 뒤 두 상한을 검사한다")
+    void lockAndValidateJoinLimits_ValidRequest_LocksBeforeCounting() {
+        // given
+        when(groupRepository.findByIdForUpdate(GROUP_ID)).thenReturn(Optional.of(group));
+        when(group.getStatus()).thenReturn(GroupStatus.ACTIVE);
+        when(memberRepository.findByIdForUpdate(MEMBER_ID)).thenReturn(Optional.of(member));
+        when(member.getIsActive()).thenReturn(true);
+        when(groupMemberRepository.countActiveMembersByGroupId(
+                GROUP_ID, GroupMemberStatus.ACTIVE
+        )).thenReturn(5L);
+        when(groupMemberRepository.countByMemberIdAndStatusAndGroupStatus(
+                MEMBER_ID, GroupMemberStatus.ACTIVE, GroupStatus.ACTIVE
+        )).thenReturn(5L);
+
+        // when
+        GroupValidationService.JoinLimitContext result = groupValidationService
+                .lockAndValidateJoinLimits(GROUP_ID, MEMBER_ID);
+
+        // then
+        assertThat(result.group()).isSameAs(group);
+        assertThat(result.member()).isSameAs(member);
+        InOrder inOrder = inOrder(groupRepository, memberRepository, groupMemberRepository);
+        inOrder.verify(groupRepository).findByIdForUpdate(GROUP_ID);
+        inOrder.verify(memberRepository).findByIdForUpdate(MEMBER_ID);
+        inOrder.verify(groupMemberRepository).countActiveMembersByGroupId(
+                GROUP_ID, GroupMemberStatus.ACTIVE
+        );
+        inOrder.verify(groupMemberRepository).countByMemberIdAndStatusAndGroupStatus(
+                MEMBER_ID, GroupMemberStatus.ACTIVE, GroupStatus.ACTIVE
+        );
+    }
 
     @Test
     @DisplayName("현재 회원이 대상 그룹의 ACTIVE OWNER이면 방장 검증에 성공한다")

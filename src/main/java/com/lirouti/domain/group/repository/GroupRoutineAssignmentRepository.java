@@ -28,6 +28,7 @@ public interface GroupRoutineAssignmentRepository
      * @param scheduledStartTime 할당 당시 시작 시각
      * @param scheduledEndTime 할당 당시 마감 시각
      * @param status 할당 시점의 상태 이름
+     * @return 실제로 새로 삽입된 행 수. 이미 존재하면 0
      */
     @Modifying(flushAutomatically = true)
     @Query(value = """
@@ -54,7 +55,7 @@ public interface GroupRoutineAssignmentRepository
             )
             on duplicate key update id = id
             """, nativeQuery = true)
-    void insertIfAbsent(
+    int insertIfAbsent(
             @Param("groupRoutineId") Long groupRoutineId,
             @Param("memberId") Long memberId,
             @Param("assignedDate") LocalDate assignedDate,

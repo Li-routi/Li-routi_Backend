@@ -4,6 +4,8 @@ import com.lirouti.domain.group.dto.response.GroupResDTO;
 import com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus;
 import com.lirouti.domain.group.repository.GroupRoutineAssignmentRepository;
 import com.lirouti.domain.group.repository.GroupRoutineAssignmentRepositoryCustom.TodayAssignmentProjection;
+import com.lirouti.domain.group.repository.GroupRoutineCategoryRepository;
+import com.lirouti.domain.group.service.GroupValidationService;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.exception.MemberException;
 import com.lirouti.domain.member.exception.code.error.MemberErrorCode;
@@ -31,6 +33,10 @@ class GroupQueryServiceTest {
     @Mock
     private GroupRoutineAssignmentRepository assignmentRepository;
     @Mock
+    private GroupRoutineCategoryRepository categoryRepository;
+    @Mock
+    private GroupValidationService groupValidationService;
+    @Mock
     private MemberQueryService memberQueryService;
     @Mock
     private Member member;
@@ -45,6 +51,8 @@ class GroupQueryServiceTest {
         );
         groupQueryService = new GroupQueryService(
                 assignmentRepository,
+                categoryRepository,
+                groupValidationService,
                 memberQueryService,
                 clock
         );

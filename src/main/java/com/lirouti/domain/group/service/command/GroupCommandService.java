@@ -4,14 +4,15 @@ import com.lirouti.domain.group.converter.GroupConverter;
 import com.lirouti.domain.group.dto.request.GroupReqDTO;
 import com.lirouti.domain.group.dto.response.GroupResDTO;
 import com.lirouti.domain.group.entity.Group;
-import com.lirouti.domain.group.entity.GroupMember;
 import com.lirouti.domain.group.entity.GroupRoutine;
+import com.lirouti.domain.group.entity.GroupRoutineCategory;
 import com.lirouti.domain.group.exception.GroupException;
 import com.lirouti.domain.group.exception.code.error.GroupErrorCode;
+import com.lirouti.domain.group.repository.GroupRoutineCategoryRepository;
 import com.lirouti.domain.group.repository.GroupRoutineRepository;
 import com.lirouti.domain.group.service.GroupValidationService;
-import com.lirouti.domain.routine.entity.RoutineCategory;
-import com.lirouti.domain.routine.repository.RoutineCategoryRepository;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.Validator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -25,10 +26,104 @@ import java.util.Set;
 @Service
 @RequiredArgsConstructor
 public class GroupCommandService {
+    private static final int MAX_CREATE_ATTEMPTS = 10;
+
     private final GroupValidationService groupValidationService;
-    private final RoutineCategoryRepository routineCategoryRepository;
+    private final GroupRoutineCategoryRepository groupRoutineCategoryRepository;
     private final GroupRoutineRepository groupRoutineRepository;
     private final GroupRoutineAssignmentCommandService assignmentCommandService;
+    private final GroupCreationAttemptService groupCreationAttemptService;
+    private final GroupInviteCodeUniqueViolationDetector uniqueViolationDetector;
+    private final Validator validator;
+
+    /** 그룹 행 잠금 안에서 OWNER 권한, 상한, 이름 중복을 검증하고 사용자 카테고리를 생성한다. */
+    @Transactional
+    public GroupResDTO.Category createCategory(
+            Long groupId,
+            Long memberId,
+            GroupReqDTO.CreateCategory request
+    ) {
+        if (request == null) {
+            log.warn("그룹 카테고리 생성 요청이 비어 있습니다. groupId={}, memberId={}",
+                    groupId, memberId);
+            throw new IllegalArgumentException("유효하지 않은 그룹 카테고리 생성 요청입니다.");
+        }
+
+        Group group = groupValidationService.lockActiveGroupForUpdate(groupId);
+        groupValidationService.validateGroupOwner(groupId, memberId);
+        String name = normalizeCategoryName(groupId, memberId, request.name());
+
+        long categoryCount = groupRoutineCategoryRepository
+                .countByGroupIdAndActiveTrue(groupId);
+        if (categoryCount >= GroupRoutineCategory.MAX_GROUP_CATEGORY_COUNT) {
+            log.warn("그룹 사용자 카테고리 개수 상한을 초과했습니다. "
+                            + "groupId={}, memberId={}, categoryCount={}",
+                    groupId, memberId, categoryCount);
+            throw new GroupException(GroupErrorCode.GROUP_ROUTINE_CATEGORY_LIMIT_EXCEEDED);
+        }
+        if (groupRoutineCategoryRepository.existsReservedName(groupId, name)) {
+            log.warn("예약된 그룹 카테고리 이름을 차단했습니다. groupId={}, memberId={}, name={}",
+                    groupId, memberId, name);
+            throw new GroupException(GroupErrorCode.DUPLICATE_GROUP_ROUTINE_CATEGORY_NAME);
+        }
+
+        GroupReqDTO.CreateCategory normalizedRequest =
+                new GroupReqDTO.CreateCategory(name, request.color());
+        GroupRoutineCategory category = GroupConverter
+                .toGroupRoutineCategory(normalizedRequest, group);
+        saveGroupRoutineCategory(groupId, memberId, category);
+
+        log.info("그룹 사용자 카테고리를 생성했습니다. groupId={}, memberId={}, categoryId={}",
+                groupId, memberId, category.getId());
+        return GroupConverter.toCategory(category);
+    }
+
+    /**
+     * 초대코드 unique 충돌일 때만 독립된 전체 생성 트랜잭션을 새로 시작한다.
+     */
+    public GroupResDTO.CreateResult createGroup(
+            Long memberId,
+            GroupReqDTO.CreateGroup request
+    ) {
+        validateCreateGroupRequest(request);
+        for (int attempt = 1; attempt <= MAX_CREATE_ATTEMPTS; attempt++) {
+            try {
+                return groupCreationAttemptService.createOnce(memberId, request);
+            } catch (DataIntegrityViolationException exception) {
+                if (!uniqueViolationDetector.isInviteCodeUniqueViolation(exception)) {
+                    throw exception;
+                }
+                log.warn("그룹 통합 생성 중 초대코드 unique 충돌이 발생해 전체 생성을 "
+                                + "재시도합니다. memberId={}, attempt={}",
+                        memberId, attempt);
+            }
+        }
+
+        log.error("그룹 통합 생성의 초대코드 unique 충돌 재시도 횟수를 초과했습니다. "
+                        + "memberId={}, maxAttempts={}", memberId, MAX_CREATE_ATTEMPTS);
+        throw new GroupException(GroupErrorCode.INVITE_CODE_ISSUE_FAILED);
+    }
+
+    private void validateCreateGroupRequest(GroupReqDTO.CreateGroup request) {
+        if (request == null
+                || request.customCategories() == null
+                || request.routines() == null) {
+            throw new IllegalArgumentException("유효하지 않은 그룹 통합 생성 요청입니다.");
+        }
+        if (request.customCategories().size()
+                > GroupRoutineCategory.MAX_GROUP_CATEGORY_COUNT) {
+            throw new GroupException(GroupErrorCode.GROUP_ROUTINE_CATEGORY_LIMIT_EXCEEDED);
+        }
+        if (request.routines().size() > GroupRoutine.MAX_GROUP_ROUTINE_COUNT) {
+            throw new GroupException(GroupErrorCode.GROUP_ROUTINE_LIMIT_EXCEEDED);
+        }
+
+        Set<ConstraintViolation<GroupReqDTO.CreateGroup>> violations = validator.validate(request);
+        if (!violations.isEmpty()) {
+            log.warn("그룹 통합 생성 요청 검증에 실패했습니다. violationCount={}", violations.size());
+            throw new IllegalArgumentException("유효하지 않은 그룹 통합 생성 요청입니다.");
+        }
+    }
 
     /**
      * ACTIVE OWNER 권한과 카테고리·제목을 검증한 뒤 루틴, 일정, 당일 할당을 생성한다.
@@ -47,17 +142,17 @@ public class GroupCommandService {
     ) {
         validateRequest(request);
 
-        GroupMember ownerMembership = groupValidationService.validateGroupOwner(groupId, memberId);
-        Group group = ownerMembership.getGroup();
+        // REPEATABLE READ에서 상한 집계가 잠금 대기 전 스냅샷을 보지 않도록 그룹을 먼저 잠근다.
+        Group group = groupValidationService.lockActiveGroupForUpdate(groupId);
+        groupValidationService.validateGroupOwner(groupId, memberId);
+        validateRoutineLimit(groupId);
 
-        RoutineCategory category = routineCategoryRepository
-                .findByIdAndActiveTrue(request.categoryId())
-                .orElseThrow(() -> {
-                    log.warn("활성 그룹 루틴 카테고리 조회에 실패했습니다. "
-                                    + "groupId={}, memberId={}, categoryId={}",
-                            groupId, memberId, request.categoryId());
-                    return new GroupException(GroupErrorCode.ROUTINE_CATEGORY_NOT_FOUND);
-                });
+        GroupRoutineCategory category = getUsableCategory(
+                groupId,
+                request.categoryId(),
+                memberId,
+                null
+        );
 
         validateRoutineTitleNotDuplicated(groupId, request.title());
 
@@ -101,14 +196,12 @@ public class GroupCommandService {
                             groupId, routineId, memberId);
                     return new GroupException(GroupErrorCode.GROUP_ROUTINE_NOT_FOUND);
                 });
-        RoutineCategory category = routineCategoryRepository
-                .findByIdAndActiveTrue(request.categoryId())
-                .orElseThrow(() -> {
-                    log.warn("활성 그룹 루틴 카테고리 조회에 실패했습니다. "
-                                    + "groupId={}, routineId={}, memberId={}, categoryId={}",
-                            groupId, routineId, memberId, request.categoryId());
-                    return new GroupException(GroupErrorCode.ROUTINE_CATEGORY_NOT_FOUND);
-                });
+        GroupRoutineCategory category = getUsableCategory(
+                groupId,
+                request.categoryId(),
+                memberId,
+                routineId
+        );
         validateRoutineTitleNotDuplicated(groupId, routineId, request.title());
 
         groupRoutine.update(category, request.title(), request.description());
@@ -210,6 +303,40 @@ public class GroupCommandService {
         }
     }
 
+    /** 그룹 행 잠금을 획득한 상태에서 31번째 루틴 생성을 차단한다. */
+    private void validateRoutineLimit(Long groupId) {
+        long routineCount = groupRoutineRepository.countByGroupId(groupId);
+        if (routineCount >= GroupRoutine.MAX_GROUP_ROUTINE_COUNT) {
+            log.warn("그룹 루틴 개수 상한을 초과했습니다. groupId={}, routineCount={}",
+                    groupId, routineCount);
+            throw new GroupException(GroupErrorCode.GROUP_ROUTINE_LIMIT_EXCEEDED);
+        }
+    }
+
+    /** 활성 카테고리를 조회하고 기본 카테고리 또는 요청 그룹 소유인지 확인한다. */
+    private GroupRoutineCategory getUsableCategory(
+            Long groupId,
+            Long categoryId,
+            Long memberId,
+            Long routineId
+    ) {
+        GroupRoutineCategory category = groupRoutineCategoryRepository
+                .findByIdAndActiveTrue(categoryId)
+                .orElseThrow(() -> {
+                    log.warn("활성 그룹 루틴 카테고리 조회에 실패했습니다. "
+                                    + "groupId={}, routineId={}, memberId={}, categoryId={}",
+                            groupId, routineId, memberId, categoryId);
+                    return new GroupException(GroupErrorCode.ROUTINE_CATEGORY_NOT_FOUND);
+                });
+        if (!category.isUsableBy(groupId)) {
+            log.warn("다른 그룹의 루틴 카테고리 사용을 차단했습니다. "
+                            + "groupId={}, routineId={}, memberId={}, categoryId={}",
+                    groupId, routineId, memberId, categoryId);
+            throw new GroupException(GroupErrorCode.GROUP_ROUTINE_CATEGORY_ACCESS_DENIED);
+        }
+        return category;
+    }
+
     private void validateRoutineTitleNotDuplicated(
             Long groupId,
             Long routineId,
@@ -235,26 +362,48 @@ public class GroupCommandService {
         } catch (DataIntegrityViolationException e) {
             log.warn("그룹 루틴 저장 중 무결성 제약을 위반했습니다. groupId={}, title={}",
                     groupRoutine.getGroup().getId(), groupRoutine.getTitle());
-            if (isRoutineTitleConstraintViolation(e)) {
+            if (GroupConstraintViolationInspector.isUniqueConstraintViolation(
+                    e,
+                    GroupDatabaseConstraints.ROUTINE_TITLE
+            )) {
                 throw new GroupException(GroupErrorCode.DUPLICATE_GROUP_ROUTINE_TITLE);
             }
             throw e;
         }
     }
 
-    private boolean isRoutineTitleConstraintViolation(Throwable throwable) {
-        Throwable current = throwable;
-        while (current != null) {
-            String message = current.getMessage();
-            if (message != null
-                    && message.toLowerCase().contains("uk_group_routine_group_title")) {
-                return true;
-            }
-            if (current.getCause() == current) {
-                break;
-            }
-            current = current.getCause();
+    private String normalizeCategoryName(Long groupId, Long memberId, String rawName) {
+        String name = rawName == null ? "" : rawName.trim();
+        if (name.isEmpty()
+                || name.length() > GroupRoutineCategory.MAX_GROUP_CATEGORY_NAME_LENGTH
+                || name.indexOf('\n') >= 0
+                || name.indexOf('\r') >= 0) {
+            log.warn("그룹 카테고리 이름 검증에 실패했습니다. "
+                            + "groupId={}, memberId={}, length={}",
+                    groupId, memberId, name.length());
+            throw new GroupException(GroupErrorCode.INVALID_GROUP_ROUTINE_CATEGORY_NAME);
         }
-        return false;
+        return name;
+    }
+
+    private void saveGroupRoutineCategory(
+            Long groupId,
+            Long memberId,
+            GroupRoutineCategory category
+    ) {
+        try {
+            groupRoutineCategoryRepository.saveAndFlush(category);
+        } catch (DataIntegrityViolationException exception) {
+            if (!GroupConstraintViolationInspector.isUniqueConstraintViolation(
+                    exception,
+                    GroupDatabaseConstraints.ROUTINE_CATEGORY_NAME
+            )) {
+                throw exception;
+            }
+            log.warn("같은 이름의 그룹 카테고리 저장을 차단했습니다. "
+                            + "groupId={}, memberId={}, name={}",
+                    groupId, memberId, category.getName());
+            throw new GroupException(GroupErrorCode.DUPLICATE_GROUP_ROUTINE_CATEGORY_NAME);
+        }
     }
 }

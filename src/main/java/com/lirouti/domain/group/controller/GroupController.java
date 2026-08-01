@@ -25,6 +25,58 @@ public class GroupController implements GroupControllerDocs {
     private final GroupInviteCodeCommandService groupInviteCodeCommandService;
     private final GroupInviteCodeQueryService groupInviteCodeQueryService;
 
+    /** 모임방과 초기 카테고리·루틴·일정을 한 요청으로 생성한다. */
+    @Override
+    @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
+    public ApiResponse<GroupResDTO.CreateResult> createGroup(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @Valid @RequestBody GroupReqDTO.CreateGroup request
+    ) {
+        GroupResDTO.CreateResult result = groupCommandService.createGroup(
+                userDetails.getMemberId(),
+                request
+        );
+        return ApiResponse.onSuccess(GroupSuccessCode.GROUP_CREATE_SUCCESS, result);
+    }
+
+    /** ACTIVE 그룹 구성원이 사용할 수 있는 그룹 루틴 카테고리를 조회한다. */
+    @Override
+    @GetMapping("/{groupId}/categories")
+    public ApiResponse<GroupResDTO.CategoryList> getCategories(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long groupId
+    ) {
+        GroupResDTO.CategoryList result = groupQueryService.getCategories(
+                groupId,
+                userDetails.getMemberId()
+        );
+        return ApiResponse.onSuccess(
+                GroupSuccessCode.GROUP_ROUTINE_CATEGORY_LIST_FETCH_SUCCESS,
+                result
+        );
+    }
+
+    /** ACTIVE OWNER가 그룹 전용 사용자 카테고리를 추가한다. */
+    @Override
+    @PostMapping("/{groupId}/categories")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ApiResponse<GroupResDTO.Category> createCategory(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long groupId,
+            @Valid @RequestBody GroupReqDTO.CreateCategory request
+    ) {
+        GroupResDTO.Category result = groupCommandService.createCategory(
+                groupId,
+                userDetails.getMemberId(),
+                request
+        );
+        return ApiResponse.onSuccess(
+                GroupSuccessCode.GROUP_ROUTINE_CATEGORY_CREATE_SUCCESS,
+                result
+        );
+    }
+
     /**
      * 로그인 회원에게 오늘 할당된 활성 그룹의 루틴을 조회한다.
      *

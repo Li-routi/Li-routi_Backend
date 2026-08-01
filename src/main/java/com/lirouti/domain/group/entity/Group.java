@@ -31,7 +31,7 @@ public class Group extends BaseEntity {
     @Column(name = "invite_code", nullable = false, unique = true, length = 7)
     private String inviteCode;
 
-    @Column(name = "invite_code_expires_at")
+    @Column(name = "invite_code_expires_at", nullable = false)
     private LocalDateTime inviteCodeExpiresAt;
 
     @Enumerated(EnumType.STRING)
@@ -39,9 +39,13 @@ public class Group extends BaseEntity {
     private GroupStatus status;
 
     @Builder
-    private Group(String name, String inviteCode) {
+    private Group(String name, String inviteCode, LocalDateTime inviteCodeExpiresAt) {
         this.name = name;
         this.inviteCode = inviteCode;
+        // 기존 생성 경로는 만료 시각을 전달하지 않았다. V10의 NULL 보정 정책과 같이 즉시 만료시킨다.
+        this.inviteCodeExpiresAt = inviteCodeExpiresAt != null
+                ? inviteCodeExpiresAt
+                : LocalDateTime.now();
         this.status = GroupStatus.ACTIVE;
     }
 

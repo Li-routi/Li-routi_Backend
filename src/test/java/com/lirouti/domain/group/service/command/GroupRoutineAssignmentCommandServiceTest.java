@@ -77,6 +77,7 @@ class GroupRoutineAssignmentCommandServiceTest {
                 .thenReturn(List.of(groupMember));
         when(groupMember.getMember()).thenReturn(member);
         when(member.getId()).thenReturn(1L);
+        givenInsertedAssignment();
 
         // when
         int result = assignmentCommandService.assignRoutineToActiveMembersToday(groupRoutine);
@@ -129,6 +130,7 @@ class GroupRoutineAssignmentCommandServiceTest {
         when(schedule.getEndTime()).thenReturn(LocalTime.of(10, 0));
         when(groupMember.getMember()).thenReturn(member);
         when(member.getId()).thenReturn(1L);
+        givenInsertedAssignment();
 
         // when
         int result = assignmentCommandService.assignTodayRoutinesToMember(10L, 1L);
@@ -168,6 +170,7 @@ class GroupRoutineAssignmentCommandServiceTest {
                 .thenReturn(List.of(groupMember));
         when(groupMember.getMember()).thenReturn(member);
         when(member.getId()).thenReturn(1L);
+        givenInsertedAssignment();
 
         // when
         int result = assignmentCommandService.assignScheduledRoutinesForDate(assignedDate);
@@ -192,6 +195,28 @@ class GroupRoutineAssignmentCommandServiceTest {
                 LocalTime.of(19, 0),
                 GroupRoutineAssignmentStatus.IN_PROGRESS.name()
         );
+    }
+
+    @Test
+    @DisplayName("이미 존재하는 당일 할당은 생성 건수에 포함하지 않는다")
+    void assignRoutineToActiveMembersToday_DuplicateAssignment_ReturnsZero() {
+        // given
+        LocalDateTime now = LocalDateTime.of(2026, 7, 23, 8, 0);
+        givenNow(now);
+        givenRoutine(now.getDayOfWeek());
+        when(groupMemberRepository.findAllByGroupIdAndStatus(10L, GroupMemberStatus.ACTIVE))
+                .thenReturn(List.of(groupMember));
+        when(groupMember.getMember()).thenReturn(member);
+        when(member.getId()).thenReturn(1L);
+        when(assignmentRepository.insertIfAbsent(
+                any(), any(), any(), any(), any(), any()
+        )).thenReturn(0);
+
+        // when
+        int result = assignmentCommandService.assignRoutineToActiveMembersToday(groupRoutine);
+
+        // then
+        assertThat(result).isZero();
     }
 
     @Test
@@ -412,6 +437,12 @@ class GroupRoutineAssignmentCommandServiceTest {
     private void givenNow(LocalDateTime now) {
         when(clock.instant()).thenReturn(now.atZone(KST).toInstant());
         when(clock.getZone()).thenReturn(KST);
+    }
+
+    private void givenInsertedAssignment() {
+        when(assignmentRepository.insertIfAbsent(
+                any(), any(), any(), any(), any(), any()
+        )).thenReturn(1);
     }
 
     private com.lirouti.domain.group.entity.GroupRoutineAssignment assignment(

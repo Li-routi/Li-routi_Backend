@@ -2,6 +2,7 @@ package com.lirouti.domain.group.repository;
 
 import com.lirouti.domain.group.entity.GroupMember;
 import com.lirouti.domain.group.enums.GroupMemberStatus;
+import com.lirouti.domain.group.enums.GroupStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -16,6 +17,40 @@ public interface GroupMemberRepository extends JpaRepository<GroupMember, Long> 
      * 항상 요청 대상 그룹과 회원의 참여 관계를 함께 조회한다.
      */
     Optional<GroupMember> findByGroupIdAndMemberId(Long groupId, Long memberId);
+
+    /**
+     * 회원이 현재 참여 중인 활성 그룹 수를 역할과 관계없이 집계한다.
+     * 탈퇴·강제 퇴장 이력과 삭제된 그룹은 참여 상한에서 제외한다.
+     */
+    @Query("""
+            select count(groupMember)
+            from GroupMember groupMember
+            where groupMember.member.id = :memberId
+              and groupMember.status = :memberStatus
+              and groupMember.group.status = :groupStatus
+            """)
+    long countByMemberIdAndStatusAndGroupStatus(
+            @Param("memberId") Long memberId,
+            @Param("memberStatus") GroupMemberStatus memberStatus,
+            @Param("groupStatus") GroupStatus groupStatus
+    );
+
+    /**
+     * 그룹의 ACTIVE 참여 관계 중 계정도 활성 상태인 회원 수를 역할과 관계없이 집계한다.
+     * 탈퇴·강제 퇴장 관계와 탈퇴·비활성 계정은 그룹원 상한에서 제외한다.
+     */
+    @Query("""
+            select count(groupMember)
+            from GroupMember groupMember
+            where groupMember.group.id = :groupId
+              and groupMember.status = :status
+              and groupMember.member.isActive = true
+              and groupMember.member.deletedAt is null
+            """)
+    long countActiveMembersByGroupId(
+            @Param("groupId") Long groupId,
+            @Param("status") GroupMemberStatus status
+    );
 
     /**
      * 대상 그룹에서 지정한 가입 상태이며 계정도 활성 상태인 구성원을 모두 조회한다.

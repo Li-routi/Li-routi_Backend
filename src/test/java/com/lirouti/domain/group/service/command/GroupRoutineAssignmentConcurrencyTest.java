@@ -13,8 +13,8 @@ import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.enums.Role;
 import com.lirouti.domain.member.enums.SocialProvider;
 import com.lirouti.domain.member.repository.MemberRepository;
-import com.lirouti.domain.routine.entity.RoutineCategory;
-import com.lirouti.domain.routine.repository.RoutineCategoryRepository;
+import com.lirouti.domain.group.entity.GroupRoutineCategory;
+import com.lirouti.domain.group.repository.GroupRoutineCategoryRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -45,7 +45,7 @@ class GroupRoutineAssignmentConcurrencyTest {
     @Autowired
     private GroupRoutineRepository groupRoutineRepository;
     @Autowired
-    private RoutineCategoryRepository routineCategoryRepository;
+    private GroupRoutineCategoryRepository groupRoutineCategoryRepository;
     @Autowired
     private GroupRepository groupRepository;
     @Autowired
@@ -71,7 +71,8 @@ class GroupRoutineAssignmentConcurrencyTest {
                 .name("할당 동시성 그룹")
                 .inviteCode(suffix.substring(Math.max(0, suffix.length() - 7)))
                 .build());
-        RoutineCategory category = routineCategoryRepository.save(RoutineCategory.builder()
+        GroupRoutineCategory category = groupRoutineCategoryRepository.save(
+                GroupRoutineCategory.builder()
                 .name("할당 동시성 카테고리-" + suffix)
                 .active(true)
                 .build());
@@ -101,7 +102,7 @@ class GroupRoutineAssignmentConcurrencyTest {
     void tearDown() {
         assignmentRepository.deleteById(assignmentId);
         groupRoutineRepository.deleteById(routineId);
-        routineCategoryRepository.deleteById(categoryId);
+        groupRoutineCategoryRepository.deleteById(categoryId);
         groupRepository.deleteById(groupId);
         memberRepository.deleteById(memberId);
     }

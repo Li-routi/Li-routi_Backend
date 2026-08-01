@@ -5,12 +5,12 @@ import com.lirouti.domain.group.dto.response.GroupResDTO;
 import com.lirouti.domain.group.entity.Group;
 import com.lirouti.domain.group.entity.GroupMember;
 import com.lirouti.domain.group.entity.GroupRoutine;
+import com.lirouti.domain.group.entity.GroupRoutineCategory;
 import com.lirouti.domain.group.exception.GroupException;
 import com.lirouti.domain.group.exception.code.error.GroupErrorCode;
 import com.lirouti.domain.group.repository.GroupRoutineRepository;
+import com.lirouti.domain.group.repository.GroupRoutineCategoryRepository;
 import com.lirouti.domain.group.service.GroupValidationService;
-import com.lirouti.domain.routine.entity.RoutineCategory;
-import com.lirouti.domain.routine.repository.RoutineCategoryRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -38,7 +38,7 @@ class GroupCommandServiceTest {
     @Mock
     private GroupValidationService groupValidationService;
     @Mock
-    private RoutineCategoryRepository routineCategoryRepository;
+    private GroupRoutineCategoryRepository groupRoutineCategoryRepository;
     @Mock
     private GroupRoutineRepository groupRoutineRepository;
     @Mock
@@ -46,7 +46,7 @@ class GroupCommandServiceTest {
     @Mock
     private Group group;
     @Mock
-    private RoutineCategory category;
+    private GroupRoutineCategory category;
     @Mock
     private GroupMember ownerMembership;
 
@@ -56,11 +56,13 @@ class GroupCommandServiceTest {
     private void givenValidatedOwner() {
         when(groupValidationService.validateGroupOwner(GROUP_ID, OWNER_ID))
                 .thenReturn(ownerMembership);
-        when(ownerMembership.getGroup()).thenReturn(group);
+        when(groupValidationService.lockActiveGroupForUpdate(GROUP_ID)).thenReturn(group);
     }
 
     private void givenActiveCategory() {
-        when(routineCategoryRepository.findByIdAndActiveTrue(3L)).thenReturn(Optional.of(category));
+        when(groupRoutineCategoryRepository.findByIdAndActiveTrue(3L))
+                .thenReturn(Optional.of(category));
+        when(category.isUsableBy(GROUP_ID)).thenReturn(true);
     }
 
     private void givenNoDuplicateTitle() {
@@ -117,7 +119,8 @@ class GroupCommandServiceTest {
     void createRoutine_CategoryNotFound_ThrowsGroupException() {
         // given
         givenValidatedOwner();
-        when(routineCategoryRepository.findByIdAndActiveTrue(3L)).thenReturn(Optional.empty());
+        when(groupRoutineCategoryRepository.findByIdAndActiveTrue(3L))
+                .thenReturn(Optional.empty());
 
         // when & then
         assertThatThrownBy(() -> groupCommandService.createRoutine(GROUP_ID, OWNER_ID, request()))
@@ -146,6 +149,41 @@ class GroupCommandServiceTest {
     }
 
     @Test
+    @DisplayName("그룹에 루틴이 30개 있으면 31번째 루틴을 생성하지 않는다")
+    void createRoutine_AtLimit_ThrowsLimitExceeded() {
+        // given
+        givenValidatedOwner();
+        when(groupRoutineRepository.countByGroupId(GROUP_ID))
+                .thenReturn((long) GroupRoutine.MAX_GROUP_ROUTINE_COUNT);
+
+        // when & then
+        assertThatThrownBy(() -> groupCommandService.createRoutine(GROUP_ID, OWNER_ID, request()))
+                .isInstanceOf(GroupException.class)
+                .extracting("code")
+                .isEqualTo(GroupErrorCode.GROUP_ROUTINE_LIMIT_EXCEEDED);
+        verify(groupValidationService).lockActiveGroupForUpdate(GROUP_ID);
+        verify(groupRoutineCategoryRepository, never()).findByIdAndActiveTrue(any());
+        verify(groupRoutineRepository, never()).saveAndFlush(any(GroupRoutine.class));
+    }
+
+    @Test
+    @DisplayName("다른 그룹의 카테고리로 루틴을 생성할 수 없다")
+    void createRoutine_OtherGroupCategory_ThrowsCategoryAccessDenied() {
+        // given
+        givenValidatedOwner();
+        when(groupRoutineCategoryRepository.findByIdAndActiveTrue(3L))
+                .thenReturn(Optional.of(category));
+        when(category.isUsableBy(GROUP_ID)).thenReturn(false);
+
+        // when & then
+        assertThatThrownBy(() -> groupCommandService.createRoutine(GROUP_ID, OWNER_ID, request()))
+                .isInstanceOf(GroupException.class)
+                .extracting("code")
+                .isEqualTo(GroupErrorCode.GROUP_ROUTINE_CATEGORY_ACCESS_DENIED);
+        verify(groupRoutineRepository, never()).saveAndFlush(any(GroupRoutine.class));
+    }
+
+    @Test
     @DisplayName("방장 검증이 실패하면 후속 조회와 저장을 수행하지 않는다")
     void createRoutine_OwnerValidationFails_DoesNotContinue() {
         // given
@@ -157,7 +195,7 @@ class GroupCommandServiceTest {
                 .isInstanceOf(GroupException.class)
                 .extracting("code")
                 .isEqualTo(GroupErrorCode.GROUP_OWNER_ACCESS_DENIED);
-        verify(routineCategoryRepository, never()).findByIdAndActiveTrue(any());
+        verify(groupRoutineCategoryRepository, never()).findByIdAndActiveTrue(any());
         verify(groupRoutineRepository, never()).saveAndFlush(any(GroupRoutine.class));
     }
 
@@ -229,7 +267,7 @@ class GroupCommandServiceTest {
         )).isInstanceOf(GroupException.class)
                 .extracting("code")
                 .isEqualTo(GroupErrorCode.GROUP_ROUTINE_NOT_FOUND);
-        verify(routineCategoryRepository, never()).findByIdAndActiveTrue(any());
+        verify(groupRoutineCategoryRepository, never()).findByIdAndActiveTrue(any());
         verify(assignmentCommandService, never())
                 .synchronizeRoutineAssignmentsToday(any(GroupRoutine.class));
     }
@@ -254,6 +292,30 @@ class GroupCommandServiceTest {
         )).isInstanceOf(GroupException.class)
                 .extracting("code")
                 .isEqualTo(GroupErrorCode.DUPLICATE_GROUP_ROUTINE_TITLE);
+        verify(groupRoutineRepository, never()).saveAndFlush(any(GroupRoutine.class));
+        verify(assignmentCommandService, never())
+                .synchronizeRoutineAssignmentsToday(any(GroupRoutine.class));
+    }
+
+    @Test
+    @DisplayName("다른 그룹의 카테고리로 루틴을 수정할 수 없다")
+    void updateRoutine_OtherGroupCategory_ThrowsCategoryAccessDenied() {
+        // given
+        GroupRoutine routine = existingRoutine();
+        when(groupValidationService.validateGroupOwner(GROUP_ID, OWNER_ID))
+                .thenReturn(ownerMembership);
+        when(groupRoutineRepository.findByIdAndGroupIdForUpdate(ROUTINE_ID, GROUP_ID))
+                .thenReturn(Optional.of(routine));
+        when(groupRoutineCategoryRepository.findByIdAndActiveTrue(3L))
+                .thenReturn(Optional.of(category));
+        when(category.isUsableBy(GROUP_ID)).thenReturn(false);
+
+        // when & then
+        assertThatThrownBy(() -> groupCommandService.updateRoutine(
+                GROUP_ID, ROUTINE_ID, OWNER_ID, updateRequest()
+        )).isInstanceOf(GroupException.class)
+                .extracting("code")
+                .isEqualTo(GroupErrorCode.GROUP_ROUTINE_CATEGORY_ACCESS_DENIED);
         verify(groupRoutineRepository, never()).saveAndFlush(any(GroupRoutine.class));
         verify(assignmentCommandService, never())
                 .synchronizeRoutineAssignmentsToday(any(GroupRoutine.class));

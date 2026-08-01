@@ -36,6 +36,12 @@ import java.time.LocalDateTime;
         }
 )
 public class GroupMember extends BaseEntity {
+    /** 한 회원이 역할과 관계없이 동시에 참여할 수 있는 ACTIVE 그룹 수. */
+    public static final int MAX_ACTIVE_GROUP_COUNT = 6;
+
+    /** 한 그룹에 역할과 관계없이 동시에 참여할 수 있는 활성 회원 수. */
+    public static final int MAX_ACTIVE_MEMBER_COUNT_PER_GROUP = 6;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

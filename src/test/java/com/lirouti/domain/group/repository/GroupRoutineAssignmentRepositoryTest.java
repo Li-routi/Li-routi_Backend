@@ -7,7 +7,7 @@ import com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.enums.Role;
 import com.lirouti.domain.member.enums.SocialProvider;
-import com.lirouti.domain.routine.entity.RoutineCategory;
+import com.lirouti.domain.group.entity.GroupRoutineCategory;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.DisplayName;
@@ -38,7 +38,8 @@ class GroupRoutineAssignmentRepositoryTest {
     void save_DuplicateRoutineAndMember_ThrowsDataIntegrityViolation() {
         // given
         Group group = Group.builder().name("할당 그룹").inviteCode("ASG0001").build();
-        RoutineCategory category = RoutineCategory.builder().name("할당 카테고리").active(true).build();
+        GroupRoutineCategory category = GroupRoutineCategory.builder()
+                .name("할당 카테고리").active(true).build();
         Member member = Member.builder()
                 .email("assignment@example.com")
                 .nickname("할당회원")
@@ -70,7 +71,8 @@ class GroupRoutineAssignmentRepositoryTest {
     void insertIfAbsent_SameDate_IsIdempotentAndStoresSnapshot() {
         // given
         Group group = Group.builder().name("멱등 그룹").inviteCode("ASG0002").build();
-        RoutineCategory category = RoutineCategory.builder().name("멱등 카테고리").active(true).build();
+        GroupRoutineCategory category = GroupRoutineCategory.builder()
+                .name("멱등 카테고리").active(true).build();
         Member member = Member.builder()
                 .email("assignment-idempotent@example.com")
                 .nickname("멱등회원")
@@ -92,17 +94,17 @@ class GroupRoutineAssignmentRepositoryTest {
         LocalDate assignedDate = LocalDate.of(2026, 7, 23);
 
         // when
-        groupRoutineAssignmentRepository.insertIfAbsent(
+        int firstInsertCount = groupRoutineAssignmentRepository.insertIfAbsent(
                 routine.getId(), member.getId(), assignedDate,
                 LocalTime.of(9, 0), LocalTime.of(10, 0),
                 GroupRoutineAssignmentStatus.PENDING.name()
         );
-        groupRoutineAssignmentRepository.insertIfAbsent(
+        int duplicateInsertCount = groupRoutineAssignmentRepository.insertIfAbsent(
                 routine.getId(), member.getId(), assignedDate,
                 LocalTime.of(18, 0), LocalTime.of(19, 0),
                 GroupRoutineAssignmentStatus.MISSED.name()
         );
-        groupRoutineAssignmentRepository.insertIfAbsent(
+        int nextDateInsertCount = groupRoutineAssignmentRepository.insertIfAbsent(
                 routine.getId(), member.getId(), assignedDate.plusDays(1),
                 LocalTime.of(18, 0), LocalTime.of(19, 0),
                 GroupRoutineAssignmentStatus.PENDING.name()
@@ -110,6 +112,9 @@ class GroupRoutineAssignmentRepositoryTest {
         em.clear();
 
         // then
+        assertThat(firstInsertCount).isEqualTo(1);
+        assertThat(duplicateInsertCount).isZero();
+        assertThat(nextDateInsertCount).isEqualTo(1);
         assertThat(groupRoutineAssignmentRepository
                 .findAllByMemberIdAndAssignedDate(member.getId(), assignedDate))
                 .singleElement()
@@ -356,7 +361,7 @@ class GroupRoutineAssignmentRepositoryTest {
                 .name(name + " 그룹")
                 .inviteCode((identifier + "0000000").substring(0, 7))
                 .build();
-        RoutineCategory category = RoutineCategory.builder()
+        GroupRoutineCategory category = GroupRoutineCategory.builder()
                 .name(name + " 카테고리")
                 .active(true)
                 .build();

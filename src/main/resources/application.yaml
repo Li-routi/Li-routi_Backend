@@ -16,6 +16,10 @@ spring:
     username: ${DB_USERNAME:lirouti}
     password: ${DB_PASSWORD:lirouti1234}
     driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      data-source-properties:
+        # INSERT ... ON DUPLICATE KEY UPDATE의 no-op을 0건으로 받아 실제 신규 할당 수를 계산한다.
+        useAffectedRows: true
 
   jpa:
     hibernate:

@@ -9,7 +9,7 @@ import com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.enums.Role;
 import com.lirouti.domain.member.enums.SocialProvider;
-import com.lirouti.domain.routine.entity.RoutineCategory;
+import com.lirouti.domain.group.entity.GroupRoutineCategory;
 import com.lirouti.global.auth.CustomUserDetails;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -53,7 +53,7 @@ class GroupControllerTest {
         Group group = group("GQ00001");
         Member member = member();
         membership(member, group, GroupMemberRole.MEMBER);
-        RoutineCategory category = category(true);
+        GroupRoutineCategory category = category(true);
         GroupRoutine routine = routine(group, category, "오늘 정리");
         GroupRoutineAssignment assignment = assignment(
                 routine,
@@ -108,7 +108,7 @@ class GroupControllerTest {
         Group group = group("GQ00002");
         Member member = member();
         GroupMember membership = membership(member, group, GroupMemberRole.MEMBER);
-        RoutineCategory category = category(true);
+        GroupRoutineCategory category = category(true);
         GroupRoutine routine = routine(group, category, "탈퇴 전 루틴");
         assignment(
                 routine,
@@ -166,7 +166,7 @@ class GroupControllerTest {
         Member member = member();
         membership(owner, group, GroupMemberRole.OWNER);
         membership(member, group, GroupMemberRole.MEMBER);
-        RoutineCategory category = category(true);
+        GroupRoutineCategory category = category(true);
         em.flush();
 
         // when & then
@@ -222,7 +222,7 @@ class GroupControllerTest {
         Group group = group("GC00002");
         Member owner = member();
         membership(owner, group, GroupMemberRole.OWNER);
-        RoutineCategory category = category(true);
+        GroupRoutineCategory category = category(true);
         em.flush();
 
         // when & then
@@ -241,7 +241,7 @@ class GroupControllerTest {
         Group group = group("GC00003");
         Member regularMember = member();
         membership(regularMember, group, GroupMemberRole.MEMBER);
-        RoutineCategory category = category(true);
+        GroupRoutineCategory category = category(true);
         em.flush();
 
         // when & then
@@ -260,7 +260,7 @@ class GroupControllerTest {
         Group group = group("GC00004");
         Member owner = member();
         membership(owner, group, GroupMemberRole.OWNER);
-        RoutineCategory category = category(true);
+        GroupRoutineCategory category = category(true);
         em.flush();
         String request = validRequest(category.getId(), "중복 루틴");
         mockMvc.perform(post("/api/groups/{groupId}/routines", group.getId())
@@ -285,7 +285,7 @@ class GroupControllerTest {
         Group group = group("GC00005");
         Member owner = member();
         membership(owner, group, GroupMemberRole.OWNER);
-        RoutineCategory category = category(true);
+        GroupRoutineCategory category = category(true);
         em.flush();
         String request = """
                 {
@@ -315,7 +315,7 @@ class GroupControllerTest {
         Group group = group("GC00006");
         Member owner = member();
         membership(owner, group, GroupMemberRole.OWNER);
-        RoutineCategory category = category(true);
+        GroupRoutineCategory category = category(true);
         em.flush();
         String request = """
                 {
@@ -363,8 +363,8 @@ class GroupControllerTest {
         Member member = member();
         membership(owner, group, GroupMemberRole.OWNER);
         membership(member, group, GroupMemberRole.MEMBER);
-        RoutineCategory oldCategory = category(true);
-        RoutineCategory changedCategory = category(true);
+        GroupRoutineCategory oldCategory = category(true);
+        GroupRoutineCategory changedCategory = category(true);
         GroupRoutine routine = routine(group, oldCategory, "기존 공동 루틴");
         routine.addSchedule(
                 today().getDayOfWeek(),
@@ -445,7 +445,7 @@ class GroupControllerTest {
         Group group = group("GU00002");
         Member regularMember = member();
         membership(regularMember, group, GroupMemberRole.MEMBER);
-        RoutineCategory category = category(true);
+        GroupRoutineCategory category = category(true);
         GroupRoutine routine = routine(group, category, "수정 권한 루틴");
         em.flush();
 
@@ -473,7 +473,7 @@ class GroupControllerTest {
         Group otherGroup = group("GU00004");
         Member owner = member();
         membership(owner, targetGroup, GroupMemberRole.OWNER);
-        RoutineCategory category = category(true);
+        GroupRoutineCategory category = category(true);
         GroupRoutine otherRoutine = routine(otherGroup, category, "다른 그룹 루틴");
         em.flush();
 
@@ -733,9 +733,9 @@ class GroupControllerTest {
         return membership;
     }
 
-    private RoutineCategory category(boolean active) {
+    private GroupRoutineCategory category(boolean active) {
         int value = sequence.incrementAndGet();
-        RoutineCategory category = RoutineCategory.builder()
+        GroupRoutineCategory category = GroupRoutineCategory.builder()
                 .name("컨트롤러 카테고리" + value)
                 .active(active)
                 .build();
@@ -743,7 +743,11 @@ class GroupControllerTest {
         return category;
     }
 
-    private GroupRoutine routine(Group group, RoutineCategory category, String title) {
+    private GroupRoutine routine(
+            Group group,
+            GroupRoutineCategory category,
+            String title
+    ) {
         GroupRoutine routine = GroupRoutine.builder()
                 .group(group)
                 .category(category)

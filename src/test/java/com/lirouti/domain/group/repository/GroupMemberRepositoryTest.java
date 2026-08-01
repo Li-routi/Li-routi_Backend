@@ -4,6 +4,7 @@ import com.lirouti.domain.group.entity.Group;
 import com.lirouti.domain.group.entity.GroupMember;
 import com.lirouti.domain.group.enums.GroupMemberRole;
 import com.lirouti.domain.group.enums.GroupMemberStatus;
+import com.lirouti.domain.group.enums.GroupStatus;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.enums.Role;
 import com.lirouti.domain.member.enums.SocialProvider;
@@ -64,6 +65,70 @@ class GroupMemberRepositoryTest {
         assertThat(result)
                 .extracting(GroupMember::getId)
                 .containsExactlyInAnyOrder(owner.getId(), active.getId());
+    }
+
+    @Test
+    @DisplayName("참여 수는 역할과 무관하게 ACTIVE 관계와 ACTIVE 그룹만 집계한다")
+    void countByMemberIdAndStatusAndGroupStatus_ActiveOnly_CountsOwnerAndMember() {
+        // given
+        Member target = member();
+        Group owned = group("C000001");
+        Group joined = group("C000002");
+        Group leftGroup = group("C000003");
+        Group kickedGroup = group("C000004");
+        Group deletedGroup = group("C000005");
+        membership(target, owned, GroupMemberRole.OWNER);
+        membership(target, joined, GroupMemberRole.MEMBER);
+        GroupMember left = membership(target, leftGroup, GroupMemberRole.MEMBER);
+        GroupMember kicked = membership(target, kickedGroup, GroupMemberRole.MEMBER);
+        membership(target, deletedGroup, GroupMemberRole.MEMBER);
+        left.leave();
+        kicked.kick();
+        deletedGroup.delete();
+        em.flush();
+        em.clear();
+
+        // when
+        long result = groupMemberRepository.countByMemberIdAndStatusAndGroupStatus(
+                target.getId(),
+                GroupMemberStatus.ACTIVE,
+                GroupStatus.ACTIVE
+        );
+
+        // then
+        assertThat(result).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("그룹원 수는 OWNER와 MEMBER를 포함하고 탈퇴 관계와 비활성 계정을 제외한다")
+    void countActiveMembersByGroupId_ActiveAccounts_CountsOwnerAndMember() {
+        // given
+        Group target = group("M000001");
+        membership(member(), target, GroupMemberRole.OWNER);
+        membership(member(), target, GroupMemberRole.MEMBER);
+        GroupMember left = membership(member(), target, GroupMemberRole.MEMBER);
+        GroupMember kicked = membership(member(), target, GroupMemberRole.MEMBER);
+        Member withdrawn = member();
+        membership(withdrawn, target, GroupMemberRole.MEMBER);
+        membership(member(), group("M000002"), GroupMemberRole.MEMBER);
+        left.leave();
+        kicked.kick();
+        withdrawn.withdraw(
+                "withdrawn-member-limit@example.com",
+                "withdrawn-member-limit-social-id",
+                LocalDateTime.of(2026, 8, 1, 0, 0)
+        );
+        em.flush();
+        em.clear();
+
+        // when
+        long result = groupMemberRepository.countActiveMembersByGroupId(
+                target.getId(),
+                GroupMemberStatus.ACTIVE
+        );
+
+        // then
+        assertThat(result).isEqualTo(2);
     }
 
     private Group group(String inviteCode) {

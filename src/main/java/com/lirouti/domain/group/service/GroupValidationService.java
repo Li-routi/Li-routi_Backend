@@ -10,10 +10,14 @@ import com.lirouti.domain.group.exception.code.error.GroupErrorCode;
 import com.lirouti.domain.group.repository.GroupMemberRepository;
 import com.lirouti.domain.group.repository.GroupRepository;
 import com.lirouti.domain.member.entity.Member;
+import com.lirouti.domain.member.exception.MemberException;
+import com.lirouti.domain.member.exception.code.error.MemberErrorCode;
+import com.lirouti.domain.member.repository.MemberRepository;
 import com.lirouti.domain.member.service.query.MemberQueryService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -30,7 +34,120 @@ import org.springframework.transaction.annotation.Transactional;
 public class GroupValidationService {
     private final GroupRepository groupRepository;
     private final GroupMemberRepository groupMemberRepository;
+    private final MemberRepository memberRepository;
     private final MemberQueryService memberQueryService;
+
+    /**
+     * 회원 행을 잠근 뒤 역할과 관계없이 현재 참여 중인 활성 그룹 수를 검증한다.
+     * 그룹 생성과 향후 가입 서비스는 이 메서드를 자신의 쓰기 트랜잭션 안에서 호출하고,
+     * 반환된 회원으로 참여 관계를 저장해야 잠금이 저장 시점까지 유지된다.
+     *
+     * @param memberId 참여할 회원 ID
+     * @return 잠금 및 활성 상태 검증을 통과한 회원
+     * @throws GroupException 이미 활성 그룹에 6개 참여 중인 경우
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Member lockActiveMemberAndValidateParticipationLimit(Long memberId) {
+        Member member = lockActiveMember(memberId);
+        validateParticipationLimit(memberId);
+        return member;
+    }
+
+    /**
+     * 그룹 행을 잠근 뒤 현재 활성 계정인 ACTIVE 그룹원 수를 검증한다.
+     * 향후 가입 서비스는 같은 쓰기 트랜잭션에서 이 메서드와 GroupMember 저장을 함께 수행해야 한다.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Group lockActiveGroupAndValidateMemberLimit(Long groupId) {
+        Group group = lockActiveGroup(groupId);
+        validateGroupMemberLimit(groupId);
+        return group;
+    }
+
+    /**
+     * 가입 시 필요한 두 상한을 동시 요청에도 안전한 잠금 순서로 함께 검증한다.
+     * 모든 잠금을 먼저 획득한 뒤 집계해야 REPEATABLE READ의 오래된 스냅샷을 피할 수 있다.
+     * 향후 가입 API는 개별 검증 메서드를 조합하지 않고 이 메서드를 재사용한다.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public JoinLimitContext lockAndValidateJoinLimits(Long groupId, Long memberId) {
+        Group group = lockActiveGroup(groupId);
+        Member member = lockActiveMember(memberId);
+        validateGroupMemberLimit(groupId);
+        validateParticipationLimit(memberId);
+        return new JoinLimitContext(group, member);
+    }
+
+    private Member lockActiveMember(Long memberId) {
+        if (memberId == null) {
+            log.warn("참여 상한 검증에 실패했습니다. memberId가 없습니다.");
+            throw new MemberException(MemberErrorCode.MEMBER_NOT_FOUND);
+        }
+
+        Member member = memberRepository.findByIdForUpdate(memberId)
+                .orElseThrow(() -> {
+                    log.warn("참여 상한 검증 대상 회원을 찾을 수 없습니다. memberId={}", memberId);
+                    return new MemberException(MemberErrorCode.MEMBER_NOT_FOUND);
+                });
+        if (!Boolean.TRUE.equals(member.getIsActive()) || member.getDeletedAt() != null) {
+            log.warn("탈퇴하거나 비활성화된 회원의 그룹 참여를 차단했습니다. memberId={}", memberId);
+            throw new MemberException(MemberErrorCode.WITHDRAWN_MEMBER);
+        }
+        return member;
+    }
+
+    private void validateParticipationLimit(Long memberId) {
+        long activeGroupCount = groupMemberRepository.countByMemberIdAndStatusAndGroupStatus(
+                memberId,
+                GroupMemberStatus.ACTIVE,
+                GroupStatus.ACTIVE
+        );
+        if (activeGroupCount >= GroupMember.MAX_ACTIVE_GROUP_COUNT) {
+            log.warn("활성 그룹 참여 상한을 초과했습니다. memberId={}, activeGroupCount={}",
+                    memberId, activeGroupCount);
+            throw new GroupException(GroupErrorCode.GROUP_PARTICIPATION_LIMIT_EXCEEDED);
+        }
+    }
+
+    /**
+     * 그룹 행을 잠그고 현재 활성 상태인지 검증한다.
+     * 루틴·카테고리 개수 검사부터 저장까지 그룹 단위로 직렬화하는 명령에서 사용한다.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Group lockActiveGroupForUpdate(Long groupId) {
+        return lockActiveGroup(groupId);
+    }
+
+    private Group lockActiveGroup(Long groupId) {
+        if (groupId == null) {
+            log.warn("그룹 잠금에 실패했습니다. groupId가 없습니다.");
+            throw new GroupException(GroupErrorCode.GROUP_NOT_FOUND);
+        }
+
+        Group group = groupRepository.findByIdForUpdate(groupId)
+                .orElseThrow(() -> {
+                    log.warn("잠글 그룹을 찾을 수 없습니다. groupId={}", groupId);
+                    return new GroupException(GroupErrorCode.GROUP_NOT_FOUND);
+                });
+        validateActiveGroup(groupId, group);
+        return group;
+    }
+
+    private void validateGroupMemberLimit(Long groupId) {
+        long activeMemberCount = groupMemberRepository.countActiveMembersByGroupId(
+                groupId,
+                GroupMemberStatus.ACTIVE
+        );
+        if (activeMemberCount >= GroupMember.MAX_ACTIVE_MEMBER_COUNT_PER_GROUP) {
+            log.warn("활성 그룹원 상한을 초과했습니다. groupId={}, activeMemberCount={}",
+                    groupId, activeMemberCount);
+            throw new GroupException(GroupErrorCode.GROUP_MEMBER_LIMIT_EXCEEDED);
+        }
+    }
+
+    /** 가입 상한 검증을 통과한 잠긴 그룹과 회원이다. */
+    public record JoinLimitContext(Group group, Member member) {
+    }
 
     /**
      * 로그인 회원이 요청 대상 그룹의 ACTIVE 구성원인지 검증한다.
@@ -100,11 +217,15 @@ public class GroupValidationService {
                     return new GroupException(GroupErrorCode.GROUP_NOT_FOUND);
                 });
 
+        validateActiveGroup(groupId, group);
+        return group;
+    }
+
+    private void validateActiveGroup(Long groupId, Group group) {
         if (group.getStatus() != GroupStatus.ACTIVE) {
             log.warn("비활성 그룹에 대한 접근을 차단했습니다. groupId={}, status={}",
                     groupId, group.getStatus());
             throw new GroupException(GroupErrorCode.GROUP_INACTIVE);
         }
-        return group;
     }
 }

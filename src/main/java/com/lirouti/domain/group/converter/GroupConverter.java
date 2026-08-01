@@ -4,10 +4,15 @@ import com.lirouti.domain.group.dto.request.GroupReqDTO;
 import com.lirouti.domain.group.dto.response.GroupResDTO;
 import com.lirouti.domain.group.entity.Group;
 import com.lirouti.domain.group.entity.GroupRoutine;
+import com.lirouti.domain.group.entity.GroupRoutineCategory;
 import com.lirouti.domain.group.entity.GroupRoutineSchedule;
+import com.lirouti.domain.group.entity.GroupMember;
+import com.lirouti.domain.group.enums.GroupMemberRole;
+import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.group.repository.GroupRoutineAssignmentRepositoryCustom.TodayAssignmentProjection;
-import com.lirouti.domain.routine.entity.RoutineCategory;
+import com.lirouti.domain.routine.enums.RoutineCategoryColor;
 
+import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
 
@@ -15,27 +20,176 @@ public final class GroupConverter {
     private GroupConverter() {
     }
 
+    /** 통합 생성 요청과 생성된 초대코드 정보를 신규 ACTIVE 그룹으로 변환한다. */
+    public static Group toGroup(
+            GroupReqDTO.CreateGroup request,
+            String inviteCode,
+            LocalDateTime inviteCodeExpiresAt
+    ) {
+        return Group.builder()
+                .name(request.name())
+                .inviteCode(inviteCode)
+                .inviteCodeExpiresAt(inviteCodeExpiresAt)
+                .build();
+    }
+
+    /** 신규 그룹의 인증 회원 참여 관계를 ACTIVE OWNER로 생성한다. */
+    public static GroupMember toOwnerMembership(Member member, Group group) {
+        return GroupMember.builder()
+                .member(member)
+                .group(group)
+                .role(GroupMemberRole.OWNER)
+                .build();
+    }
+
+    /** 요청의 사용자 카테고리를 그룹 소유의 활성 카테고리로 변환한다. */
+    public static GroupRoutineCategory toGroupRoutineCategory(
+            GroupReqDTO.CreateGroupCategory request,
+            Group group
+    ) {
+        return newGroupRoutineCategory(group, request.name(), request.color());
+    }
+
+    /** 그룹 카테고리 추가 요청을 그룹 소유의 활성 카테고리로 변환한다. */
+    public static GroupRoutineCategory toGroupRoutineCategory(
+            GroupReqDTO.CreateCategory request,
+            Group group
+    ) {
+        return newGroupRoutineCategory(group, request.name(), request.color());
+    }
+
+    private static GroupRoutineCategory newGroupRoutineCategory(
+            Group group,
+            String name,
+            RoutineCategoryColor color
+    ) {
+        return GroupRoutineCategory.builder()
+                .group(group)
+                .name(name)
+                .color(color)
+                .displayOrder(0)
+                .active(true)
+                .build();
+    }
+
+    /** 조회된 카테고리와 남은 추가 가능 개수를 목록 응답으로 변환한다. */
+    public static GroupResDTO.CategoryList toCategoryList(
+            List<GroupRoutineCategory> categories,
+            int addableCount
+    ) {
+        return GroupResDTO.CategoryList.builder()
+                .categories(categories.stream().map(GroupConverter::toCategory).toList())
+                .addableCount(addableCount)
+                .build();
+    }
+
+    /** 그룹 루틴 카테고리 한 건을 응답으로 변환한다. */
+    public static GroupResDTO.Category toCategory(GroupRoutineCategory category) {
+        return GroupResDTO.Category.builder()
+                .categoryId(category.getId())
+                .name(category.getName())
+                .color(category.getColor())
+                .fixed(category.isFixed())
+                .build();
+    }
+
+    /** 통합 생성 요청의 초기 루틴을 일정이 연결된 그룹 루틴으로 변환한다. */
+    public static GroupRoutine toGroupRoutine(
+            GroupReqDTO.CreateGroupRoutine request,
+            Group group,
+            GroupRoutineCategory category
+    ) {
+        return newGroupRoutine(
+                group,
+                category,
+                request.title(),
+                request.description(),
+                request.schedules()
+        );
+    }
+
+    /** 저장된 그룹·사용자 카테고리·초기 루틴 및 할당 수를 통합 생성 응답으로 조립한다. */
+    public static GroupResDTO.CreateResult toCreateResult(
+            Group group,
+            List<CreatedCategory> createdCategories,
+            List<CreatedRoutine> createdRoutines
+    ) {
+        List<GroupResDTO.CreatedCategory> categories = createdCategories.stream()
+                .map(created -> GroupResDTO.CreatedCategory.builder()
+                        .clientKey(created.clientKey())
+                        .categoryId(created.category().getId())
+                        .name(created.category().getName())
+                        .color(created.category().getColor())
+                        .build())
+                .toList();
+        List<GroupResDTO.CreatedRoutine> routines = createdRoutines.stream()
+                .map(created -> GroupResDTO.CreatedRoutine.builder()
+                        .routineId(created.routine().getId())
+                        .categoryId(created.routine().getCategory().getId())
+                        .categoryName(created.routine().getCategory().getName())
+                        .title(created.routine().getTitle())
+                        .description(created.routine().getDescription())
+                        .schedules(toRoutineSchedules(created.routine()))
+                        .assignmentCount(created.assignmentCount())
+                        .build())
+                .toList();
+
+        return GroupResDTO.CreateResult.builder()
+                .groupId(group.getId())
+                .name(group.getName())
+                .customCategories(categories)
+                .routines(routines)
+                .assignmentCount(createdRoutines.stream()
+                        .mapToInt(CreatedRoutine::assignmentCount)
+                        .sum())
+                .build();
+    }
+
+    /** clientKey와 실제 저장된 사용자 카테고리를 연결하는 변환 입력이다. */
+    public record CreatedCategory(String clientKey, GroupRoutineCategory category) {
+    }
+
+    /** 실제 저장된 초기 루틴과 생성 당일 할당 건수를 연결하는 변환 입력이다. */
+    public record CreatedRoutine(GroupRoutine routine, int assignmentCount) {
+    }
+
     /**
      * 생성 요청과 검증된 그룹·카테고리를 일정이 연결된 그룹 루틴으로 변환한다.
      *
      * @param request 그룹 루틴 생성 요청
      * @param group 루틴이 속할 그룹
-     * @param category 앱에서 관리하는 활성 카테고리
+     * @param category 앱 또는 소속 그룹이 관리하는 활성 그룹 카테고리
      * @return 요일별 일정이 연결된 그룹 루틴
      */
     public static GroupRoutine toGroupRoutine(
             GroupReqDTO.CreateRoutine request,
             Group group,
-            RoutineCategory category
+            GroupRoutineCategory category
+    ) {
+        return newGroupRoutine(
+                group,
+                category,
+                request.title(),
+                request.description(),
+                request.schedules()
+        );
+    }
+
+    private static GroupRoutine newGroupRoutine(
+            Group group,
+            GroupRoutineCategory category,
+            String title,
+            String description,
+            List<GroupReqDTO.RoutineSchedule> schedules
     ) {
         GroupRoutine groupRoutine = GroupRoutine.builder()
                 .group(group)
                 .category(category)
-                .title(request.title())
-                .description(request.description())
+                .title(title)
+                .description(description)
                 .build();
 
-        request.schedules().forEach(schedule -> groupRoutine.addSchedule(
+        schedules.forEach(schedule -> groupRoutine.addSchedule(
                 schedule.repeatDay(),
                 schedule.startTime(),
                 schedule.endTime()
