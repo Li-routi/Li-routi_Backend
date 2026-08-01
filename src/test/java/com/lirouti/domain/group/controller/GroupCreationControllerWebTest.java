@@ -116,7 +116,7 @@ class GroupCreationControllerWebTest {
 
     @Test
     @DisplayName("인증하지 않은 통합 생성 요청은 기존 보안 정책에 따라 401으로 거부한다")
-    void createGroup_Unauthenticated_ReturnsForbidden() throws Exception {
+    void createGroup_Unauthenticated_ReturnsUnauthorized() throws Exception {
         mockMvc.perform(post("/api/groups")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(validRequest()))

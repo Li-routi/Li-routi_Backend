@@ -142,7 +142,7 @@ class GroupControllerTest {
 
     @Test
     @DisplayName("인증 없이 오늘 그룹 루틴을 조회하면 거부된다")
-    void getTodayRoutines_Unauthenticated_ReturnsForbidden() throws Exception {
+    void getTodayRoutines_Unauthenticated_ReturnsUnauthorized() throws Exception {
         mockMvc.perform(get("/api/groups/routines/today"))
                 .andExpect(status().isUnauthorized());
     }
@@ -337,7 +337,7 @@ class GroupControllerTest {
 
     @Test
     @DisplayName("인증 없이 그룹 루틴 생성 요청을 하면 거부된다")
-    void createRoutine_Unauthenticated_ReturnsForbidden() throws Exception {
+    void createRoutine_Unauthenticated_ReturnsUnauthorized() throws Exception {
         mockMvc.perform(post("/api/groups/{groupId}/routines", 1L)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
