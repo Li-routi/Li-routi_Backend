@@ -24,6 +24,7 @@ import com.lirouti.domain.group.entity.Group;
 import com.lirouti.domain.group.entity.GroupMember;
 import com.lirouti.domain.group.entity.GroupRoutine;
 import com.lirouti.domain.group.entity.GroupRoutineAssignment;
+import com.lirouti.domain.group.entity.GroupRoutineCategory;
 import com.lirouti.domain.group.enums.GroupMemberRole;
 import com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus;
 import com.lirouti.domain.group.exception.GroupException;
@@ -33,7 +34,6 @@ import com.lirouti.domain.media.service.MediaService;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.enums.Role;
 import com.lirouti.domain.member.enums.SocialProvider;
-import com.lirouti.domain.routine.entity.RoutineCategory;
 import com.lirouti.domain.verification.dto.request.VerificationReqDTO;
 import com.lirouti.domain.verification.dto.response.VerificationResDTO;
 import com.lirouti.domain.verification.service.RoutineVerificationService;
@@ -111,7 +111,8 @@ class RoutineVerificationQueryTest {
 
     private GroupRoutineAssignment assignment(Group group, Member member) {
         int n = seq.incrementAndGet();
-        RoutineCategory category = RoutineCategory.builder().name("카테고리" + n).active(true).build();
+        GroupRoutineCategory category = GroupRoutineCategory.builder()
+                .group(group).name("카테고리" + n).active(true).build();
         em.persist(category);
         GroupRoutine routine = GroupRoutine.builder()
                 .group(group).category(category).title("아침 청소" + n).description("설명").build();
