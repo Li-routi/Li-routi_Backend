@@ -168,7 +168,7 @@ class ChallengeVerificationControllerTest {
     }
 
     @Test
-    @DisplayName("피드 조회는 200과 닉네임·코멘트가 담긴 카드를 돌려준다")
+    @DisplayName("피드 조회는 200과 닉네임·코멘트·mine이 담긴 카드를 돌려준다")
     void getFeed_Success() throws Exception {
         Member me = persistMember();
         Challenge c = persistChallenge();
@@ -185,6 +185,12 @@ class ChallengeVerificationControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.verifications[0].nickname").value("vermvc"))
                 .andExpect(jsonPath("$.result.verifications[0].content").value("피드에 보일 코멘트"))
+                // JSON 으로 나가는 필드 이름이 클라이언트와의 계약이라 여기서 고정한다.
+                // 판정 로직은 FeedMineFlagTest 가 보지만 그쪽은 DTO 접근자를 부르므로
+                // 직렬화 이름이 접근자와 갈라지는 변경(@JsonProperty, 네이밍 전략 등)은
+                // 컴파일도 테스트도 통과한 채 계약만 깬다. 그 경우를 잡는 것이 이 줄이다.
+                // 내가 올린 인증이라 true 다.
+                .andExpect(jsonPath("$.result.verifications[0].mine").value(true))
                 .andExpect(jsonPath("$.result.hasNext").value(false))
                 .andExpect(jsonPath("$.result.nextCursor").doesNotExist());
     }
