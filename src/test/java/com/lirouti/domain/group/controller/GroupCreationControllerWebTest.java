@@ -10,6 +10,9 @@ import com.lirouti.domain.group.service.query.GroupInviteCodeQueryService;
 import com.lirouti.domain.group.service.query.GroupQueryService;
 import com.lirouti.domain.member.enums.Role;
 import com.lirouti.global.auth.CustomUserDetails;
+import com.lirouti.global.apiPayload.ApiErrorResponseWriter;
+import com.lirouti.global.auth.AccessDeniedHandlerImpl;
+import com.lirouti.global.auth.AuthenticationEntryPointImpl;
 import com.lirouti.global.auth.filter.JwtAuthFilter;
 import com.lirouti.global.auth.filter.JwtExceptionFilter;
 import com.lirouti.global.config.SecurityConfig;
@@ -38,7 +41,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(GroupController.class)
-@Import({SecurityConfig.class, JwtAuthFilter.class, JwtExceptionFilter.class})
+@Import({SecurityConfig.class, JwtAuthFilter.class, JwtExceptionFilter.class,
+        AuthenticationEntryPointImpl.class, AccessDeniedHandlerImpl.class,
+        ApiErrorResponseWriter.class})
 @DisplayName("모임방 통합 생성 WebMvc 테스트")
 class GroupCreationControllerWebTest {
     private static final Long MEMBER_ID = 1L;
@@ -110,12 +115,12 @@ class GroupCreationControllerWebTest {
     }
 
     @Test
-    @DisplayName("인증하지 않은 통합 생성 요청은 기존 보안 정책에 따라 403으로 거부한다")
+    @DisplayName("인증하지 않은 통합 생성 요청은 기존 보안 정책에 따라 401으로 거부한다")
     void createGroup_Unauthenticated_ReturnsForbidden() throws Exception {
         mockMvc.perform(post("/api/groups")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(validRequest()))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
         verify(groupCommandService, never())
                 .createGroup(any(), any(GroupReqDTO.CreateGroup.class));
     }

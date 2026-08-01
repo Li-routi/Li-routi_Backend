@@ -1,5 +1,7 @@
 package com.lirouti.global.config;
 
+import com.lirouti.global.auth.AccessDeniedHandlerImpl;
+import com.lirouti.global.auth.AuthenticationEntryPointImpl;
 import com.lirouti.global.auth.filter.JwtAuthFilter;
 import com.lirouti.global.auth.filter.JwtExceptionFilter;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +20,8 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
     private final JwtAuthFilter jwtAuthFilter;
     private final JwtExceptionFilter jwtExceptionFilter;
+    private final AuthenticationEntryPointImpl authenticationEntryPoint;
+    private final AccessDeniedHandlerImpl accessDeniedHandler;
 
     private static final String[] PUBLIC_URIS = {
             "/api/auth/**",
@@ -42,6 +46,14 @@ public class SecurityConfig {
                         auth.requestMatchers(PUBLIC_URIS).permitAll()
                                 .anyRequest().authenticated()
                 )
+                // 인증·인가 실패를 ApiResponse 형태로 내보낸다. 등록하지 않으면 스프링 기본
+                // 동작이 본문 0바이트 403을 내보내, 클라이언트가 파싱에 실패하고 코드도 메시지도
+                // 받지 못한다. 미인증은 401, 권한 부족은 403으로 갈린다.
+                //
+                // 둘을 항상 함께 둔다 — 하나만 등록하면 나머지 경우가 기본 동작으로 샌다.
+                .exceptionHandling(handler -> handler
+                        .authenticationEntryPoint(authenticationEntryPoint)
+                        .accessDeniedHandler(accessDeniedHandler))
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtExceptionFilter, JwtAuthFilter.class);
 

@@ -55,10 +55,10 @@ class ChallengeParticipationControllerTest {
     }
 
     @Test
-    @DisplayName("인증 없이 참여 요청하면 거부된다(403)")
+    @DisplayName("인증 없이 참여 요청하면 거부된다(401)")
     void participate_Unauthenticated_IsRejected() throws Exception {
         mockMvc.perform(post("/api/challenges/{id}/participation", 1L))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
     }
 
     @Test

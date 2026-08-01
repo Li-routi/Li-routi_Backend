@@ -50,10 +50,10 @@ class MyChallengeControllerTest {
     }
 
     @Test
-    @DisplayName("인증이 없으면 접근이 거부된다(403)")
+    @DisplayName("인증이 없으면 접근이 거부된다(401)")
     void getMyChallenges_Unauthenticated_IsRejected() throws Exception {
         mockMvc.perform(get("/api/members/me/challenges"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
     }
 
     @Test

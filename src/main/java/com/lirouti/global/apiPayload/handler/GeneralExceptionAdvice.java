@@ -17,6 +17,7 @@ import org.springframework.validation.BindException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.sql.SQLException;
@@ -148,6 +149,31 @@ public class GeneralExceptionAdvice {
         return ResponseEntity
                 .status(GeneralErrorCode.INTERNAL_SERVER_ERROR.getHttpStatus())
                 .body(ApiResponse.onFailure(GeneralErrorCode.INTERNAL_SERVER_ERROR));
+    }
+
+    /**
+     * 매핑된 핸들러가 없는 경로. <b>404 다.</b>
+     *
+     * <p>이 핸들러가 없으면 아래 {@code Exception.class} 폴백이 받아 <b>500</b> 이 나간다.
+     * 스프링은 핸들러를 못 찾으면 정적 리소스를 찾아보고, 그것도 없으면
+     * {@code NoResourceFoundException} 을 던지는데 그것이 그대로 "처리되지 않은 서버 오류"가
+     * 되기 때문이다. {@code DefaultHandlerExceptionResolver} 가 404 로 바꿔주기는 하지만
+     * {@code @ExceptionHandler} 가 먼저 실행되어 거기까지 가지 않는다.
+     *
+     * <p><b>주소 오타를 서버 장애로 알려주는 셈이라 진단을 막는다.</b> 실제로 클라이언트가
+     * 없는 경로를 부르고 "유효한 토큰인데 서버가 500 을 낸다"고 보고한 적이 있다. 404 였다면
+     * 즉시 알았을 일이다. 봇 스캐너가 긁는 요청까지 전부 500 + ERROR 로그로 쌓이는 문제도 있다.
+     *
+     * <p>{@code warn} 이 아니라 {@code debug} 로 남긴다 — 스캐너 트래픽이 대부분이라
+     * 경고로 올리면 로그가 그것으로 덮인다.
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<@NonNull ApiResponse<Void>> handleNoResourceFound(NoResourceFoundException e) {
+        log.debug("매핑된 핸들러가 없는 경로입니다. path={}", e.getResourcePath());
+
+        return ResponseEntity
+                .status(GeneralErrorCode.NOT_FOUND.getHttpStatus())
+                .body(ApiResponse.onFailure(GeneralErrorCode.NOT_FOUND));
     }
 
     // 그 외의 정의되지 않은 모든 예외 처리

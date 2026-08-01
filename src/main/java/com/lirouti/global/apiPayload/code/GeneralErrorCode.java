@@ -10,6 +10,17 @@ public enum GeneralErrorCode implements BaseErrorCode {
     BAD_REQUEST(HttpStatus.BAD_REQUEST,
             "COMMON400_1",
             "잘못된 요청입니다."),
+    /**
+     * 토큰 없이 보호된 경로를 부른 경우. <b>토큰이 잘못된 것과 다르다</b> —
+     * 그건 필터가 잡아 {@code AUTH401_*} 로 내려간다(만료·형식오류·블랙리스트).
+     * 이 코드는 "아직 로그인하지 않았다"만 뜻하므로, 클라이언트는 재발급이 아니라
+     * 로그인 화면으로 보내면 된다.
+     */
+    UNAUTHORIZED(HttpStatus.UNAUTHORIZED,
+            "COMMON401_1",
+            "로그인이 필요합니다."),
+    // 코드 문자열이 COMMON 이 아니라 AUTH 인 것은 이 파일에서 이것뿐이다. 이미 클라이언트에
+    // 나간 값이라 바꾸지 않는다(exception_convention: 외부에 공개된 코드는 임의로 변경하지 않는다).
     FORBIDDEN(HttpStatus.FORBIDDEN,
             "AUTH403_1",
             "요청이 거부되었습니다."),
