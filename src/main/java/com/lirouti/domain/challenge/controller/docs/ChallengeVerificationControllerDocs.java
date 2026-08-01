@@ -113,9 +113,16 @@ public interface ChallengeVerificationControllerDocs {
 
                     커서 페이지네이션은 피드와 같습니다(커서 값은 verificationId).
 
-                    **현재 회차의 인증만 나옵니다.** 그만뒀다 다시 참여하면 회차가 올라가고
-                    지난 회차의 인증은 이 목록에 포함되지 않습니다. 스트릭·오늘 완료 여부와
-                    같은 기준입니다.
+                    ### 전체 회차가 나옵니다
+                    그만뒀다 다시 참여해도 **지난 참여의 인증이 그대로 보입니다.** 이탈은
+                    기록을 지우지 않기 때문입니다.
+
+                    각 항목의 `participationRound`가 응답의 `currentParticipationRound`보다
+                    작으면 **지난 참여**의 기록입니다. 이 둘을 비교해 "이번 참여 / 지난 참여"로
+                    묶어 보여주세요.
+
+                    **스트릭은 현재 회차 기준이라 목록과 기준이 다릅니다.** 재참여 직후에는
+                    "0일 연속" 옆에 지난 참여 기록이 놓일 수 있으니, 회차로 구분해 주세요.
 
                     **그만둔 챌린지도 조회됩니다.** 마지막으로 참여했던 회차의 기록이 그대로 보입니다.
                     한 번도 참여한 적이 없으면 빈 목록이 아니라 409입니다.
@@ -131,7 +138,8 @@ public interface ChallengeVerificationControllerDocs {
                     "내가 눌렀는지"는 자기 게시물에서 쓸 데가 없습니다.
 
                     응답 result: verifications[{ verificationId, imageUrl, content, verifiedDate,
-                    verifiedAt, likeCount }], currentStreak, nextCursor, hasNext.
+                    verifiedAt, likeCount, participationRound }], currentStreak,
+                    currentParticipationRound, nextCursor, hasNext.
                     """
     )
     @ApiResponses({

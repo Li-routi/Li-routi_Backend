@@ -81,7 +81,6 @@ public class ChallengeVerificationRepositoryImpl implements ChallengeVerificatio
     @Override
     public List<ChallengeVerification> findMineByCursor(
             Long memberChallengeId,
-            int participationRound,
             Long cursor,
             int limit
     ) {
@@ -91,7 +90,6 @@ public class ChallengeVerificationRepositoryImpl implements ChallengeVerificatio
                 .selectFrom(verification)
                 .where(
                         verification.memberChallenge.id.eq(memberChallengeId),
-                        verification.participationRound.eq(participationRound),
                         notHidden(verification),
                         cursorLt(cursor)
                 )

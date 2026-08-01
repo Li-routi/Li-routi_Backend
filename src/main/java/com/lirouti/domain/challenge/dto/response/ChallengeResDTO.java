@@ -165,11 +165,20 @@ public final class ChallengeResDTO {
      * currentStreak을 함께 싣는 이유는, 이 화면이 "며칠째 이어오고 있는지"와 목록을 같이 보여주기
      * 때문이다. 상세(Detail)에도 있지만 그쪽은 챌린지 정보를 받는 호출이라 스크롤 도중에는
      * 다시 부르지 않는다.
+     *
+     * <p>{@code currentParticipationRound}는 <b>지금 참여의 회차</b>다. 항목의
+     * {@code participationRound}와 비교해 "이번 참여 / 지난 참여"를 가른다 — 목록이 전체 회차를
+     * 담으므로, 이 값이 없으면 클라이언트가 어디까지가 이번 참여인지 알 수 없다.
+     *
+     * <p><b>스트릭과 목록의 기준이 다르다.</b> 스트릭은 현재 회차만 보고 목록은 전부 담으므로,
+     * "0일 연속" 옆에 지난 참여 기록이 놓일 수 있다. 회차를 실은 이유가 그것이다 —
+     * 클라이언트가 구분해 보여줄 수 있다.
      */
     @Builder
     public record MyVerifications(
             List<MyVerificationItem> verifications,
             int currentStreak,
+            int currentParticipationRound,
             Long nextCursor,
             boolean hasNext
     ) {
@@ -185,6 +194,10 @@ public final class ChallengeResDTO {
      * likeCount는 있고 liked는 없다(#63). 좋아요는 인증 한 건에 붙으므로 같은 사진이 피드에
      * 나올 때와 수가 같아야 한다 — 한쪽만 비어 있으면 화면이 어긋난다. 반면 "내가 눌렀는지"는
      * 자기 게시물에서 쓸 데가 없다.
+     *
+     * <p>{@code participationRound}는 그 인증을 남긴 참여 회차다. 래퍼의
+     * {@code currentParticipationRound}보다 작으면 <b>지난 참여</b>의 기록이다 —
+     * 나갔다가 다시 들어오면 회차가 오르고, 그 이전 인증이 여기 해당한다.
      */
     @Builder
     public record MyVerificationItem(
@@ -193,7 +206,8 @@ public final class ChallengeResDTO {
             String content,
             LocalDate verifiedDate,
             LocalDateTime verifiedAt,
-            long likeCount
+            long likeCount,
+            int participationRound
     ) {
     }
 

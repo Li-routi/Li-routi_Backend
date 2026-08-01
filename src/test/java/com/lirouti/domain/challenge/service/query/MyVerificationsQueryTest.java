@@ -24,6 +24,7 @@ import java.time.ZoneId;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest
@@ -101,8 +102,8 @@ class MyVerificationsQueryTest {
     }
 
     @Test
-    @DisplayName("지난 회차 인증은 빠진다 — 재참여로 회차가 오르면 이전 기록은 목록에서 사라진다")
-    void getMyVerifications_ExcludesPreviousRounds() {
+    @DisplayName("지난 회차 인증도 나온다 — 재참여해도 내 기록이 목록에서 사라지지 않는다")
+    void getMyVerifications_IncludesPreviousRounds() {
         Challenge c = persistChallenge();
         Member me = persistMember("round1");
         LocalDate today = LocalDate.now(KST);
@@ -116,8 +117,35 @@ class MyVerificationsQueryTest {
         ChallengeResDTO.MyVerifications result =
                 challengeQueryService.getMyVerifications(me.getId(), c.getId(), null, null);
 
-        assertThat(result.verifications()).hasSize(1);
-        assertThat(result.verifications().get(0).content()).isEqualTo("2회차");
+        // 예전에는 1회차가 빠졌다. 그러면 피드에는 mine=true 로 남아 있는 글이
+        // 내 목록에는 없는 상태가 되고, 회차는 되돌아가지 않아 영영 다시 보이지 않는다.
+        assertThat(result.verifications()).hasSize(2);
+        assertThat(result.verifications()).extracting("content")
+                .containsExactly("2회차", "1회차");   // 최신순(id 내림차순)
+    }
+
+    @Test
+    @DisplayName("항목마다 회차가 실리고, 현재 회차가 함께 내려간다 — 지난 참여를 구분할 근거다")
+    void getMyVerifications_CarriesRoundInfo() {
+        Challenge c = persistChallenge();
+        Member me = persistMember("roundinfo");
+        LocalDate today = LocalDate.now(KST);
+
+        MemberChallenge mc = persistParticipation(me, c, 2, true);
+        persistVerification(mc, 1, today.minusDays(10), "지난 참여");
+        persistVerification(mc, 2, today, "이번 참여");
+        em.flush();
+
+        ChallengeResDTO.MyVerifications result =
+                challengeQueryService.getMyVerifications(me.getId(), c.getId(), null, null);
+
+        // 항목의 회차가 currentParticipationRound 보다 작으면 지난 참여다.
+        // 이 값이 없으면 목록이 전체 회차를 담아도 클라이언트가 어디까지가 이번 참여인지 모른다.
+        assertAll(
+                () -> assertThat(result.currentParticipationRound()).isEqualTo(2),
+                () -> assertThat(result.verifications()).extracting("participationRound")
+                        .containsExactly(2, 1)
+        );
     }
 
     @Test

@@ -209,6 +209,8 @@ public final class ChallengeConverter {
                 .verifiedDate(verification.getVerifiedDate())
                 .verifiedAt(verification.getVerifiedAt())
                 .likeCount(likeCount)
+                // 인증 행이 스냅샷으로 들고 있는 값이라 추가 조회가 없다.
+                .participationRound(verification.getParticipationRound())
                 .build();
     }
 
@@ -221,6 +223,7 @@ public final class ChallengeConverter {
             Map<Long, String> imageUrls,
             Map<Long, Long> likeCounts,
             int currentStreak,
+            int currentParticipationRound,
             Long nextCursor,
             boolean hasNext
     ) {
@@ -231,6 +234,7 @@ public final class ChallengeConverter {
         return ChallengeResDTO.MyVerifications.builder()
                 .verifications(items)
                 .currentStreak(currentStreak)
+                .currentParticipationRound(currentParticipationRound)
                 .nextCursor(nextCursor)
                 .hasNext(hasNext)
                 .build();
