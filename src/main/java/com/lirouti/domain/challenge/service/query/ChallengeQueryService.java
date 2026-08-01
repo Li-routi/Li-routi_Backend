@@ -103,7 +103,8 @@ public class ChallengeQueryService {
                 challengeVerificationLikeRepository.findLikedVerificationIds(ids, viewerId);
 
         return ChallengeConverter.toFeed(
-                page.rows(), imageUrls, likeCounts, likedIds, page.nextCursor(), page.hasNext());
+                page.rows(), imageUrls, likeCounts, likedIds, viewerId,
+                page.nextCursor(), page.hasNext());
     }
 
     /**
