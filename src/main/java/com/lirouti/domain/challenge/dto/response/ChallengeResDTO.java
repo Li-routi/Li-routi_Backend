@@ -107,7 +107,16 @@ public final class ChallengeResDTO {
     ) {
     }
 
-    // 피드 카드 한 건. 닉네임·사진·코멘트에 좋아요 수와 내가 눌렀는지를 함께 보여준다(#63).
+    /**
+     * 피드 카드 한 건. 닉네임·사진·코멘트에 좋아요 수와 내가 눌렀는지를 함께 보여준다.
+     *
+     * <p>{@code mine}은 <b>이 인증을 조회자 본인이 올렸는지</b>다. 서버가 판정해 내려주는 이유는
+     * 클라이언트가 판정할 방법이 없기 때문이다 — 응답에 작성자 식별자가 없고, 닉네임은
+     * 유니크 제약이 없어(회원 유니크는 이메일과 소셜 식별자뿐) 동명이인이 생기면 남의 글이
+     * 내 글로 보인다. 그 값으로 삭제·수정 버튼을 그리면 그대로 사고다.
+     *
+     * <p>{@code liked}와 같은 방식이다 — 둘 다 JWT에서 얻은 조회자를 기준으로 서버가 정한다.
+     */
     @Builder
     public record FeedItem(
             Long verificationId,
@@ -116,7 +125,8 @@ public final class ChallengeResDTO {
             String content,
             LocalDateTime verifiedAt,
             long likeCount,
-            boolean liked
+            boolean liked,
+            boolean mine
     ) {
     }
 

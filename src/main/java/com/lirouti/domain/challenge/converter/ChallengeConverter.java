@@ -118,7 +118,8 @@ public final class ChallengeConverter {
             ChallengeVerification verification,
             String imageUrl,
             long likeCount,
-            boolean liked
+            boolean liked,
+            boolean mine
     ) {
         return ChallengeResDTO.FeedItem.builder()
                 .verificationId(verification.getId())
@@ -128,7 +129,25 @@ public final class ChallengeConverter {
                 .verifiedAt(verification.getVerifiedAt())
                 .likeCount(likeCount)
                 .liked(liked)
+                .mine(mine)
                 .build();
+    }
+
+    /**
+     * 이 인증을 조회자 본인이 올렸는지.
+     *
+     * <p>추가 조회가 없다. 피드 쿼리가 참여와 회원을 fetch join 으로 이미 읽어 두었기 때문이다
+     * (그 join 을 빼면 이 줄이 페이지 크기만큼 회원 조회를 일으킨다).
+     *
+     * <p>{@code viewerId} 가 없으면 false 다. 모든 챌린지 경로가 로그인을 요구하므로 실제로는
+     * null 이 오지 않지만, 온다면 "누구의 것도 아니다"가 맞다 — 익명에게 남의 글을 자기 것으로
+     * 보여 주는 쪽이 훨씬 나쁘다.
+     */
+    private static boolean isMine(ChallengeVerification verification, Long viewerId) {
+        if (viewerId == null) {
+            return false;
+        }
+        return viewerId.equals(verification.getMemberChallenge().getMember().getId());
     }
 
     // 좋아요·취소 결과(#63). 최종 상태만 담아 클라이언트가 재조회 없이 갱신하게 한다.
@@ -150,6 +169,7 @@ public final class ChallengeConverter {
             Map<Long, String> imageUrls,
             Map<Long, Long> likeCounts,
             Set<Long> likedIds,
+            Long viewerId,
             Long nextCursor,
             boolean hasNext
     ) {
@@ -158,7 +178,8 @@ public final class ChallengeConverter {
                         v,
                         imageUrls.get(v.getId()),
                         likeCounts.getOrDefault(v.getId(), 0L),
-                        likedIds.contains(v.getId())))
+                        likedIds.contains(v.getId()),
+                        isMine(v, viewerId)))
                 .toList();
         return ChallengeResDTO.Feed.builder()
                 .verifications(items)

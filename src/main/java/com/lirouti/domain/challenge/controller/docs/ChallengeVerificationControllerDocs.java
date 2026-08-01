@@ -82,8 +82,16 @@ public interface ChallengeVerificationControllerDocs {
                     각 카드에 likeCount(좋아요 수)와 liked(내가 눌렀는지)가 함께 나갑니다(#63).
                     좋아요 수는 탈퇴 회원의 좋아요를 뺀 값입니다.
 
+                    ### mine — 내가 올린 인증인지
+                    `mine`은 **그 인증을 요청한 회원 본인이 올렸는지**입니다. 토큰의 회원과
+                    작성자를 서버가 대조해 내려줍니다.
+
+                    **닉네임으로 판단하지 마세요.** 닉네임에는 유니크 제약이 없어(회원 유니크는
+                    이메일과 소셜 식별자뿐) 동명이인이 생기면 남의 글이 내 글로 보입니다.
+                    그 값으로 삭제·신고 버튼을 그리면 그대로 사고가 됩니다.
+
                     응답 result: verifications[{ verificationId, nickname, imageUrl, content,
-                    verifiedAt, likeCount, liked }], nextCursor, hasNext.
+                    verifiedAt, likeCount, liked, mine }], nextCursor, hasNext.
                     """
     )
     @ApiResponses({
