@@ -163,4 +163,27 @@ class ChallengeDetailVerifiedFlagTest {
                 () -> assertThat(result.verifiedInCurrentPeriod()).isFalse()
         );
     }
+
+    @Test
+    @DisplayName("같은 날 이탈 후 재참여하면 false — 새 회차라 다시 인증할 수 있다")
+    void rejoinedSameDay_IsFalse() {
+        // given: 오늘 인증하고 이탈했다가 같은 날 다시 참여한다.
+        // 회차가 올라가 지난 회차의 인증과 분리되므로 오늘 다시 인증할 수 있어야 한다
+        // (database-schema.md 의 participation_round 근거).
+        Member me = member();
+        Challenge c = challenge();
+        MemberChallenge mc = participate(me, c, LocalDate.now(KST));
+        mc.leave();
+        mc.rejoin(LocalDateTime.now());
+
+        // when
+        ChallengeResDTO.Detail result = detail(me, c);
+
+        // then: 판정이 rejoin 의 lastVerifiedDate 초기화에 기대고 있다.
+        // 그 초기화가 사라지면 재참여 직후 버튼이 잠기므로 여기서 고정한다.
+        assertAll(
+                () -> assertThat(result.participating()).isTrue(),
+                () -> assertThat(result.verifiedInCurrentPeriod()).isFalse()
+        );
+    }
 }
