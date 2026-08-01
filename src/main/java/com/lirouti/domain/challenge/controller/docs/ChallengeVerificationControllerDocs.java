@@ -231,4 +231,49 @@ public interface ChallengeVerificationControllerDocs {
             @Parameter(description = "신고할 인증 ID") Long verificationId,
             ChallengeReqDTO.Report request
     );
+
+    @Operation(
+            summary = "인증 메모 수정",
+            description = """
+                    내가 올린 인증의 **메모(코멘트)만** 수정합니다. 인증이 필요합니다.
+
+                    피드 응답의 `mine`이 `true`인 카드에만 이 진입점을 노출하세요.
+
+                    ### 사진은 바뀌지 않습니다
+                    사진을 바꾸려면 **그날 다시 인증**하세요(POST). 사진은 수행의 증거라
+                    교체하면 AI 심사를 다시 거치고, 그래서 경로가 다릅니다.
+                    이 API는 사진도 인증 시각도 건드리지 않습니다 — 피드 순서가 흔들리지 않습니다.
+
+                    ### 날짜 제한이 없습니다
+                    어제 이전에 쓴 메모도 고칠 수 있습니다. 메모는 사진에 덧붙이는 말이라
+                    나중에 고쳐도 "그날 수행했다"는 사실이 흔들리지 않기 때문입니다.
+                    (사진 교체가 당일로 제한되는 것과 다릅니다.)
+
+                    ### 메모 비우기
+                    `content`를 비우거나 보내지 않으면 **메모가 지워집니다.** 공백만 보내도
+                    같습니다. 처음 인증할 때도 선택 값이라 나중에 지우지 못할 이유가 없습니다.
+
+                    ### 404가 나는 경우
+                    **내 인증이 아니거나, 없거나, 신고 누적으로 가려진 경우**입니다. 셋을
+                    구분해 알려주지 않습니다 — 구분하면 응답만으로 그 id의 존재와 작성자가
+                    드러납니다. 가려진 인증은 작성자 본인에게도 보이지 않으므로 수정도 막습니다.
+
+                    스트릭·좋아요·신고는 영향받지 않습니다. 행이 사라지지 않고 인증일도
+                    그대로라 그것들이 참조하는 값이 하나도 바뀌지 않습니다.
+
+                    응답 result: verificationId, content(비웠으면 null).
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "수정 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "코멘트가 255자를 넘음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증 필요(미인증)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "내 인증이 아니거나 없거나 가려진 인증")
+    })
+    ApiResponse<ChallengeResDTO.MemoUpdate> updateMemo(
+            CustomUserDetails userDetails,
+            @Parameter(description = "챌린지 ID") Long challengeId,
+            @Parameter(description = "인증 ID") Long verificationId,
+            ChallengeReqDTO.UpdateMemo request
+    );
 }

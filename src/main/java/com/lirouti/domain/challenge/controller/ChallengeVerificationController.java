@@ -103,4 +103,17 @@ public class ChallengeVerificationController implements ChallengeVerificationCon
                 .report(userDetails.getMemberId(), challengeId, verificationId, request);
         return ApiResponse.onSuccess(ChallengeSuccessCode.VERIFICATION_REPORT_SUCCESS, result);
     }
+
+    @Override
+    @PatchMapping("/{verificationId}")
+    public ApiResponse<ChallengeResDTO.MemoUpdate> updateMemo(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long challengeId,
+            @PathVariable Long verificationId,
+            @Valid @RequestBody ChallengeReqDTO.UpdateMemo request
+    ) {
+        ChallengeResDTO.MemoUpdate result = challengeCommandService
+                .updateMemo(userDetails.getMemberId(), challengeId, verificationId, request);
+        return ApiResponse.onSuccess(ChallengeSuccessCode.VERIFICATION_MEMO_UPDATE_SUCCESS, result);
+    }
 }

@@ -43,6 +43,30 @@ public interface ChallengeVerificationRepository
     );
 
     /**
+     * 그 챌린지의 인증이면서 <b>작성자가 요청자인지</b>까지 확인하며 조회한다. 메모 수정용이다.
+     *
+     * <p>세 조건을 모두 쿼리에 넣는다. 가져와서 뒤에서 비교하면 <b>응답만으로 그 인증의 존재
+     * 여부와 작성자가 드러난다</b> — 남의 글에 404 대신 403 이 나가면 "그 id 는 있다"를 알려주는
+     * 셈이다. 어긋나면 빈 값이 나가 호출부가 404 로 바꾼다.
+     *
+     * <p><b>가려진 인증({@code hiddenAt} 이 있는 것)은 제외한다.</b> 신고가 임계값만큼 쌓이면
+     * 작성자 본인에게도 보이지 않는데, 보이지 않는 글을 고칠 수 있으면 화면에 없는 진입점이
+     * 열려 있는 셈이다. 고쳐도 되살아나지 않는다는 점에서도(해제 경로가 없다) 허용할 이유가 없다.
+     */
+    @Query("""
+            select v from ChallengeVerification v
+            where v.id = :verificationId
+              and v.memberChallenge.challenge.id = :challengeId
+              and v.memberChallenge.member.id = :memberId
+              and v.hiddenAt is null
+            """)
+    Optional<ChallengeVerification> findMineInChallenge(
+            @Param("verificationId") Long verificationId,
+            @Param("challengeId") Long challengeId,
+            @Param("memberId") Long memberId
+    );
+
+    /**
      * 신고 누적 판정을 위해 인증 행을 잠그고 조회한다.
      *
      * 잠금 없이 "저장 후 세기"만 하면 동시 신고가 서로의 미커밋 INSERT 를 보지 못해
