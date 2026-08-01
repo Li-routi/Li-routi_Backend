@@ -15,32 +15,24 @@ import com.lirouti.domain.group.repository.GroupRoutineRepository;
 import com.lirouti.domain.group.service.GroupValidationService;
 import com.lirouti.domain.media.enums.MediaPurpose;
 import com.lirouti.domain.media.service.MediaService;
-import com.lirouti.domain.routine.repository.MemberRoutineRepository;
 import com.lirouti.domain.verification.converter.VerificationConverter;
 import com.lirouti.domain.verification.dto.response.VerificationResDTO;
 import com.lirouti.domain.verification.entity.GroupRoutineVerification;
-import com.lirouti.domain.verification.entity.MemberRoutineVerification;
-import com.lirouti.domain.verification.exception.VerificationException;
-import com.lirouti.domain.verification.exception.code.error.VerificationErrorCode;
 import com.lirouti.domain.verification.repository.GroupRoutineVerificationRepository;
-import com.lirouti.domain.verification.repository.MemberRoutineVerificationRepository;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * 루틴 인증 조회. <b>이 서비스의 본질은 "누가 볼 수 있는가"를 판정하는 것이다.</b>
+ * 그룹 루틴 인증 조회. <b>이 서비스의 본질은 "누가 볼 수 있는가"를 판정하는 것이다.</b>
  *
- * <p>루틴 인증 사진은 비공개 prefix 에 있어 주소만으로는 열리지 않는다. 열리게 하려면 서명을
+ * <p>인증 사진은 비공개 prefix 에 있어 주소만으로는 열리지 않는다. 열리게 하려면 서명을
  * 붙여야 하는데, <b>서명을 붙이는 순간 그 URL 을 가진 사람은 누구나 볼 수 있다.</b> 그래서
- * 접근 판정이 서명보다 먼저 와야 하고, 그 순서가 이 클래스의 각 메서드 첫머리에 있다.
+ * 접근 판정이 서명보다 먼저 와야 하고, 그 순서가 아래 메서드 첫머리에 있다.
  *
- * <table>
- *   <caption>대상별 접근 범위</caption>
- *   <tr><th>인증</th><th>볼 수 있는 사람</th><th>판정 방법</th></tr>
- *   <tr><td>개인 루틴</td><td>본인만</td><td>루틴 소유자 확인</td></tr>
- *   <tr><td>그룹 루틴</td><td>그 방 멤버 전원</td><td>{@link GroupValidationService}</td></tr>
- * </table>
+ * <p><b>개인 루틴 인증에는 조회가 없다.</b> 그 사진을 보여 주는 화면이 없다는 기획 판단이다.
+ * 그래서 개인 인증 사진은 저장만 되고 읽는 경로가 없다 — 사진을 계속 필수로 받을지는
+ * 그 화면이 생기거나 사진을 뺄 때 다시 정한다.
  */
 @Slf4j
 @Service
@@ -52,46 +44,8 @@ public class RoutineVerificationQueryService {
 
     private final MediaService mediaService;
     private final GroupValidationService groupValidationService;
-    private final MemberRoutineRepository memberRoutineRepository;
     private final GroupRoutineRepository groupRoutineRepository;
-    private final MemberRoutineVerificationRepository memberRoutineVerificationRepository;
     private final GroupRoutineVerificationRepository groupRoutineVerificationRepository;
-
-    /**
-     * 내 개인 루틴 인증 목록.
-     *
-     * <p>비활성 루틴도 조회된다. 루틴을 끈 것과 그때까지의 기록을 못 보는 것은 다른 얘기다.
-     * 없는 루틴과 남의 루틴은 구분하지 않고 404 로 묶는다 — 구분해서 알려주면 응답만으로
-     * 그 id 의 존재 여부가 드러난다(인증 API 와 같은 기준).
-     */
-    @Transactional(readOnly = true)
-    public VerificationResDTO.MemberRoutineFeed getMemberRoutineVerifications(
-            Long memberId,
-            Long routineId,
-            Long cursor,
-            Integer size
-    ) {
-        if (!memberRoutineRepository.existsByIdAndMemberId(routineId, memberId)) {
-            log.warn("조회할 수 없는 루틴의 인증 목록을 요청했습니다. memberId={}, routineId={}",
-                    memberId, routineId);
-            throw new VerificationException(VerificationErrorCode.ROUTINE_NOT_FOUND);
-        }
-
-        int appliedSize = clampSize(size);
-        List<MemberRoutineVerification> rows = memberRoutineVerificationRepository
-                .findByRoutineIdByCursor(routineId, cursor, Limit.of(appliedSize + 1));
-        CursorPage<MemberRoutineVerification> page =
-                sliceByCursor(rows, appliedSize, MemberRoutineVerification::getId);
-
-        Map<Long, String> imageUrls = signImageUrls(
-                page.rows(),
-                MemberRoutineVerification::getId,
-                MemberRoutineVerification::getImageUrl,
-                MediaPurpose.MEMBER_ROUTINE_VERIFICATION);
-
-        return VerificationConverter.toMemberRoutineFeed(
-                page.rows(), imageUrls, page.nextCursor(), page.hasNext());
-    }
 
     /**
      * 그룹 루틴 인증 목록. 그 방 멤버 전원의 인증이 최신순으로 함께 나온다.

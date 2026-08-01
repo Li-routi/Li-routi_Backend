@@ -709,16 +709,21 @@ MySQL은 유니크 키에서 `NULL`을 서로 다른 값으로 취급하므로 �
 | --- | --- | --- | --- | --- |
 | 챌린지 | 전체 공개 | `challenge-verifications/` | (같음) | 공개 버킷 정책 |
 | 그룹 루틴 | 그 방 멤버 전원 | `group-routine-verifications/` | `group-routine-verifications/{groupId}/` | **presigned GET** ✅ |
-| 개인 루틴 | 본인만 | `member-routine-verifications/` | `member-routine-verifications/{memberId}/` | **presigned GET** ✅ |
+| 개인 루틴 | 본인만 | `member-routine-verifications/` | `member-routine-verifications/{memberId}/` | **조회 경로 없음** ⚠️ |
 
 범위 식별자를 경로에 넣으려는 근거는 위 [범위 식별자] 절과 같다. **공개 용도에는 식별자를 넣지 않고 비공개 용도에만 넣는다** — 비공개는 경로가 URL로 노출되지 않고, 일괄 정리에 그 값이 필요하다. 아직 넣지 않은 이유는 아래 경고를 볼 것.
 
 **presigned GET 이 구현됐다.** 조회 API 가 응답에 서명된 주소를 실어 내려준다.
 
 ```text
-GET /api/routines/{routineId}/verifications                    본인만
 GET /api/groups/{gid}/routines/{rid}/verifications             그 방의 활성 멤버만
 ```
+
+> ⚠️ **개인 루틴 인증에는 조회 API 를 두지 않았다.** 그 사진을 보여 주는 화면이 없다는 기획 판단이다.
+>
+> 그 결과 **개인 인증 사진은 저장만 되고 읽는 경로가 없다.** 사진은 여전히 필수인데(`image_url NOT NULL`) 읽는 쪽이 없으므로, 그 사진은 S3 용량만 차지한다. 완료 여부는 인증 행의 존재로 판정하므로 기능은 돌아간다 — 즉 **사진이 없어도 지금 화면은 똑같이 동작한다.**
+>
+> 둘 중 하나로 정리해야 한다. **개인 인증 사진을 보여 주는 화면을 만들거나, 사진을 선택으로 낮추거나.** 지금 상태를 오래 두면 아무도 안 보는 파일이 계속 쌓인다.
 
 세 가지를 정해 두었다.
 

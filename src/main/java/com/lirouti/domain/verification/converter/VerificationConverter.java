@@ -6,7 +6,6 @@ import java.util.Map;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.verification.dto.response.VerificationResDTO;
 import com.lirouti.domain.verification.entity.GroupRoutineVerification;
-import com.lirouti.domain.verification.entity.MemberRoutineVerification;
 
 /**
  * 인증 엔티티를 응답으로 옮긴다.
@@ -18,35 +17,6 @@ import com.lirouti.domain.verification.entity.MemberRoutineVerification;
 public final class VerificationConverter {
 
     private VerificationConverter() {
-    }
-
-    public static VerificationResDTO.MemberRoutineFeed toMemberRoutineFeed(
-            List<MemberRoutineVerification> verifications,
-            Map<Long, String> imageUrls,
-            Long nextCursor,
-            boolean hasNext
-    ) {
-        return VerificationResDTO.MemberRoutineFeed.builder()
-                .verifications(verifications.stream()
-                        .map(verification -> toMemberRoutineItem(
-                                verification, imageUrls.get(verification.getId())))
-                        .toList())
-                .nextCursor(nextCursor)
-                .hasNext(hasNext)
-                .build();
-    }
-
-    public static VerificationResDTO.MemberRoutineItem toMemberRoutineItem(
-            MemberRoutineVerification verification,
-            String imageUrl
-    ) {
-        return VerificationResDTO.MemberRoutineItem.builder()
-                .verificationId(verification.getId())
-                .imageUrl(imageUrl)
-                .content(verification.getContent())
-                .verifiedDate(verification.getVerifiedDate())
-                .verifiedAt(verification.getVerifiedAt())
-                .build();
     }
 
     public static VerificationResDTO.GroupRoutineFeed toGroupRoutineFeed(

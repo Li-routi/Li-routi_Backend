@@ -75,19 +75,4 @@ public class RoutineVerificationController implements RoutineVerificationControl
         return ApiResponse.onSuccess(
                 VerificationSuccessCode.GROUP_ROUTINE_VERIFICATION_LIST_SUCCESS, result);
     }
-
-    @Override
-    @GetMapping("/api/routines/{routineId}/verifications")
-    public ApiResponse<VerificationResDTO.MemberRoutineFeed> getMemberRoutineVerifications(
-            @AuthenticationPrincipal CustomUserDetails userDetails,
-            @PathVariable Long routineId,
-            @RequestParam(required = false) Long cursor,
-            @RequestParam(required = false) Integer size
-    ) {
-        VerificationResDTO.MemberRoutineFeed result =
-                routineVerificationQueryService.getMemberRoutineVerifications(
-                        userDetails.getMemberId(), routineId, cursor, size);
-        return ApiResponse.onSuccess(
-                VerificationSuccessCode.MEMBER_ROUTINE_VERIFICATION_LIST_SUCCESS, result);
-    }
 }

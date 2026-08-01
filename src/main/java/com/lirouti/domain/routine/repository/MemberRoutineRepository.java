@@ -31,17 +31,6 @@ public interface MemberRoutineRepository extends JpaRepository<MemberRoutine, Lo
     Optional<MemberRoutine> findByIdAndMemberIdAndActiveTrue(Long id, Long memberId);
 
     /**
-     * 그 회원의 루틴인지만 확인한다. <b>비활성 루틴도 포함한다.</b>
-     *
-     * <p>인증(쓰기)은 활성 루틴만 받지만 <b>기록 조회는 그렇지 않다.</b> 루틴을 끈 뒤에도
-     * 그때까지 쌓은 자기 인증은 볼 수 있어야 한다 — 챌린지에서 "그만뒀다고 자기 기록을 못 보게
-     * 할 이유가 없다"고 판단한 것과 같은 기준이다.
-     *
-     * <p>엔티티를 돌려주지 않는 이유는 소유권 확인 말고 쓸 데가 없기 때문이다.
-     */
-    boolean existsByIdAndMemberId(Long id, Long memberId);
-
-    /**
      * 회원이 이미 고른 기본 제공 루틴의 ID를 조회한다. 같은 기본 루틴을 두 번 등록하려는
      * 요청을 DB 제약 위반 전에 걸러내고, 목록 화면에서 어떤 항목이 이미 체크된 상태인지
      * 알려 주는 데 쓴다.
