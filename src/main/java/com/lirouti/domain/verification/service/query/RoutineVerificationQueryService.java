@@ -79,7 +79,7 @@ public class RoutineVerificationQueryService {
 
         int appliedSize = clampSize(size);
         List<MemberRoutineVerification> rows = memberRoutineVerificationRepository
-                .findMineByCursor(routineId, cursor, Limit.of(appliedSize + 1));
+                .findByRoutineIdByCursor(routineId, cursor, Limit.of(appliedSize + 1));
         CursorPage<MemberRoutineVerification> page =
                 sliceByCursor(rows, appliedSize, MemberRoutineVerification::getId);
 

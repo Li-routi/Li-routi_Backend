@@ -703,17 +703,19 @@ MySQL은 유니크 키에서 `NULL`을 서로 다른 값으로 취급하므로 �
 
 ### 접근 범위 — 셋이 다르다
 
-| 인증 | 볼 수 있는 사람 | 미디어 prefix | 서빙 |
-| --- | --- | --- | --- |
-| 챌린지 | 전체 공개 | `challenge-verifications/` | 공개 버킷 정책 |
-| 그룹 루틴 | 그 방 멤버 전원 | `group-routine-verifications/{groupId}/` | **presigned GET** |
-| 개인 루틴 | 본인만 | `member-routine-verifications/{memberId}/` | **presigned GET** |
+**볼 수 있는 사람과 서빙 방식은 구현돼 있고, 경로의 범위 식별자는 아직 목표다.** 표에서 두 열을 갈라 둔 이유가 이것이다.
 
-범위 식별자를 경로에 넣는 근거는 위 [범위 식별자] 절과 같다. **공개 용도에는 식별자를 넣지 않지만 비공개 용도에는 넣는다** — 비공개는 경로가 URL로 노출되지 않고, 접근 판정과 일괄 정리에 그 값이 필요하다.
+| 인증 | 볼 수 있는 사람 | 지금 발급되는 prefix | 목표 prefix | 서빙 |
+| --- | --- | --- | --- | --- |
+| 챌린지 | 전체 공개 | `challenge-verifications/` | (같음) | 공개 버킷 정책 |
+| 그룹 루틴 | 그 방 멤버 전원 | `group-routine-verifications/` | `group-routine-verifications/{groupId}/` | **presigned GET** ✅ |
+| 개인 루틴 | 본인만 | `member-routine-verifications/` | `member-routine-verifications/{memberId}/` | **presigned GET** ✅ |
+
+범위 식별자를 경로에 넣으려는 근거는 위 [범위 식별자] 절과 같다. **공개 용도에는 식별자를 넣지 않고 비공개 용도에만 넣는다** — 비공개는 경로가 URL로 노출되지 않고, 일괄 정리에 그 값이 필요하다. 아직 넣지 않은 이유는 아래 경고를 볼 것.
 
 **presigned GET 이 구현됐다.** 조회 API 가 응답에 서명된 주소를 실어 내려준다.
 
-```
+```text
 GET /api/routines/{routineId}/verifications                    본인만
 GET /api/groups/{gid}/routines/{rid}/verifications             그 방의 활성 멤버만
 ```

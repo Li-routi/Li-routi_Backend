@@ -95,7 +95,9 @@ public interface RoutineVerificationControllerDocs {
                     ### 페이지네이션
                     첫 요청은 `cursor` 없이 보내고, 응답의 `nextCursor`를 다음 요청의 `cursor`로
                     넘깁니다. `hasNext`가 false면 더 요청하지 않습니다.
-                    `size`는 기본 20, 최대 50이며 범위를 넘으면 잘립니다.
+                    `size`는 51 이상이면 50으로 잘립니다. **생략하거나 0 이하를 보내면
+                    잘리는 것이 아니라 기본값 20이 적용됩니다** — `size=0`으로 빈 목록을
+                    받을 수는 없습니다.
                     """
     )
     @ApiResponses({
@@ -127,7 +129,9 @@ public interface RoutineVerificationControllerDocs {
                     ### 페이지네이션
                     첫 요청은 `cursor` 없이 보내고, 응답의 `nextCursor`를 다음 요청의 `cursor`로
                     넘깁니다. `hasNext`가 false면 더 요청하지 않습니다.
-                    `size`는 기본 20, 최대 50이며 범위를 넘으면 잘립니다.
+                    `size`는 51 이상이면 50으로 잘립니다. **생략하거나 0 이하를 보내면
+                    잘리는 것이 아니라 기본값 20이 적용됩니다** — `size=0`으로 빈 목록을
+                    받을 수는 없습니다.
                     """
     )
     @ApiResponses({

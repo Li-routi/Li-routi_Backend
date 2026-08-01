@@ -25,6 +25,11 @@ public interface GroupRoutineVerificationRepository
      * <p>{@code groupId} 를 조건에 넣는 이유는 경로의 그룹과 루틴이 실제로 짝인지 확인하기
      * 위해서다. 방 멤버 검증은 경로의 groupId 로 하므로, 루틴이 다른 방 것이면
      * <b>자기 방 자격으로 남의 방 인증을 읽게 된다.</b> 인증 API 가 같은 조건을 거는 것과 짝이다.
+     *
+     * <p><b>다만 요청자가 그 방 멤버인지는 여기서 보지 않는다.</b> 이 조건은 "그룹과 루틴이
+     * 짝인가"만 답한다. 멤버 자격은 호출부가 먼저 확인한다(RoutineVerificationQueryService 가
+     * {@code GroupValidationService} 로). 이 메서드가 걸러 준다고 믿으면 방 밖의 회원에게
+     * 그대로 나간다.
      */
     @Query("""
             select verification from GroupRoutineVerification verification

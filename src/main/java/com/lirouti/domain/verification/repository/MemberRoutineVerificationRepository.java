@@ -37,7 +37,12 @@ public interface MemberRoutineVerificationRepository
     );
 
     /**
-     * 그 루틴의 내 인증을 최신순으로 가져온다. 커서·정렬 키는 {@code verifiedDate} 가 아니라 id 다.
+     * 그 루틴의 인증을 최신순으로 가져온다. 커서·정렬 키는 {@code verifiedDate} 가 아니라 id 다.
+     *
+     * <p><b>소유권을 확인하지 않는다.</b> 조건은 {@code routineId} 하나뿐이고, 그 루틴이 요청자의
+     * 것인지는 호출부가 먼저 확인한다(RoutineVerificationQueryService 의
+     * {@code existsByIdAndMemberId}). 이 메서드가 걸러 준다고 믿고 소유권 확인을 건너뛰면
+     * 남의 인증이 그대로 나간다.
      *
      * <p>날짜로 정렬해도 하루 1건 제약 때문에 순서는 같지만, <b>커서로는 id 가 안전하다.</b>
      * 날짜는 값이 같은 행이 생길 여지가 있고(제약이 풀리면) 그때 커서가 항목을 건너뛴다.
@@ -52,7 +57,7 @@ public interface MemberRoutineVerificationRepository
               and (:cursor is null or v.id < :cursor)
             order by v.id desc
             """)
-    List<MemberRoutineVerification> findMineByCursor(
+    List<MemberRoutineVerification> findByRoutineIdByCursor(
             @Param("routineId") Long routineId,
             @Param("cursor") Long cursor,
             Limit limit
