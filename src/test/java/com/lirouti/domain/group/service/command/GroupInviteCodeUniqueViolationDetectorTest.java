@@ -11,9 +11,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @DisplayName("초대코드 unique 제약 판별 테스트")
 class GroupInviteCodeUniqueViolationDetectorTest {
-    private static final String INVITE_CODE_UNIQUE_CONSTRAINT =
-            "UKmgt3kl7whp0n031hlo8x6jupi";
-
     private final GroupInviteCodeUniqueViolationDetector detector =
             new GroupInviteCodeUniqueViolationDetector();
 
@@ -21,10 +18,27 @@ class GroupInviteCodeUniqueViolationDetectorTest {
     @DisplayName("초대코드 unique 제약 위반만 true로 판별한다")
     void isInviteCodeUniqueViolation_InviteCodeConstraint_ReturnsTrue() {
         assertThat(detector.isInviteCodeUniqueViolation(
-                violation(INVITE_CODE_UNIQUE_CONSTRAINT)
+                violation(GroupDatabaseConstraints.INVITE_CODE)
         )).isTrue();
         assertThat(detector.isInviteCodeUniqueViolation(
-                violation("lirouti." + INVITE_CODE_UNIQUE_CONSTRAINT)
+                violation("lirouti." + GroupDatabaseConstraints.INVITE_CODE)
+        )).isTrue();
+    }
+
+    @Test
+    @DisplayName("바깥쪽의 다른 unique 위반 뒤에 있는 초대코드 위반도 찾는다")
+    void isInviteCodeUniqueViolation_NestedAfterOtherUnique_ReturnsTrue() {
+        ConstraintViolationException inviteViolation = constraintViolation(
+                GroupDatabaseConstraints.INVITE_CODE,
+                new SQLException("duplicate invite code", "23000", 1062)
+        );
+        ConstraintViolationException otherViolation = constraintViolation(
+                GroupDatabaseConstraints.ROUTINE_TITLE,
+                new SQLException("nested unique violation", inviteViolation)
+        );
+
+        assertThat(detector.isInviteCodeUniqueViolation(
+                new DataIntegrityViolationException("outer", otherViolation)
         )).isTrue();
     }
 
@@ -41,12 +55,21 @@ class GroupInviteCodeUniqueViolationDetectorTest {
 
     private DataIntegrityViolationException violation(String constraintName) {
         SQLException sqlException = new SQLException("duplicate value", "23000", 1062);
-        ConstraintViolationException constraintViolationException = new ConstraintViolationException(
+        return new DataIntegrityViolationException(
                 "duplicate value",
-                sqlException,
+                constraintViolation(constraintName, sqlException)
+        );
+    }
+
+    private ConstraintViolationException constraintViolation(
+            String constraintName,
+            SQLException cause
+    ) {
+        return new ConstraintViolationException(
+                "duplicate value",
+                cause,
                 ConstraintViolationException.ConstraintKind.UNIQUE,
                 constraintName
         );
-        return new DataIntegrityViolationException("duplicate value", constraintViolationException);
     }
 }

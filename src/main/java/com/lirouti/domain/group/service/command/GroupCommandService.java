@@ -27,8 +27,6 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class GroupCommandService {
     private static final int MAX_CREATE_ATTEMPTS = 10;
-    private static final String UK_GROUP_ROUTINE_CATEGORY_GROUP_NAME =
-            "uk_group_routine_category_group_name";
 
     private final GroupValidationService groupValidationService;
     private final GroupRoutineCategoryRepository groupRoutineCategoryRepository;
@@ -364,27 +362,14 @@ public class GroupCommandService {
         } catch (DataIntegrityViolationException e) {
             log.warn("그룹 루틴 저장 중 무결성 제약을 위반했습니다. groupId={}, title={}",
                     groupRoutine.getGroup().getId(), groupRoutine.getTitle());
-            if (isRoutineTitleConstraintViolation(e)) {
+            if (GroupConstraintViolationInspector.isUniqueConstraintViolation(
+                    e,
+                    GroupDatabaseConstraints.ROUTINE_TITLE
+            )) {
                 throw new GroupException(GroupErrorCode.DUPLICATE_GROUP_ROUTINE_TITLE);
             }
             throw e;
         }
-    }
-
-    private boolean isRoutineTitleConstraintViolation(Throwable throwable) {
-        Throwable current = throwable;
-        while (current != null) {
-            String message = current.getMessage();
-            if (message != null
-                    && message.toLowerCase().contains("uk_group_routine_group_title")) {
-                return true;
-            }
-            if (current.getCause() == current) {
-                break;
-            }
-            current = current.getCause();
-        }
-        return false;
     }
 
     private String normalizeCategoryName(Long groupId, Long memberId, String rawName) {
@@ -409,7 +394,10 @@ public class GroupCommandService {
         try {
             groupRoutineCategoryRepository.saveAndFlush(category);
         } catch (DataIntegrityViolationException exception) {
-            if (!containsConstraint(exception, UK_GROUP_ROUTINE_CATEGORY_GROUP_NAME)) {
+            if (!GroupConstraintViolationInspector.isUniqueConstraintViolation(
+                    exception,
+                    GroupDatabaseConstraints.ROUTINE_CATEGORY_NAME
+            )) {
                 throw exception;
             }
             log.warn("같은 이름의 그룹 카테고리 저장을 차단했습니다. "
@@ -417,21 +405,5 @@ public class GroupCommandService {
                     groupId, memberId, category.getName());
             throw new GroupException(GroupErrorCode.DUPLICATE_GROUP_ROUTINE_CATEGORY_NAME);
         }
-    }
-
-    private boolean containsConstraint(Throwable throwable, String constraintName) {
-        Throwable current = throwable;
-        while (current != null) {
-            String message = current.getMessage();
-            if (message != null
-                    && message.toLowerCase().contains(constraintName.toLowerCase())) {
-                return true;
-            }
-            if (current.getCause() == current) {
-                break;
-            }
-            current = current.getCause();
-        }
-        return false;
     }
 }

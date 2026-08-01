@@ -221,7 +221,9 @@ public final class GroupReqDTO {
             List<@NotNull(message = "반복 일정은 null일 수 없습니다.") @Valid RoutineSchedule> schedules
     ) {
         public CreateGroupRoutine {
-            categoryKey = categoryKey == null ? null : categoryKey.trim();
+            categoryKey = categoryKey == null || categoryKey.isBlank()
+                    ? null
+                    : categoryKey.trim();
             title = title == null ? null : title.trim();
         }
 

@@ -41,7 +41,7 @@ import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("GroupCreationAttemptService 그룹 통합 생성 시도 테스트")
-class GroupCreationCommandServiceTest {
+class GroupCreationAttemptServiceTest {
     private static final Long MEMBER_ID = 1L;
     private static final Long GROUP_ID = 10L;
     private static final LocalDateTime INVITE_EXPIRES_AT =
@@ -161,6 +161,26 @@ class GroupCreationCommandServiceTest {
                 .extracting("code")
                 .isEqualTo(GroupErrorCode.GROUP_ROUTINE_CATEGORY_ACCESS_DENIED);
         verify(groupRoutineRepository, never()).saveAndFlush(any(GroupRoutine.class));
+    }
+
+    @Test
+    @DisplayName("공백 categoryKey는 기본 categoryId 참조로 생성한다")
+    void createGroup_BlankCategoryKey_UsesFixedCategoryId() {
+        GroupReqDTO.CreateGroup request = new GroupReqDTO.CreateGroup(
+                "아침 모임",
+                List.of(),
+                List.of(routine(1L, "   ", "아침 운동", DayOfWeek.MONDAY))
+        );
+        givenValidRequest(request, member());
+        givenRoutinePersistence();
+        GroupRoutineCategory fixedCategory = fixedCategory();
+        when(groupRoutineCategoryRepository.findByIdAndActiveTrue(1L))
+                .thenReturn(java.util.Optional.of(fixedCategory));
+
+        groupCreationAttemptService.createOnce(MEMBER_ID, request);
+
+        verify(groupRoutineRepository).saveAndFlush(argThat(routine ->
+                routine.getCategory() == fixedCategory));
     }
 
     @Test

@@ -119,7 +119,7 @@ class GroupParticipationLimitConcurrencyTest {
         for (int index = 0; index < 7; index++) {
             Group group = groupRepository.save(Group.builder()
                     .name("참여 상한 그룹 " + index)
-                    .inviteCode(suffix.substring(index, index + 7).toUpperCase())
+                    .inviteCode((suffix.substring(0, 6) + index).toUpperCase())
                     .build());
             groups.add(group);
             groupIds.add(group.getId());

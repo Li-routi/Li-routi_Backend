@@ -112,11 +112,13 @@ class GroupRoutineUpdateIntegrationTest {
                 .build());
         GroupRoutineCategory originalCategory = groupRoutineCategoryRepository.save(
                 GroupRoutineCategory.builder()
+                .group(group)
                 .name("수정 전 카테고리-" + suffix)
                 .active(true)
                 .build());
         GroupRoutineCategory newCategory = groupRoutineCategoryRepository.save(
                 GroupRoutineCategory.builder()
+                .group(group)
                 .name("수정 후 카테고리-" + suffix)
                 .active(true)
                 .build());

@@ -13,6 +13,7 @@ import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -62,6 +63,21 @@ class GroupReqDTOValidationTest {
         assertThat(category.name()).isEqualTo("아침 관리");
         assertThat(routine.categoryKey()).isEqualTo("morning");
         assertThat(routine.title()).isEqualTo("침구 정리");
+        assertThat(validator.validate(request)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("공백 categoryKey는 null로 정규화해 categoryId 참조를 허용한다")
+    void construct_BlankCategoryKey_NormalizesToNull() {
+        GroupReqDTO.CreateGroupRoutine routine = routine(
+                1L,
+                "   ",
+                "아침 운동",
+                schedules()
+        );
+        GroupReqDTO.CreateGroup request = request(List.of(), List.of(routine));
+
+        assertThat(routine.categoryKey()).isNull();
         assertThat(validator.validate(request)).isEmpty();
     }
 
@@ -412,6 +428,6 @@ class GroupReqDTOValidationTest {
     private Set<String> messages(GroupReqDTO.CreateGroup request) {
         return validator.validate(request).stream()
                 .map(ConstraintViolation::getMessage)
-                .collect(java.util.stream.Collectors.toSet());
+                .collect(Collectors.toSet());
     }
 }

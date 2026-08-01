@@ -181,7 +181,9 @@ class GroupCategoryControllerIntegrationTest {
         Group group = group();
         Member owner = member();
         membership(group, owner, GroupMemberRole.OWNER);
-        for (int index = 0; index < 5; index++) {
+        for (int index = 0;
+             index < GroupRoutineCategory.MAX_GROUP_CATEGORY_COUNT;
+             index++) {
             category(group, "관리" + index, true);
         }
         em.flush();

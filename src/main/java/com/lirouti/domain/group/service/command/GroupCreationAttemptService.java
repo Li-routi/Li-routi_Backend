@@ -129,7 +129,7 @@ public class GroupCreationAttemptService {
             Map<String, GroupRoutineCategory> customCategoriesByKey,
             Long memberId
     ) {
-        if (request.categoryKey() != null) {
+        if (hasText(request.categoryKey())) {
             GroupRoutineCategory category = customCategoriesByKey.get(request.categoryKey());
             if (category == null) {
                 throw new GroupException(GroupErrorCode.ROUTINE_CATEGORY_NOT_FOUND);
@@ -150,5 +150,9 @@ public class GroupCreationAttemptService {
             throw new GroupException(GroupErrorCode.GROUP_ROUTINE_CATEGORY_ACCESS_DENIED);
         }
         return category;
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 }

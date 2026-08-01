@@ -10,6 +10,7 @@ import com.lirouti.domain.group.entity.GroupMember;
 import com.lirouti.domain.group.enums.GroupMemberRole;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.group.repository.GroupRoutineAssignmentRepositoryCustom.TodayAssignmentProjection;
+import com.lirouti.domain.routine.enums.RoutineCategoryColor;
 
 import java.time.LocalDateTime;
 import java.util.Comparator;
@@ -46,13 +47,7 @@ public final class GroupConverter {
             GroupReqDTO.CreateGroupCategory request,
             Group group
     ) {
-        return GroupRoutineCategory.builder()
-                .group(group)
-                .name(request.name())
-                .color(request.color())
-                .displayOrder(0)
-                .active(true)
-                .build();
+        return newGroupRoutineCategory(group, request.name(), request.color());
     }
 
     /** 그룹 카테고리 추가 요청을 그룹 소유의 활성 카테고리로 변환한다. */
@@ -60,10 +55,18 @@ public final class GroupConverter {
             GroupReqDTO.CreateCategory request,
             Group group
     ) {
+        return newGroupRoutineCategory(group, request.name(), request.color());
+    }
+
+    private static GroupRoutineCategory newGroupRoutineCategory(
+            Group group,
+            String name,
+            RoutineCategoryColor color
+    ) {
         return GroupRoutineCategory.builder()
                 .group(group)
-                .name(request.name())
-                .color(request.color())
+                .name(name)
+                .color(color)
                 .displayOrder(0)
                 .active(true)
                 .build();
@@ -96,19 +99,13 @@ public final class GroupConverter {
             Group group,
             GroupRoutineCategory category
     ) {
-        GroupRoutine groupRoutine = GroupRoutine.builder()
-                .group(group)
-                .category(category)
-                .title(request.title())
-                .description(request.description())
-                .build();
-
-        request.schedules().forEach(schedule -> groupRoutine.addSchedule(
-                schedule.repeatDay(),
-                schedule.startTime(),
-                schedule.endTime()
-        ));
-        return groupRoutine;
+        return newGroupRoutine(
+                group,
+                category,
+                request.title(),
+                request.description(),
+                request.schedules()
+        );
     }
 
     /** 저장된 그룹·사용자 카테고리·초기 루틴 및 할당 수를 통합 생성 응답으로 조립한다. */
@@ -169,14 +166,30 @@ public final class GroupConverter {
             Group group,
             GroupRoutineCategory category
     ) {
+        return newGroupRoutine(
+                group,
+                category,
+                request.title(),
+                request.description(),
+                request.schedules()
+        );
+    }
+
+    private static GroupRoutine newGroupRoutine(
+            Group group,
+            GroupRoutineCategory category,
+            String title,
+            String description,
+            List<GroupReqDTO.RoutineSchedule> schedules
+    ) {
         GroupRoutine groupRoutine = GroupRoutine.builder()
                 .group(group)
                 .category(category)
-                .title(request.title())
-                .description(request.description())
+                .title(title)
+                .description(description)
                 .build();
 
-        request.schedules().forEach(schedule -> groupRoutine.addSchedule(
+        schedules.forEach(schedule -> groupRoutine.addSchedule(
                 schedule.repeatDay(),
                 schedule.startTime(),
                 schedule.endTime()

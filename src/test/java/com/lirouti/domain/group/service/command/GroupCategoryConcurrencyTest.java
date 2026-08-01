@@ -64,7 +64,8 @@ class GroupCategoryConcurrencyTest {
     @DisplayName("4개인 그룹의 서로 다른 동시 생성은 한 건만 성공해 5개를 유지한다")
     void createCategory_ConcurrentAtLimit_DoesNotExceedFive() throws InterruptedException {
         // given
-        Seed seed = transaction().execute(status -> seed(4));
+        Seed seed = transaction().execute(status ->
+                seed(GroupRoutineCategory.MAX_GROUP_CATEGORY_COUNT - 1));
         Counters counters = runConcurrently(
                 seed,
                 new GroupReqDTO.CreateCategory("마지막A", null),
