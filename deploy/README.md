@@ -130,10 +130,21 @@ cd /opt/app && docker compose logs -f app
 
 **cron은 PATH를 `/usr/bin:/bin`으로만 준다.** `aws`는 snap으로 설치돼 `/snap/bin`에 있어 그대로 두면 덤프를 다 뜬 뒤 마지막 업로드에서 죽는다. `backup.sh`가 PATH에 `/snap/bin`을 더해 이 문제를 스스로 막는다.
 
-**백업 버킷의 버전 관리를 켠다** (2026-08-03 활성화 완료). 앱과 백업이 같은 인스턴스 역할을 쓰기 때문에 앱이 침해되면 백업을 덮어쓸 수 있다 — 이유와 켜는 경로, 서버에서 확인하는 방법은 [2) 정책 생성](#2-정책-생성)의 경고를 볼 것.
+**백업 버킷의 버전 관리를 켠다** (2026-08-03 KST 활성화 완료). 앱과 백업이 같은 인스턴스 역할을 쓰기 때문에 앱이 침해되면 백업을 덮어쓸 수 있다 — 이유와 켜는 경로, 서버에서 확인하는 방법은 [2) 정책 생성](#2-정책-생성)의 경고를 볼 것.
 
-> 2026-08-03 **등록 완료.** `0 19 * * * /opt/app/backup.sh >> /opt/app/backup.log 2>&1`
+등록은 **손으로 `crontab -e`를 열지 말고 아래를 붙여넣는다.** 두 번 실행해도 같은 줄이 겹치지 않는다. 인스턴스를 교체하면 cron은 그 인스턴스와 함께 사라지므로, **재구축 절차에서 이 단계를 반드시 다시 밟아야 한다.**
+
+```bash
+( crontab -l 2>/dev/null | grep -vF '/opt/app/backup.sh'; \
+  echo '0 19 * * * /opt/app/backup.sh >> /opt/app/backup.log 2>&1' ) | crontab -
+crontab -l                      # 등록 확인
+/opt/app/backup.sh              # 한 번 돌려서 업로드까지 되는지 확인
+```
+
+> 2026-08-03 KST **등록 완료.** `0 19 * * * /opt/app/backup.sh >> /opt/app/backup.log 2>&1`
 > 수동 실행과 cron 최소 환경(`env -i PATH=/usr/bin:/bin`) 양쪽에서 업로드까지 성공을 확인했다(`2026-08-03.sql.gz`, gzip 11.7 KiB).
+>
+> **이 문서의 날짜는 모두 KST다.** 서버·GitHub·S3 로그가 UTC라 아홉 시간 차이로 하루가 어긋나 보일 수 있다.
 
 ## AWS / 네트워크
 
@@ -548,17 +559,24 @@ IAM → 정책 → 정책 생성 → JSON 탭에 [`deploy/iam-policy.json`](./ia
 >
 > **실효가 있는 건 버킷 버전 관리다.** 덮어쓰기가 새 버전을 만들 뿐 이전 버전이 남으므로 복구가 된다. 콘솔에서 S3 → `lirouti-db-backup` → 속성 → 버전 관리 → 활성화. 비용은 이전 버전 만료 라이프사이클(예: 30일)로 잡는다.
 >
-> **2026-08-03 활성화 확인.** 백업 cron 등록과 같은 날 켰다.
+> **2026-08-03 KST 활성화 확인.** 백업 cron 등록과 같은 날 켰다.
 >
 > 설정 조회(`get-bucket-versioning`)는 인스턴스 역할에 `s3:GetBucketVersioning`이 없어 `AccessDenied`가 나지만, **켜졌는지 여부는 서버에서도 확인할 수 있다.** 버전 관리가 켜진 버킷은 `PutObject` 응답에 `VersionId`를 실어 보내기 때문이다. 꺼져 있으면 그 필드가 오지 않는다.
 >
 > ```bash
-> # 새 오브젝트를 만들지 않도록 그날 백업 키에 그대로 덮어쓴다
-> aws s3api put-object --bucket lirouti-db-backup --key "$(TZ=Asia/Seoul date +%F).sql.gz" --body <덤프파일>
-> #   "VersionId": "ms4nc4..."  ← 이 줄이 있으면 켜져 있다
+> /opt/app/backup.sh --check-versioning
+> #   버전 관리 켜짐 (2026-08-03.sql.gz VersionId=ms4nc4...)     ← 켜져 있음
+> #   버전 관리 꺼짐 — 덮어쓰기가 복구 불가다. 콘솔에서 켤 것       ← 꺼져 있음 (exit 1)
 > ```
 >
-> 참고로 `aws s3 cp`(백업 스크립트가 쓰는 명령)는 이 응답을 출력하지 않는다. 확인용으로는 `s3api put-object`를 쓴다.
+> **이 확인은 손으로 `s3api put-object`를 치지 않는다.** 무엇을 올리느냐에 함정이 두 개 있어서, 스크립트가 대신 정하게 했다.
+>
+> - **전용 확인용 키를 쓰면 지우지 못하고 남는다.** 이 역할에는 백업 버킷 `DeleteObject`가 없어 콘솔에서만 치울 수 있다. 실제로 예전 확인용 오브젝트가 몇 주째 남아 있었다.
+> - **그날 백업 키에 아무 파일이나 올리면 그 키의 최신 버전이 그 파일이 된다.** 이전 버전은 남지만, 복구할 때 집는 것은 최신 버전이다. 확인해보려다 그날 백업을 못 쓰게 만드는 셈이다.
+>
+> 그래서 `--check-versioning`은 **백업과 똑같이 새 덤프를 떠서 그날 키에 올린다.** 새 오브젝트가 생기지 않고, 올라간 최신 버전도 정상 백업이다.
+>
+> 참고로 `aws s3 cp`(백업 경로가 쓰는 명령)는 이 응답을 출력하지 않는다. 그래서 확인 경로만 `s3api put-object`를 쓴다.
 >
 > 콘솔 경로는 이렇다. 버전 관리는 **켠 시점 이후에 올라온 오브젝트부터** 버전을 남기므로(그 전 것들은 버전 ID가 `null`인 한 벌로 남는다), 빨리 켤수록 보호 범위가 넓어진다.
 >
@@ -687,15 +705,17 @@ echo "③ OK"
 
 > 검증에 올린 테스트 객체(`s3://lirouti-db-backup/iam-check.txt`, `s3://lirouti-prod-bucket/iam-check/probe.txt`, `s3://lirouti-prod-bucket/iam-check/tiny.bin`)는 **인스턴스 역할로 지울 수 없다**(DeleteObject 미부여). 콘솔에서 지운다. 미디어 쪽은 `iam-check/` prefix에 두어 실제 인증 사진(`challenge-verifications/`)과 섞이지 않게 했다.
 
-#### 추가 실측 (2026-07-28)
+#### 추가 실측 (2026-07-28 KST)
+
+> 날짜는 KST다. 서버·GitHub·S3 로그는 UTC라 아홉 시간 차이로 하루가 어긋나 보일 수 있다.
 
 | 확인 | 결과 |
 | --- | --- |
 | 백업 버킷 기존 오브젝트 **덮어쓰기** | ⚠️ **성공** — 앱 역할로 덮어써진다. [2) 정책 생성](#2-정책-생성) 경고 참고 |
 | 백업 버킷 `HeadObject` | ✅ `403` (GetObject 미부여 — 덮어쓴 결과를 읽어볼 수도 없다) |
-| `s3:GetBucketVersioning` | ✅ `AccessDenied` — 설정 조회는 막힌다. 다만 **켜졌는지는 `PutObject` 응답의 `VersionId`로 확인된다**(2026-08-03 확인, 활성화됨) |
+| `s3:GetBucketVersioning` | ✅ `AccessDenied` — 설정 조회는 막힌다. 다만 **켜졌는지는 `PutObject` 응답의 `VersionId`로 확인된다**(2026-08-03 KST 확인, 활성화됨 — `backup.sh --check-versioning`) |
 | 미디어 공개 URL 익명 GET | ✅ `403` — 버킷 비공개가 유지되고 있다(사진 서빙은 #39) |
-| 백업 cron 등록 여부 | ⚠️ 당시 **미등록** — `backup.sh`는 있으나 `crontab` 비어 있었음. **2026-08-03 등록 완료**(`0 19 * * *`) |
+| 백업 cron 등록 여부 | ⚠️ 당시 **미등록** — `backup.sh`는 있으나 `crontab` 비어 있었음. **2026-08-03 KST 등록 완료**(`0 19 * * *`) |
 | 호스트에서 `localhost:8080` | ✅ `GET /api/challenges` 200, `POST /api/media/presigned-url` 403(인증 필요) — ③ 명령의 전제 확인 |
 
 > 위 표는 2026-07-28 시점의 기록이다. **#77 이후 `GET /api/challenges`는 403이다** — 챌린지 조회에도 로그인이 필요해졌다. 기동만 확인하려면 인증이 필요 없는 `/health`를 쓴다.
