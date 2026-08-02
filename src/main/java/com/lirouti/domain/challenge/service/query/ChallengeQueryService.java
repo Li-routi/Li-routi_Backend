@@ -112,10 +112,13 @@ public class ChallengeQueryService {
     /**
      * 그 챌린지에서 내가 남긴 인증만 커서 기반으로 조회한다(#62).
      *
-     * 현재 회차만 돌려준다. 이탈 후 재참여하면 회차가 오르고 지난 회차 인증이 그대로 남는데,
-     * 그것까지 섞으면 스트릭은 0인데 목록에는 지난 참여의 기록이 쌓여 있는 화면이 된다.
-     * 인증·연속 참여일·오늘 완료 여부를 모두 현재 회차로 판단하는 기준과 맞춘 것이다
-     * (database-schema.md). 화면이 "이번 참여"가 아니라 "전체 내 기록"으로 확정되면 회차 조건만 빼면 된다.
+     * <b>전체 회차를 돌려준다.</b> 예전에는 현재 회차만 담았는데, 재참여하면 지난 회차 인증이
+     * 내 목록에서만 사라졌다 — 피드에는 그대로 남고 mine 까지 true 라, 내 글이라고 표시되는데
+     * 내 목록엔 없는 상태였다. 회차는 되돌아가지 않아 영영 다시 보이지 않았고, 이탈이 기록을
+     * 지우지 않는다는 원칙(database-schema.md)과도 어긋났다.
+     *
+     * 대신 회차를 응답에 실어 클라이언트가 "이번 참여 / 지난 참여"를 가른다.
+     * 스트릭은 그대로 현재 회차 기준이라 목록과 기준이 다르다 — 그래서 회차가 필요하다.
      *
      * 이탈한 챌린지도 조회된다. 이탈은 active만 내리고 회차는 그대로여서, 이탈 상태의
      * 현재 회차는 곧 마지막 참여 기록이다. 그만뒀다고 자기 기록을 못 보게 할 이유가 없다.
@@ -129,9 +132,8 @@ public class ChallengeQueryService {
      * 새 인증은 커서보다 큰 id라 이미 넘긴 페이지에 끼어들지 않고, 당일 재인증은 같은 행을
      * 갱신하므로(verified_at만 바뀐다) 위치가 흔들리지 않는다.
      *
-     * 다만 스크롤 도중 이탈·재참여가 일어나면 다음 페이지부터 회차가 달라져 빈 목록이 된다.
-     * 커서(이전 회차의 id)와 새 회차의 인증이 겹치지 않기 때문이다. 목록이 갑자기 끝날 뿐
-     * 중복·유출은 없고, 그 순간에 스크롤하고 있어야 하는 드문 조합이라 별도 처리를 두지 않았다.
+     * 회차 조건을 뺀 덕에 스크롤 도중 재참여해도 다음 페이지가 비지 않는다. 예전에는 커서가
+     * 지난 회차의 id 라 새 회차 인증과 겹치지 않아 목록이 갑자기 끝났다.
      */
     @Transactional(readOnly = true)
     public ChallengeResDTO.MyVerifications getMyVerifications(
@@ -147,7 +149,6 @@ public class ChallengeQueryService {
         int appliedSize = clampSize(size);
         List<ChallengeVerification> rows = challengeVerificationRepository.findMineByCursor(
                 memberChallenge.getId(),
-                memberChallenge.getParticipationRound(),
                 cursor,
                 appliedSize + 1
         );
@@ -169,7 +170,8 @@ public class ChallengeQueryService {
         int currentStreak = memberChallenge.currentStreakAsOf(LocalDate.now(TimeUtil.KST));
 
         return ChallengeConverter.toMyVerifications(
-                page.rows(), imageUrls, likeCounts, currentStreak, page.nextCursor(), page.hasNext());
+                page.rows(), imageUrls, likeCounts, currentStreak,
+                memberChallenge.getParticipationRound(), page.nextCursor(), page.hasNext());
     }
 
     /** size + 1로 받아온 행에서 현재 페이지·다음 커서·다음 페이지 여부를 뽑아낸 결과. */

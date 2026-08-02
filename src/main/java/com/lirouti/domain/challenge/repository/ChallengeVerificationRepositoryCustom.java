@@ -34,21 +34,28 @@ public interface ChallengeVerificationRepositoryCustom {
     );
 
     /**
-     * 한 회원이 그 챌린지에서 남긴 인증을 커서 기반으로 조회한다(#62).
+     * 한 회원이 그 챌린지에서 남긴 인증을 커서 기반으로 조회한다.
      *
-     * 피드와 달리 회차로 범위를 좁힌다. member_challenge는 이탈 후 재참여 시 같은 행을
-     * 재활용하고 participation_round만 올리므로, 회차를 걸지 않으면 지난 참여의 인증까지 섞인다.
-     * 스트릭·오늘 완료 여부가 모두 현재 회차 기준이라(database-schema.md) 목록도 같은 기준으로 둔다.
+     * <p><b>회차로 좁히지 않는다.</b> 예전에는 현재 회차만 돌려줬는데, 그러면 재참여한 뒤
+     * 지난 회차 인증이 <b>내 목록에서만</b> 사라졌다 — 피드에는 그대로 남고 {@code mine} 까지
+     * true 로 표시되므로, 내 글이라고 표시되는데 내 목록엔 없는 상태가 됐다.
+     * 회차는 되돌아가지 않으므로 그 인증은 영영 다시 보이지 않았다.
      *
-     * 조인이 없다. memberChallengeId를 이미 알고 들어오므로 UNIQUE(member_challenge_id,
-     * participation_round, verified_date)의 선두 두 컬럼을 그대로 타고, 인덱스를 새로 만들 필요가 없다.
+     * <p>이탈이 기록을 지우지 않는다는 원칙(database-schema.md: 참여 이력을 보존하므로
+     * 소프트 삭제를 쓰지 않는다)과도 어긋났다. 회차는 응답에 실어 클라이언트가
+     * "이번 참여 / 지난 참여"로 구분하게 한다.
      *
-     * 신고 필터(#15)를 걸지 않는다 — 내가 내 인증을 신고할 일이 없다.
-     * 정렬·커서 키가 id인 이유는 피드와 같다(당일 재인증이 verified_at을 덮어써서 순서가 흔들린다).
+     * <p>조인이 없다. memberChallengeId 를 이미 알고 들어오므로
+     * UNIQUE(member_challenge_id, participation_round, verified_date) 의 선두 컬럼을 타고,
+     * 인덱스를 새로 만들 필요가 없다.
+     *
+     * <p>신고 필터를 걸지 않는다 — 내가 내 인증을 신고할 일이 없다.
+     * 정렬·커서 키가 id 인 이유는 피드와 같다(당일 재인증이 verified_at 을 덮어써서 순서가 흔들린다).
+     * <b>회차 조건을 뺀 덕에 커서가 더 안정적이다</b> — 스크롤 도중 재참여해도 다음 페이지가
+     * 비지 않는다(예전에는 커서가 지난 회차 id 라 새 회차 인증과 겹치지 않았다).
      */
     List<ChallengeVerification> findMineByCursor(
             Long memberChallengeId,
-            int participationRound,
             Long cursor,
             int limit
     );
