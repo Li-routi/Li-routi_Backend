@@ -6,13 +6,23 @@
 #   2) AWS CLI 설치:  sudo snap install aws-cli --classic
 #   3) 아래 BUCKET을 실제 백업 버킷으로 수정
 #
-# cron 등록 (매일 04:00 KST):
+# cron 등록 (매일 04:00 KST = 19:00 UTC):
 #   crontab -e
-#   0 4 * * * /opt/app/backup.sh >> /opt/app/backup.log 2>&1
+#   0 19 * * * /opt/app/backup.sh >> /opt/app/backup.log 2>&1
+#
+# 서버 시간대가 UTC다. 스케줄을 04로 적으면 새벽이 아니라 낮 1시에 돈다.
 #
 # 앱·DB가 한 인스턴스에 동거하므로 인스턴스 소멸 = 데이터 소멸. S3 외부 백업이 필수 보완재다.
 
 set -euo pipefail
+
+# cron은 PATH를 /usr/bin:/bin 으로만 준다. aws는 snap으로 설치돼 /snap/bin에 있으므로,
+# 이 줄이 없으면 덤프까지 다 끝낸 뒤 마지막 업로드에서 "aws: command not found"로 죽는다.
+export PATH="${PATH}:/snap/bin"
+
+# 서버는 UTC인데 파일 이름은 한국 날짜여야 한다.
+# 04:00 KST 실행분이 UTC 기준으론 전날이라, 이 줄이 없으면 백업 이름이 하루씩 밀린다.
+export TZ="Asia/Seoul"
 
 cd /opt/app
 source .env
