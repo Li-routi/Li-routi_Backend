@@ -24,6 +24,10 @@ public interface ChallengeVerificationControllerDocs {
 
                     하루에 한 번만 인증할 수 있습니다. 오늘 이미 인증했다면 새 인증이 만들어지는 대신
                     사진·코멘트가 덮어써지고(reverified=true), 이때 스트릭은 오르지 않습니다.
+
+                    **하루 1회는 참여 회차를 넘어 적용됩니다.** 오늘 인증한 뒤 챌린지를 나갔다
+                    다시 들어와도 그날은 더 인증할 수 없습니다(`CHALLENGE409_5`).
+                    나가기로 인증 횟수를 늘릴 수 없습니다.
                     어제 인증했으면 스트릭이 1 오르고, 그보다 오래됐거나 첫 인증이면 1부터 시작합니다.
 
                     **AI가 두 가지를 심사합니다.** 어느 쪽이든 반려되면 422이고,
@@ -54,7 +58,7 @@ public interface ChallengeVerificationControllerDocs {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "인증 성공(덮어쓰기 포함)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "발급 규칙에 맞지 않는 미디어 key"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "인증 필요(미인증)"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "참여 중이 아님 / 동시 중복 요청"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "참여 중이 아님 / 동시 중복 요청 / 나갔다 들어왔지만 오늘 이미 인증함"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "422", description = "AI 심사 반려 — 챌린지 불일치(CHALLENGE422_1) 또는 공개 불가(CHALLENGE422_2)")
     })
     ApiResponse<ChallengeResDTO.Verification> verify(

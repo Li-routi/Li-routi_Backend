@@ -71,6 +71,9 @@ public interface ChallengeControllerDocs {
 
                     참여 중이 아니면 항상 false입니다 — 이탈한 뒤에는 인증할 수 없기 때문입니다.
 
+                    **나갔다 다시 들어와도 그날 인증했으면 true를 유지합니다.** 하루 1회는 참여
+                    회차를 넘어 적용되므로, 재참여로 버튼을 다시 열 수 없습니다.
+
                     routineCycle(DAILY/WEEKLY/MONTHLY), reward(달성 시 부여되는 재화 수량),
                     participating(조회자 참여 여부), participantCount(참여자 수),
                     verificationPostCount(인증 게시글 수), todayCompletionCount(오늘 완료자 수).

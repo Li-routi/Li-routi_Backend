@@ -7,6 +7,7 @@ import com.lirouti.domain.challenge.enums.ChallengeCategory;
 import com.lirouti.domain.challenge.exception.ChallengeException;
 import com.lirouti.domain.challenge.exception.code.error.ChallengeErrorCode;
 import com.lirouti.domain.challenge.repository.ChallengeRepository;
+import com.lirouti.domain.challenge.repository.ChallengeVerificationRepository;
 import com.lirouti.domain.challenge.repository.MemberChallengeRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -40,6 +41,11 @@ class ChallengeQueryServiceTest {
     @Mock
     private MemberChallengeRepository memberChallengeRepository;
 
+    // 상세의 "현재 주기에 인증했는지"가 인증 테이블을 직접 본다(재참여가 lastVerifiedDate 를
+    // 초기화해 그 값으로는 판정할 수 없다). 그래서 이 mock 이 필요하다.
+    @Mock
+    private ChallengeVerificationRepository challengeVerificationRepository;
+
     @InjectMocks
     private ChallengeQueryService challengeQueryService;
 
@@ -48,6 +54,10 @@ class ChallengeQueryServiceTest {
         // 전체 목록은 카드 통계를 배치 집계한다. 대부분의 테스트는 통계 값 자체를 검증하지 않으므로 빈 맵으로 둔다.
         lenient().when(challengeRepository.countActiveParticipantsByChallengeIds(anyList())).thenReturn(Map.of());
         lenient().when(challengeRepository.countVerificationPostsByChallengeIds(anyList())).thenReturn(Map.of());
+        // 대부분의 테스트는 인증 여부를 보지 않는다. 기본은 "인증 없음"으로 둔다.
+        lenient().when(challengeVerificationRepository
+                        .findByMemberChallengeIdAndVerifiedDate(any(), any(LocalDate.class)))
+                .thenReturn(Optional.empty());
     }
 
     private Challenge challenge(String name) {

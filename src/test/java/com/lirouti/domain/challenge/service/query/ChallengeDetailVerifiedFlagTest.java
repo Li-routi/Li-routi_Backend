@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.lirouti.domain.challenge.dto.response.ChallengeResDTO;
 import com.lirouti.domain.challenge.entity.Challenge;
+import com.lirouti.domain.challenge.entity.ChallengeVerification;
 import com.lirouti.domain.challenge.entity.MemberChallenge;
 import com.lirouti.domain.challenge.enums.ChallengeCategory;
 import com.lirouti.domain.member.entity.Member;
@@ -70,6 +71,12 @@ class ChallengeDetailVerifiedFlagTest {
         return c;
     }
 
+    /**
+     * 참여시키고, 인증일이 주어지면 <b>실제 인증 행까지</b> 만든다.
+     *
+     * 판정이 lastVerifiedDate 가 아니라 인증 테이블을 보므로 행이 없으면 false 가 된다.
+     * 재참여가 lastVerifiedDate 를 초기화해 그 값으로는 판정할 수 없기 때문이다.
+     */
     private MemberChallenge participate(Member m, Challenge c, LocalDate lastVerifiedDate) {
         MemberChallenge mc = MemberChallenge.builder()
                 .member(m).challenge(c)
@@ -77,6 +84,14 @@ class ChallengeDetailVerifiedFlagTest {
                 .lastVerifiedDate(lastVerifiedDate)
                 .joinedAt(LocalDateTime.now()).active(true).build();
         em.persist(mc);
+        if (lastVerifiedDate != null) {
+            em.persist(ChallengeVerification.builder()
+                    .memberChallenge(mc).participationRound(1)
+                    .verifiedDate(lastVerifiedDate)
+                    .verifiedAt(lastVerifiedDate.atTime(9, 0))
+                    .imageUrl("challenge-verifications/ffffffff-ffff-4fff-8fff-ffffffffffff.jpg")
+                    .content("인증").build());
+        }
         em.flush();
         return mc;
     }
@@ -164,12 +179,10 @@ class ChallengeDetailVerifiedFlagTest {
         );
     }
 
-    @Test
-    @DisplayName("같은 날 이탈 후 재참여하면 false — 새 회차라 다시 인증할 수 있다")
-    void rejoinedSameDay_IsFalse() {
+@Test
+    @DisplayName("같은 날 이탈 후 재참여해도 true — 하루 1회는 회차를 넘어 적용된다")
+    void rejoinedSameDay_StaysTrue() {
         // given: 오늘 인증하고 이탈했다가 같은 날 다시 참여한다.
-        // 회차가 올라가 지난 회차의 인증과 분리되므로 오늘 다시 인증할 수 있어야 한다
-        // (database-schema.md 의 participation_round 근거).
         Member me = member();
         Challenge c = challenge();
         MemberChallenge mc = participate(me, c, LocalDate.now(KST));
@@ -179,11 +192,12 @@ class ChallengeDetailVerifiedFlagTest {
         // when
         ChallengeResDTO.Detail result = detail(me, c);
 
-        // then: 판정이 rejoin 의 lastVerifiedDate 초기화에 기대고 있다.
-        // 그 초기화가 사라지면 재참여 직후 버튼이 잠기므로 여기서 고정한다.
+        // then: 예전에는 여기서 false 가 나와 버튼이 다시 열렸다. rejoin 이 lastVerifiedDate 를
+        // null 로 만들기 때문인데, 판정이 인증 테이블을 직접 보도록 바뀌어 그 우회가 막혔다.
+        // 쓰기도 같은 기준으로 막는다(RejoinDailyOnceTest).
         assertAll(
                 () -> assertThat(result.participating()).isTrue(),
-                () -> assertThat(result.verifiedInCurrentPeriod()).isFalse()
+                () -> assertThat(result.verifiedInCurrentPeriod()).isTrue()
         );
     }
 }

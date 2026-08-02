@@ -37,6 +37,32 @@ public interface ChallengeVerificationRepository
      * 신고할 수 있고, 응답만으로는 그 인증의 존재 여부가 드러난다.
      * 어긋나면 빈 값이 나가 404로 처리된다.
      */
+    /**
+     * 그 참여의 <b>그날 인증</b>을 회차와 무관하게 찾는다.
+     *
+     * <p>하루 1회는 회차를 넘어 적용된다. 회차를 조건에 넣으면 나갔다 다시 들어온 뒤
+     * 같은 날 또 인증할 수 있다 — 새 회차에서는 기존 인증이 안 보여 덮어쓰기가 아니라
+     * 새 행이 된다. 실제로 운영에서 그렇게 두 건이 생겼다.
+     *
+     * <p>{@code participation_round} 가 유니크 키에 들어 있어 DB 는 이것을 막지 않는다.
+     * 대신 호출부가 참여 행을 비관 잠금으로 잡은 뒤 이 조회를 하므로, 같은 회원의 동시
+     * 요청은 그 잠금에서 직렬화된다.
+     *
+     * <p>여러 건이면 가장 최근 회차의 것을 준다. 정책 도입 전에 쌓인 중복이 있어
+     * 단건 조회로는 예외가 나기 때문이다(그 데이터는 지우지 않기로 했다).
+     */
+    @Query("""
+            select v from ChallengeVerification v
+            where v.memberChallenge.id = :memberChallengeId
+              and v.verifiedDate = :verifiedDate
+            order by v.participationRound desc, v.id desc
+            limit 1
+            """)
+    Optional<ChallengeVerification> findByMemberChallengeIdAndVerifiedDate(
+            @Param("memberChallengeId") Long memberChallengeId,
+            @Param("verifiedDate") LocalDate verifiedDate
+    );
+
     Optional<ChallengeVerification> findByIdAndMemberChallengeChallengeId(
             Long id,
             Long challengeId

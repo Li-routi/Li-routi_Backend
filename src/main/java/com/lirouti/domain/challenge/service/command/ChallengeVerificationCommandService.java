@@ -12,6 +12,7 @@ import com.lirouti.domain.challenge.repository.MemberChallengeRepository;
 import com.lirouti.domain.media.service.MediaService;
 import com.lirouti.global.util.TimeUtil;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -37,6 +38,7 @@ import java.util.Optional;
  * <b>이 메서드 안의 순서는 그대로 유지해야 한다.</b> 행 락 → 오늘 인증 조회 → INSERT/덮어쓰기 →
  * 스트릭 갱신이 한 트랜잭션에 있어야 중복 증가와 stale update가 모두 막힌다(#53, database-schema.md).
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ChallengeVerificationCommandService {
@@ -77,12 +79,27 @@ public class ChallengeVerificationCommandService {
         LocalDate today = now.toLocalDate();
         LocalDateTime verifiedAt = now.toLocalDateTime();
 
+        // 회차를 빼고 찾는다. 회차를 조건에 넣으면 나갔다 다시 들어온 뒤 같은 날 또 인증할 수
+        // 있다 — 새 회차에서는 기존 인증이 안 보여 덮어쓰기가 아니라 새 행이 되기 때문이다.
+        // 하루 1회는 회차를 넘어 적용한다.
         Optional<ChallengeVerification> todayVerification = challengeVerificationRepository
-                .findByMemberChallengeIdAndParticipationRoundAndVerifiedDate(
-                        memberChallenge.getId(),
-                        memberChallenge.getParticipationRound(),
-                        today
-                );
+                .findByMemberChallengeIdAndVerifiedDate(memberChallenge.getId(), today);
+
+        // 지난 회차에 오늘 인증한 것이면 덮어쓰지 않고 막는다.
+        //
+        // 덮어쓰면 그 인증이 지난 참여의 기록인데 오늘 올린 사진으로 바뀌고, 회차와 내용이
+        // 어긋난다. 새로 만들면 하루 두 건이 되어 애초에 막으려던 것이 된다. 남는 선택은
+        // 거절뿐이다 — 이미 오늘 했으므로 "다시 할 수 없다"가 맞다.
+        boolean fromPreviousRound = todayVerification
+                .filter(v -> v.getParticipationRound() < memberChallenge.getParticipationRound())
+                .isPresent();
+        if (fromPreviousRound) {
+            log.warn("지난 회차에 오늘 인증한 이력이 있어 재인증을 막았습니다."
+                            + " memberId={}, challengeId={}, currentRound={}",
+                    memberId, challengeId, memberChallenge.getParticipationRound());
+            throw new ChallengeException(ChallengeErrorCode.ALREADY_VERIFIED_TODAY);
+        }
+
         boolean reverified = todayVerification.isPresent();
 
         ChallengeVerification verification = todayVerification
