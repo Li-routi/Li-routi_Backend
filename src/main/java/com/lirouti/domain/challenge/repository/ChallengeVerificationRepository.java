@@ -37,6 +37,11 @@ public interface ChallengeVerificationRepository
      * 신고할 수 있고, 응답만으로는 그 인증의 존재 여부가 드러난다.
      * 어긋나면 빈 값이 나가 404로 처리된다.
      */
+    Optional<ChallengeVerification> findByIdAndMemberChallengeChallengeId(
+            Long id,
+            Long challengeId
+    );
+
     /**
      * 그 참여의 <b>그날 인증</b>을 회차와 무관하게 찾는다.
      *
@@ -63,9 +68,22 @@ public interface ChallengeVerificationRepository
             @Param("verifiedDate") LocalDate verifiedDate
     );
 
-    Optional<ChallengeVerification> findByIdAndMemberChallengeChallengeId(
-            Long id,
-            Long challengeId
+    /**
+     * 그 참여가 <b>주어진 구간 안에</b> 인증한 적이 있는지. 상세의 "현재 주기에 인증했는지" 판정용이다.
+     *
+     * <p>구간을 받는 이유는 주기가 하루가 아닐 수 있어서다. {@code WEEKLY} 챌린지를 이번 주
+     * 월요일에 인증했다면 화요일에도 "이번 주에 이미 했다"가 맞는데, 그날 하나만 보면 놓친다.
+     * 경계는 {@link com.lirouti.domain.challenge.enums.RoutineCycle} 이 계산한다.
+     *
+     * <p>회차를 조건에 넣지 않는다. 재참여로 회차가 올라가도 그 구간에 인증한 사실은 남는다 —
+     * 회차를 넣으면 나갔다 들어온 뒤 버튼이 다시 열린다.
+     *
+     * <p>엔티티가 아니라 존재 여부만 돌려준다. 판정에 쓸 뿐이라 행을 읽을 필요가 없다.
+     */
+    boolean existsByMemberChallengeIdAndVerifiedDateBetween(
+            Long memberChallengeId,
+            LocalDate periodStart,
+            LocalDate periodEnd
     );
 
     /**

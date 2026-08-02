@@ -242,7 +242,8 @@ public class ChallengeQueryService {
      *
      * <p>구간 경계는 {@link RoutineCycle} 이 안다 — {@code DAILY} 면 같은 날인지,
      * {@code WEEKLY} 면 같은 주(일~토)인지, {@code MONTHLY} 면 같은 달인지.
-     * 지금은 {@code DAILY} 만 있어 조회도 그날 하루로 좁힌다.
+     * <b>구간 전체를 조회한다.</b> 그날 하나만 보면 {@code WEEKLY} 챌린지를 이번 주 월요일에
+     * 인증하고 화요일에 열었을 때 "아직 안 함"이 되어 버튼이 다시 열린다.
      *
      * <p><b>이탈했으면 false 다.</b> 참여 행이 남아 있어도 지금 참여 중이 아니면 인증할 수 없다.
      *
@@ -254,10 +255,8 @@ public class ChallengeQueryService {
             return false;
         }
         LocalDate today = LocalDate.now(TimeUtil.KST);
-        return challengeVerificationRepository
-                .findByMemberChallengeIdAndVerifiedDate(participation.getId(), today)
-                .filter(v -> cycle.isSamePeriod(v.getVerifiedDate(), today))
-                .isPresent();
+        return challengeVerificationRepository.existsByMemberChallengeIdAndVerifiedDateBetween(
+                participation.getId(), cycle.currentPeriodStart(today), today);
     }
 
     private int clampSize(Integer size) {
