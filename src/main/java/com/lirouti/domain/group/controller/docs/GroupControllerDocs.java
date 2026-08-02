@@ -186,10 +186,10 @@ public interface GroupControllerDocs {
                     description = "동일 그룹 내 루틴 제목 중복"
             )
     })
-    ApiResponse<GroupResDTO.RoutineCreateResult> createRoutine(
+    ApiResponse<GroupResDTO.GroupRoutineCreateResult> createRoutine(
             @Parameter(hidden = true) CustomUserDetails userDetails,
             @Parameter(description = "그룹 ID", required = true) Long groupId,
-            GroupReqDTO.CreateRoutine request
+            GroupReqDTO.GroupRoutineCreateRequest request
     );
 
     /**

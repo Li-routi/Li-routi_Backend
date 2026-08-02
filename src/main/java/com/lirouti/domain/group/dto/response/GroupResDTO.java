@@ -84,7 +84,8 @@ public final class GroupResDTO {
      * @param assignmentCount 생성 당일 할당 대상 수
      */
     @Builder
-    public record RoutineCreateResult(
+    @Schema(name = "GroupRoutineCreateResult", description = "그룹 루틴 생성 결과")
+    public record GroupRoutineCreateResult(
             Long routineId,
             Long groupId,
             Long categoryId,

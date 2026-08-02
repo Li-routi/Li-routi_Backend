@@ -87,7 +87,7 @@ class GroupCommandServiceTest {
                 .thenReturn(2);
 
         // when
-        GroupResDTO.RoutineCreateResult result =
+        GroupResDTO.GroupRoutineCreateResult result =
                 groupCommandService.createRoutine(GROUP_ID, OWNER_ID, request());
 
         // then
@@ -107,7 +107,7 @@ class GroupCommandServiceTest {
                 .thenReturn(1);
 
         // when
-        GroupResDTO.RoutineCreateResult result =
+        GroupResDTO.GroupRoutineCreateResult result =
                 groupCommandService.createRoutine(GROUP_ID, OWNER_ID, request());
 
         // then
@@ -321,8 +321,8 @@ class GroupCommandServiceTest {
                 .synchronizeRoutineAssignmentsToday(any(GroupRoutine.class));
     }
 
-    private GroupReqDTO.CreateRoutine request() {
-        return new GroupReqDTO.CreateRoutine(
+    private GroupReqDTO.GroupRoutineCreateRequest request() {
+        return new GroupReqDTO.GroupRoutineCreateRequest(
                 3L,
                 "저녁 루틴",
                 "함께 정리합니다.",

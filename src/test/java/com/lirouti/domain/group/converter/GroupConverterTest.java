@@ -31,7 +31,7 @@ class GroupConverterTest {
     @DisplayName("요청을 루틴으로 변환하고 응답 일정은 월요일부터 정렬한다")
     void convert_CreateRoutine_MapsEntityAndSortedResult() {
         // given
-        GroupReqDTO.CreateRoutine request = new GroupReqDTO.CreateRoutine(
+        GroupReqDTO.GroupRoutineCreateRequest request = new GroupReqDTO.GroupRoutineCreateRequest(
                 3L,
                 "저녁 루틴",
                 "함께 정리합니다.",
@@ -47,7 +47,7 @@ class GroupConverterTest {
         // when
         GroupRoutine routine = GroupConverter.toGroupRoutine(request, group, category);
         ReflectionTestUtils.setField(routine, "id", 100L);
-        GroupResDTO.RoutineCreateResult result =
+        GroupResDTO.GroupRoutineCreateResult result =
                 GroupConverter.toRoutineCreateResult(routine, 2);
 
         // then

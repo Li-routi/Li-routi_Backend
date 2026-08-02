@@ -135,10 +135,10 @@ public class GroupCommandService {
      * @return 생성된 루틴과 당일 할당 대상 수
      */
     @Transactional
-    public GroupResDTO.RoutineCreateResult createRoutine(
+    public GroupResDTO.GroupRoutineCreateResult createRoutine(
             Long groupId,
             Long memberId,
-            GroupReqDTO.CreateRoutine request
+            GroupReqDTO.GroupRoutineCreateRequest request
     ) {
         validateRequest(request);
 
@@ -228,7 +228,7 @@ public class GroupCommandService {
      * @param request 검증할 그룹 루틴 생성 요청
      * @throws IllegalArgumentException 필수값, 길이, 요일 또는 시간 범위가 유효하지 않은 경우
      */
-    private void validateRequest(GroupReqDTO.CreateRoutine request) {
+    private void validateRequest(GroupReqDTO.GroupRoutineCreateRequest request) {
         if (request == null) {
             throw new IllegalArgumentException("유효하지 않은 그룹 루틴 생성 요청입니다.");
         }

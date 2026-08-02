@@ -107,12 +107,12 @@ public class GroupController implements GroupControllerDocs {
     @Override
     @PostMapping("/{groupId}/routines")
     @ResponseStatus(HttpStatus.CREATED)
-    public ApiResponse<GroupResDTO.RoutineCreateResult> createRoutine(
+    public ApiResponse<GroupResDTO.GroupRoutineCreateResult> createRoutine(
             @AuthenticationPrincipal CustomUserDetails userDetails,
             @PathVariable Long groupId,
-            @Valid @RequestBody GroupReqDTO.CreateRoutine request
+            @Valid @RequestBody GroupReqDTO.GroupRoutineCreateRequest request
     ) {
-        GroupResDTO.RoutineCreateResult result = groupCommandService.createRoutine(
+        GroupResDTO.GroupRoutineCreateResult result = groupCommandService.createRoutine(
                 groupId,
                 userDetails.getMemberId(),
                 request

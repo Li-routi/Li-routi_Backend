@@ -345,13 +345,51 @@ class GroupControllerTest {
     }
 
     @Test
-    @DisplayName("OpenAPI 문서에 그룹 루틴 생성 경로와 201 응답이 노출된다")
-    void openApi_GroupRoutineCreation_IsDocumented() throws Exception {
+    @DisplayName("OpenAPI 문서에서 그룹 루틴 생성 DTO를 개인 루틴 DTO와 분리한다")
+    void openApi_GroupRoutineCreation_UsesDedicatedSchemas() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk())
-                .andExpect(content().string(containsString("/api/groups/{groupId}/routines")))
-                .andExpect(content().string(containsString("그룹 루틴 생성")))
-                .andExpect(content().string(containsString("201")));
+                .andExpect(jsonPath("$['paths']['/api/groups/{groupId}/routines']"
+                        + "['post']['requestBody']['content']['application/json']"
+                        + "['schema']['$ref']")
+                        .value("#/components/schemas/GroupRoutineCreateRequest"))
+                .andExpect(jsonPath("$['components']['schemas']"
+                        + "['ApiResponseGroupRoutineCreateResult']['properties']"
+                        + "['result']['$ref']")
+                        .value("#/components/schemas/GroupRoutineCreateResult"))
+                .andExpect(jsonPath("$.components.schemas.GroupRoutineCreateRequest"
+                        + ".properties.categoryId").exists())
+                .andExpect(jsonPath("$.components.schemas.GroupRoutineCreateRequest"
+                        + ".properties.title").exists())
+                .andExpect(jsonPath("$.components.schemas.GroupRoutineCreateRequest"
+                        + ".properties.description").exists())
+                .andExpect(jsonPath("$.components.schemas.GroupRoutineCreateRequest"
+                        + ".properties.schedules").exists())
+                .andExpect(jsonPath("$.components.schemas.GroupRoutineCreateRequest"
+                        + ".properties.templateId").doesNotExist())
+                .andExpect(jsonPath("$.components.schemas.GroupRoutineCreateRequest"
+                        + ".properties.name").doesNotExist())
+                .andExpect(jsonPath("$.components.schemas.GroupRoutineCreateRequest"
+                        + ".properties.repeatDays").doesNotExist())
+                .andExpect(jsonPath("$.components.schemas.GroupRoutineCreateRequest"
+                        + ".properties.alarmTime").doesNotExist())
+                .andExpect(jsonPath("$.components.schemas.GroupRoutineCreateResult"
+                        + ".properties.routineId").exists())
+                .andExpect(jsonPath("$.components.schemas.GroupRoutineCreateResult"
+                        + ".properties.groupId").exists())
+                .andExpect(jsonPath("$.components.schemas.GroupRoutineCreateResult"
+                        + ".properties.assignmentCount").exists())
+                .andExpect(jsonPath("$.components.schemas.GroupRoutineCreateResult"
+                        + ".properties.routines").doesNotExist())
+                .andExpect(jsonPath("$.components.schemas.GroupRoutineCreateResult"
+                        + ".properties.activeRoutineCount").doesNotExist())
+                .andExpect(jsonPath("$.components.schemas.CreateRoutines.properties"
+                        + ".routines.items['$ref']")
+                        .value("#/components/schemas/CreateRoutine"))
+                .andExpect(jsonPath("$.components.schemas.CreateRoutine.properties.templateId")
+                        .exists())
+                .andExpect(jsonPath("$.components.schemas.RoutineCreateResult"
+                        + ".properties.activeRoutineCount").exists());
     }
 
     @Test
