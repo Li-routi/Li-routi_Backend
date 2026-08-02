@@ -162,7 +162,7 @@ public final class GroupConverter {
      * @return 요일별 일정이 연결된 그룹 루틴
      */
     public static GroupRoutine toGroupRoutine(
-            GroupReqDTO.CreateRoutine request,
+            GroupReqDTO.GroupRoutineCreateRequest request,
             Group group,
             GroupRoutineCategory category
     ) {
@@ -204,11 +204,11 @@ public final class GroupConverter {
      * @param assignmentCount 생성 당일 할당 대상 수
      * @return 그룹 루틴 생성 응답
      */
-    public static GroupResDTO.RoutineCreateResult toRoutineCreateResult(
+    public static GroupResDTO.GroupRoutineCreateResult toRoutineCreateResult(
             GroupRoutine groupRoutine,
             int assignmentCount
     ) {
-        return GroupResDTO.RoutineCreateResult.builder()
+        return GroupResDTO.GroupRoutineCreateResult.builder()
                 .routineId(groupRoutine.getId())
                 .groupId(groupRoutine.getGroup().getId())
                 .categoryId(groupRoutine.getCategory().getId())

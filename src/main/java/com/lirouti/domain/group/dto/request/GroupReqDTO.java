@@ -249,7 +249,8 @@ public final class GroupReqDTO {
      * @param description 루틴 설명
      * @param schedules 중복되지 않는 요일별 수행 일정
      */
-    public record CreateRoutine(
+    @Schema(name = "GroupRoutineCreateRequest", description = "그룹 루틴 생성 요청")
+    public record GroupRoutineCreateRequest(
             @NotNull(message = "카테고리는 필수입니다.")
             @Positive(message = "카테고리 ID는 양수여야 합니다.")
             Long categoryId,
@@ -266,7 +267,7 @@ public final class GroupReqDTO {
             @Size(max = 7, message = "반복 일정은 최대 7개까지 등록할 수 있습니다.")
             List<@NotNull(message = "반복 일정은 null일 수 없습니다.") @Valid RoutineSchedule> schedules
     ) {
-        public CreateRoutine {
+        public GroupRoutineCreateRequest {
             title = title == null ? null : title.trim();
         }
 

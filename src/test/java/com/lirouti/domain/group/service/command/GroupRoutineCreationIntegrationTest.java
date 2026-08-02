@@ -62,7 +62,7 @@ class GroupRoutineCreationIntegrationTest {
         doThrow(new IllegalStateException("assignment failure"))
                 .when(groupRoutineAssignmentRepository)
                 .insertIfAbsent(any(), any(), any(), any(), any(), any());
-        GroupReqDTO.CreateRoutine request = new GroupReqDTO.CreateRoutine(
+        GroupReqDTO.GroupRoutineCreateRequest request = new GroupReqDTO.GroupRoutineCreateRequest(
                 seed.categoryId(),
                 "롤백 루틴",
                 "할당 실패 시 모두 롤백합니다.",

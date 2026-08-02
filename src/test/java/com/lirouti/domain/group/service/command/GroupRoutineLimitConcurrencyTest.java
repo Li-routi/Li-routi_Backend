@@ -198,8 +198,8 @@ class GroupRoutineLimitConcurrencyTest {
         };
     }
 
-    private GroupReqDTO.CreateRoutine request(String title) {
-        return new GroupReqDTO.CreateRoutine(
+    private GroupReqDTO.GroupRoutineCreateRequest request(String title) {
+        return new GroupReqDTO.GroupRoutineCreateRequest(
                 categoryId,
                 title,
                 "동시 생성 상한을 검증합니다.",
