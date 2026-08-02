@@ -235,4 +235,28 @@ class RejoinDailyOnceTest {
                         .getSingleResult()).isEqualTo(1L)
         );
     }
+
+    @Test
+    @DisplayName("재참여해도 오늘 완료자 수에 남는다 — 버튼과 집계의 기준이 같아야 한다")
+    void rejoin_StillCountedAsTodayCompletion() {
+        // given: 오늘 인증하고 나갔다 다시 들어온다(회차 2)
+        Member me = member();
+        Challenge c = challenge();
+        MemberChallenge mc = participate(me, c);
+        verify(me, c);
+        em.flush();
+
+        leaveAndRejoin(mc);
+        em.clear();
+
+        // when
+        ChallengeResDTO.Detail detail = challengeQueryService.getChallenge(c.getId(), me.getId());
+
+        // then: 버튼은 잠기는데(이미 했으므로) 집계에서는 빠지면 두 숫자가 서로 다른 말을 한다.
+        // 집계가 회차를 걸면 여기서 0이 나온다.
+        assertAll(
+                () -> assertThat(detail.verifiedInCurrentPeriod()).isTrue(),
+                () -> assertThat(detail.todayCompletionCount()).isEqualTo(1L)
+        );
+    }
 }

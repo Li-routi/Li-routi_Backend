@@ -124,8 +124,15 @@ public class ChallengeRepositoryImpl implements ChallengeRepositoryCustom {
 
     @Override
     public long countTodayCompletions(Long challengeId, LocalDate today) {
-        // 오늘 인증을 회원 단위로 센다. 회차가 다른 오늘자 인증이 두 건 생길 수 있으므로
-        // member_challenge_id 기준으로 중복을 제거하고, 현재 회차의 인증만 포함한다.
+        // 오늘 인증한 회원 수를 센다. 회차는 보지 않는다.
+        //
+        // 회차를 걸면 상세의 verifiedInCurrentPeriod 와 기준이 어긋난다 — 1회차에 오늘
+        // 인증하고 재참여한 사람은 버튼이 잠기는데(이미 했으므로) 이 집계에서는 빠졌다.
+        // 하루 1회를 회차와 무관하게 적용하기로 했으므로 "오늘 인증한 사람"도 같은 기준으로 센다.
+        //
+        // 중복 제거는 그대로 둔다. 새 정책에서는 같은 날 회차가 다른 인증이 생기지 않지만,
+        // 정책 도입 전에 쌓인 데이터에는 남아 있어(지우지 않기로 했다) 한 사람이 두 명으로
+        // 세어지는 것을 막아야 한다.
         Long count = queryFactory
                 .select(memberChallenge.id.countDistinct())
                 .from(verification)
@@ -134,9 +141,8 @@ public class ChallengeRepositoryImpl implements ChallengeRepositoryCustom {
                 .where(
                         memberChallenge.challenge.id.eq(challengeId),
                         verification.verifiedDate.eq(today),
-                        // 현재 회차의 오늘 인증만. 참여 중(active) 여부는 조건에 넣지 않는다
-                        // — 오늘 인증한 뒤 그만둔 사람도 '오늘 완료자'로 집계한다(스키마 규칙).
-                        verification.participationRound.eq(memberChallenge.participationRound),
+                        // 참여 중(active) 여부는 조건에 넣지 않는다 — 오늘 인증한 뒤
+                        // 그만둔 사람도 '오늘 완료자'로 집계한다(스키마 규칙).
                         activeMember(member)
                 )
                 .fetchOne();
