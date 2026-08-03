@@ -56,8 +56,9 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
             if (memberId != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                 /*
-                액세스 토큰의 만료 시간을 짧게 유지하는 대신, 매 요청마다 회원 DB를 조회하지 않고
-                서명과 클레임만 검증해 인증 정보를 구성한다. 회원 상태 변경은 토큰 만료 후 반영된다.
+                * 짧은 만료 시간의 액세스 토큰은 회원 DB를 매 요청마다 조회하지 않고,
+                * JWT 서명·클레임과 Redis 블랙리스트만 검증해 인증 정보를 구성한다.
+                * DB 회원 상태 변경은 토큰 만료 후 반영되지만, 블랙리스트에 등록된 토큰은 다음 요청부터 차단된다.
                 */            
                 CustomUserDetails userDetails = new CustomUserDetails(
                         parseMemberId(memberId),
