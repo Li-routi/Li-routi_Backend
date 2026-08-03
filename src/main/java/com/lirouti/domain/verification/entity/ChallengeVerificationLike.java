@@ -1,4 +1,4 @@
-package com.lirouti.domain.challenge.entity;
+package com.lirouti.domain.verification.entity;
 
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.global.entity.BaseEntity;
@@ -9,7 +9,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 /**
- * 인증 게시물에 대한 좋아요(#63). 챌린지가 아니라 인증 한 건에 붙는다.
+ * 인증 게시물에 대한 좋아요. 챌린지가 아니라 인증 한 건에 붙는다.
  *
  * 취소는 행 삭제다. 소프트 삭제를 쓰면 취소 후 다시 누를 때 남아 있는 행이 유니크 제약에
  * 걸린다 — MySQL 유니크 제약은 deleted_at IS NULL을 모른다. 좋아요는 신고와 달리 취소가

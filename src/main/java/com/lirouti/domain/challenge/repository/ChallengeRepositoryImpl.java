@@ -10,7 +10,7 @@ import java.util.Map;
 
 import com.lirouti.domain.challenge.entity.Challenge;
 import com.lirouti.domain.challenge.entity.QChallenge;
-import com.lirouti.domain.challenge.entity.QChallengeVerification;
+import com.lirouti.domain.verification.entity.QChallengeVerification;
 import com.lirouti.domain.challenge.entity.QMemberChallenge;
 import com.lirouti.domain.challenge.enums.ChallengeCategory;
 import com.lirouti.domain.member.entity.QMember;

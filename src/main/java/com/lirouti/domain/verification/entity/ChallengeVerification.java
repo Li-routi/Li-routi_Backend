@@ -1,5 +1,6 @@
-package com.lirouti.domain.challenge.entity;
+package com.lirouti.domain.verification.entity;
 
+import com.lirouti.domain.challenge.entity.MemberChallenge;
 import com.lirouti.global.entity.BaseEntity;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -90,7 +91,7 @@ public class ChallengeVerification extends BaseEntity {
      * 당일 재인증. 행을 지우고 새로 만들지 않고 사진·코멘트·인증 시각을 덮어쓴다.
      *
      * 하루에 한 행이라는 사실이 변하지 않으므로 유니크 제약과 충돌하지 않고,
-     * 이 인증을 참조하는 신고(#15) 데이터의 외래 키도 깨지지 않는다.
+     * 이 인증을 참조하는 신고 데이터의 외래 키도 깨지지 않는다.
      * 인증 기준일(verifiedDate)과 회차는 바뀌지 않으므로 건드리지 않는다.
      */
     public void reverify(String imageUrl, String content, LocalDateTime verifiedAt) {

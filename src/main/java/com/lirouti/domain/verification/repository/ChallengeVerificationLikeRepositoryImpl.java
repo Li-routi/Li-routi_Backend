@@ -1,6 +1,6 @@
-package com.lirouti.domain.challenge.repository;
+package com.lirouti.domain.verification.repository;
 
-import com.lirouti.domain.challenge.entity.QChallengeVerificationLike;
+import com.lirouti.domain.verification.entity.QChallengeVerificationLike;
 import com.lirouti.domain.member.entity.QMember;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import lombok.RequiredArgsConstructor;
