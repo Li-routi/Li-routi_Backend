@@ -66,6 +66,32 @@ class GroupRoutineAssignmentCommandServiceTest {
     private GroupRoutineAssignmentCommandService assignmentCommandService;
 
     @Test
+    @DisplayName("루틴 삭제 시 PENDING과 IN_PROGRESS 할당만 일괄 삭제한다")
+    void deleteMutableAssignments_Routine_DeletesOnlyMutableStatuses() {
+        // given
+        when(assignmentRepository.deleteAllByGroupRoutineIdAndStatusIn(
+                100L,
+                List.of(
+                        GroupRoutineAssignmentStatus.PENDING,
+                        GroupRoutineAssignmentStatus.IN_PROGRESS
+                )
+        )).thenReturn(4);
+
+        // when
+        int result = assignmentCommandService.deleteMutableAssignments(100L);
+
+        // then
+        assertThat(result).isEqualTo(4);
+        verify(assignmentRepository).deleteAllByGroupRoutineIdAndStatusIn(
+                100L,
+                List.of(
+                        GroupRoutineAssignmentStatus.PENDING,
+                        GroupRoutineAssignmentStatus.IN_PROGRESS
+                )
+        );
+    }
+
+    @Test
     @DisplayName("루틴 생성일이 반복 요일이면 ACTIVE 구성원에게 시간 스냅샷을 할당한다")
     void assignRoutineToActiveMembersToday_MatchingDay_CreatesSnapshot() {
         // given

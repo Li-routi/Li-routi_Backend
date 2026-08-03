@@ -49,6 +49,9 @@ public class GroupRoutine extends BaseEntity {
     @Column(nullable = false, length = 255)
     private String description;
 
+    @Column(nullable = false)
+    private Boolean active;
+
     @OneToMany(mappedBy = "groupRoutine", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<GroupRoutineSchedule> schedules = new ArrayList<>();
 
@@ -71,6 +74,12 @@ public class GroupRoutine extends BaseEntity {
         this.category = category;
         this.title = title;
         this.description = description;
+        this.active = true;
+    }
+
+    /** 완료·미이행 할당과 인증 이력을 보존하기 위해 루틴 행을 비활성화한다. */
+    public void delete() {
+        this.active = false;
     }
 
     /**

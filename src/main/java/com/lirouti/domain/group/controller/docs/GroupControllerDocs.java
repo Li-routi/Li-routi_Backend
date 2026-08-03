@@ -244,6 +244,40 @@ public interface GroupControllerDocs {
     );
 
     @Operation(
+            summary = "그룹 루틴 삭제",
+            description = """
+                    그룹의 ACTIVE OWNER가 요청 그룹에 속한 활성 그룹 루틴을 삭제합니다.
+                    루틴은 완료·미이행 할당과 인증 이력을 보존하기 위해 비활성화하고,
+                    PENDING·IN_PROGRESS 할당만 물리 삭제합니다.
+
+                    ### 에러 코드
+
+                    | code | HTTP | 설명 |
+                    | --- | --- | --- |
+                    | `GROUP403_1` | 403 | 비활성 그룹 |
+                    | `GROUP403_2` | 403 | ACTIVE 그룹 구성원이 아님 |
+                    | `GROUP403_3` | 403 | ACTIVE OWNER가 아님 |
+                    | `GROUP404_1` | 404 | 그룹을 찾을 수 없음 |
+                    | `GROUP404_4` | 404 | 요청 그룹의 활성 루틴을 찾을 수 없음 |
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200", description = "그룹 루틴 삭제 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401", description = "유효하지 않거나 만료된 인증 토큰"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "403", description = "비활성 구성원 또는 OWNER 권한 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404", description = "그룹 또는 그룹 루틴을 찾을 수 없음")
+    })
+    ApiResponse<Void> deleteRoutine(
+            @Parameter(hidden = true) CustomUserDetails userDetails,
+            @Parameter(description = "그룹 ID", required = true) Long groupId,
+            @Parameter(description = "그룹 루틴 ID", required = true) Long routineId
+    );
+
+    @Operation(
             summary = "그룹 초대코드 조회",
             description = "ACTIVE OWNER가 현재 초대코드와 말소 시각을 조회합니다. 만료된 코드는 자동으로 재발급하지 않습니다."
     )

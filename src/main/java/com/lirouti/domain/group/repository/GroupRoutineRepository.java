@@ -10,8 +10,8 @@ import org.springframework.data.repository.query.Param;
 import java.util.Optional;
 
 public interface GroupRoutineRepository extends JpaRepository<GroupRoutine, Long> {
-    /** 그룹에 현재 등록된 루틴 수를 조회한다. */
-    long countByGroupId(Long groupId);
+    /** 그룹에 현재 등록된 활성 루틴 수를 조회한다. */
+    long countByGroupIdAndActiveTrue(Long groupId);
 
     /**
      * 대상 그룹에 동일한 제목의 루틴이 존재하는지 확인한다.
@@ -36,6 +36,7 @@ public interface GroupRoutineRepository extends JpaRepository<GroupRoutine, Long
             from GroupRoutine routine
             where routine.id = :routineId
               and routine.group.id = :groupId
+              and routine.active = true
             """)
     Optional<GroupRoutine> findByIdAndGroupIdForUpdate(
             @Param("routineId") Long routineId,

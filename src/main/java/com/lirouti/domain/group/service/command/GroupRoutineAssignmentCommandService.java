@@ -43,6 +43,19 @@ public class GroupRoutineAssignmentCommandService {
     private final GroupValidationService groupValidationService;
     private final Clock clock;
 
+    /** 루틴 삭제 시 완료되지 않은 모든 회원의 할당을 한 번에 물리 삭제한다. */
+    @Transactional
+    public int deleteMutableAssignments(Long groupRoutineId) {
+        if (groupRoutineId == null) {
+            throw new IllegalArgumentException("그룹 루틴 ID는 필수입니다.");
+        }
+        int deletedCount = groupRoutineAssignmentRepository
+                .deleteAllByGroupRoutineIdAndStatusIn(groupRoutineId, MUTABLE_STATUSES);
+        log.debug("그룹 루틴의 미확정 할당을 삭제했습니다. routineId={}, deletedCount={}",
+                groupRoutineId, deletedCount);
+        return deletedCount;
+    }
+
     /**
      * 루틴 생성일이 반복 요일이면 현재 ACTIVE 그룹원 전원에게 즉시 할당한다.
      *

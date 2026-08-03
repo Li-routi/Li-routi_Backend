@@ -163,10 +163,50 @@ class GroupRoutineRepositoryTest {
         em.clear();
 
         // when
-        long result = groupRoutineRepository.countByGroupId(targetGroup.getId());
+        long result = groupRoutineRepository.countByGroupIdAndActiveTrue(targetGroup.getId());
 
         // then
         assertThat(result).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("비활성 루틴은 활성 개수와 수정 잠금 조회에서 제외한다")
+    void softDeletedRoutine_ActiveQueries_ExcludeRoutine() {
+        // given
+        Group group = group();
+        GroupRoutine routine = groupRoutineRepository.saveAndFlush(
+                routine(group, category(), "삭제 루틴")
+        );
+        routine.delete();
+        groupRoutineRepository.flush();
+        em.clear();
+
+        // when & then
+        assertThat(groupRoutineRepository.countByGroupIdAndActiveTrue(group.getId())).isZero();
+        assertThat(groupRoutineRepository.findByIdAndGroupIdForUpdate(
+                routine.getId(), group.getId()
+        )).isEmpty();
+        assertThat(groupRoutineRepository.existsByIdAndGroupId(
+                routine.getId(), group.getId()
+        )).isTrue();
+    }
+
+    @Test
+    @DisplayName("비활성 루틴의 제목도 같은 그룹에서 계속 예약된다")
+    void save_TitleOfInactiveRoutine_StillViolatesUniqueConstraint() {
+        // given
+        Group group = group();
+        GroupRoutineCategory category = category();
+        GroupRoutine inactive = groupRoutineRepository.saveAndFlush(
+                routine(group, category, "예약 제목")
+        );
+        inactive.delete();
+        groupRoutineRepository.flush();
+
+        // when & then
+        assertThatThrownBy(() -> groupRoutineRepository.saveAndFlush(
+                routine(group, category, "예약 제목")
+        )).isInstanceOf(DataIntegrityViolationException.class);
     }
 
     private Group group() {
