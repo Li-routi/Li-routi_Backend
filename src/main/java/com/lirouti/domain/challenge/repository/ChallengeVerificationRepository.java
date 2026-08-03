@@ -43,6 +43,50 @@ public interface ChallengeVerificationRepository
     );
 
     /**
+     * 그 참여의 <b>그날 인증</b>을 회차와 무관하게 찾는다.
+     *
+     * <p>하루 1회는 회차를 넘어 적용된다. 회차를 조건에 넣으면 나갔다 다시 들어온 뒤
+     * 같은 날 또 인증할 수 있다 — 새 회차에서는 기존 인증이 안 보여 덮어쓰기가 아니라
+     * 새 행이 된다. 실제로 운영에서 그렇게 두 건이 생겼다.
+     *
+     * <p>{@code participation_round} 가 유니크 키에 들어 있어 DB 는 이것을 막지 않는다.
+     * 대신 호출부가 참여 행을 비관 잠금으로 잡은 뒤 이 조회를 하므로, 같은 회원의 동시
+     * 요청은 그 잠금에서 직렬화된다.
+     *
+     * <p>여러 건이면 가장 최근 회차의 것을 준다. 정책 도입 전에 쌓인 중복이 있어
+     * 단건 조회로는 예외가 나기 때문이다(그 데이터는 지우지 않기로 했다).
+     */
+    @Query("""
+            select v from ChallengeVerification v
+            where v.memberChallenge.id = :memberChallengeId
+              and v.verifiedDate = :verifiedDate
+            order by v.participationRound desc, v.id desc
+            limit 1
+            """)
+    Optional<ChallengeVerification> findByMemberChallengeIdAndVerifiedDate(
+            @Param("memberChallengeId") Long memberChallengeId,
+            @Param("verifiedDate") LocalDate verifiedDate
+    );
+
+    /**
+     * 그 참여가 <b>주어진 구간 안에</b> 인증한 적이 있는지. 상세의 "현재 주기에 인증했는지" 판정용이다.
+     *
+     * <p>구간을 받는 이유는 주기가 하루가 아닐 수 있어서다. {@code WEEKLY} 챌린지를 이번 주
+     * 월요일에 인증했다면 화요일에도 "이번 주에 이미 했다"가 맞는데, 그날 하나만 보면 놓친다.
+     * 경계는 {@link com.lirouti.domain.challenge.enums.RoutineCycle} 이 계산한다.
+     *
+     * <p>회차를 조건에 넣지 않는다. 재참여로 회차가 올라가도 그 구간에 인증한 사실은 남는다 —
+     * 회차를 넣으면 나갔다 들어온 뒤 버튼이 다시 열린다.
+     *
+     * <p>엔티티가 아니라 존재 여부만 돌려준다. 판정에 쓸 뿐이라 행을 읽을 필요가 없다.
+     */
+    boolean existsByMemberChallengeIdAndVerifiedDateBetween(
+            Long memberChallengeId,
+            LocalDate periodStart,
+            LocalDate periodEnd
+    );
+
+    /**
      * 그 챌린지의 인증이면서 <b>작성자가 요청자인지</b>까지 확인하며 조회한다. 메모 수정용이다.
      *
      * <p>세 조건을 모두 쿼리에 넣는다. 가져와서 뒤에서 비교하면 <b>응답만으로 그 인증의 존재

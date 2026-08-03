@@ -233,24 +233,30 @@ public class ChallengeQueryService {
     /**
      * 현재 주기 구간에 이미 인증했는지.
      *
-     * <p><b>마지막 인증일 하나로 판정한다.</b> 참여 행이 그 값을 들고 있어 인증 테이블을 다시
-     * 뒤질 필요가 없다. 인증할 때마다 갱신되므로 "가장 최근 인증"이 곧 이 값이다.
+     * <p><b>참여 행의 {@code lastVerifiedDate} 를 쓰지 않는다.</b> 재참여가 그 값을 {@code null}
+     * 로 초기화하기 때문이다 — 오늘 인증한 뒤 나갔다 다시 들어오면 "아직 안 함"으로 보여
+     * 버튼이 다시 열렸다. 하루 1회는 회차를 넘어 적용하므로 <b>인증 테이블을 직접 본다.</b>
+     *
+     * <p>쓰기 쪽도 같은 기준으로 막는다(ChallengeVerificationCommandService). 한쪽만 고치면
+     * 버튼은 잠겨 있는데 API 로는 되거나, 그 반대가 된다.
      *
      * <p>구간 경계는 {@link RoutineCycle} 이 안다 — {@code DAILY} 면 같은 날인지,
      * {@code WEEKLY} 면 같은 주(일~토)인지, {@code MONTHLY} 면 같은 달인지.
+     * <b>구간 전체를 조회한다.</b> 그날 하나만 보면 {@code WEEKLY} 챌린지를 이번 주 월요일에
+     * 인증하고 화요일에 열었을 때 "아직 안 함"이 되어 버튼이 다시 열린다.
      *
-     * <p><b>이탈했으면 false 다.</b> 참여 행은 남아 있어도 지금 참여 중이 아니면 인증할 수 없고,
-     * 재참여하면 회차가 올라가 지난 회차의 인증과 분리된다. 그 상태에서 "이미 인증함"으로
-     * 보이면 재참여 직후 버튼이 잠긴다.
+     * <p><b>이탈했으면 false 다.</b> 참여 행이 남아 있어도 지금 참여 중이 아니면 인증할 수 없다.
      *
      * <p>신고로 가려진 인증도 인증한 것으로 센다. 숨김은 노출만 막을 뿐 수행 기록은 그대로이며,
      * 스트릭·오늘 완료자 수가 숨김을 무시하는 것과 같은 기준이다.
      */
     private boolean hasVerifiedInCurrentPeriod(MemberChallenge participation, RoutineCycle cycle) {
-        if (!participation.isParticipating() || participation.getLastVerifiedDate() == null) {
+        if (!participation.isParticipating()) {
             return false;
         }
-        return cycle.isSamePeriod(participation.getLastVerifiedDate(), LocalDate.now(TimeUtil.KST));
+        LocalDate today = LocalDate.now(TimeUtil.KST);
+        return challengeVerificationRepository.existsByMemberChallengeIdAndVerifiedDateBetween(
+                participation.getId(), cycle.currentPeriodStart(today), today);
     }
 
     private int clampSize(Integer size) {

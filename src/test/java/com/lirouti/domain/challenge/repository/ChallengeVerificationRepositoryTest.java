@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertAll;
 
 @SpringBootTest
 @Transactional
@@ -253,5 +254,66 @@ class ChallengeVerificationRepositoryTest {
         assertThat(challengeVerificationRepository
                 .findByMemberChallengeIdAndParticipationRoundAndVerifiedDate(mc.getId(), 1, today))
                 .get().extracting(ChallengeVerification::getId).isEqualTo(previousRound.getId());
+    }
+
+    // ── 주기 구간 조회 ──
+    //
+    // 상세의 "현재 주기에 인증했는지"가 이 쿼리로 판정한다. 고정 날짜를 쓴다 —
+    // LocalDate.now() 로 짜면 오늘이 주 시작일(일요일)인 날에는 "구간 안의 지난 날"이
+    // 없어 검증이 조용히 비어 버린다. 실제로 그렇게 만들었다가 회귀를 못 잡았다.
+
+    @Test
+    @DisplayName("구간 안의 지난 날 인증도 찾는다 — 그날 하나만 보면 주간 판정이 깨진다")
+    void existsInPeriod_FindsEarlierDayInRange() {
+        // given: 2026-08-02(일) ~ 08-08(토) 주간 구간. 인증은 그 주 월요일에 있다
+        LocalDate weekStart = LocalDate.parse("2026-08-02");
+        LocalDate monday = LocalDate.parse("2026-08-03");
+        LocalDate wednesday = LocalDate.parse("2026-08-05");
+
+        MemberChallenge mc = join(member(true), challenge(), 1, true);
+        verify(mc, monday, 1);
+        em.flush();
+
+        // when & then: 수요일에 열어도 "이번 주에 했다"가 나와야 한다
+        assertAll(
+                () -> assertThat(challengeVerificationRepository
+                        .existsByMemberChallengeIdAndVerifiedDateBetween(mc.getId(), weekStart, wednesday))
+                        .isTrue(),
+                // 하루만 보는 조회로는 못 찾는다 — 이것이 회귀했던 지점이다
+                () -> assertThat(challengeVerificationRepository
+                        .findByMemberChallengeIdAndVerifiedDate(mc.getId(), wednesday))
+                        .isEmpty()
+        );
+    }
+
+    @Test
+    @DisplayName("구간 밖 인증은 찾지 않는다 — 지난 주 것으로 이번 주가 잠기면 안 된다")
+    void existsInPeriod_IgnoresOutsideRange() {
+        LocalDate weekStart = LocalDate.parse("2026-08-02");
+        LocalDate saturdayBefore = LocalDate.parse("2026-08-01");   // 지난 주 마지막 날
+
+        MemberChallenge mc = join(member(true), challenge(), 1, true);
+        verify(mc, saturdayBefore, 1);
+        em.flush();
+
+        assertThat(challengeVerificationRepository
+                .existsByMemberChallengeIdAndVerifiedDateBetween(
+                        mc.getId(), weekStart, LocalDate.parse("2026-08-08")))
+                .isFalse();
+    }
+
+    @Test
+    @DisplayName("회차가 달라도 찾는다 — 재참여로 구간 판정을 우회할 수 없다")
+    void existsInPeriod_IgnoresRound() {
+        LocalDate day = LocalDate.parse("2026-08-05");
+
+        // 회차 1로 인증한 뒤 재참여해 회차가 2가 된 상태
+        MemberChallenge mc = join(member(true), challenge(), 2, true);
+        verify(mc, day, 1);
+        em.flush();
+
+        assertThat(challengeVerificationRepository
+                .existsByMemberChallengeIdAndVerifiedDateBetween(mc.getId(), day, day))
+                .isTrue();
     }
 }
