@@ -1,18 +1,7 @@
 package com.lirouti.global.auth.filter;
 
-import com.lirouti.domain.auth.exception.AuthException;
-import com.lirouti.domain.auth.exception.code.error.AuthErrorCode;
-import com.lirouti.domain.member.enums.Role;
-import com.lirouti.global.auth.CustomUserDetails;
-import com.lirouti.global.util.JwtUtil;
-import com.lirouti.global.util.RedisUtil;
-import io.jsonwebtoken.Claims;
-import jakarta.servlet.FilterChain;
-import jakarta.servlet.ServletException;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
-import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
+import java.io.IOException;
+
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
@@ -20,7 +9,20 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-import java.io.IOException;
+import com.lirouti.domain.auth.exception.AuthException;
+import com.lirouti.domain.auth.exception.code.error.AuthErrorCode;
+import com.lirouti.domain.member.enums.Role;
+import com.lirouti.global.auth.CustomUserDetails;
+import com.lirouti.global.util.JwtUtil;
+import com.lirouti.global.util.RedisUtil;
+
+import io.jsonwebtoken.Claims;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 
 @Component
 @RequiredArgsConstructor
@@ -53,6 +55,10 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             String memberId = claims.getSubject();
 
             if (memberId != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+                /*
+                액세스 토큰의 만료 시간을 짧게 유지하는 대신, 매 요청마다 회원 DB를 조회하지 않고
+                서명과 클레임만 검증해 인증 정보를 구성한다. 회원 상태 변경은 토큰 만료 후 반영된다.
+                */            
                 CustomUserDetails userDetails = new CustomUserDetails(
                         parseMemberId(memberId),
                         parseRole(claims)

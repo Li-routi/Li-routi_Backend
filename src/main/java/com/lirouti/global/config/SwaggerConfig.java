@@ -34,8 +34,8 @@ public class SwaggerConfig {
 
     private Info apiInfo() {
         return new Info()
-                .title("Ri-routi API") // API 문서의 제목
-                .description("Ri-routi 프로젝트 API 문서입니다.") // API 문서의 설명
+                .title("Li-Routi API") // API 문서의 제목
+                .description("Li-Routi 프로젝트 API 문서입니다.") // API 문서의 설명
                 .version("1.0.0"); // API 문서의 버전
     }
 
