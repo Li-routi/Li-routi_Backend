@@ -125,6 +125,7 @@ public interface GroupControllerDocs {
 
                     | code | HTTP | 설명 |
                     | --- | --- | --- |
+                    | `GROUP403_2` | 403 | ACTIVE 그룹 구성원이 아님 (비구성원, LEFT/KICKED 구성원 포함) |
                     | `GROUP403_3` | 403 | ACTIVE OWNER가 아님 |
                     | `GROUP404_1` | 404 | 존재하지 않거나 DELETED 상태인 그룹 |
                     """
@@ -135,7 +136,7 @@ public interface GroupControllerDocs {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
                     responseCode = "401", description = "유효하지 않거나 만료된 인증 토큰"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                    responseCode = "403", description = "미인증 또는 ACTIVE OWNER 권한 없음"),
+                    responseCode = "403", description = "ACTIVE 그룹 구성원이 아니거나 ACTIVE OWNER 권한이 없음"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
                     responseCode = "404", description = "존재하지 않거나 DELETED 상태인 그룹")
     })

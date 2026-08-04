@@ -262,6 +262,7 @@ class GroupControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("/api/groups/{groupId}")))
                 .andExpect(content().string(containsString("그룹 삭제")))
+                .andExpect(content().string(containsString("GROUP403_2")))
                 .andExpect(content().string(containsString("GROUP403_3")))
                 .andExpect(content().string(containsString("GROUP404_1")));
     }

@@ -40,6 +40,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -95,12 +96,15 @@ class GroupHardDeleteIntegrationTest {
 
         GroupRoutineCategory targetCategory = groupCategory(targetGroup, "삭제 대상 카테고리");
         GroupRoutineCategory otherCategory = groupCategory(otherGroup, "보존 카테고리");
+        GroupRoutineCategory fixedCategory = fixedCategory("보존 공용 카테고리");
         GroupRoutine targetRoutine = routine(targetGroup, targetCategory, "삭제 대상 루틴");
+        GroupRoutine fixedCategoryRoutine = routine(targetGroup, fixedCategory, "공용 카테고리 대상 루틴");
         GroupRoutine otherRoutine = routine(otherGroup, otherCategory, "보존 루틴");
         targetRoutine.addSchedule(DayOfWeek.MONDAY, LocalTime.of(9, 0), LocalTime.of(10, 0));
         targetRoutine.addSchedule(DayOfWeek.TUESDAY, LocalTime.of(11, 0), LocalTime.of(12, 0));
         otherRoutine.addSchedule(DayOfWeek.WEDNESDAY, LocalTime.of(13, 0), LocalTime.of(14, 0));
         entityManager.persist(targetRoutine);
+        entityManager.persist(fixedCategoryRoutine);
         entityManager.persist(otherRoutine);
         targetGroup.addRoutine(targetRoutine);
         targetGroup.addRoutineCategory(targetCategory);
@@ -172,6 +176,7 @@ class GroupHardDeleteIntegrationTest {
         assertThat(groupMemberRepository.existsById(ids.targetMemberMembershipId())).isFalse();
         assertThat(groupRoutineCategoryRepository.existsById(ids.targetCategoryId())).isFalse();
         assertThat(groupRoutineRepository.existsById(ids.targetRoutineId())).isFalse();
+        assertThat(groupRoutineRepository.existsById(fixedCategoryRoutine.getId())).isFalse();
         ids.targetScheduleIds().forEach(id ->
                 assertThat(groupRoutineScheduleRepository.existsById(id)).isFalse());
         assertThat(groupRoutineAssignmentRepository.existsById(ids.pendingAssignmentId())).isFalse();
@@ -192,7 +197,7 @@ class GroupHardDeleteIntegrationTest {
         // then: Member 계정, 공용 기본 그룹 카테고리, 개인 루틴과 개인 카테고리
         assertThat(entityManager.find(Member.class, ids.ownerId())).isNotNull();
         assertThat(entityManager.find(Member.class, ids.memberId())).isNotNull();
-        assertThat(entityManager.find(GroupRoutineCategory.class, 1L)).isNotNull();
+        assertThat(groupRoutineCategoryRepository.existsById(fixedCategory.getId())).isTrue();
         assertThat(routineCategoryRepository.existsById(ids.personalCategoryId())).isTrue();
         assertThat(memberRoutineRepository.existsById(ids.personalRoutineId())).isTrue();
         Long personalScheduleCount = entityManager.createQuery(
@@ -279,12 +284,13 @@ class GroupHardDeleteIntegrationTest {
 
     private Member member() {
         int number = sequence.incrementAndGet();
+        String uniqueId = UUID.randomUUID().toString();
         Member member = Member.builder()
-                .email("hard-delete-" + number + "@example.com")
+                .email("hard-delete-" + uniqueId + "@example.com")
                 .nickname("Hard Delete 회원 " + number)
                 .socialProvider(SocialProvider.GOOGLE)
                 .role(Role.ROLE_USER)
-                .socialId("hard-delete-social-" + number)
+                .socialId("hard-delete-social-" + uniqueId)
                 .build();
         entityManager.persist(member);
         return member;
@@ -309,6 +315,15 @@ class GroupHardDeleteIntegrationTest {
                 .build();
         entityManager.persist(category);
         group.addRoutineCategory(category);
+        return category;
+    }
+
+    private GroupRoutineCategory fixedCategory(String name) {
+        GroupRoutineCategory category = GroupRoutineCategory.builder()
+                .name(name)
+                .active(true)
+                .build();
+        entityManager.persist(category);
         return category;
     }
 
