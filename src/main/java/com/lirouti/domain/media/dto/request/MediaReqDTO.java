@@ -5,11 +5,13 @@ import com.lirouti.domain.media.enums.MediaPurpose;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 public final class MediaReqDTO {
     private MediaReqDTO() {
     }
 
+    @Schema(name = "PresignedUrlRequest", description = "presigned URL 발급 요청")
     public record PresignedUrl(
             @NotNull(message = "미디어 용도는 필수입니다.")
             MediaPurpose purpose,
