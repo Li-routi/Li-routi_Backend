@@ -1,10 +1,10 @@
-package com.lirouti.domain.challenge.dto.request;
+package com.lirouti.domain.verification.dto.request;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
-public final class ChallengeReqDTO {
-    private ChallengeReqDTO() {
+public final class ChallengeVerificationReqDTO {
+    private ChallengeVerificationReqDTO() {
     }
 
     /**

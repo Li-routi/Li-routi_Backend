@@ -3,15 +3,17 @@ package com.lirouti.domain.challenge.service.query;
 import com.lirouti.domain.challenge.converter.ChallengeConverter;
 import com.lirouti.domain.challenge.dto.response.ChallengeResDTO;
 import com.lirouti.domain.challenge.entity.Challenge;
-import com.lirouti.domain.challenge.entity.ChallengeVerification;
+import com.lirouti.domain.verification.converter.ChallengeVerificationConverter;
+import com.lirouti.domain.verification.dto.response.ChallengeVerificationResDTO;
+import com.lirouti.domain.verification.entity.ChallengeVerification;
 import com.lirouti.domain.challenge.entity.MemberChallenge;
 import com.lirouti.domain.challenge.enums.ChallengeCategory;
 import com.lirouti.domain.challenge.enums.RoutineCycle;
 import com.lirouti.domain.challenge.exception.ChallengeException;
 import com.lirouti.domain.challenge.exception.code.error.ChallengeErrorCode;
 import com.lirouti.domain.challenge.repository.ChallengeRepository;
-import com.lirouti.domain.challenge.repository.ChallengeVerificationLikeRepository;
-import com.lirouti.domain.challenge.repository.ChallengeVerificationRepository;
+import com.lirouti.domain.verification.repository.ChallengeVerificationLikeRepository;
+import com.lirouti.domain.verification.repository.ChallengeVerificationRepository;
 import com.lirouti.domain.challenge.repository.MemberChallengeRepository;
 import com.lirouti.domain.media.service.MediaService;
 import com.lirouti.global.util.TimeUtil;
@@ -75,7 +77,7 @@ public class ChallengeQueryService {
      * 신고가 임계값만큼 쌓이면 조회자가 누구든 빠진다 — 그건 이 조건이 아니라 hiddenAt 이 막는다.
      */
     @Transactional(readOnly = true)
-    public ChallengeResDTO.Feed getVerificationFeed(
+    public ChallengeVerificationResDTO.Feed getVerificationFeed(
             Long challengeId,
             Long viewerId,
             Long cursor,
@@ -104,7 +106,7 @@ public class ChallengeQueryService {
         Set<Long> likedIds =
                 challengeVerificationLikeRepository.findLikedVerificationIds(ids, viewerId);
 
-        return ChallengeConverter.toFeed(
+        return ChallengeVerificationConverter.toFeed(
                 page.rows(), imageUrls, likeCounts, likedIds, viewerId,
                 page.nextCursor(), page.hasNext());
     }
@@ -136,7 +138,7 @@ public class ChallengeQueryService {
      * 지난 회차의 id 라 새 회차 인증과 겹치지 않아 목록이 갑자기 끝났다.
      */
     @Transactional(readOnly = true)
-    public ChallengeResDTO.MyVerifications getMyVerifications(
+    public ChallengeVerificationResDTO.MyVerifications getMyVerifications(
             Long memberId,
             Long challengeId,
             Long cursor,
@@ -169,7 +171,7 @@ public class ChallengeQueryService {
         // 마지막 인증이 이틀 전이면 저장값은 그대로여도 실제로는 끊긴 상태다.
         int currentStreak = memberChallenge.currentStreakAsOf(LocalDate.now(TimeUtil.KST));
 
-        return ChallengeConverter.toMyVerifications(
+        return ChallengeVerificationConverter.toMyVerifications(
                 page.rows(), imageUrls, likeCounts, currentStreak,
                 memberChallenge.getParticipationRound(), page.nextCursor(), page.hasNext());
     }

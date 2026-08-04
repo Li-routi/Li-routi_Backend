@@ -1,6 +1,5 @@
-package com.lirouti.domain.challenge.controller.docs;
+package com.lirouti.domain.verification.controller.docs;
 
-import com.lirouti.domain.challenge.dto.request.ChallengeReqDTO;
 import com.lirouti.domain.challenge.dto.response.ChallengeResDTO;
 import com.lirouti.global.apiPayload.ApiResponse;
 import com.lirouti.global.auth.CustomUserDetails;
@@ -9,6 +8,8 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import com.lirouti.domain.verification.dto.response.ChallengeVerificationResDTO;
+import com.lirouti.domain.verification.dto.request.ChallengeVerificationReqDTO;
 
 @Tag(name = "Challenge", description = "챌린지 인증 API")
 public interface ChallengeVerificationControllerDocs {
@@ -61,10 +62,10 @@ public interface ChallengeVerificationControllerDocs {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "참여 중이 아님 / 동시 중복 요청 / 나갔다 들어왔지만 오늘 이미 인증함"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "422", description = "AI 심사 반려 — 챌린지 불일치(CHALLENGE422_1) 또는 공개 불가(CHALLENGE422_2)")
     })
-    ApiResponse<ChallengeResDTO.Verification> verify(
+    ApiResponse<ChallengeVerificationResDTO.Verification> verify(
             CustomUserDetails userDetails,
             @Parameter(description = "챌린지 ID") Long challengeId,
-            ChallengeReqDTO.Verify request
+            ChallengeVerificationReqDTO.Verify request
     );
 
     @Operation(
@@ -83,7 +84,7 @@ public interface ChallengeVerificationControllerDocs {
                     신고가 적을 때는 신고자 본인에게만 가려지고 다른 회원에게는 그대로 보이지만,
                     신고가 일정 수만큼 쌓이면 전체 회원에게 가려집니다.
 
-                    각 카드에 likeCount(좋아요 수)와 liked(내가 눌렀는지)가 함께 나갑니다(#63).
+                    각 카드에 likeCount(좋아요 수)와 liked(내가 눌렀는지)가 함께 나갑니다.
                     좋아요 수는 탈퇴 회원의 좋아요를 뺀 값입니다.
 
                     ### mine — 내가 올린 인증인지
@@ -103,7 +104,7 @@ public interface ChallengeVerificationControllerDocs {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "인증 필요(미인증)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "존재하지 않거나 비활성 챌린지")
     })
-    ApiResponse<ChallengeResDTO.Feed> getVerificationFeed(
+    ApiResponse<ChallengeVerificationResDTO.Feed> getVerificationFeed(
             CustomUserDetails userDetails,
             @Parameter(description = "챌린지 ID") Long challengeId,
             @Parameter(description = "이전 응답의 nextCursor. 첫 요청에서는 생략") Long cursor,
@@ -151,7 +152,7 @@ public interface ChallengeVerificationControllerDocs {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "인증 필요(미인증)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "그 챌린지에 참여한 이력이 없음")
     })
-    ApiResponse<ChallengeResDTO.MyVerifications> getMyVerifications(
+    ApiResponse<ChallengeVerificationResDTO.MyVerifications> getMyVerifications(
             CustomUserDetails userDetails,
             @Parameter(description = "챌린지 ID") Long challengeId,
             @Parameter(description = "이전 응답의 nextCursor. 첫 요청에서는 생략") Long cursor,
@@ -180,7 +181,7 @@ public interface ChallengeVerificationControllerDocs {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "인증 필요(미인증)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "그 챌린지에 없는 인증")
     })
-    ApiResponse<ChallengeResDTO.Like> like(
+    ApiResponse<ChallengeVerificationResDTO.Like> like(
             CustomUserDetails userDetails,
             @Parameter(description = "챌린지 ID") Long challengeId,
             @Parameter(description = "인증 ID") Long verificationId
@@ -205,7 +206,7 @@ public interface ChallengeVerificationControllerDocs {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "인증 필요(미인증)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "그 챌린지에 없는 인증")
     })
-    ApiResponse<ChallengeResDTO.Like> unlike(
+    ApiResponse<ChallengeVerificationResDTO.Like> unlike(
             CustomUserDetails userDetails,
             @Parameter(description = "챌린지 ID") Long challengeId,
             @Parameter(description = "인증 ID") Long verificationId
@@ -237,11 +238,11 @@ public interface ChallengeVerificationControllerDocs {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "해당 챌린지에 그 인증이 없음"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "이미 신고한 인증")
     })
-    ApiResponse<ChallengeResDTO.Report> report(
+    ApiResponse<ChallengeVerificationResDTO.Report> report(
             CustomUserDetails userDetails,
             @Parameter(description = "챌린지 ID") Long challengeId,
             @Parameter(description = "신고할 인증 ID") Long verificationId,
-            ChallengeReqDTO.Report request
+            ChallengeVerificationReqDTO.Report request
     );
 
     @Operation(
@@ -282,10 +283,10 @@ public interface ChallengeVerificationControllerDocs {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증 필요(미인증)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "내 인증이 아니거나 없거나 가려진 인증")
     })
-    ApiResponse<ChallengeResDTO.MemoUpdate> updateMemo(
+    ApiResponse<ChallengeVerificationResDTO.MemoUpdate> updateMemo(
             CustomUserDetails userDetails,
             @Parameter(description = "챌린지 ID") Long challengeId,
             @Parameter(description = "인증 ID") Long verificationId,
-            ChallengeReqDTO.UpdateMemo request
+            ChallengeVerificationReqDTO.UpdateMemo request
     );
 }
