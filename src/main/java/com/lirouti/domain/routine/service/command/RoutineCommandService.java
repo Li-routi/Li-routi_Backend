@@ -125,6 +125,55 @@ public class RoutineCommandService {
         return RoutineConverter.toCategory(category);
     }
 
+    /** 인증 회원이 직접 만든 활성 카테고리의 이름과 색상을 수정한다. */
+    @Transactional
+    public RoutineResDTO.Category updateCategory(
+            Long memberId,
+            Long categoryId,
+            RoutineReqDTO.UpdateCategory request
+    ) {
+        if (request == null) {
+            throw new IllegalArgumentException("유효하지 않은 카테고리 수정 요청입니다.");
+        }
+
+        lockMember(memberId);
+        memberQueryService.getActiveMember(memberId);
+        RoutineCategory category = findOwnedMutableCategory(memberId, categoryId);
+        String name = normalizedCategoryName(memberId, request.name());
+
+        if (!category.getName().equals(name)
+                && routineCategoryRepository.existsUsableName(memberId, name)) {
+            log.warn("중복된 카테고리 이름 수정을 차단했습니다. memberId={}, categoryId={}, name={}",
+                    memberId, categoryId, name);
+            throw new RoutineException(RoutineErrorCode.DUPLICATE_ROUTINE_CATEGORY_NAME);
+        }
+
+        category.update(name, request.color());
+        saveCategory(memberId, category);
+        log.info("사용자 루틴 카테고리를 수정했습니다. memberId={}, categoryId={}",
+                memberId, categoryId);
+        return RoutineConverter.toCategory(category);
+    }
+
+    /** 개인 루틴이 전혀 참조하지 않는 본인 사용자 카테고리를 물리 삭제한다. */
+    @Transactional
+    public void deleteCategory(Long memberId, Long categoryId) {
+        lockMember(memberId);
+        memberQueryService.getActiveMember(memberId);
+        RoutineCategory category = findOwnedMutableCategory(memberId, categoryId);
+
+        if (memberRoutineRepository.existsByCategoryId(categoryId)) {
+            log.warn("개인 루틴이 포함된 카테고리 삭제를 차단했습니다. memberId={}, categoryId={}",
+                    memberId, categoryId);
+            throw new RoutineException(RoutineErrorCode.ROUTINE_CATEGORY_NOT_EMPTY);
+        }
+
+        routineCategoryRepository.delete(category);
+        routineCategoryRepository.flush();
+        log.info("사용자 루틴 카테고리를 삭제했습니다. memberId={}, categoryId={}",
+                memberId, categoryId);
+    }
+
     /** 인증 회원이 소유한 활성 개인 루틴의 설정을 전체 교체한다. */
     @Transactional
     public RoutineResDTO.Routine updateRoutine(
@@ -180,6 +229,27 @@ public class RoutineCommandService {
                             memberId, routineId);
                     return new RoutineException(RoutineErrorCode.ROUTINE_NOT_FOUND);
                 });
+    }
+
+    private RoutineCategory findOwnedMutableCategory(Long memberId, Long categoryId) {
+        if (categoryId == null) {
+            throw new RoutineException(RoutineErrorCode.ROUTINE_CATEGORY_NOT_FOUND);
+        }
+        RoutineCategory category = routineCategoryRepository.findByIdAndActiveTrue(categoryId)
+                .orElseThrow(() -> new RoutineException(
+                        RoutineErrorCode.ROUTINE_CATEGORY_NOT_FOUND));
+        if (category.isFixed()) {
+            log.warn("고정 카테고리 변경을 차단했습니다. memberId={}, categoryId={}",
+                    memberId, categoryId);
+            throw new RoutineException(
+                    RoutineErrorCode.FIXED_ROUTINE_CATEGORY_MODIFICATION_NOT_ALLOWED);
+        }
+        if (!category.isOwnedBy(memberId)) {
+            log.warn("다른 회원의 카테고리 변경을 차단했습니다. memberId={}, categoryId={}",
+                    memberId, categoryId);
+            throw new RoutineException(RoutineErrorCode.ROUTINE_CATEGORY_ACCESS_DENIED);
+        }
+        return category;
     }
 
     /**

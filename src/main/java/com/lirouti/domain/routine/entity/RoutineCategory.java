@@ -113,4 +113,27 @@ public class RoutineCategory extends BaseEntity {
     public boolean isUsableBy(Long memberId) {
         return isFixed() || (memberId != null && memberId.equals(owner.getId()));
     }
+
+    /** 주어진 회원이 직접 만든 사용자 카테고리인지 확인한다. */
+    public boolean isOwnedBy(Long memberId) {
+        return !isFixed() && memberId != null && memberId.equals(owner.getId());
+    }
+
+    /** 사용자 카테고리의 이름과 색상을 교체한다. */
+    public void update(String name, RoutineCategoryColor color) {
+        if (isFixed()) {
+            throw new IllegalStateException("고정 카테고리는 수정할 수 없습니다.");
+        }
+        if (name == null
+                || name.isBlank()
+                || name.length() > MAX_MEMBER_CATEGORY_NAME_LENGTH
+                || name.indexOf('\n') >= 0
+                || name.indexOf('\r') >= 0) {
+            throw new IllegalArgumentException(
+                    "카테고리 이름은 1자 이상 " + MAX_MEMBER_CATEGORY_NAME_LENGTH
+                            + "자 이하여야 하며 줄바꿈을 포함할 수 없습니다.");
+        }
+        this.name = name;
+        this.color = color;
+    }
 }

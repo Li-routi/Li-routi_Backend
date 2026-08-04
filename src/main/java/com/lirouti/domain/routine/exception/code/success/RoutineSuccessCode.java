@@ -33,6 +33,16 @@ public enum RoutineSuccessCode implements BaseSuccessCode {
             "개인 루틴 삭제에 성공했습니다.",
             "ROUTINE200_5"
     ),
+    ROUTINE_CATEGORY_UPDATE_SUCCESS(
+            HttpStatus.OK,
+            "개인 루틴 카테고리 수정에 성공했습니다.",
+            "ROUTINE200_6"
+    ),
+    ROUTINE_CATEGORY_DELETE_SUCCESS(
+            HttpStatus.OK,
+            "개인 루틴 카테고리 삭제에 성공했습니다.",
+            "ROUTINE200_7"
+    ),
     ROUTINE_CREATE_SUCCESS(
             HttpStatus.CREATED,
             "루틴 생성에 성공했습니다.",

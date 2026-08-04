@@ -10,6 +10,9 @@ import java.util.List;
 import java.util.Optional;
 
 public interface MemberRoutineRepository extends JpaRepository<MemberRoutine, Long> {
+    /** 활성 여부와 관계없이 카테고리를 참조하는 개인 루틴이 하나라도 있는지 확인한다. */
+    boolean existsByCategoryId(Long categoryId);
+
     @Query("""
             select routine
             from MemberRoutine routine
