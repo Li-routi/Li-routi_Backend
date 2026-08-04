@@ -29,7 +29,7 @@ public final class RoutineReqDTO {
      * @param routines 등록할 루틴 목록
      */
     @Schema(
-            name = "CreateRoutines",
+            name = "PersonalRoutineCreateRequest",
             description = "개인 루틴 벌크 생성 요청",
             // 스웨거의 "Try it out" 입력창에 그대로 채워지는 값이다. 세 항목이 각각 다른
             // 동작을 보여 준다 — 이름을 유지한 기본 루틴, 이름을 바꿔 원본 선택이 해제되는
@@ -101,7 +101,7 @@ public final class RoutineReqDTO {
      * @param repeatDays 반복 요일. 미지정 시 매일
      * @param alarmTime 알람 시각. 선택하지 않았으면 {@code null}
      */
-    @Schema(name = "CreateRoutine", description = "등록할 루틴 한 건")
+    @Schema(name = "PersonalRoutineCreateItem", description = "등록할 개인 루틴 한 건")
     public record CreateRoutine(
             @Schema(
                     description = "루틴이 소속될 카테고리 ID. 고정 카테고리(운동 1, 건강 2, "
@@ -189,6 +189,66 @@ public final class RoutineReqDTO {
     }
 
     /**
+     * 저장된 개인 루틴의 설정을 전체 교체하는 요청이다.
+     *
+     * <p>설정 바텀시트가 전체 폼을 제출하므로 알람을 제외한 필드는 모두 필수다.
+     * {@code alarmTime}은 {@code null}이면 알람을 사용하지 않는다는 뜻이다.
+     * 카테고리 이동은 기본 루틴 원본과의 관계가 정해지지 않아 이 요청에서 다루지 않는다.
+     */
+    @Schema(name = "PersonalRoutineUpdateRequest", description = "개인 루틴 설정 수정 요청")
+    public record UpdateRoutine(
+            @Schema(description = "루틴 이름. 앞뒤 공백을 제거한 뒤 1~20자", example = "물 2L 마시기")
+            @NotBlank(message = "루틴 이름은 필수입니다.")
+            @Size(
+                    max = MemberRoutine.MAX_NAME_LENGTH,
+                    message = "루틴 이름은 20자 이하여야 합니다."
+            )
+            String name,
+
+            @Schema(type = "string", description = "마감 시각(HH:mm)", example = "21:00")
+            @NotNull(message = "마감 시각은 필수입니다.")
+            @JsonFormat(pattern = "HH:mm")
+            LocalTime endTime,
+
+            @Schema(
+                    description = "반복 요일. 하나 이상이며 중복될 수 없습니다.",
+                    example = "[\"MONDAY\", \"WEDNESDAY\", \"FRIDAY\"]"
+            )
+            @NotEmpty(message = "반복 요일은 하나 이상이어야 합니다.")
+            @Size(max = 7, message = "반복 요일은 최대 7개까지 지정할 수 있습니다.")
+            List<@NotNull(message = "반복 요일은 null일 수 없습니다.") DayOfWeek> repeatDays,
+
+            @Schema(
+                    type = "string",
+                    description = "알람 시각(HH:mm). null이면 알람 없음",
+                    example = "20:30"
+            )
+            @JsonFormat(pattern = "HH:mm")
+            LocalTime alarmTime
+    ) {
+        public UpdateRoutine {
+            name = name == null ? null : name.trim();
+        }
+
+        @AssertTrue(message = "루틴 이름에는 줄바꿈을 포함할 수 없습니다.")
+        @JsonIgnore
+        public boolean isNameSingleLine() {
+            return name == null || !(name.contains("\n") || name.contains("\r"));
+        }
+
+        @AssertTrue(message = "같은 반복 요일을 중복해서 지정할 수 없습니다.")
+        @JsonIgnore
+        public boolean isRepeatDayUnique() {
+            if (repeatDays == null) {
+                return true;
+            }
+            return repeatDays.stream()
+                    .filter(Objects::nonNull)
+                    .allMatch(new HashSet<>()::add);
+        }
+    }
+
+    /**
      * 사용자 카테고리 추가 요청이다.
      *
      * <p>{@code name}은 {@link CreateRoutine}과 같은 이유로 컴팩트 생성자에서 정규화한다.
@@ -197,7 +257,7 @@ public final class RoutineReqDTO {
      * @param color 색상 칩. "없음"을 고르면 {@code null}
      */
     @Schema(
-            name = "CreateCategory",
+            name = "PersonalRoutineCategoryCreateRequest",
             description = "사용자 카테고리 추가 요청",
             example = """
                     {

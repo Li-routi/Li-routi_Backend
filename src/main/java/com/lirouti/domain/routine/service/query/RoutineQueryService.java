@@ -21,9 +21,10 @@ import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
-
-import static io.netty.util.concurrent.FastThreadLocal.size;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -84,6 +85,33 @@ public class RoutineQueryService {
                 memberId, categoryId, templates.size());
 
         return RoutineConverter.toTemplateList(templates, addedTemplateIds);
+    }
+
+    /**
+     * 인증 회원의 활성 개인 루틴 전체를 화면 노출 순서대로 조회한다.
+     * 루틴 본문과 반복 요일을 두 번의 묶음 조회로 가져와 N+1 쿼리를 피한다.
+     */
+    @Transactional(readOnly = true)
+    public RoutineResDTO.RoutineList getRoutines(Long memberId) {
+        memberQueryService.getActiveMember(memberId);
+
+        List<MemberRoutine> ordered = memberRoutineRepository
+                .findActiveOrderedByMemberId(memberId);
+        if (ordered.isEmpty()) {
+            return RoutineConverter.toRoutineListResponse(List.of());
+        }
+
+        Map<Long, MemberRoutine> routinesWithSchedules = memberRoutineRepository
+                .findAllWithSchedulesByIdIn(ordered.stream().map(MemberRoutine::getId).toList())
+                .stream()
+                .collect(Collectors.toMap(MemberRoutine::getId, Function.identity()));
+        List<MemberRoutine> hydrated = ordered.stream()
+                .map(routine -> routinesWithSchedules.getOrDefault(routine.getId(), routine))
+                .toList();
+
+        log.debug("개인 루틴 목록을 조회했습니다. memberId={}, routineCount={}",
+                memberId, hydrated.size());
+        return RoutineConverter.toRoutineListResponse(hydrated);
     }
 
     /**

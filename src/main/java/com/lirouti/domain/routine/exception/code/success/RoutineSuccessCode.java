@@ -18,6 +18,21 @@ public enum RoutineSuccessCode implements BaseSuccessCode {
             "기본 제공 루틴 목록 조회에 성공했습니다.",
             "ROUTINE200_2"
     ),
+    ROUTINE_LIST_FETCH_SUCCESS(
+            HttpStatus.OK,
+            "개인 루틴 목록 조회에 성공했습니다.",
+            "ROUTINE200_3"
+    ),
+    ROUTINE_UPDATE_SUCCESS(
+            HttpStatus.OK,
+            "개인 루틴 수정에 성공했습니다.",
+            "ROUTINE200_4"
+    ),
+    ROUTINE_DELETE_SUCCESS(
+            HttpStatus.OK,
+            "개인 루틴 삭제에 성공했습니다.",
+            "ROUTINE200_5"
+    ),
     ROUTINE_CREATE_SUCCESS(
             HttpStatus.CREATED,
             "루틴 생성에 성공했습니다.",

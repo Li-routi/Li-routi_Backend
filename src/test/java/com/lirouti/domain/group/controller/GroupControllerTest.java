@@ -383,12 +383,12 @@ class GroupControllerTest {
                         + ".properties.routines").doesNotExist())
                 .andExpect(jsonPath("$.components.schemas.GroupRoutineCreateResult"
                         + ".properties.activeRoutineCount").doesNotExist())
-                .andExpect(jsonPath("$.components.schemas.CreateRoutines.properties"
+                .andExpect(jsonPath("$.components.schemas.PersonalRoutineCreateRequest.properties"
                         + ".routines.items['$ref']")
-                        .value("#/components/schemas/CreateRoutine"))
-                .andExpect(jsonPath("$.components.schemas.CreateRoutine.properties.templateId")
+                        .value("#/components/schemas/PersonalRoutineCreateItem"))
+                .andExpect(jsonPath("$.components.schemas.PersonalRoutineCreateItem.properties.templateId")
                         .exists())
-                .andExpect(jsonPath("$.components.schemas.RoutineCreateResult"
+                .andExpect(jsonPath("$.components.schemas.PersonalRoutineCreateResult"
                         + ".properties.activeRoutineCount").exists());
     }
 

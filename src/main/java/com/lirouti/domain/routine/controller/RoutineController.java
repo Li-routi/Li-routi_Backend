@@ -61,6 +61,41 @@ public class RoutineController implements RoutineControllerDocs {
         );
     }
 
+    @Override
+    @GetMapping
+    public ApiResponse<RoutineResDTO.RoutineList> getRoutines(
+            @AuthenticationPrincipal CustomUserDetails userDetails
+    ) {
+        RoutineResDTO.RoutineList result = routineQueryService
+                .getRoutines(userDetails.getMemberId());
+        return ApiResponse.onSuccess(
+                RoutineSuccessCode.ROUTINE_LIST_FETCH_SUCCESS,
+                result
+        );
+    }
+
+    @Override
+    @PatchMapping("/{routineId}")
+    public ApiResponse<RoutineResDTO.Routine> updateRoutine(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long routineId,
+            @Valid @RequestBody RoutineReqDTO.UpdateRoutine request
+    ) {
+        RoutineResDTO.Routine result = routineCommandService.updateRoutine(
+                userDetails.getMemberId(), routineId, request);
+        return ApiResponse.onSuccess(RoutineSuccessCode.ROUTINE_UPDATE_SUCCESS, result);
+    }
+
+    @Override
+    @DeleteMapping("/{routineId}")
+    public ApiResponse<Void> deleteRoutine(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long routineId
+    ) {
+        routineCommandService.deleteRoutine(userDetails.getMemberId(), routineId);
+        return ApiResponse.onSuccess(RoutineSuccessCode.ROUTINE_DELETE_SUCCESS, null);
+    }
+
     /**
      * 선택하거나 직접 작성한 개인 루틴을 한 번에 생성한다.
      *

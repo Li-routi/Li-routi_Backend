@@ -8,6 +8,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import java.time.DayOfWeek;
 import java.time.LocalTime;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -135,6 +136,64 @@ class MemberRoutineTest {
         assertThatThrownBy(() -> routine.addSchedule(DayOfWeek.MONDAY))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("중복");
+    }
+
+    @Test
+    @DisplayName("이름을 유지한 수정은 원본 참조를 유지하고 반복 요일을 교체한다")
+    void update_KeptTemplateName_KeepsTemplateAndReplacesSettings() {
+        RoutineTemplate template = template();
+        MemberRoutine routine = routine(template, TEMPLATE_NAME);
+        routine.addSchedule(DayOfWeek.MONDAY);
+
+        routine.update(
+                TEMPLATE_NAME,
+                LocalTime.of(21, 30),
+                LocalTime.of(20, 30),
+                List.of(DayOfWeek.WEDNESDAY, DayOfWeek.FRIDAY)
+        );
+
+        assertAll(
+                () -> assertThat(routine.getTemplate()).isSameAs(template),
+                () -> assertThat(routine.getEndTime()).isEqualTo(LocalTime.of(21, 30)),
+                () -> assertThat(routine.getAlarmTime()).isEqualTo(LocalTime.of(20, 30)),
+                () -> assertThat(routine.getSchedules())
+                        .extracting(MemberRoutineSchedule::getRepeatDay)
+                        .containsExactly(DayOfWeek.WEDNESDAY, DayOfWeek.FRIDAY)
+        );
+    }
+
+    @Test
+    @DisplayName("이름을 바꾼 수정은 원본 참조를 해제한다")
+    void update_ChangedTemplateName_DetachesTemplate() {
+        MemberRoutine routine = routine(template(), TEMPLATE_NAME);
+
+        routine.update(
+                "물 2L 마시기",
+                LocalTime.of(22, 0),
+                null,
+                List.of(DayOfWeek.MONDAY)
+        );
+
+        assertAll(
+                () -> assertThat(routine.getTemplate()).isNull(),
+                () -> assertThat(routine.getName()).isEqualTo("물 2L 마시기"),
+                () -> assertThat(routine.getAlarmTime()).isNull()
+        );
+    }
+
+    @Test
+    @DisplayName("삭제는 루틴을 비활성화하고 원본과 반복 일정을 해제한다")
+    void deactivate_DetachesTemplateAndClearsSchedules() {
+        MemberRoutine routine = routine(template(), TEMPLATE_NAME);
+        routine.addSchedule(DayOfWeek.MONDAY);
+
+        routine.deactivate();
+
+        assertAll(
+                () -> assertThat(routine.getActive()).isFalse(),
+                () -> assertThat(routine.getTemplate()).isNull(),
+                () -> assertThat(routine.getSchedules()).isEmpty()
+        );
     }
 
     private MemberRoutine buildWithName(String name) {

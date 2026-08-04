@@ -121,6 +121,12 @@ public final class RoutineConverter {
                 .build();
     }
 
+    public static RoutineResDTO.RoutineList toRoutineListResponse(List<MemberRoutine> routines) {
+        return RoutineResDTO.RoutineList.builder()
+                .routines(routines.stream().map(RoutineConverter::toRoutine).toList())
+                .build();
+    }
+
     /** 기본 제공 루틴 한 건을 응답으로 변환한다. */
     private static RoutineResDTO.Template toTemplate(RoutineTemplate template, boolean alreadyAdded) {
         return RoutineResDTO.Template.builder()
@@ -133,7 +139,7 @@ public final class RoutineConverter {
     }
 
     /** 저장된 개인 루틴 한 건을 응답으로 변환하고 반복 요일을 월요일부터의 순서로 정렬한다. */
-    private static RoutineResDTO.Routine toRoutine(MemberRoutine routine) {
+    public static RoutineResDTO.Routine toRoutine(MemberRoutine routine) {
         return toRoutine(routine, false);
     }
 

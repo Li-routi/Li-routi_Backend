@@ -17,13 +17,18 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.DayOfWeek;
+import java.time.LocalTime;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -103,6 +108,178 @@ class RoutineControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.templates[?(@.templateId == 201)].alreadyAdded")
                         .value(true));
+    }
+
+    @Test
+    @DisplayName("활성 개인 루틴만 카테고리와 루틴 노출 순서대로 반환한다")
+    void getRoutines_ReturnsActiveOwnedRoutinesInDisplayOrder() throws Exception {
+        // given
+        Member member = member();
+        Member other = member();
+        RoutineTemplate exerciseTemplate = em.find(RoutineTemplate.class, 101L);
+        RoutineTemplate waterTemplate = em.find(RoutineTemplate.class, 201L);
+
+        MemberRoutine healthCustom = routine(
+                member, waterTemplate.getCategory(), null, "영양제 먹기");
+        MemberRoutine exerciseCustom = routine(
+                member, exerciseTemplate.getCategory(), null, "저녁 산책");
+        MemberRoutine healthTemplate = routine(
+                member, waterTemplate.getCategory(), waterTemplate, waterTemplate.getName());
+        healthTemplate.addSchedule(DayOfWeek.FRIDAY);
+        healthTemplate.addSchedule(DayOfWeek.WEDNESDAY);
+
+        routine(other, exerciseTemplate.getCategory(), null, "다른 회원 루틴");
+        MemberRoutine inactive = routine(
+                member, exerciseTemplate.getCategory(), null, "비활성 루틴");
+        ReflectionTestUtils.setField(inactive, "active", false);
+        em.flush();
+        em.clear();
+
+        // when & then
+        mockMvc.perform(get("/api/routines").with(user(principal(member))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.isSuccess").value(true))
+                .andExpect(jsonPath("$.code").value("ROUTINE200_3"))
+                .andExpect(jsonPath("$.result.routines.length()").value(3))
+                .andExpect(jsonPath("$.result.routines[0].routineId")
+                        .value(exerciseCustom.getId()))
+                .andExpect(jsonPath("$.result.routines[1].routineId")
+                        .value(healthTemplate.getId()))
+                .andExpect(jsonPath("$.result.routines[1].templateId").value(201))
+                .andExpect(jsonPath("$.result.routines[1].repeatDays")
+                        .value(org.hamcrest.Matchers.contains(
+                                "MONDAY", "WEDNESDAY", "FRIDAY")))
+                .andExpect(jsonPath("$.result.routines[2].routineId")
+                        .value(healthCustom.getId()));
+    }
+
+    @Test
+    @DisplayName("이름을 유지한 수정은 기본 루틴 참조를 유지하고 설정을 교체한다")
+    void updateRoutine_KeptTemplateName_UpdatesSettingsAndKeepsTemplate() throws Exception {
+        Member member = member();
+        RoutineTemplate water = em.find(RoutineTemplate.class, 201L);
+        MemberRoutine routine = routine(member, water.getCategory(), water, water.getName());
+        em.flush();
+        em.clear();
+
+        String body = """
+                {
+                  "name": "물 챙겨 마시기",
+                  "endTime": "21:30",
+                  "repeatDays": ["WEDNESDAY", "FRIDAY"],
+                  "alarmTime": "20:30"
+                }
+                """;
+
+        mockMvc.perform(patch("/api/routines/{routineId}", routine.getId())
+                        .with(user(principal(member)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("ROUTINE200_4"))
+                .andExpect(jsonPath("$.result.templateId").value(201))
+                .andExpect(jsonPath("$.result.endTime").value("21:30"))
+                .andExpect(jsonPath("$.result.alarmTime").value("20:30"))
+                .andExpect(jsonPath("$.result.repeatDays")
+                        .value(org.hamcrest.Matchers.contains("WEDNESDAY", "FRIDAY")));
+    }
+
+    @Test
+    @DisplayName("기본 루틴 이름을 바꾸면 원본 참조를 해제한다")
+    void updateRoutine_ChangedTemplateName_DetachesTemplate() throws Exception {
+        Member member = member();
+        RoutineTemplate water = em.find(RoutineTemplate.class, 201L);
+        MemberRoutine routine = routine(member, water.getCategory(), water, water.getName());
+        em.flush();
+        em.clear();
+
+        String body = """
+                {
+                  "name": "물 2L 마시기",
+                  "endTime": "22:00",
+                  "repeatDays": ["MONDAY"],
+                  "alarmTime": null
+                }
+                """;
+
+        mockMvc.perform(patch("/api/routines/{routineId}", routine.getId())
+                        .with(user(principal(member)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.name").value("물 2L 마시기"))
+                .andExpect(jsonPath("$.result.templateId").doesNotExist())
+                .andExpect(jsonPath("$.result.alarmTime").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("다른 회원의 개인 루틴은 수정할 수 없다")
+    void updateRoutine_OtherMembersRoutine_Returns404() throws Exception {
+        Member owner = member();
+        Member requester = member();
+        RoutineTemplate water = em.find(RoutineTemplate.class, 201L);
+        MemberRoutine routine = routine(owner, water.getCategory(), water, water.getName());
+        em.flush();
+        em.clear();
+
+        String body = """
+                {"name":"물 챙겨 마시기","endTime":"22:00","repeatDays":["MONDAY"]}
+                """;
+        mockMvc.perform(patch("/api/routines/{routineId}", routine.getId())
+                        .with(user(principal(requester)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("ROUTINE404_3"));
+    }
+
+    @Test
+    @DisplayName("삭제하면 비활성화되고 같은 기본 루틴을 다시 등록할 수 있다")
+    void deleteRoutine_TemplateRoutine_AllowsTemplateRegistrationAgain() throws Exception {
+        Member member = member();
+        RoutineTemplate water = em.find(RoutineTemplate.class, 201L);
+        MemberRoutine routine = routine(member, water.getCategory(), water, water.getName());
+        Long routineId = routine.getId();
+        em.flush();
+        em.clear();
+
+        mockMvc.perform(delete("/api/routines/{routineId}", routineId)
+                        .with(user(principal(member))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("ROUTINE200_5"));
+
+        em.clear();
+        MemberRoutine deleted = em.find(MemberRoutine.class, routineId);
+        assertThat(deleted.getActive()).isFalse();
+        assertThat(deleted.getTemplate()).isNull();
+        assertThat(deleted.getSchedules()).isEmpty();
+
+        mockMvc.perform(post("/api/routines")
+                        .with(user(principal(member)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"routines":[
+                                  {"categoryId":2,"templateId":201,"name":"물 챙겨 마시기"}
+                                ]}
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.result.routines[0].templateId").value(201));
+    }
+
+    @Test
+    @DisplayName("다른 회원의 개인 루틴은 삭제할 수 없다")
+    void deleteRoutine_OtherMembersRoutine_Returns404() throws Exception {
+        Member owner = member();
+        Member requester = member();
+        RoutineTemplate water = em.find(RoutineTemplate.class, 201L);
+        MemberRoutine routine = routine(owner, water.getCategory(), water, water.getName());
+        em.flush();
+        em.clear();
+
+        mockMvc.perform(delete("/api/routines/{routineId}", routine.getId())
+                        .with(user(principal(requester))))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("ROUTINE404_3"));
     }
 
     @Test

@@ -11,7 +11,9 @@ import lombok.NoArgsConstructor;
 import java.time.DayOfWeek;
 import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * 회원이 혼자 수행하는 개인 루틴이다. 그룹 루틴({@code group_routine})과 달리 담당자가 본인 한 명이다.
@@ -111,10 +113,7 @@ public class MemberRoutine extends BaseEntity {
         if (member == null || category == null) {
             throw new IllegalArgumentException("회원과 카테고리는 필수입니다.");
         }
-        if (name == null || name.isBlank() || name.length() > MAX_NAME_LENGTH) {
-            throw new IllegalArgumentException(
-                    "루틴 이름은 1자 이상 " + MAX_NAME_LENGTH + "자 이하여야 합니다.");
-        }
+        validateName(name);
         this.member = member;
         this.category = category;
         this.template = keepsTemplateName(template, name) ? template : null;
@@ -131,6 +130,7 @@ public class MemberRoutine extends BaseEntity {
      * @throws IllegalArgumentException 같은 요일이 이미 등록된 경우
      */
     public void addSchedule(DayOfWeek repeatDay) {
+        Objects.requireNonNull(repeatDay, "반복 요일은 필수입니다.");
         if (schedules.stream().anyMatch(schedule -> schedule.getRepeatDay() == repeatDay)) {
             throw new IllegalArgumentException("같은 요일을 중복해서 등록할 수 없습니다.");
         }
@@ -138,6 +138,50 @@ public class MemberRoutine extends BaseEntity {
                 .memberRoutine(this)
                 .repeatDay(repeatDay)
                 .build());
+    }
+
+    /**
+     * 개인 루틴 설정을 전체 교체한다.
+     * 이름이 원본 기본 루틴과 달라지면 원본 참조를 해제하고 사용자 루틴으로 전환한다.
+     */
+    public void update(
+            String name,
+            LocalTime endTime,
+            LocalTime alarmTime,
+            List<DayOfWeek> repeatDays
+    ) {
+        validateName(name);
+        if (endTime == null) {
+            throw new IllegalArgumentException("마감 시각은 필수입니다.");
+        }
+        if (repeatDays == null
+                || repeatDays.isEmpty()
+                || repeatDays.stream().anyMatch(Objects::isNull)
+                || new HashSet<>(repeatDays).size() != repeatDays.size()) {
+            throw new IllegalArgumentException("반복 요일은 하나 이상이며 중복될 수 없습니다.");
+        }
+
+        this.template = keepsTemplateName(this.template, name) ? this.template : null;
+        this.name = name;
+        this.endTime = endTime;
+        this.alarmTime = alarmTime;
+        this.schedules.clear();
+        repeatDays.forEach(this::addSchedule);
+    }
+
+    /** 반복 일정 전체 교체 전에 기존 행을 먼저 삭제할 수 있도록 컬렉션을 비운다. */
+    public void clearSchedules() {
+        this.schedules.clear();
+    }
+
+    /**
+     * 개인 루틴을 비활성화한다.
+     * 원본 참조를 해제해 같은 기본 루틴을 다시 등록할 수 있게 하고 반복 일정도 정리한다.
+     */
+    public void deactivate() {
+        this.active = false;
+        this.template = null;
+        clearSchedules();
     }
 
     /**
@@ -152,5 +196,16 @@ public class MemberRoutine extends BaseEntity {
     /** 선택한 기본 루틴의 이름을 그대로 유지했는지 판단한다. 원본이 없으면 유지 대상도 없다. */
     private static boolean keepsTemplateName(RoutineTemplate template, String name) {
         return template != null && template.getName().equals(name);
+    }
+
+    private static void validateName(String name) {
+        if (name == null
+                || name.isBlank()
+                || name.length() > MAX_NAME_LENGTH
+                || name.indexOf('\n') >= 0
+                || name.indexOf('\r') >= 0) {
+            throw new IllegalArgumentException(
+                    "루틴 이름은 1자 이상 " + MAX_NAME_LENGTH + "자 이하여야 합니다.");
+        }
     }
 }
