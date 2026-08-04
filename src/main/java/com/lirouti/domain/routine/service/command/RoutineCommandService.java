@@ -125,6 +125,63 @@ public class RoutineCommandService {
         return RoutineConverter.toCategory(category);
     }
 
+    /** 인증 회원이 소유한 활성 개인 루틴의 설정을 전체 교체한다. */
+    @Transactional
+    public RoutineResDTO.Routine updateRoutine(
+            Long memberId,
+            Long routineId,
+            RoutineReqDTO.UpdateRoutine request
+    ) {
+        if (request == null) {
+            throw new IllegalArgumentException("유효하지 않은 루틴 수정 요청입니다.");
+        }
+        memberQueryService.getActiveMember(memberId);
+        MemberRoutine routine = findOwnedActiveRoutine(memberId, routineId);
+        String name = normalizedRoutineName(memberId, request.name());
+
+        try {
+            // 같은 요일을 유지하는 수정에서는 새 일정 INSERT가 기존 일정 DELETE보다 먼저
+            // 실행되면 (member_routine_id, repeat_day) 유니크 키가 충돌한다.
+            // orphanRemoval 삭제를 먼저 확정한 뒤 새 일정을 추가한다.
+            routine.clearSchedules();
+            memberRoutineRepository.flush();
+            routine.update(name, request.endTime(), request.alarmTime(), request.repeatDays());
+        } catch (IllegalArgumentException e) {
+            log.warn("개인 루틴 수정 요청 검증에 실패했습니다. memberId={}, routineId={}",
+                    memberId, routineId);
+            throw new RoutineException(RoutineErrorCode.INVALID_ROUTINE_UPDATE);
+        }
+
+        memberRoutineRepository.flush();
+        log.info("개인 루틴을 수정했습니다. memberId={}, routineId={}", memberId, routineId);
+        return RoutineConverter.toRoutine(routine);
+    }
+
+    /**
+     * 인증 회원이 소유한 개인 루틴을 소프트 삭제한다.
+     * 수행 이력의 FK는 보존하고, 기본 루틴 참조는 해제해 같은 템플릿을 다시 등록할 수 있다.
+     */
+    @Transactional
+    public void deleteRoutine(Long memberId, Long routineId) {
+        memberQueryService.getActiveMember(memberId);
+        MemberRoutine routine = findOwnedActiveRoutine(memberId, routineId);
+        routine.deactivate();
+        memberRoutineRepository.flush();
+        log.info("개인 루틴을 삭제했습니다. memberId={}, routineId={}", memberId, routineId);
+    }
+
+    private MemberRoutine findOwnedActiveRoutine(Long memberId, Long routineId) {
+        if (routineId == null) {
+            throw new RoutineException(RoutineErrorCode.ROUTINE_NOT_FOUND);
+        }
+        return memberRoutineRepository.findByIdAndMemberIdAndActiveTrue(routineId, memberId)
+                .orElseThrow(() -> {
+                    log.warn("수정·삭제할 개인 루틴을 찾을 수 없습니다. memberId={}, routineId={}",
+                            memberId, routineId);
+                    return new RoutineException(RoutineErrorCode.ROUTINE_NOT_FOUND);
+                });
+    }
+
     /**
      * 개수 상한을 세는 시점부터 저장까지를 회원 단위로 직렬화하기 위해 회원 행에 쓰기 잠금을 건다.
      *
