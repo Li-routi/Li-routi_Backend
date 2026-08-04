@@ -115,6 +115,89 @@ public interface RoutineControllerDocs {
             @Parameter(description = "조회할 카테고리 ID. 생략하면 전체", example = "2") Long categoryId
     );
 
+    @Operation(
+            summary = "개인 루틴 목록 조회",
+            description = """
+                    인증 회원의 활성 개인 루틴을 조회합니다.
+                    카테고리 노출 순서대로 정렬하며, 같은 카테고리에서는 기본 제공 루틴을 먼저,
+                    사용자가 직접 추가한 루틴을 생성 순서대로 반환합니다.
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "개인 루틴 목록 조회 성공"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401",
+                    description = "유효하지 않거나 만료된 인증 토큰"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "403",
+                    description = "미인증 요청 또는 탈퇴·비활성 회원"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404",
+                    description = "인증 토큰이 참조하는 회원을 찾을 수 없음"
+            )
+    })
+    ApiResponse<RoutineResDTO.RoutineList> getRoutines(
+            @Parameter(hidden = true) CustomUserDetails userDetails
+    );
+
+    @Operation(
+            summary = "개인 루틴 수정",
+            description = """
+                    인증 회원이 소유한 활성 개인 루틴의 설정을 수정합니다.
+                    설정 화면의 전체 폼을 받으므로 name, endTime, repeatDays는 필수이고
+                    alarmTime은 null이면 알람 없음으로 저장됩니다.
+                    기본 제공 루틴의 이름을 바꾸면 templateId 참조가 해제되며,
+                    이름을 유지하고 시간·요일·알람만 바꾸면 참조를 유지합니다.
+                    카테고리 이동은 지원하지 않습니다.
+
+                    ### 에러 코드
+                    | code | HTTP | 언제 |
+                    | --- | --- | --- |
+                    | `COMMON400_1` | 400 | 요청 형식 또는 필수값 검증 실패 |
+                    | `ROUTINE400_1` | 400 | 이름 규칙 위반 |
+                    | `ROUTINE400_4` | 400 | 마감 시각·반복 요일 규칙 위반 |
+                    | `ROUTINE404_3` | 404 | 없거나 비활성인 루틴 또는 다른 회원의 루틴 |
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200", description = "개인 루틴 수정 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "400", description = "요청 값 검증 실패"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404", description = "수정할 개인 루틴을 찾을 수 없음")
+    })
+    ApiResponse<RoutineResDTO.Routine> updateRoutine(
+            @Parameter(hidden = true) CustomUserDetails userDetails,
+            @Parameter(description = "수정할 개인 루틴 ID", example = "12") Long routineId,
+            RoutineReqDTO.UpdateRoutine request
+    );
+
+    @Operation(
+            summary = "개인 루틴 삭제",
+            description = """
+                    인증 회원이 소유한 활성 개인 루틴을 삭제합니다.
+                    수행 이력 보존을 위해 행은 비활성화하고, 반복 일정과 기본 루틴 참조를 해제합니다.
+                    따라서 활성 루틴 30개 상한에서 제외되며 같은 기본 루틴을 다시 등록할 수 있습니다.
+                    없거나 비활성인 루틴과 다른 회원의 루틴은 모두 ROUTINE404_3으로 응답합니다.
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200", description = "개인 루틴 삭제 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404", description = "삭제할 개인 루틴을 찾을 수 없음")
+    })
+    ApiResponse<Void> deleteRoutine(
+            @Parameter(hidden = true) CustomUserDetails userDetails,
+            @Parameter(description = "삭제할 개인 루틴 ID", example = "12") Long routineId
+    );
+
     /**
      * 개인 루틴 벌크 생성 API 명세다.
      *
