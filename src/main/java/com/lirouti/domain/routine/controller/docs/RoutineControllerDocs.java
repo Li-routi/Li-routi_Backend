@@ -63,6 +63,106 @@ public interface RoutineControllerDocs {
             @Parameter(hidden = true) CustomUserDetails userDetails
     );
 
+    @Operation(
+            summary = "사용자 루틴 카테고리 수정",
+            description = """
+                    루틴 추가 화면에서 인증 회원이 직접 만든 사용자 카테고리의 이름과 색상을 수정합니다.
+                    이름을 바꾸더라도 해당 카테고리에 속한 개인 루틴은 같은 categoryId를 계속 참조하므로
+                    루틴 데이터에는 영향을 주지 않습니다.
+
+                    ### 규칙
+
+                    - 본인이 만든 활성 사용자 카테고리만 수정할 수 있습니다.
+                    - 고정 카테고리(운동, 건강, 자기계발, 생활정리, 마음관리, 취미)는 수정할 수 없습니다.
+                    - 이름은 앞뒤 공백을 제거한 뒤 1~10자여야 하며 줄바꿈을 포함할 수 없습니다.
+                    - 고정 카테고리 및 본인의 다른 카테고리와 같은 이름은 사용할 수 없습니다.
+                    - 기존 이름을 그대로 두고 색상만 바꾸는 것은 허용됩니다.
+                    - color를 `null`로 보내면 "색 없음"으로 저장됩니다.
+
+                    ### color 값
+
+                    색상 칩은 `RED`, `ORANGE`, `YELLOW`, `GREEN`, `BLUE`, `MAGENTA`, `BLACK`
+                    일곱 가지입니다. 실제 색상 값(HEX)은 테마·플랫폼마다 달라 서버가 정하지 않습니다.
+
+                    ### 에러 코드
+
+                    | code | HTTP | 언제 | 화면 처리 |
+                    | --- | --- | --- | --- |
+                    | `COMMON400_1` | 400 | 요청 형식 검증 실패 — 이름이 비었거나 10자 초과·줄바꿈 포함, 없는 color 값 | 해당 입력 필드에 안내 |
+                    | `ROUTINE400_2` | 400 | 이름이 앞뒤 공백 제거 후 1~10자를 벗어남 | 이름 입력란에 안내 |
+                    | `ROUTINE403_1` | 403 | 다른 회원이 만든 카테고리 | 카테고리 목록을 다시 조회 |
+                    | `ROUTINE403_2` | 403 | 고정 카테고리 수정 시도 | 수정 화면을 닫고 카테고리 목록을 다시 조회 |
+                    | `MEMBER403_1` | 403 | 탈퇴·비활성 회원 | 로그아웃 처리 |
+                    | `MEMBER404_1` | 404 | 토큰이 가리키는 회원이 없음 | 로그아웃 처리 |
+                    | `ROUTINE404_1` | 404 | 카테고리가 없거나 비활성 | 카테고리 목록을 다시 조회 |
+                    | `ROUTINE409_4` | 409 | 고정 카테고리 또는 본인의 다른 카테고리와 이름 중복 | 이름 입력란에 중복 안내 |
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200", description = "사용자 카테고리 수정 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "400", description = "이름 규칙 위반"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401", description = "유효하지 않거나 만료된 인증 토큰"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "403", description = "고정 또는 다른 회원의 카테고리"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404", description = "카테고리를 찾을 수 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "409", description = "카테고리 이름 중복")
+    })
+    ApiResponse<RoutineResDTO.Category> updateCategory(
+            @Parameter(hidden = true) CustomUserDetails userDetails,
+            @Parameter(description = "수정할 사용자 카테고리 ID", example = "7") Long categoryId,
+            RoutineReqDTO.UpdateCategory request
+    );
+
+    @Operation(
+            summary = "사용자 루틴 카테고리 삭제",
+            description = """
+                    인증 회원이 직접 만든 사용자 카테고리를 삭제합니다.
+                    삭제 성공 후 `GET /api/routines/categories`를 다시 조회하면 카테고리가 목록에서 사라지고
+                    `addableCount`가 1 증가합니다.
+
+                    ### 규칙
+
+                    - 본인이 만든 활성 사용자 카테고리만 삭제할 수 있습니다.
+                    - 고정 카테고리(운동, 건강, 자기계발, 생활정리, 마음관리, 취미)는 삭제할 수 없습니다.
+                    - 활성·비활성 여부와 관계없이 개인 루틴이 하나라도 포함된 카테고리는 삭제할 수 없습니다.
+                    - 루틴이 전혀 없는 카테고리는 물리 삭제합니다.
+                    - 물리 삭제이므로 삭제 후 같은 이름의 사용자 카테고리를 다시 만들 수 있습니다.
+                    - 성공 응답의 result는 `null`입니다.
+
+                    ### 에러 코드
+
+                    | code | HTTP | 언제 | 화면 처리 |
+                    | --- | --- | --- | --- |
+                    | `ROUTINE403_1` | 403 | 다른 회원이 만든 카테고리 | 카테고리 목록을 다시 조회 |
+                    | `ROUTINE403_2` | 403 | 고정 카테고리 삭제 시도 | 삭제 화면을 닫고 카테고리 목록을 다시 조회 |
+                    | `MEMBER403_1` | 403 | 탈퇴·비활성 회원 | 로그아웃 처리 |
+                    | `MEMBER404_1` | 404 | 토큰이 가리키는 회원이 없음 | 로그아웃 처리 |
+                    | `ROUTINE404_1` | 404 | 카테고리가 없거나 비활성 | 카테고리 목록을 다시 조회 |
+                    | `ROUTINE409_5` | 409 | 활성 또는 비활성 개인 루틴이 하나라도 포함됨 | 루틴을 다른 카테고리로 옮기거나 삭제해야 함을 안내 |
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200", description = "사용자 카테고리 삭제 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401", description = "유효하지 않거나 만료된 인증 토큰"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "403", description = "고정 또는 다른 회원의 카테고리"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404", description = "카테고리를 찾을 수 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "409", description = "개인 루틴이 포함된 카테고리")
+    })
+    ApiResponse<Void> deleteCategory(
+            @Parameter(hidden = true) CustomUserDetails userDetails,
+            @Parameter(description = "삭제할 사용자 카테고리 ID", example = "7") Long categoryId
+    );
+
     /**
      * 카테고리별 기본 제공 루틴 목록 조회 API 명세다.
      *
