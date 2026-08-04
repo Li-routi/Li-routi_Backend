@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import static com.lirouti.domain.challenge.repository.ChallengeQuerySupport.activeMember;
+import static com.lirouti.domain.member.repository.MemberQuerySupport.activeMember;
 import static com.querydsl.core.group.GroupBy.groupBy;
 
 @RequiredArgsConstructor

@@ -1,7 +1,7 @@
 package com.lirouti.domain.verification.repository;
 
-import static com.lirouti.domain.challenge.repository.ChallengeQuerySupport.activeMember;
-import static com.lirouti.domain.challenge.repository.ChallengeQuerySupport.notHidden;
+import static com.lirouti.domain.member.repository.MemberQuerySupport.activeMember;
+import static com.lirouti.domain.verification.repository.VerificationQuerySupport.notHidden;
 
 import java.util.List;
 

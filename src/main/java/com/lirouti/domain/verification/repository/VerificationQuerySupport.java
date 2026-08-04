@@ -1,23 +1,16 @@
-package com.lirouti.domain.challenge.repository;
+package com.lirouti.domain.verification.repository;
 
 import com.lirouti.domain.verification.entity.QChallengeVerification;
-import com.lirouti.domain.member.entity.QMember;
 import com.querydsl.core.types.dsl.BooleanExpression;
 
 /**
- * 챌린지 QueryDSL 구현들이 공유하는 조건.
- * 같은 규칙을 각 Impl에 복사해 두면 한쪽만 고쳐져 집계와 조회의 기준이 어긋나므로 여기에 모은다.
+ * 인증 조회가 공유하는 QueryDSL 조건.
+ *
+ * <p>인증 엔티티를 보는 조건은 인증 도메인이 가진다. 챌린지 쪽에 두면 인증 엔티티를 참조하려고
+ * 챌린지가 인증을 알고, 인증은 그 조건을 쓰려고 챌린지를 알게 되어 의존이 양방향이 된다.
  */
-public final class ChallengeQuerySupport {
-    private ChallengeQuerySupport() {
-    }
-
-    /**
-     * 집계·조회에서 제외할 회원: 비활성(탈퇴)이거나 소프트 삭제된 회원.
-     * #18(회원 탈퇴)이 두 플래그를 어떻게 세팅하든 누수가 없도록 둘 다 확인한다.
-     */
-    public static BooleanExpression activeMember(QMember member) {
-        return member.isActive.isTrue().and(member.deletedAt.isNull());
+public final class VerificationQuerySupport {
+    private VerificationQuerySupport() {
     }
 
     /**

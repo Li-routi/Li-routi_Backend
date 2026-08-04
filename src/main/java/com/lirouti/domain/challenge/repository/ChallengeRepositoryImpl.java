@@ -1,7 +1,7 @@
 package com.lirouti.domain.challenge.repository;
 
-import static com.lirouti.domain.challenge.repository.ChallengeQuerySupport.activeMember;
-import static com.lirouti.domain.challenge.repository.ChallengeQuerySupport.notHidden;
+import static com.lirouti.domain.member.repository.MemberQuerySupport.activeMember;
+import static com.lirouti.domain.verification.repository.VerificationQuerySupport.notHidden;
 import static com.querydsl.core.group.GroupBy.groupBy;
 
 import java.time.LocalDate;
