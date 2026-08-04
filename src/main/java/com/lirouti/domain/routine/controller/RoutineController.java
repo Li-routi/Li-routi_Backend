@@ -40,6 +40,34 @@ public class RoutineController implements RoutineControllerDocs {
         );
     }
 
+    @Override
+    @PatchMapping("/categories/{categoryId}")
+    public ApiResponse<RoutineResDTO.Category> updateCategory(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long categoryId,
+            @Valid @RequestBody RoutineReqDTO.UpdateCategory request
+    ) {
+        RoutineResDTO.Category result = routineCommandService.updateCategory(
+                userDetails.getMemberId(), categoryId, request);
+        return ApiResponse.onSuccess(
+                RoutineSuccessCode.ROUTINE_CATEGORY_UPDATE_SUCCESS,
+                result
+        );
+    }
+
+    @Override
+    @DeleteMapping("/categories/{categoryId}")
+    public ApiResponse<Void> deleteCategory(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long categoryId
+    ) {
+        routineCommandService.deleteCategory(userDetails.getMemberId(), categoryId);
+        return ApiResponse.onSuccess(
+                RoutineSuccessCode.ROUTINE_CATEGORY_DELETE_SUCCESS,
+                null
+        );
+    }
+
     /**
      * 카테고리별 기본 제공 루틴 목록을 조회한다.
      *

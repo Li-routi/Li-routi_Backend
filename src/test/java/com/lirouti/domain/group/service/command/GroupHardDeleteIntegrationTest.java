@@ -35,6 +35,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.Clock;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -58,6 +59,8 @@ class GroupHardDeleteIntegrationTest {
     private GroupQueryService groupQueryService;
     @Autowired
     private PlatformTransactionManager transactionManager;
+    @Autowired
+    private Clock clock;
     @Autowired
     private GroupRepository groupRepository;
     @Autowired
@@ -112,11 +115,11 @@ class GroupHardDeleteIntegrationTest {
         otherGroup.addRoutineCategory(otherCategory);
 
         GroupRoutineAssignment pendingAssignment = assignment(
-                targetRoutine, owner, GroupRoutineAssignmentStatus.PENDING, LocalDate.now());
+                targetRoutine, owner, GroupRoutineAssignmentStatus.PENDING, LocalDate.now(clock));
         GroupRoutineAssignment completedAssignment = assignment(
-                targetRoutine, member, GroupRoutineAssignmentStatus.COMPLETED, LocalDate.now());
+                targetRoutine, member, GroupRoutineAssignmentStatus.COMPLETED, LocalDate.now(clock));
         GroupRoutineAssignment otherAssignment = assignment(
-                otherRoutine, member, GroupRoutineAssignmentStatus.IN_PROGRESS, LocalDate.now());
+                otherRoutine, member, GroupRoutineAssignmentStatus.IN_PROGRESS, LocalDate.now(clock));
         entityManager.persist(pendingAssignment);
         entityManager.persist(completedAssignment);
         entityManager.persist(otherAssignment);
@@ -230,7 +233,7 @@ class GroupHardDeleteIntegrationTest {
             routine.addSchedule(DayOfWeek.FRIDAY, LocalTime.of(15, 0), LocalTime.of(16, 0));
             entityManager.persist(routine);
             GroupRoutineAssignment assignment = assignment(
-                    routine, owner, GroupRoutineAssignmentStatus.PENDING, LocalDate.now());
+                    routine, owner, GroupRoutineAssignmentStatus.PENDING, LocalDate.now(clock));
             entityManager.persist(assignment);
             routine.addAssignment(assignment);
             GroupRoutineVerification verification = verification(assignment);

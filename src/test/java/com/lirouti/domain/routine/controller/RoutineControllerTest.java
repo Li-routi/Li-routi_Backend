@@ -462,6 +462,124 @@ class RoutineControllerTest {
                 .andExpect(jsonPath("$.isSuccess").value(false));
     }
 
+    @Test
+    @DisplayName("본인 사용자 카테고리의 이름과 색상을 수정한다")
+    void updateCategory_OwnedCategory_Returns200() throws Exception {
+        Member member = member();
+        RoutineCategory category = memberCategory(
+                member, "저녁 관리", RoutineCategoryColor.RED);
+        em.flush();
+        em.clear();
+
+        mockMvc.perform(patch("/api/routines/categories/{categoryId}", category.getId())
+                        .with(user(principal(member)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"  아침 관리  ","color":"BLUE"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("ROUTINE200_6"))
+                .andExpect(jsonPath("$.result.categoryId").value(category.getId()))
+                .andExpect(jsonPath("$.result.name").value("아침 관리"))
+                .andExpect(jsonPath("$.result.color").value("BLUE"))
+                .andExpect(jsonPath("$.result.fixed").value(false));
+    }
+
+    @Test
+    @DisplayName("고정 카테고리는 수정할 수 없다")
+    void updateCategory_FixedCategory_Returns403() throws Exception {
+        Member member = member();
+        em.flush();
+
+        mockMvc.perform(patch("/api/routines/categories/{categoryId}", 1L)
+                        .with(user(principal(member)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"새 운동\",\"color\":\"BLUE\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ROUTINE403_2"));
+    }
+
+    @Test
+    @DisplayName("다른 회원의 사용자 카테고리는 수정할 수 없다")
+    void updateCategory_OtherMembersCategory_Returns403() throws Exception {
+        Member owner = member();
+        Member requester = member();
+        RoutineCategory category = memberCategory(owner, "남의 분류", null);
+        em.flush();
+        em.clear();
+
+        mockMvc.perform(patch("/api/routines/categories/{categoryId}", category.getId())
+                        .with(user(principal(requester)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"가져오기\",\"color\":null}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ROUTINE403_1"));
+    }
+
+    @Test
+    @DisplayName("본인의 다른 카테고리나 고정 카테고리와 같은 이름으로 수정할 수 없다")
+    void updateCategory_DuplicateName_Returns409() throws Exception {
+        Member member = member();
+        RoutineCategory category = memberCategory(member, "수정 대상", null);
+        memberCategory(member, "아침 관리", RoutineCategoryColor.BLUE);
+        em.flush();
+        em.clear();
+
+        mockMvc.perform(patch("/api/routines/categories/{categoryId}", category.getId())
+                        .with(user(principal(member)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"아침 관리\",\"color\":\"RED\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("ROUTINE409_4"));
+    }
+
+    @Test
+    @DisplayName("루틴이 없는 사용자 카테고리는 삭제 후 같은 이름으로 다시 만들 수 있다")
+    void deleteCategory_EmptyCategory_AllowsSameNameCreationAgain() throws Exception {
+        Member member = member();
+        RoutineCategory category = memberCategory(
+                member, "다시 만들기", RoutineCategoryColor.BLACK);
+        Long categoryId = category.getId();
+        em.flush();
+        em.clear();
+
+        mockMvc.perform(delete("/api/routines/categories/{categoryId}", categoryId)
+                        .with(user(principal(member))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("ROUTINE200_7"));
+
+        em.clear();
+        assertThat(em.find(RoutineCategory.class, categoryId)).isNull();
+
+        mockMvc.perform(get("/api/routines/categories")
+                        .with(user(principal(member))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.addableCount").value(5));
+
+        mockMvc.perform(post("/api/routines/categories")
+                        .with(user(principal(member)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"다시 만들기\",\"color\":\"MAGENTA\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.result.name").value("다시 만들기"));
+    }
+
+    @Test
+    @DisplayName("비활성 루틴이 포함된 사용자 카테고리도 삭제할 수 없다")
+    void deleteCategory_WithInactiveRoutine_Returns409() throws Exception {
+        Member member = member();
+        RoutineCategory category = memberCategory(member, "기록 보존", null);
+        MemberRoutine routine = routine(member, category, null, "예전 루틴");
+        ReflectionTestUtils.setField(routine, "active", false);
+        em.flush();
+        em.clear();
+
+        mockMvc.perform(delete("/api/routines/categories/{categoryId}", category.getId())
+                        .with(user(principal(member))))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("ROUTINE409_5"));
+    }
+
     private Member member() {
         int value = sequence.incrementAndGet();
         Member member = Member.builder()

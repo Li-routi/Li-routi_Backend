@@ -299,4 +299,37 @@ public final class RoutineReqDTO {
             return name == null || !(name.contains("\n") || name.contains("\r"));
         }
     }
+
+    @Schema(
+            name = "PersonalRoutineCategoryUpdateRequest",
+            description = "사용자 개인 루틴 카테고리 수정 요청",
+            example = """
+                    {
+                      "name": "아침 관리",
+                      "color": "BLUE"
+                    }"""
+    )
+    public record UpdateCategory(
+            @Schema(description = "카테고리 이름. 앞뒤 공백 제거 후 1~10자, 줄바꿈 불가",
+                    example = "아침 관리")
+            @NotBlank(message = "카테고리 이름은 필수입니다.")
+            @Size(
+                    max = RoutineCategory.MAX_MEMBER_CATEGORY_NAME_LENGTH,
+                    message = "카테고리 이름은 10자 이하여야 합니다."
+            )
+            String name,
+
+            @Schema(description = "색상 칩. null이면 색상 없음", example = "BLUE")
+            RoutineCategoryColor color
+    ) {
+        public UpdateCategory {
+            name = name == null ? null : name.trim();
+        }
+
+        @AssertTrue(message = "카테고리 이름에는 줄바꿈을 포함할 수 없습니다.")
+        @JsonIgnore
+        public boolean isNameSingleLine() {
+            return name == null || !(name.contains("\n") || name.contains("\r"));
+        }
+    }
 }
