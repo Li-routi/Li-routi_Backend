@@ -6,6 +6,7 @@ import com.lirouti.domain.member.controller.docs.MemberControllerDocs;
 import com.lirouti.domain.member.dto.request.MemberReqDTO;
 import com.lirouti.domain.member.dto.response.MemberResDTO;
 import com.lirouti.domain.member.exception.code.success.MemberSuccessCode;
+import com.lirouti.domain.member.service.MemberProfileService;
 import com.lirouti.domain.member.service.command.MemberCommandService;
 import com.lirouti.domain.member.service.query.MemberQueryService;
 import com.lirouti.global.apiPayload.ApiResponse;
@@ -21,7 +22,8 @@ import org.springframework.web.bind.annotation.*;
 @RequiredArgsConstructor
 @RequestMapping("/api/members")
 public class MemberController implements MemberControllerDocs {
-    private final MemberCommandService memberCommandService;
+    private final MemberProfileService memberProfileService;
+    private final MemberCommandService memberCommandService; // logout, withdraw 담당
     private final MemberQueryService memberQueryService;
 
     @Override
@@ -39,7 +41,7 @@ public class MemberController implements MemberControllerDocs {
             @AuthenticationPrincipal CustomUserDetails userDetails,
             @Valid @RequestBody MemberReqDTO.UpdateProfile request
     ) {
-        MemberResDTO.MemberInfo response = memberCommandService.updateProfile(userDetails.getMemberId(), request);
+        MemberResDTO.MemberInfo response = memberProfileService.updateProfile(userDetails.getMemberId(), request);
         return ApiResponse.onSuccess(MemberSuccessCode.MEMBER_PROFILE_UPDATE_SUCCESS, response);
     }
 
