@@ -129,6 +129,7 @@ public final class GroupResDTO {
      * @param startTime 수행 시작 시각
      * @param endTime 수행 마감 시각
      */
+    @Schema(name = "GroupRoutineScheduleResult", description = "그룹 루틴 수행 일정")
     @Builder
     public record RoutineSchedule(
             DayOfWeek repeatDay,
