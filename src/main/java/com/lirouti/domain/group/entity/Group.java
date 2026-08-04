@@ -9,6 +9,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * 여러 회원이 함께 루틴을 수행하는 그룹이다.
@@ -38,6 +40,15 @@ public class Group extends BaseEntity {
     @Column(nullable = false, length = 20)
     private GroupStatus status;
 
+    @OneToMany(mappedBy = "group", cascade = CascadeType.REMOVE)
+    private List<GroupMember> members = new ArrayList<>();
+
+    @OneToMany(mappedBy = "group", cascade = CascadeType.REMOVE)
+    private List<GroupRoutine> routines = new ArrayList<>();
+
+    @OneToMany(mappedBy = "group", cascade = CascadeType.REMOVE)
+    private List<GroupRoutineCategory> routineCategories = new ArrayList<>();
+
     @Builder
     private Group(String name, String inviteCode, LocalDateTime inviteCodeExpiresAt) {
         this.name = name;
@@ -57,6 +68,24 @@ public class Group extends BaseEntity {
     public void issueInviteCode(String inviteCode, LocalDateTime expiresAt) {
         this.inviteCode = inviteCode;
         this.inviteCodeExpiresAt = expiresAt;
+    }
+
+    public void addMember(GroupMember member) {
+        if (member != null && !members.contains(member)) {
+            members.add(member);
+        }
+    }
+
+    public void addRoutine(GroupRoutine routine) {
+        if (routine != null && !routines.contains(routine)) {
+            routines.add(routine);
+        }
+    }
+
+    public void addRoutineCategory(GroupRoutineCategory category) {
+        if (category != null && !routineCategories.contains(category)) {
+            routineCategories.add(category);
+        }
     }
 
     /**
