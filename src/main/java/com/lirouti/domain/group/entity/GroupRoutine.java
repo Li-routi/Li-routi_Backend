@@ -52,6 +52,9 @@ public class GroupRoutine extends BaseEntity {
     @OneToMany(mappedBy = "groupRoutine", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<GroupRoutineSchedule> schedules = new ArrayList<>();
 
+    @OneToMany(mappedBy = "groupRoutine", cascade = CascadeType.REMOVE)
+    private List<GroupRoutineAssignment> assignments = new ArrayList<>();
+
     /**
      * 검증된 그룹과 카테고리에 속하는 그룹 루틴을 생성한다.
      *
@@ -91,6 +94,12 @@ public class GroupRoutine extends BaseEntity {
                 .startTime(startTime)
                 .endTime(endTime)
                 .build());
+    }
+
+    public void addAssignment(GroupRoutineAssignment assignment) {
+        if (assignment != null && !assignments.contains(assignment)) {
+            assignments.add(assignment);
+        }
     }
 
     /**

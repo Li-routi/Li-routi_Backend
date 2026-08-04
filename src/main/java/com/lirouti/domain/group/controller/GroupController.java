@@ -40,6 +40,17 @@ public class GroupController implements GroupControllerDocs {
         return ApiResponse.onSuccess(GroupSuccessCode.GROUP_CREATE_SUCCESS, result);
     }
 
+    /** ACTIVE OWNER가 그룹과 그룹에 종속된 데이터를 Hard Delete한다. */
+    @Override
+    @DeleteMapping("/{groupId}")
+    public ApiResponse<Void> deleteGroup(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long groupId
+    ) {
+        groupCommandService.deleteGroup(groupId, userDetails.getMemberId());
+        return ApiResponse.onSuccess(GroupSuccessCode.GROUP_DELETE_SUCCESS, null);
+    }
+
     /** ACTIVE 그룹 구성원이 사용할 수 있는 그룹 루틴 카테고리를 조회한다. */
     @Override
     @GetMapping("/{groupId}/categories")

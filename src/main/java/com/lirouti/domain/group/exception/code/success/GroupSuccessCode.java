@@ -47,6 +47,11 @@ public enum GroupSuccessCode implements BaseSuccessCode {
             HttpStatus.CREATED,
             "그룹 루틴 카테고리 생성에 성공했습니다.",
             "GROUP201_4"
+    ),
+    GROUP_DELETE_SUCCESS(
+            HttpStatus.OK,
+            "그룹 삭제에 성공했습니다.",
+            "GROUP200_5"
     );
 
     private final HttpStatus httpStatus;

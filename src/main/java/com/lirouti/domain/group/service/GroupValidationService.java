@@ -167,6 +167,29 @@ public class GroupValidationService {
     @Transactional(readOnly = true)
     public GroupMember validateGroupOwner(Long groupId, Long memberId) {
         GroupMember groupMember = getValidatedGroupMember(groupId, memberId);
+        return validateOwner(groupMember, groupId, memberId);
+    }
+
+    /**
+     * 이미 잠금 획득이 끝난 그룹을 사용해 OWNER 권한을 검증한다.
+     * 삭제처럼 호출부가 그룹 행을 먼저 잠가야 하는 명령에서 그룹을 다시 조회하지 않는다.
+     */
+    @Transactional(readOnly = true)
+    public GroupMember validateGroupOwner(Group group, Long memberId) {
+        if (group == null) {
+            throw new GroupException(GroupErrorCode.GROUP_NOT_FOUND);
+        }
+        validateActiveGroup(group.getId(), group);
+        Member member = memberQueryService.getActiveMember(memberId);
+        GroupMember groupMember = getValidatedGroupMember(group, member);
+        return validateOwner(groupMember, group.getId(), memberId);
+    }
+
+    private GroupMember validateOwner(
+            GroupMember groupMember,
+            Long groupId,
+            Long memberId
+    ) {
         if (groupMember.getRole() != GroupMemberRole.OWNER) {
             log.warn("그룹 방장 권한 검증에 실패했습니다. groupId={}, memberId={}, role={}",
                     groupId, memberId, groupMember.getRole());
@@ -185,18 +208,23 @@ public class GroupValidationService {
         Member member = memberQueryService.getActiveMember(memberId);
         Group group = getActiveGroup(groupId);
 
+        return getValidatedGroupMember(group, member);
+    }
+
+    private GroupMember getValidatedGroupMember(Group group, Member member) {
+
         GroupMember groupMember = groupMemberRepository
                 .findByGroupIdAndMemberId(group.getId(), member.getId())
                 .orElseThrow(() -> {
                     log.warn("그룹 구성원 조회에 실패했습니다. groupId={}, memberId={}",
-                            groupId, memberId);
+                            group.getId(), member.getId());
                     return new GroupException(GroupErrorCode.GROUP_MEMBER_ACCESS_DENIED);
                 });
 
         if (groupMember.getStatus() != GroupMemberStatus.ACTIVE) {
             log.warn("활성 상태가 아닌 그룹 구성원의 접근을 거부했습니다. "
                             + "groupId={}, memberId={}, status={}",
-                    groupId, memberId, groupMember.getStatus());
+                    group.getId(), member.getId(), groupMember.getStatus());
             throw new GroupException(GroupErrorCode.GROUP_MEMBER_ACCESS_DENIED);
         }
         return groupMember;

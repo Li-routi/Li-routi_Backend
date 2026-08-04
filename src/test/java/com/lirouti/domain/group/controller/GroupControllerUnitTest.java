@@ -113,4 +113,20 @@ class GroupControllerUnitTest {
         assertThat(response.getResult()).isSameAs(result);
         verify(groupCommandService).createCategory(GROUP_ID, MEMBER_ID, request);
     }
+
+    @Test
+    @DisplayName("인증 회원 ID와 그룹 ID를 그룹 삭제 서비스에 전달하고 성공 코드를 반환한다")
+    void deleteGroup_AuthenticatedMember_DelegatesAndReturnsSuccess() {
+        // given
+        CustomUserDetails principal = new CustomUserDetails(MEMBER_ID, Role.ROLE_USER);
+
+        // when
+        ApiResponse<Void> response = groupController.deleteGroup(principal, GROUP_ID);
+
+        // then
+        assertThat(response.getIsSuccess()).isTrue();
+        assertThat(response.getCode()).isEqualTo(GroupSuccessCode.GROUP_DELETE_SUCCESS.getCode());
+        assertThat(response.getResult()).isNull();
+        verify(groupCommandService).deleteGroup(GROUP_ID, MEMBER_ID);
+    }
 }

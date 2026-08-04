@@ -66,6 +66,7 @@ public class RoutineVerificationCommandService {
                 .imageUrl(mediaKey)
                 .content(content)
                 .build();
+        assignment.attachVerification(verification);
         GroupRoutineVerification saved =
                 save(() -> groupRoutineVerificationRepository.saveAndFlush(verification));
 

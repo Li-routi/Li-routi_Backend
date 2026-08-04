@@ -148,6 +148,42 @@ class GroupControllerTest {
     }
 
     @Test
+    @DisplayName("ACTIVE OWNER가 그룹을 삭제하면 200과 공통 성공 응답을 반환한다")
+    void deleteGroup_Owner_ReturnsOk() throws Exception {
+        // given
+        Group group = group("GD00001");
+        Member owner = member();
+        membership(owner, group, GroupMemberRole.OWNER);
+        em.flush();
+
+        // when & then
+        mockMvc.perform(delete("/api/groups/{groupId}", group.getId())
+                        .with(user(principal(owner))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.isSuccess").value(true))
+                .andExpect(jsonPath("$.code").value("GROUP200_5"))
+                .andExpect(jsonPath("$.result").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("인증 없이 그룹 삭제를 요청하면 기존 보안 동작대로 401을 반환한다")
+    void deleteGroup_Unauthenticated_ReturnsUnauthorized() throws Exception {
+        mockMvc.perform(delete("/api/groups/{groupId}", 1L))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("OpenAPI 문서에 그룹 Hard Delete 경로와 응답 코드가 노출된다")
+    void openApi_GroupDelete_IsDocumented() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("/api/groups/{groupId}")))
+                .andExpect(content().string(containsString("그룹 삭제")))
+                .andExpect(content().string(containsString("GROUP403_3")))
+                .andExpect(content().string(containsString("GROUP404_1")));
+    }
+
+    @Test
     @DisplayName("OpenAPI 문서에 오늘 그룹 루틴 조회 경로와 200 응답이 노출된다")
     void openApi_TodayGroupRoutineQuery_IsDocumented() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))

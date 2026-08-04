@@ -62,6 +62,7 @@ public class GroupCreationAttemptService {
 
         GroupMember ownerMembership = GroupConverter.toOwnerMembership(owner, group);
         groupMemberRepository.saveAndFlush(ownerMembership);
+        group.addMember(ownerMembership);
 
         List<GroupConverter.CreatedCategory> createdCategories =
                 createCustomCategories(group, request.customCategories());
@@ -83,6 +84,7 @@ public class GroupCreationAttemptService {
             );
             GroupRoutine routine = GroupConverter.toGroupRoutine(routineRequest, group, category);
             groupRoutineRepository.saveAndFlush(routine);
+            group.addRoutine(routine);
             int assignmentCount = assignmentCommandService
                     .assignRoutineToActiveMembersToday(routine);
             createdRoutines.add(new GroupConverter.CreatedRoutine(routine, assignmentCount));
@@ -118,6 +120,7 @@ public class GroupCreationAttemptService {
             GroupRoutineCategory category = GroupConverter
                     .toGroupRoutineCategory(request, group);
             groupRoutineCategoryRepository.saveAndFlush(category);
+            group.addRoutineCategory(category);
             created.add(new GroupConverter.CreatedCategory(request.clientKey(), category));
         }
         return created;
