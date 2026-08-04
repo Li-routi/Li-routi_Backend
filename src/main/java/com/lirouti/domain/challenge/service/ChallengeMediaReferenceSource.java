@@ -1,7 +1,7 @@
 package com.lirouti.domain.challenge.service;
 
 import com.lirouti.domain.challenge.repository.ChallengeRepository;
-import com.lirouti.domain.challenge.repository.ChallengeVerificationRepository;
+import com.lirouti.domain.verification.repository.ChallengeVerificationRepository;
 import com.lirouti.domain.media.enums.MediaPurpose;
 import com.lirouti.domain.media.service.MediaReferenceSource;
 import lombok.RequiredArgsConstructor;

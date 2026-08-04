@@ -112,6 +112,39 @@ public interface GroupControllerDocs {
             GroupReqDTO.CreateGroup request
     );
 
+    @Operation(
+            summary = "그룹 삭제",
+            description = """
+                    해당 그룹의 ACTIVE OWNER만 그룹을 삭제할 수 있습니다.
+                    그룹과 그룹에 종속된 데이터는 Hard Delete되며, 회원 계정과 다른 그룹의 데이터는 삭제되지 않습니다.
+                    공용 기본 그룹 카테고리와 개인 루틴·개인 카테고리도 삭제 대상에 포함되지 않습니다.
+
+                    DELETED 상태이거나 존재하지 않는 그룹은 `GROUP404_1`로 응답합니다.
+
+                    ### 에러 코드
+
+                    | code | HTTP | 설명 |
+                    | --- | --- | --- |
+                    | `GROUP403_2` | 403 | ACTIVE 그룹 구성원이 아님 (비구성원, LEFT/KICKED 구성원 포함) |
+                    | `GROUP403_3` | 403 | ACTIVE OWNER가 아님 |
+                    | `GROUP404_1` | 404 | 존재하지 않거나 DELETED 상태인 그룹 |
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200", description = "그룹 삭제 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401", description = "유효하지 않거나 만료된 인증 토큰"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "403", description = "ACTIVE 그룹 구성원이 아니거나 ACTIVE OWNER 권한이 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404", description = "존재하지 않거나 DELETED 상태인 그룹")
+    })
+    ApiResponse<Void> deleteGroup(
+            @Parameter(hidden = true) CustomUserDetails userDetails,
+            @Parameter(description = "삭제할 그룹 ID", required = true, example = "1") Long groupId
+    );
+
     /**
      * 로그인 회원에게 오늘 할당된 활성 그룹의 루틴 목록 조회 API 명세다.
      *

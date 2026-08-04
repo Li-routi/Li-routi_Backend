@@ -148,6 +148,126 @@ class GroupControllerTest {
     }
 
     @Test
+    @DisplayName("ACTIVE OWNER가 그룹을 삭제하면 200과 공통 성공 응답을 반환한다")
+    void deleteGroup_Owner_ReturnsOk() throws Exception {
+        // given
+        Group group = group("GD00001");
+        Member owner = member();
+        membership(owner, group, GroupMemberRole.OWNER);
+        em.flush();
+
+        // when & then
+        mockMvc.perform(delete("/api/groups/{groupId}", group.getId())
+                        .with(user(principal(owner))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.isSuccess").value(true))
+                .andExpect(jsonPath("$.code").value("GROUP200_5"))
+                .andExpect(jsonPath("$.result").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("일반 MEMBER는 그룹을 삭제할 수 없다")
+    void deleteGroup_RegularMember_ReturnsOwnerAccessDenied() throws Exception {
+        Group group = group("GDM001");
+        Member owner = member();
+        Member regularMember = member();
+        membership(owner, group, GroupMemberRole.OWNER);
+        membership(regularMember, group, GroupMemberRole.MEMBER);
+        em.flush();
+
+        mockMvc.perform(delete("/api/groups/{groupId}", group.getId())
+                        .with(user(principal(regularMember))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("GROUP403_3"));
+    }
+
+    @Test
+    @DisplayName("비구성원은 그룹을 삭제할 수 없다")
+    void deleteGroup_NonMember_ReturnsMemberAccessDenied() throws Exception {
+        Group group = group("GDN001");
+        Member owner = member();
+        Member outsider = member();
+        membership(owner, group, GroupMemberRole.OWNER);
+        em.flush();
+
+        mockMvc.perform(delete("/api/groups/{groupId}", group.getId())
+                        .with(user(principal(outsider))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("GROUP403_2"));
+    }
+
+    @Test
+    @DisplayName("다른 그룹의 OWNER라도 대상 그룹을 삭제할 수 없다")
+    void deleteGroup_OwnerOfOtherGroup_ReturnsMemberAccessDenied() throws Exception {
+        Group targetGroup = group("GDO001");
+        Group otherGroup = group("GDO002");
+        Member otherOwner = member();
+        membership(otherOwner, otherGroup, GroupMemberRole.OWNER);
+        em.flush();
+
+        mockMvc.perform(delete("/api/groups/{groupId}", targetGroup.getId())
+                        .with(user(principal(otherOwner))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("GROUP403_2"));
+    }
+
+    @Test
+    @DisplayName("LEFT 또는 KICKED 구성원은 그룹을 삭제할 수 없다")
+    void deleteGroup_InactiveMembers_ReturnsMemberAccessDenied() throws Exception {
+        Group group = group("GDI001");
+        Member owner = member();
+        Member leftMember = member();
+        Member kickedMember = member();
+        membership(owner, group, GroupMemberRole.OWNER);
+        GroupMember leftMembership = membership(leftMember, group, GroupMemberRole.MEMBER);
+        GroupMember kickedMembership = membership(kickedMember, group, GroupMemberRole.MEMBER);
+        leftMembership.leave();
+        kickedMembership.kick();
+        em.flush();
+
+        for (Member requester : new Member[]{leftMember, kickedMember}) {
+            mockMvc.perform(delete("/api/groups/{groupId}", group.getId())
+                            .with(user(principal(requester))))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.code").value("GROUP403_2"));
+        }
+    }
+
+    @Test
+    @DisplayName("DELETED 그룹은 삭제 API에서 GROUP404_1로 응답한다")
+    void deleteGroup_DeletedGroup_ReturnsNotFound() throws Exception {
+        Group group = group("GDD001");
+        Member owner = member();
+        membership(owner, group, GroupMemberRole.OWNER);
+        group.delete();
+        em.flush();
+
+        mockMvc.perform(delete("/api/groups/{groupId}", group.getId())
+                        .with(user(principal(owner))))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("GROUP404_1"));
+    }
+
+    @Test
+    @DisplayName("인증 없이 그룹 삭제를 요청하면 기존 보안 동작대로 401을 반환한다")
+    void deleteGroup_Unauthenticated_ReturnsUnauthorized() throws Exception {
+        mockMvc.perform(delete("/api/groups/{groupId}", 1L))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("OpenAPI 문서에 그룹 Hard Delete 경로와 응답 코드가 노출된다")
+    void openApi_GroupDelete_IsDocumented() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("/api/groups/{groupId}")))
+                .andExpect(content().string(containsString("그룹 삭제")))
+                .andExpect(content().string(containsString("GROUP403_2")))
+                .andExpect(content().string(containsString("GROUP403_3")))
+                .andExpect(content().string(containsString("GROUP404_1")));
+    }
+
+    @Test
     @DisplayName("OpenAPI 문서에 오늘 그룹 루틴 조회 경로와 200 응답이 노출된다")
     void openApi_TodayGroupRoutineQuery_IsDocumented() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
@@ -383,12 +503,12 @@ class GroupControllerTest {
                         + ".properties.routines").doesNotExist())
                 .andExpect(jsonPath("$.components.schemas.GroupRoutineCreateResult"
                         + ".properties.activeRoutineCount").doesNotExist())
-                .andExpect(jsonPath("$.components.schemas.CreateRoutines.properties"
+                .andExpect(jsonPath("$.components.schemas.PersonalRoutineCreateRequest.properties"
                         + ".routines.items['$ref']")
-                        .value("#/components/schemas/CreateRoutine"))
-                .andExpect(jsonPath("$.components.schemas.CreateRoutine.properties.templateId")
+                        .value("#/components/schemas/PersonalRoutineCreateItem"))
+                .andExpect(jsonPath("$.components.schemas.PersonalRoutineCreateItem.properties.templateId")
                         .exists())
-                .andExpect(jsonPath("$.components.schemas.RoutineCreateResult"
+                .andExpect(jsonPath("$.components.schemas.PersonalRoutineCreateResult"
                         + ".properties.activeRoutineCount").exists());
     }
 

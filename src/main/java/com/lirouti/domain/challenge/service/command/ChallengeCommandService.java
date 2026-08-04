@@ -13,11 +13,8 @@ import com.lirouti.domain.challenge.client.AnthropicVerificationReviewClient;
 import com.lirouti.domain.challenge.client.ReviewRejection;
 import com.lirouti.domain.challenge.client.VerificationReview;
 import com.lirouti.domain.challenge.converter.ChallengeConverter;
-import com.lirouti.domain.challenge.dto.request.ChallengeReqDTO;
 import com.lirouti.domain.challenge.dto.response.ChallengeResDTO;
 import com.lirouti.domain.challenge.entity.Challenge;
-import com.lirouti.domain.challenge.entity.ChallengeVerification;
-import com.lirouti.domain.challenge.entity.ChallengeVerificationReport;
 import com.lirouti.domain.challenge.entity.MemberChallenge;
 import com.lirouti.domain.challenge.exception.ChallengeException;
 import com.lirouti.domain.challenge.exception.code.error.ChallengeErrorCode;
@@ -26,6 +23,15 @@ import com.lirouti.domain.media.enums.MediaPurpose;
 import com.lirouti.domain.media.service.MediaService;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.repository.MemberRepository;
+import com.lirouti.domain.verification.converter.ChallengeVerificationConverter;
+import com.lirouti.domain.verification.dto.response.ChallengeVerificationResDTO;
+import com.lirouti.domain.verification.dto.request.ChallengeVerificationReqDTO;
+import com.lirouti.domain.verification.entity.ChallengeVerification;
+import com.lirouti.domain.verification.entity.ChallengeVerificationReport;
+import com.lirouti.domain.verification.exception.VerificationException;
+import com.lirouti.domain.verification.exception.code.error.ChallengeVerificationErrorCode;
+import com.lirouti.domain.verification.repository.*;
+import com.lirouti.domain.verification.service.command.ChallengeVerificationCommandService;
 import com.lirouti.global.properties.AiReviewProperties;
 import com.lirouti.global.properties.ChallengeReportProperties;
 import com.lirouti.global.util.TimeUtil;
@@ -108,10 +114,10 @@ public class ChallengeCommandService {
      *
      * 사진이 챌린지 의도에 맞는지는 AI 가 심사한다. 통과하지 못하면 422 로 반려하고 저장하지 않는다.
      */
-    public ChallengeResDTO.Verification verify(
+    public ChallengeVerificationResDTO.Verification verify(
             Long memberId,
             Long challengeId,
-            ChallengeReqDTO.Verify request
+            ChallengeVerificationReqDTO.Verify request
     ) {
         // ① key는 서버가 발급하지만 요청으로 되돌아오므로, 저장 전에 발급 규칙과 대조한다.
         mediaService.validateMediaKey(request.mediaKey(), MediaPurpose.CHALLENGE_VERIFICATION);
@@ -190,9 +196,9 @@ public class ChallengeCommandService {
             // 계속 볼 수 있다. 유해로 반려된 것일 수 있으므로 그 자리에서 치운다.
             mediaService.deleteQuietly(mediaKey);
 
-            throw new ChallengeException(review.rejection() == ReviewRejection.UNSAFE
-                    ? ChallengeErrorCode.VERIFICATION_REJECTED_AS_UNSAFE
-                    : ChallengeErrorCode.VERIFICATION_REJECTED_BY_REVIEW);
+            throw new VerificationException(review.rejection() == ReviewRejection.UNSAFE
+                    ? ChallengeVerificationErrorCode.VERIFICATION_REJECTED_AS_UNSAFE
+                    : ChallengeVerificationErrorCode.VERIFICATION_REJECTED_BY_REVIEW);
         }
 
         // 통과에도 한 줄 남긴다. 없으면 "심사가 돌고 있다"를 로그로 확인할 방법이 사라진다 —
@@ -214,21 +220,21 @@ public class ChallengeCommandService {
      * 제약 위반을 잡아 409로 바꾼다(인증 저장과 같은 방식).
      */
     @Transactional(isolation = Isolation.READ_COMMITTED)
-    public ChallengeResDTO.Report report(
+    public ChallengeVerificationResDTO.Report report(
             Long memberId,
             Long challengeId,
             Long verificationId,
-            ChallengeReqDTO.Report request
+            ChallengeVerificationReqDTO.Report request
     ) {
         // 경로의 challengeId와 실제 인증의 챌린지가 맞는지까지 확인한다. 어긋나면 404다.
         ChallengeVerification verification = challengeVerificationRepository
                 .findByIdAndMemberChallengeChallengeId(verificationId, challengeId)
-                .orElseThrow(() -> new ChallengeException(ChallengeErrorCode.VERIFICATION_NOT_FOUND));
+                .orElseThrow(() -> new VerificationException(ChallengeVerificationErrorCode.VERIFICATION_NOT_FOUND));
 
         // 숨김 판정을 직렬화하기 위해 인증 행을 잠근다. 신고 INSERT 전에 잡아야 한다 —
         // 저장 후에 잠그면 그 사이 다른 트랜잭션이 이미 세기를 마치고 지나갈 수 있다.
         verification = challengeVerificationRepository.findByIdForUpdate(verificationId)
-                .orElseThrow(() -> new ChallengeException(ChallengeErrorCode.VERIFICATION_NOT_FOUND));
+                .orElseThrow(() -> new VerificationException(ChallengeVerificationErrorCode.VERIFICATION_NOT_FOUND));
 
         // 신고자는 FK만 필요하므로 프록시 참조로 불필요한 회원 조회를 피한다(참여 생성과 같은 이유).
         Member reporter = memberRepository.getReferenceById(memberId);
@@ -247,11 +253,11 @@ public class ChallengeCommandService {
             // InnoDB가 중복 키 오류 대신 데드락으로 판정해 CannotAcquireLockException을 줄 수 있다.
             saved = challengeVerificationReportRepository.saveAndFlush(report);
         } catch (DataIntegrityViolationException | CannotAcquireLockException e) {
-            throw new ChallengeException(ChallengeErrorCode.ALREADY_REPORTED);
+            throw new VerificationException(ChallengeVerificationErrorCode.ALREADY_REPORTED);
         }
 
         hideIfReportedEnough(verification);
-        return ChallengeConverter.toReport(saved);
+        return ChallengeVerificationConverter.toReport(saved);
     }
 
     /**
@@ -302,7 +308,7 @@ public class ChallengeCommandService {
      * 자기 인증에 누르는 것을 막지 않는다. 막으면 검증 분기와 에러 코드가 늘지만 얻는 것이 적다.
      */
     @Transactional
-    public ChallengeResDTO.Like like(Long memberId, Long challengeId, Long verificationId) {
+    public ChallengeVerificationResDTO.Like like(Long memberId, Long challengeId, Long verificationId) {
         findVerificationInChallenge(challengeId, verificationId);
         challengeVerificationLikeRepository.insertIfAbsent(verificationId, memberId);
         return buildLikeResult(verificationId, true);
@@ -315,7 +321,7 @@ public class ChallengeCommandService {
      * 걸린다(database-schema.md).
      */
     @Transactional
-    public ChallengeResDTO.Like unlike(Long memberId, Long challengeId, Long verificationId) {
+    public ChallengeVerificationResDTO.Like unlike(Long memberId, Long challengeId, Long verificationId) {
         // 없는 인증에 대한 취소는 404로 알린다. 멱등한 것은 "좋아요가 없는 경우"이지
         // "인증이 없는 경우"가 아니다 — 후자는 클라이언트가 잘못된 id를 보낸 것이다.
         findVerificationInChallenge(challengeId, verificationId);
@@ -337,40 +343,40 @@ public class ChallengeCommandService {
      * 참조하는 것이 하나도 바뀌지 않는다.
      */
     @Transactional
-    public ChallengeResDTO.MemoUpdate updateMemo(
+    public ChallengeVerificationResDTO.MemoUpdate updateMemo(
             Long memberId,
             Long challengeId,
             Long verificationId,
-            ChallengeReqDTO.UpdateMemo request
+            ChallengeVerificationReqDTO.UpdateMemo request
     ) {
         ChallengeVerification verification = challengeVerificationRepository
                 .findMineInChallenge(verificationId, challengeId, memberId)
                 .orElseThrow(() -> {
                     log.warn("수정할 수 없는 인증입니다. memberId={}, challengeId={}, verificationId={}",
                             memberId, challengeId, verificationId);
-                    return new ChallengeException(ChallengeErrorCode.VERIFICATION_NOT_FOUND);
+                    return new VerificationException(ChallengeVerificationErrorCode.VERIFICATION_NOT_FOUND);
                 });
 
         verification.updateContent(request.content());
-        return ChallengeConverter.toMemoUpdate(verification);
+        return ChallengeVerificationConverter.toMemoUpdate(verification);
     }
 
     /** 경로의 challengeId와 인증의 챌린지가 맞는지까지 확인한다. 어긋나면 404다(신고와 같은 기준). */
     private ChallengeVerification findVerificationInChallenge(Long challengeId, Long verificationId) {
         return challengeVerificationRepository
                 .findByIdAndMemberChallengeChallengeId(verificationId, challengeId)
-                .orElseThrow(() -> new ChallengeException(ChallengeErrorCode.VERIFICATION_NOT_FOUND));
+                .orElseThrow(() -> new VerificationException(ChallengeVerificationErrorCode.VERIFICATION_NOT_FOUND));
     }
 
     /**
      * 응답에 최종 상태를 실어 클라이언트가 재조회 없이 화면을 갱신하게 한다.
      * 집계는 피드와 같은 배치 쿼리를 한 건짜리로 부른다 — 세는 규칙(탈퇴 회원 제외)이 갈리지 않도록.
      */
-    private ChallengeResDTO.Like buildLikeResult(Long verificationId, boolean liked) {
+    private ChallengeVerificationResDTO.Like buildLikeResult(Long verificationId, boolean liked) {
         long likeCount = challengeVerificationLikeRepository
                 .countByVerificationIds(List.of(verificationId))
                 .getOrDefault(verificationId, 0L);
-        return ChallengeConverter.toLike(verificationId, likeCount, liked);
+        return ChallengeVerificationConverter.toLike(verificationId, likeCount, liked);
     }
 
     private MemberChallenge rejoinOrReject(MemberChallenge existing) {

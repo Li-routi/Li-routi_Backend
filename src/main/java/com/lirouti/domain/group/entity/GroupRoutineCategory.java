@@ -8,6 +8,9 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * 그룹 루틴을 분류하는 카테고리다.
  * 그룹이 없으면 앱이 제공하는 고정 카테고리이고, 그룹이 있으면 해당 그룹 전용 카테고리다.
@@ -60,6 +63,10 @@ public class GroupRoutineCategory extends BaseEntity {
     @Column(nullable = false)
     private Boolean active;
 
+    /** 그룹 전용 카테고리가 소유한 그룹 루틴이다. 고정 카테고리는 이 경로의 삭제 주체가 아니다. */
+    @OneToMany(mappedBy = "category", cascade = CascadeType.REMOVE)
+    private List<GroupRoutine> routines = new ArrayList<>();
+
     @Builder
     private GroupRoutineCategory(
             Group group,
@@ -83,5 +90,15 @@ public class GroupRoutineCategory extends BaseEntity {
     /** 고정 카테고리이거나 요청 그룹이 소유한 카테고리인지 확인한다. */
     public boolean isUsableBy(Long groupId) {
         return isFixed() || (groupId != null && groupId.equals(group.getId()));
+    }
+
+    public void addRoutine(GroupRoutine routine) {
+        if (routine != null && !routines.contains(routine)) {
+            routines.add(routine);
+        }
+    }
+
+    public void removeRoutine(GroupRoutine routine) {
+        routines.remove(routine);
     }
 }

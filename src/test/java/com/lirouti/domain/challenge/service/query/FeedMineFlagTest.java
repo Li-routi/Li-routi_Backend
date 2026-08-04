@@ -18,7 +18,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.lirouti.domain.challenge.dto.response.ChallengeResDTO;
 import com.lirouti.domain.challenge.entity.Challenge;
-import com.lirouti.domain.challenge.entity.ChallengeVerification;
+import com.lirouti.domain.verification.dto.response.ChallengeVerificationResDTO;
+import com.lirouti.domain.verification.entity.ChallengeVerification;
 import com.lirouti.domain.challenge.entity.MemberChallenge;
 import com.lirouti.domain.challenge.enums.ChallengeCategory;
 import com.lirouti.domain.member.entity.Member;
@@ -86,11 +87,11 @@ class FeedMineFlagTest {
 
     /** 인증 id → 그 카드의 mine 값. */
     private Map<Long, Boolean> mineByVerificationId(Long challengeId, Long viewerId) {
-        ChallengeResDTO.Feed feed =
+        ChallengeVerificationResDTO.Feed feed =
                 challengeQueryService.getVerificationFeed(challengeId, viewerId, null, null);
         return feed.verifications().stream().collect(Collectors.toMap(
-                ChallengeResDTO.FeedItem::verificationId,
-                ChallengeResDTO.FeedItem::mine,
+                ChallengeVerificationResDTO.FeedItem::verificationId,
+                ChallengeVerificationResDTO.FeedItem::mine,
                 (a, b) -> a));
     }
 
@@ -153,10 +154,10 @@ class FeedMineFlagTest {
         em.clear();
 
         // when
-        ChallengeResDTO.Feed feed =
+        ChallengeVerificationResDTO.Feed feed =
                 challengeQueryService.getVerificationFeed(challenge.getId(), me.getId(), null, null);
-        Map<Long, ChallengeResDTO.FeedItem> byId = feed.verifications().stream()
-                .collect(Collectors.toMap(ChallengeResDTO.FeedItem::verificationId,
+        Map<Long, ChallengeVerificationResDTO.FeedItem> byId = feed.verifications().stream()
+                .collect(Collectors.toMap(ChallengeVerificationResDTO.FeedItem::verificationId,
                         Function.identity()));
 
         // then: 닉네임은 구분이 안 되지만 mine 은 갈린다

@@ -6,6 +6,7 @@ import com.lirouti.domain.group.entity.Group;
 import com.lirouti.domain.group.entity.GroupRoutineCategory;
 import com.lirouti.domain.group.exception.GroupException;
 import com.lirouti.domain.group.exception.code.error.GroupErrorCode;
+import com.lirouti.domain.group.repository.GroupRepository;
 import com.lirouti.domain.group.repository.GroupRoutineCategoryRepository;
 import com.lirouti.domain.group.repository.GroupRoutineRepository;
 import com.lirouti.domain.group.service.GroupValidationService;
@@ -30,6 +31,7 @@ class GroupCategoryCommandServiceTest {
     private static final Long OWNER_ID = 20L;
 
     @Mock private GroupValidationService validationService;
+    @Mock private GroupRepository groupRepository;
     @Mock private GroupRoutineCategoryRepository categoryRepository;
     @Mock private GroupRoutineRepository routineRepository;
     @Mock private GroupRoutineAssignmentCommandService assignmentService;
@@ -43,7 +45,7 @@ class GroupCategoryCommandServiceTest {
     @BeforeEach
     void setUp() {
         commandService = new GroupCommandService(
-                validationService, categoryRepository, routineRepository,
+                validationService, groupRepository, categoryRepository, routineRepository,
                 assignmentService, creationAttemptService, uniqueViolationDetector, validator
         );
         when(validationService.lockActiveGroupForUpdate(GROUP_ID)).thenReturn(group);
