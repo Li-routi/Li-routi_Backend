@@ -85,6 +85,7 @@ public class GroupCreationAttemptService {
             GroupRoutine routine = GroupConverter.toGroupRoutine(routineRequest, group, category);
             groupRoutineRepository.saveAndFlush(routine);
             group.addRoutine(routine);
+            category.addRoutine(routine);
             int assignmentCount = assignmentCommandService
                     .assignRoutineToActiveMembersToday(routine);
             createdRoutines.add(new GroupConverter.CreatedRoutine(routine, assignmentCount));

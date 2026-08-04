@@ -177,6 +177,7 @@ public class GroupCommandService {
         GroupRoutine groupRoutine = GroupConverter.toGroupRoutine(request, group, category);
         saveGroupRoutine(groupRoutine);
         group.addRoutine(groupRoutine);
+        category.addRoutine(groupRoutine);
 
         int assignmentCount = assignmentCommandService
                 .assignRoutineToActiveMembersToday(groupRoutine);
@@ -223,7 +224,12 @@ public class GroupCommandService {
         );
         validateRoutineTitleNotDuplicated(groupId, routineId, request.title());
 
+        GroupRoutineCategory previousCategory = groupRoutine.getCategory();
         groupRoutine.update(category, request.title(), request.description());
+        if (previousCategory != category) {
+            previousCategory.removeRoutine(groupRoutine);
+            category.addRoutine(groupRoutine);
+        }
         groupRoutine.replaceSchedules(request.schedules().stream()
                 .map(schedule -> new GroupRoutine.ScheduleUpdate(
                         schedule.repeatDay(),
