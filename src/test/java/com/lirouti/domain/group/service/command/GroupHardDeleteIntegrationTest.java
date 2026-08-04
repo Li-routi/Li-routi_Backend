@@ -5,6 +5,7 @@ import com.lirouti.domain.group.entity.GroupMember;
 import com.lirouti.domain.group.entity.GroupRoutine;
 import com.lirouti.domain.group.entity.GroupRoutineAssignment;
 import com.lirouti.domain.group.entity.GroupRoutineCategory;
+import com.lirouti.domain.group.dto.response.GroupResDTO;
 import com.lirouti.domain.group.enums.GroupMemberRole;
 import com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus;
 import com.lirouti.domain.group.repository.GroupMemberRepository;
@@ -13,6 +14,7 @@ import com.lirouti.domain.group.repository.GroupRoutineAssignmentRepository;
 import com.lirouti.domain.group.repository.GroupRoutineCategoryRepository;
 import com.lirouti.domain.group.repository.GroupRoutineRepository;
 import com.lirouti.domain.group.repository.GroupRoutineScheduleRepository;
+import com.lirouti.domain.group.service.query.GroupQueryService;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.enums.Role;
 import com.lirouti.domain.member.enums.SocialProvider;
@@ -28,7 +30,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
@@ -38,6 +43,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest
 @Transactional
@@ -47,6 +53,10 @@ class GroupHardDeleteIntegrationTest {
 
     @Autowired
     private GroupCommandService groupCommandService;
+    @Autowired
+    private GroupQueryService groupQueryService;
+    @Autowired
+    private PlatformTransactionManager transactionManager;
     @Autowired
     private GroupRepository groupRepository;
     @Autowired
@@ -193,6 +203,68 @@ class GroupHardDeleteIntegrationTest {
                 .setParameter("routineId", ids.personalRoutineId())
                 .getSingleResult();
         assertThat(personalScheduleCount).isEqualTo(1L);
+
+        GroupResDTO.TodayRoutineList todayRoutines = groupQueryService
+                .getTodayRoutines(ids.memberId());
+        assertThat(todayRoutines.routines())
+                .singleElement()
+                .extracting(GroupResDTO.TodayRoutine::groupId)
+                .isEqualTo(ids.otherGroupId());
+    }
+
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    @DisplayName("삭제 트랜잭션이 롤백되면 그룹과 종속 데이터가 모두 유지된다")
+    void deleteGroup_WhenTransactionRollsBack_PreservesGroupAndChildren() {
+        RollbackIds ids = new TransactionTemplate(transactionManager).execute(status -> {
+            Group group = group("HDR" + sequence.incrementAndGet());
+            Member owner = member();
+            GroupMember membership = membership(group, owner, GroupMemberRole.OWNER);
+            GroupRoutineCategory category = groupCategory(group, "롤백 카테고리");
+            GroupRoutine routine = routine(group, category, "롤백 루틴");
+            routine.addSchedule(DayOfWeek.FRIDAY, LocalTime.of(15, 0), LocalTime.of(16, 0));
+            entityManager.persist(routine);
+            GroupRoutineAssignment assignment = assignment(
+                    routine, owner, GroupRoutineAssignmentStatus.PENDING, LocalDate.now());
+            entityManager.persist(assignment);
+            routine.addAssignment(assignment);
+            GroupRoutineVerification verification = verification(assignment);
+            entityManager.persist(verification);
+            assignment.attachVerification(verification);
+            entityManager.flush();
+            return new RollbackIds(
+                    group.getId(),
+                    owner.getId(),
+                    membership.getId(),
+                    category.getId(),
+                    routine.getId(),
+                    routine.getSchedules().get(0).getId(),
+                    assignment.getId(),
+                    verification.getId()
+            );
+        });
+
+        assertThatThrownBy(() -> new TransactionTemplate(transactionManager)
+                .executeWithoutResult(status -> {
+                    groupCommandService.deleteGroup(ids.groupId(), ids.ownerId());
+                    throw new IllegalStateException("rollback verification");
+                }))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("rollback verification");
+
+        try {
+            entityManager.clear();
+            assertThat(groupRepository.existsById(ids.groupId())).isTrue();
+            assertThat(groupMemberRepository.existsById(ids.membershipId())).isTrue();
+            assertThat(groupRoutineCategoryRepository.existsById(ids.categoryId())).isTrue();
+            assertThat(groupRoutineRepository.existsById(ids.routineId())).isTrue();
+            assertThat(groupRoutineScheduleRepository.existsById(ids.scheduleId())).isTrue();
+            assertThat(groupRoutineAssignmentRepository.existsById(ids.assignmentId())).isTrue();
+            assertThat(groupRoutineVerificationRepository.existsById(ids.verificationId())).isTrue();
+        } finally {
+            new TransactionTemplate(transactionManager).executeWithoutResult(status ->
+                    groupCommandService.deleteGroup(ids.groupId(), ids.ownerId()));
+        }
     }
 
     private Group group(String inviteCode) {
@@ -359,5 +431,17 @@ class GroupHardDeleteIntegrationTest {
                     personalRoutine.getId()
             );
         }
+    }
+
+    private record RollbackIds(
+            Long groupId,
+            Long ownerId,
+            Long membershipId,
+            Long categoryId,
+            Long routineId,
+            Long scheduleId,
+            Long assignmentId,
+            Long verificationId
+    ) {
     }
 }
