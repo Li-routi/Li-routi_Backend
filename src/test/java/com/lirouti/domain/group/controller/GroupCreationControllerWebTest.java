@@ -5,7 +5,6 @@ import com.lirouti.domain.group.dto.response.GroupResDTO;
 import com.lirouti.domain.group.exception.GroupException;
 import com.lirouti.domain.group.exception.code.error.GroupErrorCode;
 import com.lirouti.domain.group.service.command.GroupCommandService;
-import com.lirouti.domain.group.service.command.GroupInviteCodeCommandService;
 import com.lirouti.domain.group.service.query.GroupInviteCodeQueryService;
 import com.lirouti.domain.group.service.query.GroupQueryService;
 import com.lirouti.domain.member.enums.Role;
@@ -55,8 +54,6 @@ class GroupCreationControllerWebTest {
     @MockitoBean
     private GroupQueryService groupQueryService;
     @MockitoBean
-    private GroupInviteCodeCommandService groupInviteCodeCommandService;
-    @MockitoBean
     private GroupInviteCodeQueryService groupInviteCodeQueryService;
     @MockitoBean
     private JwtUtil jwtUtil;
@@ -89,8 +86,7 @@ class GroupCreationControllerWebTest {
                 .andExpect(jsonPath("$.code").value("GROUP201_3"))
                 .andExpect(jsonPath("$.result.groupId").value(10L))
                 .andExpect(jsonPath("$.result.name").value("아침 모임"))
-                .andExpect(jsonPath("$.result.inviteCode").doesNotExist())
-                .andExpect(jsonPath("$.result.inviteCodeExpiresAt").doesNotExist());
+                .andExpect(jsonPath("$.result.inviteCode").doesNotExist());
         verify(groupCommandService).createGroup(
                 eq(MEMBER_ID), any(GroupReqDTO.CreateGroup.class)
         );

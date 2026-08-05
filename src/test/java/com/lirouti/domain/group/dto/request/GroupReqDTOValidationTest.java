@@ -380,7 +380,7 @@ class GroupReqDTOValidationTest {
         assertThat(result.assignmentCount()).isEqualTo(1);
         assertThat(GroupResDTO.CreateResult.class.getRecordComponents())
                 .extracting(component -> component.getName())
-                .doesNotContain("inviteCode", "inviteCodeExpiresAt");
+                .doesNotContain("inviteCode");
     }
 
     private GroupReqDTO.CreateGroup request(

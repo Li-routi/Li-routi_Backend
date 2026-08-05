@@ -4,7 +4,6 @@ import com.lirouti.domain.group.dto.request.GroupReqDTO;
 import com.lirouti.domain.group.dto.response.GroupResDTO;
 import com.lirouti.domain.group.exception.code.success.GroupSuccessCode;
 import com.lirouti.domain.group.service.command.GroupCommandService;
-import com.lirouti.domain.group.service.command.GroupInviteCodeCommandService;
 import com.lirouti.domain.group.service.query.GroupInviteCodeQueryService;
 import com.lirouti.domain.group.service.query.GroupQueryService;
 import com.lirouti.domain.member.enums.Role;
@@ -34,8 +33,6 @@ class GroupControllerUnitTest {
     private GroupCommandService groupCommandService;
     @Mock
     private GroupQueryService groupQueryService;
-    @Mock
-    private GroupInviteCodeCommandService groupInviteCodeCommandService;
     @Mock
     private GroupInviteCodeQueryService groupInviteCodeQueryService;
     @InjectMocks

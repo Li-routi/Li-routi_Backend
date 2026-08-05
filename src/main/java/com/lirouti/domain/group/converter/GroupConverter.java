@@ -12,7 +12,6 @@ import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.group.repository.GroupRoutineAssignmentRepositoryCustom.TodayAssignmentProjection;
 import com.lirouti.domain.routine.enums.RoutineCategoryColor;
 
-import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
 
@@ -20,16 +19,14 @@ public final class GroupConverter {
     private GroupConverter() {
     }
 
-    /** 통합 생성 요청과 생성된 초대코드 정보를 신규 ACTIVE 그룹으로 변환한다. */
+    /** 통합 생성 요청과 생성된 영구 초대코드로 신규 ACTIVE 그룹을 변환한다. */
     public static Group toGroup(
             GroupReqDTO.CreateGroup request,
-            String inviteCode,
-            LocalDateTime inviteCodeExpiresAt
+            String inviteCode
     ) {
         return Group.builder()
                 .name(request.name())
                 .inviteCode(inviteCode)
-                .inviteCodeExpiresAt(inviteCodeExpiresAt)
                 .build();
     }
 
@@ -278,11 +275,10 @@ public final class GroupConverter {
                 .build();
     }
 
-    // 저장된 그룹 초대코드를 설정 화면 응답으로 변환
+    // 저장된 그룹 영구 초대코드를 설정 화면 응답으로 변환
     public static GroupResDTO.InviteCode toInviteCodeResult(Group group) {
         return GroupResDTO.InviteCode.builder()
                 .inviteCode(group.getInviteCode())
-                .expiresAt(group.getInviteCodeExpiresAt())
                 .build();
     }
 

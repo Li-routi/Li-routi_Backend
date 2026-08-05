@@ -51,13 +51,9 @@ public class GroupCreationAttemptService {
     ) {
         Member owner = groupValidationService
                 .lockActiveMemberAndValidateParticipationLimit(memberId);
-        GroupInviteCodeGenerator.GeneratedInviteCode inviteCode = inviteCodeGenerator.generate();
+        String inviteCode = inviteCodeGenerator.generate();
 
-        Group group = GroupConverter.toGroup(
-                request,
-                inviteCode.value(),
-                inviteCode.expiresAt()
-        );
+        Group group = GroupConverter.toGroup(request, inviteCode);
         groupRepository.saveAndFlush(group);
 
         GroupMember ownerMembership = GroupConverter.toOwnerMembership(owner, group);

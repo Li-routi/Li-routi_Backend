@@ -5,7 +5,6 @@ import com.lirouti.domain.group.dto.request.GroupReqDTO;
 import com.lirouti.domain.group.dto.response.GroupResDTO;
 import com.lirouti.domain.group.exception.code.success.GroupSuccessCode;
 import com.lirouti.domain.group.service.command.GroupCommandService;
-import com.lirouti.domain.group.service.command.GroupInviteCodeCommandService;
 import com.lirouti.domain.group.service.query.GroupInviteCodeQueryService;
 import com.lirouti.domain.group.service.query.GroupQueryService;
 import com.lirouti.global.apiPayload.ApiResponse;
@@ -22,7 +21,6 @@ import org.springframework.web.bind.annotation.*;
 public class GroupController implements GroupControllerDocs {
     private final GroupCommandService groupCommandService;
     private final GroupQueryService groupQueryService;
-    private final GroupInviteCodeCommandService groupInviteCodeCommandService;
     private final GroupInviteCodeQueryService groupInviteCodeQueryService;
 
     /** 모임방과 초기 카테고리·루틴·일정을 한 요청으로 생성한다. */
@@ -182,18 +180,4 @@ public class GroupController implements GroupControllerDocs {
         return ApiResponse.onSuccess(GroupSuccessCode.GROUP_INVITE_CODE_FETCH_SUCCESS, result);
     }
 
-    // 그룹 초대 코드 발급&재발급 API
-    @Override
-    @PostMapping("/{groupId}/invite-code")
-    @ResponseStatus(HttpStatus.CREATED)
-    public ApiResponse<GroupResDTO.InviteCode> issueInviteCode(
-            @AuthenticationPrincipal CustomUserDetails userDetails,
-            @PathVariable Long groupId
-    ) {
-        GroupResDTO.InviteCode result = groupInviteCodeCommandService.issueInviteCode(
-                groupId,
-                userDetails.getMemberId()
-        );
-        return ApiResponse.onSuccess(GroupSuccessCode.GROUP_INVITE_CODE_ISSUE_SUCCESS, result);
-    }
 }

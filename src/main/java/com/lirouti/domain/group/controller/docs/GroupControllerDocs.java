@@ -316,7 +316,7 @@ public interface GroupControllerDocs {
 
     @Operation(
             summary = "그룹 초대코드 조회",
-            description = "ACTIVE OWNER가 현재 초대코드와 말소 시각을 조회합니다. 만료된 코드는 자동으로 재발급하지 않습니다."
+            description = "ACTIVE OWNER가 그룹에 영구 귀속된 초대코드를 조회합니다."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
@@ -333,24 +333,4 @@ public interface GroupControllerDocs {
             @Parameter(description = "그룹 ID", required = true) Long groupId
     );
 
-    @Operation(
-            summary = "그룹 초대코드 발급",
-            description = "ACTIVE OWNER가 초대코드를 최초 발급하거나 새로 발급합니다. 새 코드 발급 시 기존 코드는 사용할 수 없게 됩니다."
-    )
-    @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                    responseCode = "201", description = "그룹 초대코드 발급 성공"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                    responseCode = "401", description = "유효하지 않거나 만료된 인증 토큰"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                    responseCode = "403", description = "미인증, 비활성 구성원 또는 OWNER 권한 없음"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                    responseCode = "404", description = "그룹 또는 회원을 찾을 수 없음"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                    responseCode = "500", description = "초대코드 발급 실패")
-    })
-    ApiResponse<GroupResDTO.InviteCode> issueInviteCode(
-            @Parameter(hidden = true) CustomUserDetails userDetails,
-            @Parameter(description = "그룹 ID", required = true) Long groupId
-    );
 }

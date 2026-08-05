@@ -8,7 +8,6 @@ import lombok.Builder;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 
@@ -166,11 +165,10 @@ public final class GroupResDTO {
     ) {
     }
 
-    // 그룹 설정에서 확인할 초대코드와 말소 시각
+    // 그룹 설정에서 확인할 영구 초대코드
     @Builder
     public record InviteCode(
-            String inviteCode,
-            LocalDateTime expiresAt
+            String inviteCode
     ) {
     }
 }

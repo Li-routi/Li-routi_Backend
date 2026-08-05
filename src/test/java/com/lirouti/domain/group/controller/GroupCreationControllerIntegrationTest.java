@@ -23,7 +23,6 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -77,8 +76,7 @@ class GroupCreationControllerIntegrationTest {
                     .andExpect(jsonPath("$.result.customCategories.length()").value(1))
                     .andExpect(jsonPath("$.result.routines.length()").value(1))
                     .andExpect(jsonPath("$.result.assignmentCount").value(1))
-                    .andExpect(jsonPath("$.result.inviteCode").doesNotExist())
-                    .andExpect(jsonPath("$.result.inviteCodeExpiresAt").doesNotExist());
+                    .andExpect(jsonPath("$.result.inviteCode").doesNotExist());
 
             new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
                 assertThat(count("select count(g) from Group g where g.name = :value", groupName))
@@ -169,7 +167,6 @@ class GroupCreationControllerIntegrationTest {
                 Group group = groupRepository.saveAndFlush(Group.builder()
                         .name("기존모임" + index)
                         .inviteCode("T" + suffix.substring(0, 4) + index + "X")
-                        .inviteCodeExpiresAt(LocalDateTime.of(2026, 8, 1, 10, 10))
                         .build());
                 groupMemberRepository.saveAndFlush(GroupMember.builder()
                         .member(member)
