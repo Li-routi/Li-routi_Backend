@@ -71,6 +71,24 @@ public class GroupCommandService {
                 groupId, memberId, deletedAssignmentCount);
     }
 
+    /** ACTIVE OWNER가 그룹 행 잠금 안에서 신규 참여를 차단한다. 이미 잠긴 경우에도 성공한다. */
+    @Transactional
+    public GroupResDTO.LockState lockGroup(Long groupId, Long memberId) {
+        Group group = groupValidationService.lockActiveGroupForUpdate(groupId);
+        groupValidationService.validateGroupOwner(group, memberId);
+        group.lock();
+        return GroupConverter.toLockState(group);
+    }
+
+    /** ACTIVE OWNER가 그룹 행 잠금 안에서 신규 참여를 다시 허용한다. 이미 해제된 경우에도 성공한다. */
+    @Transactional
+    public GroupResDTO.LockState unlockGroup(Long groupId, Long memberId) {
+        Group group = groupValidationService.lockActiveGroupForUpdate(groupId);
+        groupValidationService.validateGroupOwner(group, memberId);
+        group.unlock();
+        return GroupConverter.toLockState(group);
+    }
+
     /** 그룹 행 잠금 안에서 OWNER 권한, 상한, 이름 중복을 검증하고 사용자 카테고리를 생성한다. */
     @Transactional
     public GroupResDTO.Category createCategory(

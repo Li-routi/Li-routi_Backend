@@ -183,6 +183,52 @@ public interface GroupControllerDocs {
             @Parameter(description = "나갈 그룹 ID", required = true, example = "1") Long groupId
     );
 
+    @Operation(
+            summary = "그룹 방 잠금",
+            description = """
+                    해당 그룹의 ACTIVE OWNER만 신규 참여를 차단하도록 방을 잠글 수 있습니다.
+                    그룹 행을 비관적으로 잠근 뒤 권한과 상태를 검증하며, 이미 잠긴 방을 다시 잠그는 요청도
+                    현재 잠금 상태를 성공으로 반환하는 멱등 요청입니다. 잠금 과정에서 영구 초대코드는 변경되지 않습니다.
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200", description = "그룹 방 잠금 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401", description = "유효하지 않거나 만료된 인증 토큰"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "403", description = "비활성 그룹, 비구성원 또는 OWNER 권한 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404", description = "그룹 또는 회원을 찾을 수 없음")
+    })
+    ApiResponse<GroupResDTO.LockState> lockGroup(
+            @Parameter(hidden = true) CustomUserDetails userDetails,
+            @Parameter(description = "잠글 그룹 ID", required = true, example = "1") Long groupId
+    );
+
+    @Operation(
+            summary = "그룹 방 잠금 해제",
+            description = """
+                    해당 그룹의 ACTIVE OWNER만 방 잠금을 해제할 수 있습니다.
+                    이미 잠금 해제된 방을 다시 해제하는 요청도 현재 잠금 해제 상태를 성공으로 반환하는 멱등 요청입니다.
+                    잠금 해제 과정에서 영구 초대코드는 변경되지 않습니다.
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200", description = "그룹 방 잠금 해제 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401", description = "유효하지 않거나 만료된 인증 토큰"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "403", description = "비활성 그룹, 비구성원 또는 OWNER 권한 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404", description = "그룹 또는 회원을 찾을 수 없음")
+    })
+    ApiResponse<GroupResDTO.LockState> unlockGroup(
+            @Parameter(hidden = true) CustomUserDetails userDetails,
+            @Parameter(description = "잠금 해제할 그룹 ID", required = true, example = "1") Long groupId
+    );
+
     /**
      * 로그인 회원에게 오늘 할당된 활성 그룹의 루틴 목록 조회 API 명세다.
      *

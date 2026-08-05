@@ -142,4 +142,32 @@ class GroupControllerUnitTest {
         assertThat(response.getResult()).isNull();
         verify(groupCommandService).leaveGroup(GROUP_ID, MEMBER_ID);
     }
+
+    @Test
+    @DisplayName("인증 OWNER의 그룹 잠금 요청을 서비스에 전달하고 잠금 상태를 반환한다")
+    void lockGroup_AuthenticatedOwner_ReturnsLockState() {
+        CustomUserDetails principal = new CustomUserDetails(MEMBER_ID, Role.ROLE_USER);
+        GroupResDTO.LockState result = new GroupResDTO.LockState(GROUP_ID, true);
+        when(groupCommandService.lockGroup(GROUP_ID, MEMBER_ID)).thenReturn(result);
+
+        ApiResponse<GroupResDTO.LockState> response = groupController.lockGroup(principal, GROUP_ID);
+
+        assertThat(response.getCode()).isEqualTo(GroupSuccessCode.GROUP_LOCK_SUCCESS.getCode());
+        assertThat(response.getResult()).isSameAs(result);
+        verify(groupCommandService).lockGroup(GROUP_ID, MEMBER_ID);
+    }
+
+    @Test
+    @DisplayName("인증 OWNER의 그룹 잠금 해제 요청을 서비스에 전달하고 잠금 상태를 반환한다")
+    void unlockGroup_AuthenticatedOwner_ReturnsLockState() {
+        CustomUserDetails principal = new CustomUserDetails(MEMBER_ID, Role.ROLE_USER);
+        GroupResDTO.LockState result = new GroupResDTO.LockState(GROUP_ID, false);
+        when(groupCommandService.unlockGroup(GROUP_ID, MEMBER_ID)).thenReturn(result);
+
+        ApiResponse<GroupResDTO.LockState> response = groupController.unlockGroup(principal, GROUP_ID);
+
+        assertThat(response.getCode()).isEqualTo(GroupSuccessCode.GROUP_UNLOCK_SUCCESS.getCode());
+        assertThat(response.getResult()).isSameAs(result);
+        verify(groupCommandService).unlockGroup(GROUP_ID, MEMBER_ID);
+    }
 }

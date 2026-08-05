@@ -298,6 +298,111 @@ class GroupControllerTest {
     }
 
     @Test
+    @DisplayName("ACTIVE OWNER는 그룹을 잠그고 같은 요청을 반복해도 영구 초대코드를 유지한다")
+    void lockGroup_Owner_ReturnsLockedStateAndPreservesInviteCode() throws Exception {
+        Group group = group("GL00001");
+        Member owner = member();
+        membership(owner, group, GroupMemberRole.OWNER);
+        em.flush();
+
+        mockMvc.perform(patch("/api/groups/{groupId}/lock", group.getId())
+                        .with(user(principal(owner))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.isSuccess").value(true))
+                .andExpect(jsonPath("$.code").value("GROUP200_7"))
+                .andExpect(jsonPath("$.result.groupId").value(group.getId()))
+                .andExpect(jsonPath("$.result.isLocked").value(true));
+
+        mockMvc.perform(patch("/api/groups/{groupId}/lock", group.getId())
+                        .with(user(principal(owner))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.isLocked").value(true));
+
+        em.flush();
+        em.clear();
+        Group persisted = em.find(Group.class, group.getId());
+        assertThat(persisted.isLocked()).isTrue();
+        assertThat(persisted.getInviteCode()).isEqualTo("GL00001");
+    }
+
+    @Test
+    @DisplayName("ACTIVE OWNER는 그룹 잠금을 해제하고 같은 요청을 반복해도 영구 초대코드를 유지한다")
+    void unlockGroup_Owner_ReturnsUnlockedStateAndPreservesInviteCode() throws Exception {
+        Group group = group("GU00001");
+        group.lock();
+        Member owner = member();
+        membership(owner, group, GroupMemberRole.OWNER);
+        em.flush();
+
+        mockMvc.perform(patch("/api/groups/{groupId}/unlock", group.getId())
+                        .with(user(principal(owner))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.isSuccess").value(true))
+                .andExpect(jsonPath("$.code").value("GROUP200_8"))
+                .andExpect(jsonPath("$.result.groupId").value(group.getId()))
+                .andExpect(jsonPath("$.result.isLocked").value(false));
+
+        em.flush();
+        em.clear();
+        Group persisted = em.find(Group.class, group.getId());
+        assertThat(persisted.isLocked()).isFalse();
+        assertThat(persisted.getInviteCode()).isEqualTo("GU00001");
+    }
+
+    @Test
+    @DisplayName("일반 MEMBER는 그룹을 잠글 수 없다")
+    void lockGroup_RegularMember_ReturnsOwnerAccessDenied() throws Exception {
+        Group group = group("GLM0001");
+        Member owner = member();
+        Member regularMember = member();
+        membership(owner, group, GroupMemberRole.OWNER);
+        membership(regularMember, group, GroupMemberRole.MEMBER);
+        em.flush();
+
+        mockMvc.perform(patch("/api/groups/{groupId}/lock", group.getId())
+                        .with(user(principal(regularMember))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("GROUP403_3"));
+    }
+
+    @Test
+    @DisplayName("비구성원은 그룹 잠금을 해제할 수 없다")
+    void unlockGroup_NonMember_ReturnsMemberAccessDenied() throws Exception {
+        Group group = group("GLN0001");
+        Member owner = member();
+        Member outsider = member();
+        membership(owner, group, GroupMemberRole.OWNER);
+        em.flush();
+
+        mockMvc.perform(patch("/api/groups/{groupId}/unlock", group.getId())
+                        .with(user(principal(outsider))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("GROUP403_2"));
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 그룹의 방 잠금 요청은 GROUP404_1을 반환한다")
+    void lockGroup_NotFound_ReturnsGroupNotFound() throws Exception {
+        Member owner = member();
+        em.flush();
+
+        mockMvc.perform(patch("/api/groups/{groupId}/lock", Long.MAX_VALUE)
+                        .with(user(principal(owner))))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("GROUP404_1"));
+    }
+
+    @Test
+    @DisplayName("OpenAPI 문서에 그룹 방 잠금과 잠금 해제 경로가 노출된다")
+    void openApi_GroupLock_IsDocumented() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("/api/groups/{groupId}/lock")))
+                .andExpect(content().string(containsString("/api/groups/{groupId}/unlock")))
+                .andExpect(content().string(containsString("그룹 방 잠금")));
+    }
+
+    @Test
     @DisplayName("OpenAPI 문서에 그룹 Hard Delete 경로와 응답 코드가 노출된다")
     void openApi_GroupDelete_IsDocumented() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))

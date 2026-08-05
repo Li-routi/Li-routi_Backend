@@ -90,6 +90,14 @@ public final class GroupConverter {
                 .build();
     }
 
+    /** 그룹의 현재 신규 참여 잠금 상태를 응답으로 변환한다. */
+    public static GroupResDTO.LockState toLockState(Group group) {
+        return GroupResDTO.LockState.builder()
+                .groupId(group.getId())
+                .isLocked(group.isLocked())
+                .build();
+    }
+
     /** 통합 생성 요청의 초기 루틴을 일정이 연결된 그룹 루틴으로 변환한다. */
     public static GroupRoutine toGroupRoutine(
             GroupReqDTO.CreateGroupRoutine request,

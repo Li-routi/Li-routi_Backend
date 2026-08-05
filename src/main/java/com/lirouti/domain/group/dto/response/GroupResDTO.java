@@ -171,4 +171,13 @@ public final class GroupResDTO {
             String inviteCode
     ) {
     }
+
+    /** 그룹의 신규 참여 허용 여부를 전달한다. */
+    @Builder
+    @Schema(name = "GroupLockState", description = "그룹 방 잠금 상태")
+    public record LockState(
+            Long groupId,
+            boolean isLocked
+    ) {
+    }
 }

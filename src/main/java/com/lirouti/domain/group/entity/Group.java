@@ -32,6 +32,9 @@ public class Group extends BaseEntity {
     @Column(name = "invite_code", nullable = false, unique = true, length = 7)
     private String inviteCode;
 
+    @Column(name = "is_locked", nullable = false)
+    private boolean isLocked;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private GroupStatus status;
@@ -49,11 +52,22 @@ public class Group extends BaseEntity {
     private Group(String name, String inviteCode) {
         this.name = name;
         this.inviteCode = inviteCode;
+        this.isLocked = false;
         this.status = GroupStatus.ACTIVE;
     }
 
     public void updateName(String name) {
         this.name = name;
+    }
+
+    /** 신규 참여를 차단하기 위해 그룹을 잠근다. */
+    public void lock() {
+        this.isLocked = true;
+    }
+
+    /** 신규 참여를 다시 허용하기 위해 그룹을 잠금 해제한다. */
+    public void unlock() {
+        this.isLocked = false;
     }
 
     public void addMember(GroupMember member) {
