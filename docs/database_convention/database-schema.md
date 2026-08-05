@@ -887,12 +887,16 @@ POST /api/groups/{gid}/routines/{rid}/verifications
   housework-completions/{memberId}/2026/07/30/{UUID}.jpg
   group-routine-completions/{groupId}/2026/07/30/{UUID}.jpg
   group-chats/{groupId}/2026/07/30/{UUID}.jpg
+  chat-emoticons/2026/07/30/{UUID}.png
 ```
 
 규칙은 두 줄이다.
 
 - **모든 용도** — `{용도 prefix}/{yyyy}/{MM}/{dd}/{UUID}.{확장자}`
-- **비공개 용도만** — 날짜 앞에 **접근 범위 식별자 하나**를 더 둔다
+- **회원·그룹 비공개 용도** — 날짜 앞에 **접근 범위 식별자 하나**를 더 둔다
+- **서비스 소유 자산** — 회원·그룹 범위가 없으므로 접근 범위 식별자를 넣지 않는다. 애플리케이션이 자산 사용 권한과 조회 URL 발급을 통제한다.
+
+`chat-emoticons/`는 서비스가 등록한 정적 이모티콘 자산 전용 prefix다. 현재 1차 채팅 범위에는 사용자 이미지·파일 업로드가 없으므로 `group-chats/{groupId}/...`는 향후 채팅 첨부 미디어를 위한 규칙으로만 둔다. 이모티콘은 그룹 소유 미디어가 아니므로 `groupId`나 `memberId`를 key에 포함하지 않는다.
 
 #### 리프는 항상 UUID다
 
@@ -912,12 +916,13 @@ presigned URL 발급 시점의 KST 날짜다. **인증일(`verified_date`)과 �
 
 알리는 방법은 `MediaReferenceSource` 구현체다. 어떤 용도(prefix)를 책임지는지, 후보 key 중 어느 것이 쓰이는지를 답한다. **어떤 구현체도 담당하지 않는 용도는 정리 대상에서 아예 빠진다** — 담당자가 없다는 건 "무엇이 참조되는지 아무도 모른다"는 뜻이라, 안전한 쪽(안 지움)으로 실패하게 만들었다.
 
-현재 미디어 key를 담는 컬럼은 둘뿐이다.
+현재 미디어 정리 구현체가 참조하는 key 컬럼은 다음과 같다.
 
 | 테이블·컬럼 | 담당 구현체 | 비고 |
 | --- | --- | --- |
 | `challenge_verification.image_url` | `ChallengeMediaReferenceSource` | 정리의 실제 대상 |
 | `challenge.image_url` | `ChallengeMediaReferenceSource` | 지금은 전부 `NULL`. 대표 이미지를 채울 때를 대비해 미리 포함 |
+| `chat_emoticon.asset_key` | `ChatMediaReferenceSource` | 활성·비활성 이모티콘 모두 기존 메시지 보존을 위해 참조 중으로 취급 |
 
 **탈퇴·신고로 숨겨진 인증의 사진도 "쓰이는 중"으로 친다.** 행이 남아 있으면 파일도 살아 있는 것이다. 탈퇴 회원 사진을 지우는 것은 별개 정책이다(#70).
 
