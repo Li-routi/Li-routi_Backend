@@ -145,6 +145,44 @@ public interface GroupControllerDocs {
             @Parameter(description = "삭제할 그룹 ID", required = true, example = "1") Long groupId
     );
 
+    @Operation(
+            summary = "그룹 방 나가기",
+            description = """
+                    인증 회원이 자신이 ACTIVE MEMBER로 참여 중인 그룹에서 나갑니다.
+                    memberId는 인증 객체에서만 사용하며 요청으로 받지 않습니다. GroupMember 행은 삭제하지 않고
+                    LEFT 상태와 탈퇴 시각을 기록합니다.
+
+                    PENDING, IN_PROGRESS 그룹 루틴 할당만 Hard Delete하며, COMPLETED, MISSED 할당과
+                    그룹 루틴 인증 이력은 보존합니다. OWNER는 권한을 위임하거나 그룹을 삭제하기 전까지
+                    나갈 수 없습니다.
+
+                    ### 에러 코드
+
+                    | code | HTTP | 설명 |
+                    | --- | --- | --- |
+                    | `GROUP403_1` | 403 | 사용할 수 없는 그룹 |
+                    | `GROUP403_2` | 403 | ACTIVE 그룹 구성원이 아님 (비구성원, LEFT/KICKED 포함) |
+                    | `GROUP404_1` | 404 | 그룹을 찾을 수 없음 |
+                    | `GROUP409_1` | 409 | OWNER는 그룹을 나갈 수 없음 |
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200", description = "그룹 탈퇴 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401", description = "유효하지 않거나 만료된 인증 토큰"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "403", description = "미인증, 사용할 수 없는 그룹 또는 ACTIVE 구성원이 아님"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404", description = "그룹 또는 회원을 찾을 수 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "409", description = "OWNER는 그룹을 나갈 수 없음")
+    })
+    ApiResponse<Void> leaveGroup(
+            @Parameter(hidden = true) CustomUserDetails userDetails,
+            @Parameter(description = "나갈 그룹 ID", required = true, example = "1") Long groupId
+    );
+
     /**
      * 로그인 회원에게 오늘 할당된 활성 그룹의 루틴 목록 조회 API 명세다.
      *

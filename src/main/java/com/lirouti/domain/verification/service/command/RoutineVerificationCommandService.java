@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.lirouti.domain.group.entity.GroupRoutineAssignment;
+import com.lirouti.domain.group.repository.GroupRoutineAssignmentRepository;
 import com.lirouti.domain.group.service.command.GroupRoutineAssignmentCommandService;
 import com.lirouti.domain.routine.entity.MemberRoutine;
 import com.lirouti.domain.verification.entity.GroupRoutineVerification;
@@ -36,8 +37,38 @@ import lombok.extern.slf4j.Slf4j;
 public class RoutineVerificationCommandService {
 
     private final GroupRoutineVerificationRepository groupRoutineVerificationRepository;
+    private final GroupRoutineAssignmentRepository groupRoutineAssignmentRepository;
     private final GroupRoutineAssignmentCommandService assignmentCommandService;
     private final MemberRoutineVerificationRepository memberRoutineVerificationRepository;
+
+    /**
+     * 그룹 루틴 인증의 DB 구간을 하나의 트랜잭션으로 처리한다.
+     * 탈퇴의 미완료 할당 삭제와 같은 Assignment 행을 잠가 먼저 확정된 요청을 우선한다.
+     */
+    @Transactional
+    public GroupRoutineVerification verifyGroupRoutineAndComplete(
+            Long memberId,
+            Long groupId,
+            Long routineId,
+            LocalDate assignedDate,
+            String mediaKey,
+            String content,
+            LocalDateTime verifiedAt
+    ) {
+        GroupRoutineAssignment assignment = groupRoutineAssignmentRepository
+                .findForVerification(routineId, groupId, memberId, assignedDate)
+                .orElseThrow(() -> {
+                    log.warn("오늘 수행할 그룹 루틴 할당이 없습니다. memberId={}, groupId={}, routineId={}",
+                            memberId, groupId, routineId);
+                    return new VerificationException(VerificationErrorCode.ASSIGNMENT_NOT_FOUND);
+                });
+
+        if (groupRoutineVerificationRepository.findByAssignmentId(assignment.getId()).isPresent()) {
+            throw new VerificationException(VerificationErrorCode.ALREADY_VERIFIED);
+        }
+
+        return saveGroupRoutineAndComplete(assignment, mediaKey, content, verifiedAt);
+    }
 
     /**
      * 그룹 루틴 인증을 저장하고 할당을 완료로 넘긴다. <b>둘은 한 트랜잭션이어야 한다.</b>

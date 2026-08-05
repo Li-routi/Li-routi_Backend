@@ -4,6 +4,7 @@ import com.lirouti.domain.group.converter.GroupConverter;
 import com.lirouti.domain.group.dto.request.GroupReqDTO;
 import com.lirouti.domain.group.dto.response.GroupResDTO;
 import com.lirouti.domain.group.entity.Group;
+import com.lirouti.domain.group.entity.GroupMember;
 import com.lirouti.domain.group.entity.GroupRoutine;
 import com.lirouti.domain.group.entity.GroupRoutineCategory;
 import com.lirouti.domain.group.enums.GroupStatus;
@@ -51,6 +52,23 @@ public class GroupCommandService {
 
         groupValidationService.validateGroupOwner(group, memberId);
         groupRepository.delete(group);
+    }
+
+    /**
+     * ACTIVE 일반 구성원을 그룹에서 탈퇴 처리하고, 아직 확정되지 않은 그룹 루틴 할당을 삭제한다.
+     * 완료·미이행 할당과 인증 이력은 상태 조건으로 보존한다.
+     */
+    @Transactional
+    public void leaveGroup(Long groupId, Long memberId) {
+        GroupMember groupMember = groupValidationService
+                .validateActiveGroupMember(groupId, memberId);
+
+        groupMember.leave();
+        int deletedAssignmentCount = assignmentCommandService
+                .deleteUnfinishedAssignmentsForLeaver(groupId, memberId);
+
+        log.info("그룹 탈퇴를 완료했습니다. groupId={}, memberId={}, deletedAssignmentCount={}",
+                groupId, memberId, deletedAssignmentCount);
     }
 
     /** 그룹 행 잠금 안에서 OWNER 권한, 상한, 이름 중복을 검증하고 사용자 카테고리를 생성한다. */
