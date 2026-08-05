@@ -241,7 +241,7 @@ public interface GroupRoutineAssignmentRepository
      * 완료 수(분자)를 함께 가져온다. 날짜가 없는 날은 결과에 아예 나오지 않는다.
      */
     @Query("""
-            select new com.lirouti.domain.group.dto.projection.DailyAssignmentStat(
+            select new com.lirouti.domain.verification.dto.projection.DailyAssignmentStat(
                 a.assignedDate,
                 count(a),
                 sum(case when a.status = com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus.COMPLETED
