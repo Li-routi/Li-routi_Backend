@@ -2,6 +2,7 @@ package com.lirouti.domain.group.repository;
 
 import com.lirouti.domain.group.entity.GroupRoutineAssignment;
 import com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus;
+import com.lirouti.domain.verification.dto.projection.DailyAssignmentStat;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -233,5 +234,27 @@ public interface GroupRoutineAssignmentRepository
             @Param("currentTime") LocalTime currentTime,
             @Param("pendingStatus") GroupRoutineAssignmentStatus pendingStatus,
             @Param("inProgressStatus") GroupRoutineAssignmentStatus inProgressStatus
+    );
+
+    /**
+     * 리포트 집계용. 기간 내 회원의 그룹 루틴 할당을 날짜별로 묶어 총 할당 수(분모)와
+     * 완료 수(분자)를 함께 가져온다. 날짜가 없는 날은 결과에 아예 나오지 않는다.
+     */
+    @Query("""
+            select new com.lirouti.domain.group.dto.projection.DailyAssignmentStat(
+                a.assignedDate,
+                count(a),
+                sum(case when a.status = com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus.COMPLETED
+                         then 1L else 0L end)
+            )
+            from GroupRoutineAssignment a
+            where a.member.id = :memberId
+              and a.assignedDate between :start and :end
+            group by a.assignedDate
+            """)
+    List<DailyAssignmentStat> findDailyAssignmentStats(
+            @Param("memberId") Long memberId,
+            @Param("start") LocalDate start,
+            @Param("end") LocalDate end
     );
 }
