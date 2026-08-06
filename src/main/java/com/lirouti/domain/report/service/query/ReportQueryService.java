@@ -108,8 +108,8 @@ public class ReportQueryService {
                 .mapToLong(DayAggregate::completed).sum();
 
         double averageRate = monthAggregate.values().stream()
-                .filter(day -> day.completed() > 0)
-                .mapToDouble(day -> (double) day.completed() / day.scheduled())
+                .filter(day -> day.scheduled() > 0 && day.completed() > 0)
+                .mapToDouble(day -> Math.min(1.0, (double) day.completed() / day.scheduled()))
                 .average().orElse(0.0);
         int averageCompletionRate = (int) Math.round(averageRate * 100);
 
