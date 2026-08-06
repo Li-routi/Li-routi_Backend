@@ -108,7 +108,14 @@ class OpenApiSchemaCollisionTest {
                 .andExpect(jsonPath("$.components.schemas.ChallengeVerificationReportResult"
                         + ".properties.reportId").exists())
                 .andExpect(jsonPath("$.components.schemas.ChallengeVerificationReportResult"
+                        + ".properties.verificationId").exists())
+                .andExpect(jsonPath("$.components.schemas.ChallengeVerificationReportResult"
                         + ".properties.reason").doesNotExist())
+                // 반대 방향도 막는다 — 응답 필드가 요청 스키마에 섞여도 통과하면 안 된다
+                .andExpect(jsonPath("$.components.schemas.ChallengeVerificationReportRequest"
+                        + ".properties.reportId").doesNotExist())
+                .andExpect(jsonPath("$.components.schemas.ChallengeVerificationReportRequest"
+                        + ".properties.verificationId").doesNotExist())
                 .andExpect(jsonPath("$.components.schemas.Report").doesNotExist());
     }
 
