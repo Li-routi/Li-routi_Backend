@@ -832,6 +832,84 @@ class GroupControllerTest {
     }
 
     @Test
+    @DisplayName("OWNER가 그룹 루틴을 삭제하면 성공 응답과 null 결과를 반환한다")
+    void deleteRoutine_Owner_ReturnsSuccessAndDeletesMutableAssignments() throws Exception {
+        // given
+        Group group = group("GD00001");
+        Member owner = member();
+        Member member = member();
+        membership(owner, group, GroupMemberRole.OWNER);
+        membership(member, group, GroupMemberRole.MEMBER);
+        GroupRoutine routine = routine(group, category(true), "삭제 API 루틴");
+        GroupRoutineAssignment pending = assignment(
+                routine, owner, LocalTime.of(9, 0), LocalTime.of(10, 0),
+                GroupRoutineAssignmentStatus.PENDING
+        );
+        GroupRoutineAssignment completed = assignment(
+                routine, member, LocalTime.of(9, 0), LocalTime.of(10, 0),
+                GroupRoutineAssignmentStatus.COMPLETED
+        );
+        em.flush();
+        Long routineId = routine.getId();
+        Long pendingId = pending.getId();
+        Long completedId = completed.getId();
+        em.clear();
+
+        // when & then
+        mockMvc.perform(delete("/api/groups/{groupId}/routines/{routineId}",
+                        group.getId(), routineId)
+                        .with(user(principal(owner))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.isSuccess").value(true))
+                .andExpect(jsonPath("$.code").value("GROUP200_5"))
+                .andExpect(jsonPath("$.result").doesNotExist());
+
+        em.flush();
+        em.clear();
+        org.assertj.core.api.Assertions.assertThat(em.find(GroupRoutine.class, routineId).getActive())
+                .isFalse();
+        org.assertj.core.api.Assertions.assertThat(em.find(GroupRoutineAssignment.class, pendingId))
+                .isNull();
+        org.assertj.core.api.Assertions.assertThat(em.find(GroupRoutineAssignment.class, completedId))
+                .isNotNull();
+    }
+
+    @Test
+    @DisplayName("일반 구성원은 그룹 루틴을 삭제할 수 없다")
+    void deleteRoutine_RegularMember_ReturnsOwnerAccessDenied() throws Exception {
+        // given
+        Group group = group("GD00002");
+        Member regularMember = member();
+        membership(regularMember, group, GroupMemberRole.MEMBER);
+        GroupRoutine routine = routine(group, category(true), "삭제 권한 루틴");
+        em.flush();
+
+        // when & then
+        mockMvc.perform(delete("/api/groups/{groupId}/routines/{routineId}",
+                        group.getId(), routine.getId())
+                        .with(user(principal(regularMember))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("GROUP403_3"));
+    }
+
+    @Test
+    @DisplayName("OpenAPI 문서에 그룹 루틴 DELETE 경로와 주요 응답이 노출된다")
+    void openApi_GroupRoutineDelete_IsDocumented() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$['paths']['/api/groups/{groupId}/routines/{routineId}']"
+                        + "['delete']['summary']").value("그룹 루틴 삭제"))
+                .andExpect(jsonPath("$['paths']['/api/groups/{groupId}/routines/{routineId}']"
+                        + "['delete']['parameters'].length()").value(2))
+                .andExpect(jsonPath("$['paths']['/api/groups/{groupId}/routines/{routineId}']"
+                        + "['delete']['responses']['200']").exists())
+                .andExpect(jsonPath("$['paths']['/api/groups/{groupId}/routines/{routineId}']"
+                        + "['delete']['responses']['403']").exists())
+                .andExpect(jsonPath("$['paths']['/api/groups/{groupId}/routines/{routineId}']"
+                        + "['delete']['responses']['404']").exists());
+    }
+
+    @Test
     @DisplayName("OWNER는 그룹에 영구 귀속된 초대코드를 조회할 수 있다")
     void getInviteCode_Owner_ReturnsPermanentCode() throws Exception {
         // given

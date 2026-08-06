@@ -284,6 +284,31 @@ public class GroupCommandService {
     }
 
     /**
+     * ACTIVE OWNER와 루틴 소속을 검증하고 미확정 할당 삭제와 루틴 비활성화를 함께 처리한다.
+     */
+    @Transactional
+    public void deleteRoutine(Long groupId, Long routineId, Long memberId) {
+        groupValidationService.validateGroupOwner(groupId, memberId);
+
+        GroupRoutine groupRoutine = groupRoutineRepository
+                .findByIdAndGroupIdForUpdate(routineId, groupId)
+                .orElseThrow(() -> {
+                    log.warn("삭제할 활성 그룹 루틴을 찾을 수 없습니다. "
+                                    + "groupId={}, routineId={}, memberId={}",
+                            groupId, routineId, memberId);
+                    return new GroupException(GroupErrorCode.GROUP_ROUTINE_NOT_FOUND);
+                });
+
+        int deletedAssignmentCount = assignmentCommandService
+                .deleteMutableAssignments(routineId);
+        groupRoutine.delete();
+
+        log.info("그룹 루틴 삭제를 완료했습니다. "
+                        + "groupId={}, routineId={}, memberId={}, deletedAssignmentCount={}",
+                groupId, routineId, memberId, deletedAssignmentCount);
+    }
+
+    /**
      * Controller 외의 호출 경로에서도 생성 요청의 필수값과 일정 규칙을 방어적으로 검증한다.
      *
      * @param request 검증할 그룹 루틴 생성 요청
@@ -357,7 +382,7 @@ public class GroupCommandService {
      * @throws GroupException 동일 제목이 이미 존재하는 경우
      */
     private void validateRoutineTitleNotDuplicated(Long groupId, String title) {
-        if (groupRoutineRepository.existsByGroupIdAndTitle(groupId, title)) {
+        if (groupRoutineRepository.existsByGroupIdAndTitleAndActiveTrue(groupId, title)) {
             log.warn("동일한 제목의 그룹 루틴 생성을 차단했습니다. groupId={}, title={}",
                     groupId, title);
             throw new GroupException(GroupErrorCode.DUPLICATE_GROUP_ROUTINE_TITLE);
@@ -366,7 +391,7 @@ public class GroupCommandService {
 
     /** 그룹 행 잠금을 획득한 상태에서 31번째 루틴 생성을 차단한다. */
     private void validateRoutineLimit(Long groupId) {
-        long routineCount = groupRoutineRepository.countByGroupId(groupId);
+        long routineCount = groupRoutineRepository.countByGroupIdAndActiveTrue(groupId);
         if (routineCount >= GroupRoutine.MAX_GROUP_ROUTINE_COUNT) {
             log.warn("그룹 루틴 개수 상한을 초과했습니다. groupId={}, routineCount={}",
                     groupId, routineCount);
@@ -403,7 +428,7 @@ public class GroupCommandService {
             Long routineId,
             String title
     ) {
-        if (groupRoutineRepository.existsByGroupIdAndTitleAndIdNot(groupId, title, routineId)) {
+        if (groupRoutineRepository.existsByGroupIdAndTitleAndActiveTrueAndIdNot(groupId, title, routineId)) {
             log.warn("동일한 제목의 그룹 루틴 수정을 차단했습니다. "
                             + "groupId={}, routineId={}, title={}",
                     groupId, routineId, title);

@@ -42,7 +42,8 @@ public interface GroupRoutineAssignmentRepository
                 version,
                 created_at,
                 updated_at
-            ) values (
+            )
+            select
                 :groupRoutineId,
                 :memberId,
                 :assignedDate,
@@ -52,8 +53,10 @@ public interface GroupRoutineAssignmentRepository
                 0,
                 current_timestamp(6),
                 current_timestamp(6)
-            )
-            on duplicate key update id = id
+            from group_routine routine
+            where routine.id = :groupRoutineId
+              and routine.active = true
+            on duplicate key update id = group_routine_assignment.id
             """, nativeQuery = true)
     int insertIfAbsent(
             @Param("groupRoutineId") Long groupRoutineId,
@@ -72,6 +75,18 @@ public interface GroupRoutineAssignmentRepository
      * @return 해당 날짜의 할당 목록
      */
     List<GroupRoutineAssignment> findAllByMemberIdAndAssignedDate(Long memberId, LocalDate assignedDate);
+
+    /** 한 루틴의 미확정 할당만 일괄 물리 삭제한다. */
+    @Modifying(flushAutomatically = true)
+    @Query("""
+            delete from GroupRoutineAssignment assignment
+            where assignment.groupRoutine.id = :groupRoutineId
+              and assignment.status in :statuses
+            """)
+    int deleteAllByGroupRoutineIdAndStatusIn(
+            @Param("groupRoutineId") Long groupRoutineId,
+            @Param("statuses") List<GroupRoutineAssignmentStatus> statuses
+    );
 
     /**
      * 그 회원의 오늘자 할당 한 건. 인증 요청이 실제로 그 사람 몫인지 확인하는 데 쓴다.

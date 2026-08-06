@@ -15,6 +15,20 @@ import static org.mockito.Mockito.mock;
 class GroupRoutineTest {
 
     @Test
+    @DisplayName("새 루틴은 활성 상태이며 삭제하면 비활성 상태가 된다")
+    void delete_ActiveRoutine_DeactivatesRoutine() {
+        // given
+        GroupRoutine routine = routine();
+        assertThat(routine.getActive()).isTrue();
+
+        // when
+        routine.delete();
+
+        // then
+        assertThat(routine.getActive()).isFalse();
+    }
+
+    @Test
     @DisplayName("요일별 일정을 추가하면 루틴과 양방향 관계가 설정된다")
     void addSchedule_ValidSchedule_AddsWithRoutineReference() {
         // given

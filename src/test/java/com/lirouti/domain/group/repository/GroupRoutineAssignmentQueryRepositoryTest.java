@@ -138,6 +138,49 @@ class GroupRoutineAssignmentQueryRepositoryTest {
                 .isEmpty();
     }
 
+    @Test
+    @DisplayName("완료·미이행 상태 정책은 유지하되 비활성 루틴의 할당만 제외한다")
+    void findTodayAssignments_InactiveRoutine_ExcludesWithoutStatusFiltering() {
+        // given
+        Member member = member("query-inactive-routine");
+        RoutineFixture completedFixture = routineFixture("완료", "QRY0006");
+        RoutineFixture missedFixture = routineFixture("미이행", "QRY0008");
+        RoutineFixture inactiveFixture = routineFixture("비활성", "QRY0007");
+        membership(member, completedFixture.group());
+        membership(member, missedFixture.group());
+        membership(member, inactiveFixture.group());
+        assignment(completedFixture.routine(), member, TODAY,
+                LocalTime.of(9, 0), LocalTime.of(10, 0),
+                GroupRoutineAssignmentStatus.COMPLETED);
+        assignment(missedFixture.routine(), member, TODAY,
+                LocalTime.of(10, 0), LocalTime.of(11, 0),
+                GroupRoutineAssignmentStatus.MISSED);
+        assignment(inactiveFixture.routine(), member, TODAY,
+                LocalTime.of(11, 0), LocalTime.of(12, 0),
+                GroupRoutineAssignmentStatus.COMPLETED);
+        inactiveFixture.routine().delete();
+        em.flush();
+        em.clear();
+
+        // when
+        List<TodayAssignmentProjection> result = assignmentRepository
+                .findTodayAssignmentsByMemberId(member.getId(), TODAY);
+
+        // then
+        assertThat(result)
+                .extracting(TodayAssignmentProjection::status)
+                .containsExactly(
+                        GroupRoutineAssignmentStatus.COMPLETED,
+                        GroupRoutineAssignmentStatus.MISSED
+                );
+        assertThat(result)
+                .extracting(TodayAssignmentProjection::routineId)
+                .containsExactly(
+                        completedFixture.routine().getId(),
+                        missedFixture.routine().getId()
+                );
+    }
+
     private Member member(String identifier) {
         Member member = Member.builder()
                 .email(identifier + "@example.com")

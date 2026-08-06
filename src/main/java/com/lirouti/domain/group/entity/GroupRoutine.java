@@ -18,15 +18,7 @@ import java.util.Set;
 @Entity
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@Table(
-        name = "group_routine",
-        uniqueConstraints = {
-                @UniqueConstraint(
-                        name = "uk_group_routine_group_title",
-                        columnNames = {"group_id", "title"}
-                )
-        }
-)
+@Table(name = "group_routine")
 public class GroupRoutine extends BaseEntity {
     /** 한 그룹에 등록할 수 있는 그룹 루틴 수. */
     public static final int MAX_GROUP_ROUTINE_COUNT = 30;
@@ -48,6 +40,9 @@ public class GroupRoutine extends BaseEntity {
 
     @Column(nullable = false, length = 255)
     private String description;
+
+    @Column(nullable = false)
+    private Boolean active;
 
     @OneToMany(mappedBy = "groupRoutine", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<GroupRoutineSchedule> schedules = new ArrayList<>();
@@ -74,6 +69,12 @@ public class GroupRoutine extends BaseEntity {
         this.category = category;
         this.title = title;
         this.description = description;
+        this.active = true;
+    }
+
+    /** 완료·미이행 할당과 인증 이력을 보존하기 위해 루틴 행을 비활성화한다. */
+    public void delete() {
+        this.active = false;
     }
 
     /**

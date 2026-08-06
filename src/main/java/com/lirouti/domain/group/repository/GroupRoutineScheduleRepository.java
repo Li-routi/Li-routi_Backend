@@ -22,6 +22,7 @@ public interface GroupRoutineScheduleRepository extends JpaRepository<GroupRouti
             join fetch schedule.groupRoutine routine
             join fetch routine.group
             where schedule.repeatDay = :repeatDay
+              and routine.active = true
             """)
     List<GroupRoutineSchedule> findAllWithRoutineAndGroupByRepeatDay(
             @Param("repeatDay") DayOfWeek repeatDay
@@ -40,6 +41,7 @@ public interface GroupRoutineScheduleRepository extends JpaRepository<GroupRouti
             join fetch schedule.groupRoutine routine
             where routine.group.id = :groupId
               and schedule.repeatDay = :repeatDay
+              and routine.active = true
             """)
     List<GroupRoutineSchedule> findAllWithRoutineByGroupIdAndRepeatDay(
             @Param("groupId") Long groupId,

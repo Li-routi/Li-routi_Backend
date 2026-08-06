@@ -28,6 +28,7 @@ import static org.mockito.Mockito.when;
 class GroupControllerUnitTest {
     private static final Long MEMBER_ID = 1L;
     private static final Long GROUP_ID = 10L;
+    private static final Long ROUTINE_ID = 20L;
 
     @Mock
     private GroupCommandService groupCommandService;
@@ -109,6 +110,23 @@ class GroupControllerUnitTest {
                 GroupSuccessCode.GROUP_ROUTINE_CATEGORY_CREATE_SUCCESS.getCode());
         assertThat(response.getResult()).isSameAs(result);
         verify(groupCommandService).createCategory(GROUP_ID, MEMBER_ID, request);
+    }
+
+    @Test
+    @DisplayName("삭제 요청의 인증 회원 ID와 그룹·루틴 ID를 명령 서비스에 전달한다")
+    void deleteRoutine_AuthenticatedOwner_ReturnsSuccess() {
+        // given
+        CustomUserDetails principal = new CustomUserDetails(MEMBER_ID, Role.ROLE_USER);
+
+        // when
+        ApiResponse<Void> response = groupController
+                .deleteRoutine(principal, GROUP_ID, ROUTINE_ID);
+
+        // then
+        assertThat(response.getCode()).isEqualTo(
+                GroupSuccessCode.GROUP_ROUTINE_DELETE_SUCCESS.getCode());
+        assertThat(response.getResult()).isNull();
+        verify(groupCommandService).deleteRoutine(GROUP_ID, ROUTINE_ID, MEMBER_ID);
     }
 
     @Test

@@ -17,6 +17,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -205,7 +206,8 @@ class GroupCommandServiceTest {
     }
 
     private void givenNoDuplicateTitle() {
-        when(groupRoutineRepository.existsByGroupIdAndTitle(GROUP_ID, "저녁 루틴")).thenReturn(false);
+        when(groupRoutineRepository.existsByGroupIdAndTitleAndActiveTrue(GROUP_ID, "저녁 루틴"))
+                .thenReturn(false);
     }
 
     private void givenResponseReferences() {
@@ -275,7 +277,7 @@ class GroupCommandServiceTest {
         // given
         givenValidatedOwner();
         givenActiveCategory();
-        when(groupRoutineRepository.existsByGroupIdAndTitle(GROUP_ID, "저녁 루틴"))
+        when(groupRoutineRepository.existsByGroupIdAndTitleAndActiveTrue(GROUP_ID, "저녁 루틴"))
                 .thenReturn(true);
 
         // when & then
@@ -292,7 +294,7 @@ class GroupCommandServiceTest {
     void createRoutine_AtLimit_ThrowsLimitExceeded() {
         // given
         givenValidatedOwner();
-        when(groupRoutineRepository.countByGroupId(GROUP_ID))
+        when(groupRoutineRepository.countByGroupIdAndActiveTrue(GROUP_ID))
                 .thenReturn((long) GroupRoutine.MAX_GROUP_ROUTINE_COUNT);
 
         // when & then
@@ -364,7 +366,7 @@ class GroupCommandServiceTest {
         when(groupRoutineRepository.findByIdAndGroupIdForUpdate(ROUTINE_ID, GROUP_ID))
                 .thenReturn(Optional.of(routine));
         givenActiveCategory();
-        when(groupRoutineRepository.existsByGroupIdAndTitleAndIdNot(
+        when(groupRoutineRepository.existsByGroupIdAndTitleAndActiveTrueAndIdNot(
                 GROUP_ID, "수정 루틴", ROUTINE_ID
         )).thenReturn(false);
         givenResponseReferences();
@@ -421,7 +423,7 @@ class GroupCommandServiceTest {
         when(groupRoutineRepository.findByIdAndGroupIdForUpdate(ROUTINE_ID, GROUP_ID))
                 .thenReturn(Optional.of(routine));
         givenActiveCategory();
-        when(groupRoutineRepository.existsByGroupIdAndTitleAndIdNot(
+        when(groupRoutineRepository.existsByGroupIdAndTitleAndActiveTrueAndIdNot(
                 GROUP_ID, "수정 루틴", ROUTINE_ID
         )).thenReturn(true);
 
@@ -458,6 +460,83 @@ class GroupCommandServiceTest {
         verify(groupRoutineRepository, never()).saveAndFlush(any(GroupRoutine.class));
         verify(assignmentCommandService, never())
                 .synchronizeRoutineAssignmentsToday(any(GroupRoutine.class));
+    }
+
+    @Test
+    @DisplayName("OWNER가 루틴을 삭제하면 미확정 할당 삭제 후 루틴을 비활성화한다")
+    void deleteRoutine_Owner_DeletesAssignmentsAndDeactivatesRoutine() {
+        // given
+        GroupRoutine routine = existingRoutine();
+        when(groupValidationService.validateGroupOwner(GROUP_ID, OWNER_ID))
+                .thenReturn(ownerMembership);
+        when(groupRoutineRepository.findByIdAndGroupIdForUpdate(ROUTINE_ID, GROUP_ID))
+                .thenReturn(Optional.of(routine));
+        when(assignmentCommandService.deleteMutableAssignments(ROUTINE_ID)).thenReturn(3);
+
+        // when
+        groupCommandService.deleteRoutine(GROUP_ID, ROUTINE_ID, OWNER_ID);
+
+        // then
+        assertThat(routine.getActive()).isFalse();
+        InOrder inOrder = inOrder(groupValidationService, groupRoutineRepository,
+                assignmentCommandService);
+        inOrder.verify(groupValidationService).validateGroupOwner(GROUP_ID, OWNER_ID);
+        inOrder.verify(groupRoutineRepository).findByIdAndGroupIdForUpdate(ROUTINE_ID, GROUP_ID);
+        inOrder.verify(assignmentCommandService).deleteMutableAssignments(ROUTINE_ID);
+    }
+
+    @Test
+    @DisplayName("미확정 할당 삭제가 실패하면 루틴을 비활성화하지 않는다")
+    void deleteRoutine_AssignmentDeletionFails_DoesNotDeactivateRoutine() {
+        // given
+        GroupRoutine routine = mock(GroupRoutine.class);
+        when(groupValidationService.validateGroupOwner(GROUP_ID, OWNER_ID))
+                .thenReturn(ownerMembership);
+        when(groupRoutineRepository.findByIdAndGroupIdForUpdate(ROUTINE_ID, GROUP_ID))
+                .thenReturn(Optional.of(routine));
+        when(assignmentCommandService.deleteMutableAssignments(ROUTINE_ID))
+                .thenThrow(new IllegalStateException("assignment deletion failure"));
+
+        // when & then
+        assertThatThrownBy(() -> groupCommandService
+                .deleteRoutine(GROUP_ID, ROUTINE_ID, OWNER_ID))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("assignment deletion failure");
+        verify(routine, never()).delete();
+    }
+
+    @Test
+    @DisplayName("요청 그룹의 활성 루틴이 아니면 찾을 수 없는 루틴으로 처리한다")
+    void deleteRoutine_RoutineNotFound_ThrowsGroupException() {
+        // given
+        when(groupValidationService.validateGroupOwner(GROUP_ID, OWNER_ID))
+                .thenReturn(ownerMembership);
+        when(groupRoutineRepository.findByIdAndGroupIdForUpdate(ROUTINE_ID, GROUP_ID))
+                .thenReturn(Optional.empty());
+
+        // when & then
+        assertThatThrownBy(() -> groupCommandService
+                .deleteRoutine(GROUP_ID, ROUTINE_ID, OWNER_ID))
+                .isInstanceOf(GroupException.class)
+                .extracting("code")
+                .isEqualTo(GroupErrorCode.GROUP_ROUTINE_NOT_FOUND);
+        verifyNoInteractions(assignmentCommandService);
+    }
+
+    @Test
+    @DisplayName("OWNER 검증이 실패하면 삭제 대상 루틴을 조회하지 않는다")
+    void deleteRoutine_OwnerValidationFails_DoesNotContinue() {
+        // given
+        when(groupValidationService.validateGroupOwner(GROUP_ID, OWNER_ID))
+                .thenThrow(new GroupException(GroupErrorCode.GROUP_OWNER_ACCESS_DENIED));
+
+        // when & then
+        assertThatThrownBy(() -> groupCommandService
+                .deleteRoutine(GROUP_ID, ROUTINE_ID, OWNER_ID))
+                .isInstanceOf(GroupException.class)
+                .extracting("code")
+                .isEqualTo(GroupErrorCode.GROUP_OWNER_ACCESS_DENIED);
+        verifyNoInteractions(groupRoutineRepository, assignmentCommandService);
     }
 
     private GroupReqDTO.GroupRoutineCreateRequest request() {
