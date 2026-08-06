@@ -5,16 +5,20 @@ import java.security.Principal;
 import org.springframework.messaging.MessagingException;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageMapping;
+import org.springframework.messaging.handler.annotation.MessageExceptionHandler;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
 import org.springframework.validation.annotation.Validated;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.lirouti.domain.chat.dto.request.ChatReqDTO;
 import com.lirouti.domain.chat.dto.response.ChatResDTO;
 import com.lirouti.domain.chat.service.command.ChatCommandService;
+import com.lirouti.domain.chat.exception.ChatException;
 import com.lirouti.global.auth.CustomUserDetails;
+import com.lirouti.global.apiPayload.exception.GeneralException;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -41,6 +45,26 @@ public class ChatWebSocketController {
         messagingTemplate.convertAndSend(CHAT_TOPIC_FORMAT.formatted(groupId), response);
     }
 
+    @MessageExceptionHandler(ChatException.class)
+    public void handleRecoverableDomainException(
+            GeneralException exception,
+            @Payload ChatReqDTO.SendMessage request,
+            Principal principal
+    ) {
+        if (principal == null || principal.getName() == null || principal.getName().isBlank()) {
+            return;
+        }
+
+        messagingTemplate.convertAndSendToUser(
+                principal.getName(),
+                "/queue/errors",
+                new StompErrorResponse(
+                        exception.getCode().getCode(),
+                        exception.getCode().getMessage(),
+                        request == null ? null : request.clientMessageId())
+        );
+    }
+
     private Long getMemberId(Principal principal) {
         if (!(principal instanceof Authentication authentication)
                 || !authentication.isAuthenticated()
@@ -49,5 +73,13 @@ public class ChatWebSocketController {
         }
 
         return userDetails.getMemberId();
+    }
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private record StompErrorResponse(
+            String code,
+            String message,
+            String clientMessageId
+    ) {
     }
 }

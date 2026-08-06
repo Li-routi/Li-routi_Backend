@@ -146,6 +146,31 @@ public class GroupController implements GroupControllerDocs {
         return ApiResponse.onSuccess(GroupSuccessCode.GROUP_ROUTINE_UPDATE_SUCCESS, result);
     }
 
+    /** ACTIVE 구성원의 그룹 탈퇴를 처리한다. */
+    @DeleteMapping("/{groupId}/members/me")
+    public ApiResponse<Void> leaveGroup(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long groupId
+    ) {
+        groupCommandService.leaveGroup(groupId, userDetails.getMemberId());
+        return ApiResponse.onSuccess(GroupSuccessCode.GROUP_MEMBER_LEAVE_SUCCESS, null);
+    }
+
+    /** ACTIVE OWNER가 대상 구성원을 그룹에서 강제 퇴장시킨다. */
+    @DeleteMapping("/{groupId}/members/{targetMemberId}")
+    public ApiResponse<Void> kickMember(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long groupId,
+            @PathVariable Long targetMemberId
+    ) {
+        groupCommandService.kickMember(
+                groupId,
+                userDetails.getMemberId(),
+                targetMemberId
+        );
+        return ApiResponse.onSuccess(GroupSuccessCode.GROUP_MEMBER_KICK_SUCCESS, null);
+    }
+
     // 그룹 초대 코드 조회 API
     @Override
     @GetMapping("/{groupId}/invite-code")

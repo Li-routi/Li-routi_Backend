@@ -244,6 +244,49 @@ public interface GroupControllerDocs {
     );
 
     @Operation(
+            summary = "그룹 탈퇴",
+            description = "ACTIVE 구성원이 그룹에서 탈퇴합니다. OWNER는 권한 위임 또는 그룹 삭제 전까지 탈퇴할 수 없습니다."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200", description = "그룹 탈퇴 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401", description = "유효하지 않거나 만료된 인증 토큰"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "403", description = "미인증, 비활성 그룹 또는 ACTIVE 구성원이 아님"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404", description = "그룹 또는 회원을 찾을 수 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "409", description = "OWNER는 그룹 탈퇴를 할 수 없음")
+    })
+    ApiResponse<Void> leaveGroup(
+            @Parameter(hidden = true) CustomUserDetails userDetails,
+            @Parameter(description = "그룹 ID", required = true) Long groupId
+    );
+
+    @Operation(
+            summary = "그룹 구성원 강제 퇴장",
+            description = "ACTIVE OWNER가 대상 ACTIVE 구성원을 그룹에서 강제 퇴장시킵니다. OWNER는 강제 퇴장시킬 수 없습니다."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200", description = "그룹 구성원 강제 퇴장 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401", description = "유효하지 않거나 만료된 인증 토큰"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "403", description = "미인증, 비활성 그룹·구성원 또는 OWNER 권한 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404", description = "그룹 또는 회원을 찾을 수 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "409", description = "OWNER는 강제 퇴장시킬 수 없음")
+    })
+    ApiResponse<Void> kickMember(
+            @Parameter(hidden = true) CustomUserDetails userDetails,
+            @Parameter(description = "그룹 ID", required = true) Long groupId,
+            @Parameter(description = "강제 퇴장할 회원 ID", required = true) Long targetMemberId
+    );
+
+    @Operation(
             summary = "그룹 초대코드 조회",
             description = "ACTIVE OWNER가 현재 초대코드와 말소 시각을 조회합니다. 만료된 코드는 자동으로 재발급하지 않습니다."
     )

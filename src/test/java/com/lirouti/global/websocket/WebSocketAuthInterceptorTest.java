@@ -85,7 +85,6 @@ class WebSocketAuthInterceptorTest {
 
         // then
         assertThat(result).isSameAs(message);
-        verify(memberQueryService).getActiveMember(MEMBER_ID);
         verify(groupValidationService).validateActiveGroupMember(GROUP_ID, MEMBER_ID);
     }
 
@@ -104,8 +103,42 @@ class WebSocketAuthInterceptorTest {
 
         // then
         assertThat(result).isSameAs(message);
-        verify(memberQueryService).getActiveMember(MEMBER_ID);
         verify(groupValidationService).validateActiveGroupMember(GROUP_ID, MEMBER_ID);
+    }
+
+    @Test
+    @DisplayName("오류 destination 구독 시 인증 회원의 활성 상태만 확인한다")
+    void preSend_SubscribeToUserErrorDestination_ValidatesActiveMember() {
+        // given
+        Message<?> message = stompMessage(
+                StompCommand.SUBSCRIBE,
+                "/user/queue/errors",
+                authentication
+        );
+
+        // when
+        Message<?> result = interceptor.preSend(message, channel);
+
+        // then
+        assertThat(result).isSameAs(message);
+        verify(memberQueryService).getActiveMember(MEMBER_ID);
+        verifyNoInteractions(groupValidationService);
+    }
+
+    @Test
+    @DisplayName("오류 destination도 인증 정보가 없으면 거부한다")
+    void preSend_SubscribeToUserErrorDestinationWithoutAuthentication_ThrowsMessagingException() {
+        // given
+        Message<?> message = stompMessage(
+                StompCommand.SUBSCRIBE,
+                "/user/queue/errors",
+                null
+        );
+
+        // when & then
+        assertThatThrownBy(() -> interceptor.preSend(message, channel))
+                .isInstanceOf(MessagingException.class);
+        verifyNoInteractions(memberQueryService, groupValidationService);
     }
 
     @Test

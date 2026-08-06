@@ -1,9 +1,12 @@
 package com.lirouti.global.websocket;
 
 import java.nio.charset.StandardCharsets;
+import java.security.Principal;
 
+import org.springframework.context.annotation.Lazy;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessagingException;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.MessageBuilder;
@@ -13,33 +16,58 @@ import org.springframework.util.MimeTypeUtils;
 import org.springframework.web.socket.messaging.StompSubProtocolErrorHandler;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import tools.jackson.core.JacksonException;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
+import com.lirouti.domain.chat.exception.ChatException;
 import com.lirouti.global.apiPayload.code.BaseErrorCode;
 import com.lirouti.global.apiPayload.code.GeneralErrorCode;
 import com.lirouti.global.apiPayload.exception.GeneralException;
 
-import lombok.RequiredArgsConstructor;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * HTTP {@code GeneralExceptionAdvice}가 처리하지 못하는 STOMP client frame 오류를
  * 클라이언트가 해석할 수 있는 ERROR payload로 변환한다.
  */
 @Component
-@RequiredArgsConstructor
 public class StompErrorHandler extends StompSubProtocolErrorHandler {
+    private static final String USER_ERROR_DESTINATION = "/queue/errors";
+
     private final ObjectMapper objectMapper;
+    private final SimpMessagingTemplate messagingTemplate;
+
+    public StompErrorHandler(
+            ObjectMapper objectMapper,
+            @Lazy SimpMessagingTemplate messagingTemplate
+    ) {
+        this.objectMapper = objectMapper;
+        this.messagingTemplate = messagingTemplate;
+    }
 
     @Override
     public Message<byte[]> handleClientMessageProcessingError(
             Message<byte[]> clientMessage,
             Throwable exception
     ) {
-        StompHeaderAccessor errorAccessor = StompHeaderAccessor.create(StompCommand.ERROR);
         StompHeaderAccessor clientAccessor = getAccessor(clientMessage);
         BaseErrorCode errorCode = resolveErrorCode(exception);
         String errorMessage = resolveErrorMessage(exception, errorCode);
+
+        if (isRecoverableDomainException(exception)
+                && sendRecoverableError(clientAccessor, errorCode, errorMessage, clientMessage)) {
+            return null;
+        }
+
+        return buildErrorMessage(clientAccessor, errorCode, errorMessage, clientMessage);
+    }
+
+    private Message<byte[]> buildErrorMessage(
+            StompHeaderAccessor clientAccessor,
+            BaseErrorCode errorCode,
+            String errorMessage,
+            Message<byte[]> clientMessage
+    ) {
+        StompHeaderAccessor errorAccessor = StompHeaderAccessor.create(StompCommand.ERROR);
 
         errorAccessor.setMessage(errorMessage);
         errorAccessor.setContentType(MimeTypeUtils.APPLICATION_JSON);
@@ -55,6 +83,36 @@ public class StompErrorHandler extends StompSubProtocolErrorHandler {
                         resolveClientMessageId(clientMessage))
         );
         return MessageBuilder.createMessage(payload, errorAccessor.getMessageHeaders());
+    }
+
+    private boolean sendRecoverableError(
+            StompHeaderAccessor clientAccessor,
+            BaseErrorCode errorCode,
+            String errorMessage,
+            Message<byte[]> clientMessage
+    ) {
+        if (clientAccessor == null) {
+            return false;
+        }
+
+        Principal user = clientAccessor.getUser();
+        if (user == null || user.getName() == null || user.getName().isBlank()) {
+            return false;
+        }
+
+        messagingTemplate.convertAndSendToUser(
+                user.getName(),
+                USER_ERROR_DESTINATION,
+                new StompErrorResponse(
+                        errorCode.getCode(),
+                        errorMessage,
+                        resolveClientMessageId(clientMessage))
+        );
+        return true;
+    }
+
+    private boolean isRecoverableDomainException(Throwable exception) {
+        return findCause(exception, ChatException.class) != null;
     }
 
     private BaseErrorCode resolveErrorCode(Throwable exception) {
@@ -97,6 +155,17 @@ public class StompErrorHandler extends StompSubProtocolErrorHandler {
         while (current != null) {
             if (current instanceof MessagingException messagingException) {
                 return messagingException;
+            }
+            current = current.getCause();
+        }
+        return null;
+    }
+
+    private <T extends Throwable> T findCause(Throwable exception, Class<T> type) {
+        Throwable current = exception;
+        while (current != null) {
+            if (type.isInstance(current)) {
+                return type.cast(current);
             }
             current = current.getCause();
         }

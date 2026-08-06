@@ -91,6 +91,7 @@ Flyway 도입 전부터 쓰던 DB(개인 로컬·운영)에는 이력 테이블�
 - `consumable_category`: 소모품 분류와 기본 사용 주기
 - `housework_template`: 공통 집안일 템플릿과 기본 주기
 - `challenge`: 앱이 제공하는 챌린지. 회원이 직접 생성할 수 없다.
+- `chat_emoticon`: 앱이 제공하는 그룹 채팅 이모티콘 자산 메타데이터. 회원이 직접 등록할 수 없다.
 - `routine_template`: 카테고리별 기본 제공 루틴
 - `routine_category`: 개인 루틴 카테고리. 앱이 제공하는 고정 카테고리와 회원이 추가한 사용자 카테고리를 함께 담는다(`member_id`로 구분).
 - `group_routine_category`: 그룹 루틴 카테고리. 앱이 제공하는 고정 카테고리와 그룹별 사용자 카테고리를 함께 담는다(`group_id`로 구분).
@@ -107,6 +108,7 @@ Flyway 도입 전부터 쓰던 DB(개인 로컬·운영)에는 이력 테이블�
 - `consumable_purchase_log`: 소모품 구매·보충 이력. 주문과 상품 연결은 선택 사항이므로 수동 등록도 가능하다.
 - `order_detail`: 주문에 포함된 상품과 주문 당시 가격 스냅샷. 상품의 현재 가격이 바뀌어도 `unit_price`, `total_price`는 주문 이력으로 유지한다.
 - `payment`: 주문의 결제 시도·승인·실패 정보. 현 스키마상 한 주문에 복수 결제 레코드를 둘 수 있다.
+- `group_chat_message`: 그룹에 보존되는 채팅 메시지 이력. 탈퇴 회원이 작성한 메시지도 유지한다.
 
 ## 구현 시 관계 해석
 
@@ -123,6 +125,8 @@ Flyway 도입 전부터 쓰던 DB(개인 로컬·운영)에는 이력 테이블�
 - `routine_category`는 `member`를 선택적으로 참조한다. 참조가 없으면 앱이 제공하는 고정 카테고리다. 조회할 때 항상 "고정 + 요청 회원의 것"으로 범위를 좁혀야 한다.
 - `group_routine_category`는 `member_group`을 선택적으로 참조한다. 참조가 없으면 앱이 제공하는 고정 그룹 카테고리다. 조회할 때 항상 "고정 + 요청 그룹의 것"으로 범위를 좁혀야 한다.
 - `routine_template`은 반드시 하나의 `routine_category`에 속한다. 고정 카테고리에만 붙는다.
+- `group_chat_message`는 `member_group`과 발신자 `member`를 반드시 참조하고, 이모티콘 메시지만 `chat_emoticon`을 선택적으로 참조한다.
+- `group_chat_read`는 `member_group`과 `member`를 반드시 참조하고, 마지막으로 읽은 `group_chat_message`를 선택적으로 참조한다.
 
 ## 주요 비즈니스 흐름
 
@@ -463,6 +467,96 @@ MySQL은 유니크 키에서 `NULL`을 서로 다른 값으로 취급하므로 �
 
 기존 `category_id`와 개인 카테고리 FK는 운영 데이터 검증이 끝날 때까지 유지하며, 후속
 마이그레이션에서 제거한다.
+
+## 그룹 채팅 테이블
+
+그룹 하나를 채팅방 하나로 사용한다. MySQL의 `group_chat_message`가 메시지의 진실 공급원이며,
+WebSocket은 저장된 메시지를 실시간 전달하는 수단이다. 그룹 채팅 테이블은
+`V20260806102755__group_chat.sql`에서 생성하고,
+`V20260806102756__scope_chat_client_message_id_to_group.sql`에서 재전송 식별자의 유니크 범위를
+그룹·발신자 단위로 보정한다.
+
+### `chat_emoticon`
+
+서비스가 관리하는 채팅 이모티콘의 메타데이터다. 실제 이미지 bytes는 private S3에 두고
+`asset_key`에는 전체 URL이 아닌 object key를 저장한다. 일반 회원은 이 테이블이나 자산을
+직접 등록하지 않는다.
+
+| 컬럼 | 타입 | NULL | 설명 |
+| --- | --- | --- | --- |
+| id | BIGINT | N | 기본 키, auto increment |
+| code | VARCHAR(100) | N | 클라이언트가 전송하는 안정적인 논리 식별자. 유니크 |
+| asset_key | VARCHAR(500) | N | private S3 object key |
+| content_type | VARCHAR(30) | N | 현재 허용 값은 `image/png`, `image/jpeg`, `image/webp` |
+| animated | BIT(1) | N | 애니메이션 여부. 현재 지원 형식은 모두 `false` |
+| active | BIT(1) | N | 신규 메시지에서 선택할 수 있는지 여부 |
+| display_order | INT | N | 활성 목록 노출 순서 |
+| created_at / updated_at | DATETIME(6) | N / N | 생성·수정 시각 |
+
+유니크: `uk_chat_emoticon_code` (`code`)
+
+인덱스: `idx_chat_emoticon_active_order` (`active`, `display_order`)
+
+이미 메시지에서 참조한 이모티콘은 물리 삭제하지 않는다. 신규 전송만 막으려면
+`active = false`로 바꾸고, 기존 메시지 조회와 미참조 S3 정리에서는 활성 여부와 관계없이
+`asset_key`를 보존한다.
+
+### `group_chat_message`
+
+그룹에 저장되는 서버 기준 메시지다. 발신자와 생성 시각은 인증 정보와 DB에서 결정하며
+클라이언트가 보낸 값을 신뢰하지 않는다.
+
+| 컬럼 | 타입 | NULL | 설명 |
+| --- | --- | --- | --- |
+| id | BIGINT | N | 기본 키, auto increment. cursor·읽음 위치·broadcast 기준 |
+| group_id | BIGINT | N | 채팅방인 `member_group.id` FK |
+| sender_id | BIGINT | N | 발신 회원인 `member.id` FK |
+| message_type | VARCHAR(20) | N | `TEXT` 또는 `EMOTICON` |
+| content | VARCHAR(2000) | Y | TEXT 본문. EMOTICON이면 `NULL` |
+| emoticon_id | BIGINT | Y | `chat_emoticon.id` FK. EMOTICON 메시지에서 사용 |
+| client_message_id | VARCHAR(100) | N | 클라이언트가 생성하고 재시도 때 재사용하는 식별자 |
+| created_at / updated_at | DATETIME(6) | N / N | 생성·수정 시각 |
+
+유니크: `uk_group_chat_message_sender_client`
+(`group_id`, `sender_id`, `client_message_id`)
+
+인덱스:
+
+- `idx_group_chat_message_group_id_id` (`group_id`, `id`) — 그룹별 ID cursor 조회
+- `idx_group_chat_message_sender_id` (`sender_id`) — 발신자 FK 조회와 참조 무결성 지원
+
+동일한 그룹·발신자·`client_message_id`의 동시 재전송은 원자적 insert와 위 유니크 키로 한 건만
+저장한다. 같은 식별자에 다른 payload가 들어오면 애플리케이션에서 충돌로 거부한다.
+메시지 타입별 `content`·`emoticon_id` 조합은 현재 DB CHECK 제약이 아니라 Service 검증으로
+보장한다.
+
+메시지에는 `deleted_at`이 없다. 그룹을 나가거나 회원이 탈퇴해도 공동 공간의 기존 메시지는
+작성자 이력과 함께 유지하고, 접근은 활성 회원·ACTIVE 그룹 멤버십으로 차단한다. 그룹 자체의
+삭제·해체 시 메시지와 읽음 위치를 언제 물리 정리할지는 아직 확정되지 않았으므로 FK cascade를
+추가하지 않는다. 정책이 확정되면 기존 migration을 수정하지 않고 새 forward migration으로
+반영한다.
+
+### `group_chat_read`
+
+메시지마다 회원별 읽음 행을 만들지 않고, 회원·그룹별 마지막 읽음 위치 하나를 저장한다.
+여러 기기에서 요청 순서가 뒤집혀도 더 작은 메시지 ID로 위치를 되돌리지 않는다.
+
+| 컬럼 | 타입 | NULL | 설명 |
+| --- | --- | --- | --- |
+| id | BIGINT | N | 기본 키, auto increment |
+| group_id | BIGINT | N | 대상 `member_group.id` FK |
+| member_id | BIGINT | N | 읽음 위치 소유자인 `member.id` FK |
+| last_read_message_id | BIGINT | Y | 마지막으로 읽은 `group_chat_message.id` FK |
+| read_at | DATETIME(6) | Y | 마지막 읽음 위치를 전진시킨 시각 |
+| created_at / updated_at | DATETIME(6) | N / N | 생성·수정 시각 |
+
+유니크: `uk_group_chat_read_group_member` (`group_id`, `member_id`)
+
+인덱스: `idx_group_chat_read_group_message` (`group_id`, `last_read_message_id`)
+
+읽음 위치는 MySQL 조건부 upsert로 생성하거나 더 큰 메시지 ID로만 전진시킨다. 저장 전에 해당
+메시지가 요청 그룹에 속하는지 검증한다. 회원 또는 그룹 탈퇴 시 행을 별도로 삭제하는 정책은
+현재 없으며, 비활성 멤버에게는 읽음 API 접근을 허용하지 않는다.
 
 ## 챌린지 테이블
 

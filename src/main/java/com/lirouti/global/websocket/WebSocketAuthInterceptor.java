@@ -23,6 +23,7 @@ import lombok.RequiredArgsConstructor;
 public class WebSocketAuthInterceptor implements ChannelInterceptor {
     private static final String TOPIC_CHAT_PREFIX = "/topic/groups/";
     private static final String APP_CHAT_PREFIX = "/app/groups/";
+    private static final String USER_ERROR_DESTINATION = "/user/queue/errors";
     private static final String CHAT_SUFFIX = "/chat";
     private static final String CHAT_MESSAGE_SUFFIX = "/chat/messages";
 
@@ -46,7 +47,11 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
         }
 
         if (accessor.getCommand() == StompCommand.SUBSCRIBE) {
-            validateGroupAccess(accessor, message, TOPIC_CHAT_PREFIX, CHAT_SUFFIX);
+            if (USER_ERROR_DESTINATION.equals(accessor.getDestination())) {
+                validateAuthenticatedMember(accessor, message);
+            } else {
+                validateGroupAccess(accessor, message, TOPIC_CHAT_PREFIX, CHAT_SUFFIX);
+            }
         } else if (accessor.getCommand() == StompCommand.SEND) {
             validateGroupAccess(accessor, message, APP_CHAT_PREFIX, CHAT_MESSAGE_SUFFIX);
         }
@@ -73,8 +78,7 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
         CustomUserDetails userDetails = getUserDetails(accessor, message);
         Long groupId = parseGroupId(accessor.getDestination(), prefix, suffix, message);
 
-        // 세션이 만들어진 뒤의 탈퇴·그룹 탈퇴도 다음 프레임부터 반영한다.
-        memberQueryService.getActiveMember(userDetails.getMemberId());
+        // GroupValidationService가 회원·그룹·참여 상태를 함께 검증하므로 별도 회원 조회를 반복하지 않는다.
         groupValidationService.validateActiveGroupMember(groupId, userDetails.getMemberId());
     }
 

@@ -2,14 +2,22 @@ package com.lirouti.global.websocket;
 
 import java.io.IOException;
 import java.security.Principal;
+import java.time.Instant;
+import java.util.Date;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.atomic.AtomicReference;
 
+import org.springframework.context.annotation.Lazy;
+import org.springframework.http.HttpHeaders;
+import org.springframework.scheduling.TaskScheduler;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
+import org.springframework.util.StringUtils;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.WebSocketHandler;
 import org.springframework.web.socket.WebSocketSession;
@@ -18,6 +26,9 @@ import org.springframework.web.socket.handler.WebSocketHandlerDecoratorFactory;
 
 import com.lirouti.domain.member.event.MemberWithdrawnEvent;
 import com.lirouti.global.auth.CustomUserDetails;
+import com.lirouti.global.util.JwtUtil;
+
+import io.jsonwebtoken.Claims;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -30,9 +41,19 @@ import lombok.extern.slf4j.Slf4j;
 public class WebSocketSessionRegistry {
     private static final CloseStatus ACCESS_REVOKED =
             CloseStatus.POLICY_VIOLATION.withReason("WebSocket access revoked");
+    private static final CloseStatus ACCESS_TOKEN_EXPIRED =
+            CloseStatus.POLICY_VIOLATION.withReason("Access token expired");
 
-    private final ConcurrentMap<Long, ConcurrentMap<String, WebSocketSession>> sessionsByMemberId =
+    private final JwtUtil jwtUtil;
+    private final TaskScheduler taskScheduler;
+    private final ConcurrentMap<Long, ConcurrentMap<String, RegisteredSession>> sessionsByMemberId =
             new ConcurrentHashMap<>();
+
+    // WebSocket broker도 TaskScheduler를 구성하므로 설정 조립 중 즉시 해석하지 않고 첫 예약까지 지연한다.
+    public WebSocketSessionRegistry(JwtUtil jwtUtil, @Lazy TaskScheduler taskScheduler) {
+        this.jwtUtil = jwtUtil;
+        this.taskScheduler = taskScheduler;
+    }
 
     public WebSocketHandlerDecoratorFactory decoratorFactory() {
         return this::decorate;
@@ -44,12 +65,15 @@ public class WebSocketSessionRegistry {
         }
 
         // 종료 callback이 다시 unregister를 호출해도 같은 세션을 중복 처리하지 않도록 먼저 분리한다.
-        Map<String, WebSocketSession> sessions = sessionsByMemberId.remove(memberId);
+        Map<String, RegisteredSession> sessions = sessionsByMemberId.remove(memberId);
         if (sessions == null) {
             return 0;
         }
 
-        sessions.values().forEach(session -> closeSession(memberId, session));
+        sessions.values().forEach(registeredSession -> {
+            registeredSession.cancelExpirationTask();
+            closeSession(memberId, registeredSession.session(), ACCESS_REVOKED);
+        });
         return sessions.size();
     }
 
@@ -92,26 +116,111 @@ public class WebSocketSessionRegistry {
             return;
         }
 
+        Instant expiration = resolveAccessTokenExpiration(session, memberId);
+        if (expiration == null) {
+            // 만료 시각을 모르는 인증 세션을 등록하면 권한이 무기한 유지되므로 연결을 허용하지 않는다.
+            closeSession(memberId, session, ACCESS_REVOKED);
+            return;
+        }
+
+        RegisteredSession registeredSession = new RegisteredSession(session);
+
         // 권한 회수와 등록이 교차할 때 세션이 외부 맵에서 분리되는 틈이 없도록 회원 키 안에서 등록한다.
         sessionsByMemberId.compute(memberId, (ignored, sessions) -> {
-            ConcurrentMap<String, WebSocketSession> registeredSessions = sessions == null
+            ConcurrentMap<String, RegisteredSession> registeredSessions = sessions == null
                     ? new ConcurrentHashMap<>()
                     : sessions;
-            registeredSessions.put(session.getId(), session);
+            RegisteredSession replaced = registeredSessions.put(session.getId(), registeredSession);
+            if (replaced != null) {
+                replaced.cancelExpirationTask();
+            }
             return registeredSessions;
         });
+
+        ScheduledFuture<?> expirationTask = taskScheduler.schedule(
+                () -> expireSession(memberId, session.getId(), registeredSession),
+                expiration
+        );
+        registeredSession.setExpirationTask(expirationTask);
+
+        if (expirationTask == null || !isRegistered(memberId, session.getId(), registeredSession)) {
+            // 예약 직전 다른 권한 회수와 교차했거나 scheduler가 종료 중이면 무기한 세션을 남기지 않는다.
+            registeredSession.cancelExpirationTask();
+            expireSession(memberId, session.getId(), registeredSession);
+        }
     }
 
     private void unregister(WebSocketSession session) {
+        String sessionId = session.getId();
         Long memberId = resolveMemberId(session);
         if (memberId == null) {
             return;
         }
 
         sessionsByMemberId.computeIfPresent(memberId, (ignored, sessions) -> {
-            sessions.remove(session.getId(), session);
+            RegisteredSession registeredSession = sessions.get(sessionId);
+            if (registeredSession != null && registeredSession.session() == session) {
+                sessions.remove(sessionId, registeredSession);
+                registeredSession.cancelExpirationTask();
+            }
             return sessions.isEmpty() ? null : sessions;
         });
+    }
+
+    private Instant resolveAccessTokenExpiration(WebSocketSession session, Long memberId) {
+        String authorization = session.getHandshakeHeaders().getFirst(HttpHeaders.AUTHORIZATION);
+        if (!StringUtils.hasText(authorization) || !authorization.startsWith("Bearer ")) {
+            return null;
+        }
+
+        try {
+            Claims claims = jwtUtil.getClaims(authorization.substring(7));
+            Date expiration = claims.getExpiration();
+            if (!"access".equals(claims.get("category", String.class))
+                    || !memberId.toString().equals(claims.getSubject())
+                    || expiration == null) {
+                return null;
+            }
+            return expiration.toInstant();
+        } catch (RuntimeException exception) {
+            log.warn(
+                    "WebSocket access token 만료 시각을 확인하지 못했습니다. memberId={}, exceptionType={}",
+                    memberId,
+                    exception.getClass().getSimpleName()
+            );
+            return null;
+        }
+    }
+
+    private boolean isRegistered(
+            Long memberId,
+            String sessionId,
+            RegisteredSession expected
+    ) {
+        Map<String, RegisteredSession> sessions = sessionsByMemberId.get(memberId);
+        return sessions != null && sessions.get(sessionId) == expected;
+    }
+
+    private void expireSession(
+            Long memberId,
+            String sessionId,
+            RegisteredSession expected
+    ) {
+        AtomicReference<RegisteredSession> expiredSession = new AtomicReference<>();
+        sessionsByMemberId.computeIfPresent(memberId, (ignored, sessions) -> {
+            if (sessions.remove(sessionId, expected)) {
+                expiredSession.set(expected);
+            }
+            return sessions.isEmpty() ? null : sessions;
+        });
+
+        RegisteredSession removed = expiredSession.get();
+        if (removed == null) {
+            return;
+        }
+
+        removed.cancelExpirationTask();
+        closeSession(memberId, removed.session(), ACCESS_TOKEN_EXPIRED);
     }
 
     private Long resolveMemberId(WebSocketSession session) {
@@ -124,13 +233,17 @@ public class WebSocketSessionRegistry {
         return userDetails.getMemberId();
     }
 
-    private void closeSession(Long memberId, WebSocketSession session) {
+    private void closeSession(
+            Long memberId,
+            WebSocketSession session,
+            CloseStatus closeStatus
+    ) {
         if (!session.isOpen()) {
             return;
         }
 
         try {
-            session.close(ACCESS_REVOKED);
+            session.close(closeStatus);
         } catch (IOException exception) {
             log.warn(
                     "권한이 회수된 WebSocket 세션 종료에 실패했습니다. memberId={}, sessionId={}",
@@ -138,6 +251,30 @@ public class WebSocketSessionRegistry {
                     session.getId(),
                     exception
             );
+        }
+    }
+
+    private static final class RegisteredSession {
+        private final WebSocketSession session;
+        private final AtomicReference<ScheduledFuture<?>> expirationTask = new AtomicReference<>();
+
+        private RegisteredSession(WebSocketSession session) {
+            this.session = session;
+        }
+
+        private WebSocketSession session() {
+            return session;
+        }
+
+        private void setExpirationTask(ScheduledFuture<?> task) {
+            expirationTask.set(task);
+        }
+
+        private void cancelExpirationTask() {
+            ScheduledFuture<?> task = expirationTask.getAndSet(null);
+            if (task != null) {
+                task.cancel(false);
+            }
         }
     }
 }

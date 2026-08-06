@@ -1,20 +1,29 @@
 package com.lirouti.global.websocket;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import java.nio.charset.StandardCharsets;
+import java.security.Principal;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessagingException;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.MessageBuilder;
 
 import com.lirouti.domain.chat.exception.ChatException;
 import com.lirouti.domain.chat.exception.code.error.ChatErrorCode;
+import com.lirouti.domain.group.exception.GroupException;
+import com.lirouti.domain.group.exception.code.error.GroupErrorCode;
 import com.lirouti.global.apiPayload.code.GeneralErrorCode;
 
 import tools.jackson.databind.JsonNode;
@@ -24,11 +33,13 @@ import tools.jackson.databind.ObjectMapper;
 class StompErrorHandlerTest {
     private ObjectMapper objectMapper;
     private StompErrorHandler errorHandler;
+    private SimpMessagingTemplate messagingTemplate;
 
     @BeforeEach
     void setUp() {
         objectMapper = new ObjectMapper();
-        errorHandler = new StompErrorHandler(objectMapper);
+        messagingTemplate = mock(SimpMessagingTemplate.class);
+        errorHandler = new StompErrorHandler(objectMapper, messagingTemplate);
     }
 
     @Test
@@ -56,6 +67,62 @@ class StompErrorHandlerTest {
         assertThat(payload.get("message").asText())
                 .isEqualTo(ChatErrorCode.MESSAGE_CONTENT_INVALID.getMessage());
         assertThat(payload.get("clientMessageId").asText()).isEqualTo("client-1");
+    }
+
+    @Test
+    @DisplayName("인증된 도메인 오류는 사용자 오류 destination으로 보내고 연결을 유지한다")
+    void handleClientMessageProcessingError_AuthenticatedDomainException_UsesUserDestination() throws Exception {
+        // given
+        Message<byte[]> clientMessage = stompMessage(
+                StompCommand.SEND,
+                "{\"clientMessageId\":\"client-1\"}",
+                null,
+                () -> "1"
+        );
+
+        // when
+        Message<byte[]> errorMessage = errorHandler.handleClientMessageProcessingError(
+                clientMessage,
+                new ChatException(ChatErrorCode.MESSAGE_CONTENT_INVALID)
+        );
+
+        // then
+        assertThat(errorMessage).isNull();
+        ArgumentCaptor<Object> payloadCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(messagingTemplate).convertAndSendToUser(
+                eq("1"),
+                eq("/queue/errors"),
+                payloadCaptor.capture()
+        );
+        JsonNode payload = objectMapper.readTree(objectMapper.writeValueAsBytes(payloadCaptor.getValue()));
+        assertThat(payload.get("code").asText())
+                .isEqualTo(ChatErrorCode.MESSAGE_CONTENT_INVALID.getCode());
+        assertThat(payload.get("clientMessageId").asText()).isEqualTo("client-1");
+    }
+
+    @Test
+    @DisplayName("인증된 그룹 권한 오류는 사용자 destination이 아닌 ERROR frame으로 반환한다")
+    void handleClientMessageProcessingError_GroupAccessException_UsesErrorFrame() throws Exception {
+        // given
+        Message<byte[]> clientMessage = stompMessage(
+                StompCommand.SEND,
+                "{\"clientMessageId\":\"client-group\"}",
+                null,
+                () -> "1"
+        );
+
+        // when
+        Message<byte[]> errorMessage = errorHandler.handleClientMessageProcessingError(
+                clientMessage,
+                new GroupException(GroupErrorCode.GROUP_MEMBER_ACCESS_DENIED)
+        );
+
+        // then
+        assertThat(errorHeader(errorMessage).getCommand()).isEqualTo(StompCommand.ERROR);
+        JsonNode payload = errorPayload(errorMessage);
+        assertThat(payload.get("code").asText())
+                .isEqualTo(GroupErrorCode.GROUP_MEMBER_ACCESS_DENIED.getCode());
+        verifyNoInteractions(messagingTemplate);
     }
 
     @Test
@@ -130,8 +197,18 @@ class StompErrorHandlerTest {
             String payload,
             String receipt
     ) {
+        return stompMessage(command, payload, receipt, null);
+    }
+
+    private Message<byte[]> stompMessage(
+            StompCommand command,
+            String payload,
+            String receipt,
+            Principal user
+    ) {
         StompHeaderAccessor accessor = StompHeaderAccessor.create(command);
         accessor.setReceipt(receipt);
+        accessor.setUser(user);
         return MessageBuilder.createMessage(
                 payload.getBytes(StandardCharsets.UTF_8),
                 accessor.getMessageHeaders()

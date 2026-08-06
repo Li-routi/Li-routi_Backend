@@ -1,9 +1,21 @@
 package com.lirouti.domain.group.service.command;
 
+import java.util.HashSet;
+import java.util.Optional;
+import java.util.Set;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+
 import com.lirouti.domain.group.converter.GroupConverter;
 import com.lirouti.domain.group.dto.request.GroupReqDTO;
 import com.lirouti.domain.group.dto.response.GroupResDTO;
 import com.lirouti.domain.group.entity.Group;
+import com.lirouti.domain.group.entity.GroupMember;
 import com.lirouti.domain.group.entity.GroupRoutine;
 import com.lirouti.domain.group.entity.GroupRoutineCategory;
 import com.lirouti.domain.group.exception.GroupException;
@@ -11,20 +23,14 @@ import com.lirouti.domain.group.exception.code.error.GroupErrorCode;
 import com.lirouti.domain.group.repository.GroupRoutineCategoryRepository;
 import com.lirouti.domain.group.repository.GroupRoutineRepository;
 import com.lirouti.domain.group.service.GroupValidationService;
+import com.lirouti.global.websocket.WebSocketSessionRegistry;
+
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.util.HashSet;
-import java.util.Set;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class GroupCommandService {
     private static final int MAX_CREATE_ATTEMPTS = 10;
 
@@ -35,6 +41,71 @@ public class GroupCommandService {
     private final GroupCreationAttemptService groupCreationAttemptService;
     private final GroupInviteCodeUniqueViolationDetector uniqueViolationDetector;
     private final Validator validator;
+    private final Optional<WebSocketSessionRegistry> webSocketSessionRegistry;
+
+    public GroupCommandService(
+            GroupValidationService groupValidationService,
+            GroupRoutineCategoryRepository groupRoutineCategoryRepository,
+            GroupRoutineRepository groupRoutineRepository,
+            GroupRoutineAssignmentCommandService assignmentCommandService,
+            GroupCreationAttemptService groupCreationAttemptService,
+            GroupInviteCodeUniqueViolationDetector uniqueViolationDetector,
+            Validator validator
+    ) {
+        this(
+                groupValidationService,
+                groupRoutineCategoryRepository,
+                groupRoutineRepository,
+                assignmentCommandService,
+                groupCreationAttemptService,
+                uniqueViolationDetector,
+                validator,
+                Optional.empty()
+        );
+    }
+
+    @Autowired
+    public GroupCommandService(
+            GroupValidationService groupValidationService,
+            GroupRoutineCategoryRepository groupRoutineCategoryRepository,
+            GroupRoutineRepository groupRoutineRepository,
+            GroupRoutineAssignmentCommandService assignmentCommandService,
+            GroupCreationAttemptService groupCreationAttemptService,
+            GroupInviteCodeUniqueViolationDetector uniqueViolationDetector,
+            Validator validator,
+            WebSocketSessionRegistry webSocketSessionRegistry
+    ) {
+        this(
+                groupValidationService,
+                groupRoutineCategoryRepository,
+                groupRoutineRepository,
+                assignmentCommandService,
+                groupCreationAttemptService,
+                uniqueViolationDetector,
+                validator,
+                Optional.ofNullable(webSocketSessionRegistry)
+        );
+    }
+
+    private GroupCommandService(
+            GroupValidationService groupValidationService,
+            GroupRoutineCategoryRepository groupRoutineCategoryRepository,
+            GroupRoutineRepository groupRoutineRepository,
+            GroupRoutineAssignmentCommandService assignmentCommandService,
+            GroupCreationAttemptService groupCreationAttemptService,
+            GroupInviteCodeUniqueViolationDetector uniqueViolationDetector,
+            Validator validator,
+            Optional<WebSocketSessionRegistry> webSocketSessionRegistry
+    ) {
+        this.groupValidationService = groupValidationService;
+        this.groupRoutineCategoryRepository = groupRoutineCategoryRepository;
+        this.groupRoutineRepository = groupRoutineRepository;
+        this.assignmentCommandService = assignmentCommandService;
+        this.groupCreationAttemptService = groupCreationAttemptService;
+        this.uniqueViolationDetector = uniqueViolationDetector;
+        this.validator = validator;
+        this.webSocketSessionRegistry = webSocketSessionRegistry;
+    }
 
     /** 그룹 행 잠금 안에서 OWNER 권한, 상한, 이름 중복을 검증하고 사용자 카테고리를 생성한다. */
     @Transactional
@@ -102,6 +173,46 @@ public class GroupCommandService {
         log.error("그룹 통합 생성의 초대코드 unique 충돌 재시도 횟수를 초과했습니다. "
                         + "memberId={}, maxAttempts={}", memberId, MAX_CREATE_ATTEMPTS);
         throw new GroupException(GroupErrorCode.INVITE_CODE_ISSUE_FAILED);
+    }
+
+    /** ACTIVE 구성원의 그룹 탈퇴를 커밋한 뒤 해당 회원의 모든 채팅 세션을 회수한다. */
+    @Transactional
+    public void leaveGroup(Long groupId, Long memberId) {
+        groupValidationService.lockActiveGroupForUpdate(groupId);
+        GroupMember groupMember = groupValidationService
+                .validateActiveGroupMember(groupId, memberId);
+        groupMember.leave();
+        closeMemberSessionsAfterCommit(memberId);
+    }
+
+    /** ACTIVE OWNER가 대상 구성원을 강제 퇴장시키고 대상 회원의 모든 채팅 세션을 회수한다. */
+    @Transactional
+    public void kickMember(Long groupId, Long ownerId, Long targetMemberId) {
+        groupValidationService.lockActiveGroupForUpdate(groupId);
+        groupValidationService.validateGroupOwner(groupId, ownerId);
+        if (targetMemberId == null) {
+            throw new GroupException(GroupErrorCode.GROUP_MEMBER_ACCESS_DENIED);
+        }
+
+        GroupMember target = groupValidationService
+                .validateActiveGroupMember(groupId, targetMemberId);
+
+        target.kick();
+        closeMemberSessionsAfterCommit(targetMemberId);
+    }
+
+    private void closeMemberSessionsAfterCommit(Long memberId) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            webSocketSessionRegistry.ifPresent(registry -> registry.closeMemberSessions(memberId));
+            return;
+        }
+
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                webSocketSessionRegistry.ifPresent(registry -> registry.closeMemberSessions(memberId));
+            }
+        });
     }
 
     private void validateCreateGroupRequest(GroupReqDTO.CreateGroup request) {

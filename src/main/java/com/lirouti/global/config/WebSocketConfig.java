@@ -25,6 +25,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         registry.addEndpoint("/ws");
+        registry.setPreserveReceiveOrder(true);
         // HTTP RestControllerAdvice와 별도로 STOMP ERROR frame을 JSON 계약으로 처리한다.
         registry.setErrorHandler(stompErrorHandler);
     }
@@ -32,7 +33,8 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     @Override
     public void configureMessageBroker(MessageBrokerRegistry registry) {
         registry.setApplicationDestinationPrefixes("/app");
-        registry.enableSimpleBroker("/topic");
+        registry.enableSimpleBroker("/topic", "/queue");
+        registry.setPreservePublishOrder(true);
     }
 
     @Override

@@ -1,10 +1,12 @@
 package com.lirouti.domain.chat.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.lang.reflect.Method;
 import java.time.LocalDateTime;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -14,6 +16,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.messaging.MessagingException;
+import org.springframework.messaging.handler.annotation.MessageExceptionHandler;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -21,6 +24,7 @@ import org.springframework.security.core.Authentication;
 import com.lirouti.domain.chat.dto.request.ChatReqDTO;
 import com.lirouti.domain.chat.dto.response.ChatResDTO;
 import com.lirouti.domain.chat.enums.ChatMessageType;
+import com.lirouti.domain.chat.exception.ChatException;
 import com.lirouti.domain.chat.service.command.ChatCommandService;
 import com.lirouti.domain.member.enums.Role;
 import com.lirouti.global.auth.CustomUserDetails;
@@ -113,5 +117,19 @@ class ChatWebSocketControllerTest {
         assertThatThrownBy(() -> controller.sendMessage(GROUP_ID, request, null))
                 .isInstanceOf(MessagingException.class);
         verifyNoInteractions(chatCommandService, messagingTemplate);
+    }
+
+    @Test
+    @DisplayName("복구 가능한 WebSocket 도메인 오류는 ChatException만 user queue handler로 처리한다")
+    void recoverableDomainExceptionHandler_HandlesOnlyChatException() throws Exception {
+        Method handler = ChatWebSocketController.class.getDeclaredMethod(
+                "handleRecoverableDomainException",
+                com.lirouti.global.apiPayload.exception.GeneralException.class,
+                ChatReqDTO.SendMessage.class,
+                java.security.Principal.class
+        );
+
+        assertThat(handler.getAnnotation(MessageExceptionHandler.class).value())
+                .containsExactly(ChatException.class);
     }
 }

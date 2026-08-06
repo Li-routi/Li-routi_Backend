@@ -73,7 +73,11 @@ public final class ChatConverter {
             boolean hasNext
     ) {
         List<ChatResDTO.Message> results = messages.stream()
-                .map(message -> toMessage(message, emoticons.get(message.getEmoticonId())))
+                .map(message -> toMessage(
+                        message,
+                        message.getEmoticonId() == null
+                                ? null
+                                : emoticons.get(message.getEmoticonId())))
                 .toList();
         return ChatResDTO.MessageList.builder()
                 .messages(results)

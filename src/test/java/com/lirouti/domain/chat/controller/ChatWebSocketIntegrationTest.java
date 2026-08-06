@@ -4,9 +4,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -19,6 +25,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.messaging.converter.JacksonJsonMessageConverter;
 import org.springframework.messaging.simp.stomp.StompFrameHandler;
@@ -28,6 +35,7 @@ import org.springframework.messaging.simp.stomp.StompSessionHandlerAdapter;
 import org.springframework.messaging.simp.user.SimpUserRegistry;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.socket.WebSocketHttpHeaders;
 import org.springframework.web.socket.client.standard.StandardWebSocketClient;
 import org.springframework.web.socket.messaging.WebSocketStompClient;
@@ -35,25 +43,41 @@ import org.springframework.web.socket.messaging.WebSocketStompClient;
 import com.lirouti.domain.chat.dto.request.ChatReqDTO;
 import com.lirouti.domain.chat.dto.response.ChatResDTO;
 import com.lirouti.domain.chat.enums.ChatMessageType;
+import com.lirouti.domain.chat.exception.ChatException;
+import com.lirouti.domain.chat.exception.code.error.ChatErrorCode;
 import com.lirouti.domain.chat.service.command.ChatCommandService;
+import com.lirouti.domain.group.entity.GroupMember;
+import com.lirouti.domain.group.exception.GroupException;
+import com.lirouti.domain.group.exception.code.error.GroupErrorCode;
 import com.lirouti.domain.group.service.GroupValidationService;
+import com.lirouti.global.auth.CustomUserDetails;
 import com.lirouti.domain.member.enums.Role;
 import com.lirouti.domain.member.service.query.MemberQueryService;
 import com.lirouti.global.util.JwtUtil;
 import com.lirouti.global.util.RedisUtil;
 import com.lirouti.global.websocket.WebSocketSessionRegistry;
 
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
+@AutoConfigureMockMvc
 @DisplayName("Chat WebSocket broker 통합 테스트")
 class ChatWebSocketIntegrationTest {
     private static final Long MEMBER_ID = 1L;
+    private static final Long OWNER_ID = 2L;
     private static final Long GROUP_ID = 10L;
     private static final String CHAT_DESTINATION = "/topic/groups/10/chat";
+    private static final String ERROR_DESTINATION = "/user/queue/errors";
     private static final String SEND_DESTINATION = "/app/groups/10/chat/messages";
 
     @LocalServerPort
     private int port;
 
+    @Autowired
+    private MockMvc mockMvc;
     @Autowired
     private JwtUtil jwtUtil;
     @Autowired
@@ -148,6 +172,156 @@ class ChatWebSocketIntegrationTest {
     }
 
     @Test
+    @DisplayName("같은 STOMP 세션의 연속 메시지는 전송 순서대로 broadcast된다")
+    void sendMessage_SameSession_PreservesOrder() throws Exception {
+        // given
+        ChatReqDTO.SendMessage firstRequest = new ChatReqDTO.SendMessage(
+                "client-1",
+                ChatMessageType.TEXT,
+                "첫 번째 메시지",
+                null
+        );
+        ChatReqDTO.SendMessage secondRequest = new ChatReqDTO.SendMessage(
+                "client-2",
+                ChatMessageType.TEXT,
+                "두 번째 메시지",
+                null
+        );
+        ChatResDTO.Message firstResponse = ChatResDTO.Message.builder()
+                .id(100L)
+                .clientMessageId(firstRequest.clientMessageId())
+                .groupId(GROUP_ID)
+                .sender(ChatResDTO.Sender.builder().memberId(MEMBER_ID).nickname("민수").build())
+                .type(ChatMessageType.TEXT)
+                .content(firstRequest.content())
+                .createdAt(LocalDateTime.of(2026, 8, 6, 10, 0))
+                .build();
+        ChatResDTO.Message secondResponse = ChatResDTO.Message.builder()
+                .id(101L)
+                .clientMessageId(secondRequest.clientMessageId())
+                .groupId(GROUP_ID)
+                .sender(ChatResDTO.Sender.builder().memberId(MEMBER_ID).nickname("민수").build())
+                .type(ChatMessageType.TEXT)
+                .content(secondRequest.content())
+                .createdAt(LocalDateTime.of(2026, 8, 6, 10, 1))
+                .build();
+        when(chatCommandService.sendMessage(
+                eq(MEMBER_ID),
+                eq(GROUP_ID),
+                any(ChatReqDTO.SendMessage.class)
+        )).thenReturn(firstResponse, secondResponse);
+
+        StompSession session = connect();
+        CountDownLatch messagesReceived = new CountDownLatch(2);
+        List<String> receivedClientMessageIds = new java.util.concurrent.CopyOnWriteArrayList<>();
+        session.subscribe(
+                CHAT_DESTINATION,
+                new StompFrameHandler() {
+                    @Override
+                    public java.lang.reflect.Type getPayloadType(StompHeaders headers) {
+                        return ChatResDTO.Message.class;
+                    }
+
+                    @Override
+                    public void handleFrame(StompHeaders headers, Object payload) {
+                        ChatResDTO.Message message = (ChatResDTO.Message) payload;
+                        receivedClientMessageIds.add(message.clientMessageId());
+                        messagesReceived.countDown();
+                    }
+                }
+        );
+        assertThat(awaitSubscriptionCount(1)).isTrue();
+
+        // when
+        session.send(SEND_DESTINATION, firstRequest);
+        session.send(SEND_DESTINATION, secondRequest);
+
+        // then
+        assertThat(messagesReceived.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(receivedClientMessageIds)
+                .containsExactly(firstRequest.clientMessageId(), secondRequest.clientMessageId());
+
+        session.disconnect();
+    }
+
+    @Test
+    @DisplayName("복구 가능한 도메인 오류를 오류 destination으로 받고 같은 세션을 유지한다")
+    void sendMessage_RecoverableDomainError_KeepsSessionConnected() throws Exception {
+        // given
+        ChatReqDTO.SendMessage failedRequest = new ChatReqDTO.SendMessage(
+                "client-error",
+                ChatMessageType.TEXT,
+                "실패 메시지",
+                null
+        );
+        ChatReqDTO.SendMessage retryRequest = new ChatReqDTO.SendMessage(
+                "client-retry",
+                ChatMessageType.TEXT,
+                "재시도 메시지",
+                null
+        );
+        ChatResDTO.Message retryResponse = ChatResDTO.Message.builder()
+                .id(102L)
+                .clientMessageId(retryRequest.clientMessageId())
+                .groupId(GROUP_ID)
+                .sender(ChatResDTO.Sender.builder().memberId(MEMBER_ID).nickname("민수").build())
+                .type(ChatMessageType.TEXT)
+                .content(retryRequest.content())
+                .createdAt(LocalDateTime.of(2026, 8, 6, 10, 2))
+                .build();
+        when(chatCommandService.sendMessage(
+                eq(MEMBER_ID),
+                eq(GROUP_ID),
+                eq(failedRequest)
+        )).thenThrow(new ChatException(ChatErrorCode.MESSAGE_CONTENT_INVALID));
+        when(chatCommandService.sendMessage(
+                eq(MEMBER_ID),
+                eq(GROUP_ID),
+                eq(retryRequest)
+        )).thenReturn(retryResponse);
+
+        StompSession session = connect();
+        CountDownLatch errorReceived = new CountDownLatch(1);
+        CountDownLatch retryMessageReceived = new CountDownLatch(1);
+        AtomicReference<Map<String, Object>> receivedError = new AtomicReference<>();
+        AtomicReference<ChatResDTO.Message> receivedRetryMessage = new AtomicReference<>();
+        session.subscribe(
+                ERROR_DESTINATION,
+                new StompFrameHandler() {
+                    @Override
+                    public java.lang.reflect.Type getPayloadType(StompHeaders headers) {
+                        return Map.class;
+                    }
+
+                    @Override
+                    @SuppressWarnings("unchecked")
+                    public void handleFrame(StompHeaders headers, Object payload) {
+                        receivedError.set((Map<String, Object>) payload);
+                        errorReceived.countDown();
+                    }
+                }
+        );
+        subscribe(session, retryMessageReceived, receivedRetryMessage);
+        assertThat(awaitSubscriptionCount(ERROR_DESTINATION, 1)).isTrue();
+        assertThat(awaitSubscriptionCount(CHAT_DESTINATION, 1)).isTrue();
+
+        // when
+        session.send(SEND_DESTINATION, failedRequest);
+
+        // then
+        assertThat(errorReceived.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(session.isConnected()).isTrue();
+        assertThat(receivedError.get()).containsEntry("code", ChatErrorCode.MESSAGE_CONTENT_INVALID.getCode());
+        assertThat(receivedError.get()).containsEntry("clientMessageId", failedRequest.clientMessageId());
+
+        session.send(SEND_DESTINATION, retryRequest);
+        assertThat(retryMessageReceived.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(receivedRetryMessage.get()).isEqualTo(retryResponse);
+
+        session.disconnect();
+    }
+
+    @Test
     @DisplayName("회원 권한을 회수하면 모든 기기 STOMP 세션과 구독이 종료된다")
     void closeMemberSessions_MultipleSessions_DisconnectsAllSubscriptions() throws Exception {
         // given
@@ -166,15 +340,102 @@ class ChatWebSocketIntegrationTest {
         assertThat(awaitSubscriptionCount(0)).isTrue();
     }
 
+    @Test
+    @DisplayName("그룹 탈퇴 커밋 후 실제 세션을 종료하고 재연결 구독을 차단한다")
+    void leaveGroup_AfterCommit_ClosesSessionsAndRejectsReconnect() throws Exception {
+        // given
+        GroupMember membership = mock(GroupMember.class);
+        when(groupValidationService.lockActiveGroupForUpdate(GROUP_ID)).thenReturn(null);
+        when(groupValidationService.validateActiveGroupMember(GROUP_ID, MEMBER_ID))
+                .thenReturn(membership);
+
+        StompSession firstSession = connect();
+        StompSession secondSession = connect();
+        subscribe(firstSession, new CountDownLatch(1), new AtomicReference<>());
+        subscribe(secondSession, new CountDownLatch(1), new AtomicReference<>());
+        assertThat(awaitSubscriptionCount(2)).isTrue();
+
+        // when
+        mockMvc.perform(delete("/api/groups/{groupId}/members/me", GROUP_ID)
+                        .with(user(new CustomUserDetails(MEMBER_ID, Role.ROLE_USER))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("GROUP200_5"));
+
+        // then
+        verify(membership).leave();
+        assertThat(awaitDisconnected(firstSession, secondSession)).isTrue();
+        assertThat(awaitSubscriptionCount(0)).isTrue();
+
+        clearInvocations(groupValidationService);
+        when(groupValidationService.validateActiveGroupMember(GROUP_ID, MEMBER_ID))
+                .thenThrow(new GroupException(GroupErrorCode.GROUP_MEMBER_ACCESS_DENIED));
+        StompSession reconnectedSession = connect();
+        reconnectedSession.subscribe(
+                CHAT_DESTINATION,
+                new StompFrameHandler() {
+                    @Override
+                    public java.lang.reflect.Type getPayloadType(StompHeaders headers) {
+                        return ChatResDTO.Message.class;
+                    }
+
+                    @Override
+                    public void handleFrame(StompHeaders headers, Object payload) {
+                    }
+                }
+        );
+        verify(groupValidationService, timeout(5_000))
+                .validateActiveGroupMember(GROUP_ID, MEMBER_ID);
+        assertThat(awaitSubscriptionCount(0)).isTrue();
+        reconnectedSession.disconnect();
+    }
+
+    @Test
+    @DisplayName("그룹 강퇴 커밋 후 대상 회원의 모든 실제 세션을 종료한다")
+    void kickMember_AfterCommit_ClosesTargetSessions() throws Exception {
+        // given
+        GroupMember ownerMembership = mock(GroupMember.class);
+        GroupMember targetMembership = mock(GroupMember.class);
+        when(groupValidationService.lockActiveGroupForUpdate(GROUP_ID)).thenReturn(null);
+        when(groupValidationService.validateGroupOwner(GROUP_ID, OWNER_ID))
+                .thenReturn(ownerMembership);
+        when(groupValidationService.validateActiveGroupMember(GROUP_ID, MEMBER_ID))
+                .thenReturn(targetMembership);
+
+        StompSession firstSession = connect();
+        StompSession secondSession = connect();
+        subscribe(firstSession, new CountDownLatch(1), new AtomicReference<>());
+        subscribe(secondSession, new CountDownLatch(1), new AtomicReference<>());
+        assertThat(awaitSubscriptionCount(2)).isTrue();
+
+        // when
+        mockMvc.perform(delete(
+                                "/api/groups/{groupId}/members/{targetMemberId}",
+                                GROUP_ID,
+                                MEMBER_ID
+                        )
+                        .with(user(new CustomUserDetails(OWNER_ID, Role.ROLE_USER))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("GROUP200_6"));
+
+        // then
+        verify(targetMembership).kick();
+        assertThat(awaitDisconnected(firstSession, secondSession)).isTrue();
+        assertThat(awaitSubscriptionCount(0)).isTrue();
+    }
+
     private StompSession connect() throws Exception {
+        return connect(new StompSessionHandlerAdapter() {
+        });
+    }
+
+    private StompSession connect(StompSessionHandlerAdapter sessionHandler) throws Exception {
         WebSocketHttpHeaders handshakeHeaders = new WebSocketHttpHeaders();
         handshakeHeaders.setBearerAuth(jwtUtil.createAccessToken(MEMBER_ID, Role.ROLE_USER));
 
         return stompClient.connectAsync(
                         "ws://localhost:" + port + "/ws",
                         handshakeHeaders,
-                        new StompSessionHandlerAdapter() {
-                        }
+                        sessionHandler
                 )
                 .get(5, TimeUnit.SECONDS);
     }
@@ -202,10 +463,14 @@ class ChatWebSocketIntegrationTest {
     }
 
     private boolean awaitSubscriptionCount(int expectedCount) {
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        return awaitSubscriptionCount(CHAT_DESTINATION, expectedCount);
+    }
+
+    private boolean awaitSubscriptionCount(String destination, int expectedCount) {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
         while (System.nanoTime() < deadline) {
             long subscriptionCount = simpUserRegistry.findSubscriptions(
-                    subscription -> CHAT_DESTINATION.equals(subscription.getDestination())
+                    subscription -> destination.equals(subscription.getDestination())
             ).size();
             if (subscriptionCount == expectedCount) {
                 return true;
