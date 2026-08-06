@@ -215,6 +215,21 @@ public class GroupRoutineAssignmentCommandService {
     }
 
     /**
+     * 그룹 탈퇴 회원의 PENDING, IN_PROGRESS 할당만 삭제한다.
+     * COMPLETED, MISSED 할당과 인증 이력은 상태 조건으로 보존한다.
+     *
+     * @return 삭제된 미완료 할당 수
+     */
+    @Transactional
+    public int deleteUnfinishedAssignmentsForLeaver(Long groupId, Long memberId) {
+        return groupRoutineAssignmentRepository.deleteUnfinishedByGroupIdAndMemberId(
+                groupId,
+                memberId,
+                MUTABLE_STATUSES
+        );
+    }
+
+    /**
      * 수행 시간 안의 미완료 할당만 원자적으로 완료 처리한다.
      * 마감 시각은 인증 가능 범위에서 제외한다.
      *

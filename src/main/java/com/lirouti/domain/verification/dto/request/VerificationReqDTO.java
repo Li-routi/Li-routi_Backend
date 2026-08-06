@@ -6,7 +6,7 @@ import jakarta.validation.constraints.Size;
 
 public class VerificationReqDTO {
 
-    @Schema(description = "루틴 인증 요청")
+    @Schema(name = "RoutineVerifyRequest", description = "루틴 인증 요청")
     public record Verify(
             @Schema(
                     description = "presigned URL 발급 응답으로 받은 mediaKey. 전체 URL이 아니라 key다",

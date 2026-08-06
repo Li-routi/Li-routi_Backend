@@ -23,10 +23,20 @@ public enum RoutineErrorCode implements BaseErrorCode {
             "선택한 기본 루틴이 요청한 카테고리에 속하지 않습니다.",
             "ROUTINE400_3"
     ),
+    INVALID_ROUTINE_UPDATE(
+            HttpStatus.BAD_REQUEST,
+            "마감 시각과 하나 이상의 중복되지 않은 반복 요일이 필요합니다.",
+            "ROUTINE400_4"
+    ),
     ROUTINE_CATEGORY_ACCESS_DENIED(
             HttpStatus.FORBIDDEN,
             "다른 회원이 만든 카테고리는 사용할 수 없습니다.",
             "ROUTINE403_1"
+    ),
+    FIXED_ROUTINE_CATEGORY_MODIFICATION_NOT_ALLOWED(
+            HttpStatus.FORBIDDEN,
+            "고정 카테고리는 수정하거나 삭제할 수 없습니다.",
+            "ROUTINE403_2"
     ),
     // 회원 조회·탈퇴 검증은 MemberQueryService가 담당하므로 여기에 회원 관련 404를 두지 않는다.
     ROUTINE_CATEGORY_NOT_FOUND(
@@ -38,6 +48,11 @@ public enum RoutineErrorCode implements BaseErrorCode {
             HttpStatus.NOT_FOUND,
             "사용 가능한 기본 제공 루틴을 찾을 수 없습니다.",
             "ROUTINE404_2"
+    ),
+    ROUTINE_NOT_FOUND(
+            HttpStatus.NOT_FOUND,
+            "수정하거나 삭제할 수 있는 개인 루틴을 찾을 수 없습니다.",
+            "ROUTINE404_3"
     ),
     ACTIVE_ROUTINE_LIMIT_EXCEEDED(
             HttpStatus.CONFLICT,
@@ -58,6 +73,11 @@ public enum RoutineErrorCode implements BaseErrorCode {
             HttpStatus.CONFLICT,
             "같은 이름의 카테고리가 이미 존재합니다.",
             "ROUTINE409_4"
+    ),
+    ROUTINE_CATEGORY_NOT_EMPTY(
+            HttpStatus.CONFLICT,
+            "개인 루틴이 포함된 카테고리는 삭제할 수 없습니다.",
+            "ROUTINE409_5"
     );
 
     private final HttpStatus httpStatus;

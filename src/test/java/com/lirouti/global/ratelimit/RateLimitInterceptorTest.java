@@ -18,6 +18,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.method.HandlerMethod;
 
 import java.lang.reflect.Method;
+import java.time.Clock;
 import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -38,6 +39,7 @@ class RateLimitInterceptorTest {
     private RateLimitInterceptor interceptor;
     private MockHttpServletRequest request;
     private MockHttpServletResponse response;
+    private InMemoryRateLimiter fallbackLimiter;
 
     /** {@code @RateLimit}이 붙은 핸들러를 흉내내기 위한 대상. */
     static class AnnotatedController {
@@ -58,7 +60,8 @@ class RateLimitInterceptorTest {
         policy.setWindow(Duration.ofHours(1));
         properties.getPolicies().put(POLICY, policy);
 
-        interceptor = new RateLimitInterceptor(rateLimiter, properties);
+        fallbackLimiter = new InMemoryRateLimiter(Clock.systemUTC());
+        interceptor = new RateLimitInterceptor(rateLimiter, fallbackLimiter, properties);
         request = new MockHttpServletRequest();
         request.setRemoteAddr("10.0.0.7");
         response = new MockHttpServletResponse();
@@ -136,12 +139,52 @@ class RateLimitInterceptorTest {
     }
 
     @Test
-    @DisplayName("Redis가 죽으면 요청을 통과시킨다 — 보호 장치가 장애를 만들지 않게")
-    void preHandle_RedisFailure_FailsOpen() throws Exception {
+    @DisplayName("Redis가 죽어도 한도 안이면 통과한다 — 보호 장치가 장애를 만들지 않게")
+    void preHandle_RedisFailure_StillPassesUnderLimit() throws Exception {
         when(rateLimiter.consume(anyString(), anyInt(), any(Duration.class)))
                 .thenThrow(new IllegalStateException("redis down"));
 
         assertThat(interceptor.preHandle(request, response, handler("limited"))).isTrue();
+    }
+
+    @Test
+    @DisplayName("첫 degrade 로그는 반드시 남는다 — 예전에는 오버플로로 이것이 빠졌다")
+    void shouldLogDegraded_FirstCall_Logs() {
+        long now = System.currentTimeMillis();
+
+        assertThat(interceptor.shouldLogDegraded(now))
+                .as("한 번도 안 남긴 상태의 첫 호출")
+                .isTrue();
+    }
+
+    @Test
+    @DisplayName("간격 안에는 다시 남기지 않고, 간격이 지나면 다시 남긴다")
+    void shouldLogDegraded_ThrottlesWithinInterval() {
+        long now = System.currentTimeMillis();
+        interceptor.shouldLogDegraded(now);
+
+        assertThat(interceptor.shouldLogDegraded(now + 59_000))
+                .as("장애가 길어져도 요청마다 찍으면 로그가 넘친다")
+                .isFalse();
+        assertThat(interceptor.shouldLogDegraded(now + 60_000))
+                .as("한 번만 찍으면 장애가 계속되는지 알 수 없다")
+                .isTrue();
+    }
+
+    @Test
+    @DisplayName("Redis가 죽어도 한도를 넘으면 막는다 — 예전에는 여기가 무제한이었다")
+    void preHandle_RedisFailure_FallbackStillBlocks() throws Exception {
+        when(rateLimiter.consume(anyString(), anyInt(), any(Duration.class)))
+                .thenThrow(new IllegalStateException("redis down"));
+
+        for (int i = 0; i < LIMIT; i++) {
+            assertThat(interceptor.preHandle(request, response, handler("limited")))
+                    .as("%d번째는 폴백 한도 안이다", i + 1)
+                    .isTrue();
+        }
+
+        assertThatThrownBy(() -> interceptor.preHandle(request, response, handler("limited")))
+                .isInstanceOf(RateLimitExceededException.class);
     }
 
     @Test

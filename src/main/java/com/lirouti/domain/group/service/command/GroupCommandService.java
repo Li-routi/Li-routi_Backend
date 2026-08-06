@@ -4,10 +4,13 @@ import com.lirouti.domain.group.converter.GroupConverter;
 import com.lirouti.domain.group.dto.request.GroupReqDTO;
 import com.lirouti.domain.group.dto.response.GroupResDTO;
 import com.lirouti.domain.group.entity.Group;
+import com.lirouti.domain.group.entity.GroupMember;
 import com.lirouti.domain.group.entity.GroupRoutine;
 import com.lirouti.domain.group.entity.GroupRoutineCategory;
+import com.lirouti.domain.group.enums.GroupStatus;
 import com.lirouti.domain.group.exception.GroupException;
 import com.lirouti.domain.group.exception.code.error.GroupErrorCode;
+import com.lirouti.domain.group.repository.GroupRepository;
 import com.lirouti.domain.group.repository.GroupRoutineCategoryRepository;
 import com.lirouti.domain.group.repository.GroupRoutineRepository;
 import com.lirouti.domain.group.service.GroupValidationService;
@@ -29,12 +32,62 @@ public class GroupCommandService {
     private static final int MAX_CREATE_ATTEMPTS = 10;
 
     private final GroupValidationService groupValidationService;
+    private final GroupRepository groupRepository;
     private final GroupRoutineCategoryRepository groupRoutineCategoryRepository;
     private final GroupRoutineRepository groupRoutineRepository;
     private final GroupRoutineAssignmentCommandService assignmentCommandService;
     private final GroupCreationAttemptService groupCreationAttemptService;
     private final GroupInviteCodeUniqueViolationDetector uniqueViolationDetector;
     private final Validator validator;
+
+    /** 잠긴 ACTIVE OWNER 그룹을 애그리거트 루트에서 Hard Delete한다. */
+    @Transactional
+    public void deleteGroup(Long groupId, Long memberId) {
+        Group group = groupRepository.findByIdForUpdate(groupId)
+                .orElseThrow(() -> new GroupException(GroupErrorCode.GROUP_NOT_FOUND));
+
+        if (group.getStatus() != GroupStatus.ACTIVE) {
+            throw new GroupException(GroupErrorCode.GROUP_NOT_FOUND);
+        }
+
+        groupValidationService.validateGroupOwner(group, memberId);
+        groupRepository.delete(group);
+    }
+
+    /**
+     * ACTIVE 일반 구성원을 그룹에서 탈퇴 처리하고, 아직 확정되지 않은 그룹 루틴 할당을 삭제한다.
+     * 완료·미이행 할당과 인증 이력은 상태 조건으로 보존한다.
+     */
+    @Transactional
+    public void leaveGroup(Long groupId, Long memberId) {
+        GroupMember groupMember = groupValidationService
+                .validateActiveGroupMember(groupId, memberId);
+
+        groupMember.leave();
+        int deletedAssignmentCount = assignmentCommandService
+                .deleteUnfinishedAssignmentsForLeaver(groupId, memberId);
+
+        log.info("그룹 탈퇴를 완료했습니다. groupId={}, memberId={}, deletedAssignmentCount={}",
+                groupId, memberId, deletedAssignmentCount);
+    }
+
+    /** ACTIVE OWNER가 그룹 행 잠금 안에서 신규 참여를 차단한다. 이미 잠긴 경우에도 성공한다. */
+    @Transactional
+    public GroupResDTO.LockState lockGroup(Long groupId, Long memberId) {
+        Group group = groupValidationService.lockActiveGroupForUpdate(groupId);
+        groupValidationService.validateGroupOwner(group, memberId);
+        group.lock();
+        return GroupConverter.toLockState(group);
+    }
+
+    /** ACTIVE OWNER가 그룹 행 잠금 안에서 신규 참여를 다시 허용한다. 이미 해제된 경우에도 성공한다. */
+    @Transactional
+    public GroupResDTO.LockState unlockGroup(Long groupId, Long memberId) {
+        Group group = groupValidationService.lockActiveGroupForUpdate(groupId);
+        groupValidationService.validateGroupOwner(group, memberId);
+        group.unlock();
+        return GroupConverter.toLockState(group);
+    }
 
     /** 그룹 행 잠금 안에서 OWNER 권한, 상한, 이름 중복을 검증하고 사용자 카테고리를 생성한다. */
     @Transactional
@@ -72,6 +125,7 @@ public class GroupCommandService {
         GroupRoutineCategory category = GroupConverter
                 .toGroupRoutineCategory(normalizedRequest, group);
         saveGroupRoutineCategory(groupId, memberId, category);
+        group.addRoutineCategory(category);
 
         log.info("그룹 사용자 카테고리를 생성했습니다. groupId={}, memberId={}, categoryId={}",
                 groupId, memberId, category.getId());
@@ -158,6 +212,8 @@ public class GroupCommandService {
 
         GroupRoutine groupRoutine = GroupConverter.toGroupRoutine(request, group, category);
         saveGroupRoutine(groupRoutine);
+        group.addRoutine(groupRoutine);
+        category.addRoutine(groupRoutine);
 
         int assignmentCount = assignmentCommandService
                 .assignRoutineToActiveMembersToday(groupRoutine);
@@ -204,7 +260,12 @@ public class GroupCommandService {
         );
         validateRoutineTitleNotDuplicated(groupId, routineId, request.title());
 
+        GroupRoutineCategory previousCategory = groupRoutine.getCategory();
         groupRoutine.update(category, request.title(), request.description());
+        if (previousCategory != category) {
+            previousCategory.removeRoutine(groupRoutine);
+            category.addRoutine(groupRoutine);
+        }
         groupRoutine.replaceSchedules(request.schedules().stream()
                 .map(schedule -> new GroupRoutine.ScheduleUpdate(
                         schedule.repeatDay(),

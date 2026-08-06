@@ -10,6 +10,36 @@ import java.util.List;
 import java.util.Optional;
 
 public interface MemberRoutineRepository extends JpaRepository<MemberRoutine, Long> {
+    /** 활성 여부와 관계없이 카테고리를 참조하는 개인 루틴이 하나라도 있는지 확인한다. */
+    boolean existsByCategoryId(Long categoryId);
+
+    @Query("""
+            select routine
+            from MemberRoutine routine
+            join fetch routine.category category
+            left join category.owner categoryOwner
+            left join fetch routine.template template
+            where routine.member.id = :memberId
+              and routine.active = true
+            order by case when categoryOwner is null then 0 else 1 end asc,
+                     category.displayOrder asc,
+                     category.id asc,
+                     case when template.id is null then 1 else 0 end asc,
+                     template.displayOrder asc,
+                     routine.id asc
+            """)
+    List<MemberRoutine> findActiveOrderedByMemberId(@Param("memberId") Long memberId);
+
+    @Query("""
+            select distinct routine
+            from MemberRoutine routine
+            left join fetch routine.schedules
+            where routine.id in :routineIds
+            """)
+    List<MemberRoutine> findAllWithSchedulesByIdIn(
+            @Param("routineIds") List<Long> routineIds
+    );
+
     /**
      * 회원의 활성 개인 루틴 수를 센다. 활성 루틴 상한 검사에 사용한다.
      *

@@ -1,6 +1,6 @@
-package com.lirouti.domain.challenge.repository;
+package com.lirouti.domain.verification.repository;
 
-import com.lirouti.domain.challenge.entity.ChallengeVerificationLike;
+import com.lirouti.domain.verification.entity.ChallengeVerificationLike;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -10,7 +10,7 @@ public interface ChallengeVerificationLikeRepository
         extends JpaRepository<ChallengeVerificationLike, Long>, ChallengeVerificationLikeRepositoryCustom {
 
     /**
-     * 좋아요를 남긴다. <b>이미 있으면 아무 일도 하지 않고 성공한다</b>(#63).
+     * 좋아요를 남긴다. <b>이미 있으면 아무 일도 하지 않고 성공한다</b>.
      *
      * JPA save + 제약 위반 잡기로 하지 않은 이유가 있다. 유니크 제약 위반이 나면 영속성 컨텍스트가
      * 깨지고 <b>트랜잭션이 롤백 전용으로 표시된다.</b> 예외를 잡아 "이미 눌림"으로 넘겨도 이어지는

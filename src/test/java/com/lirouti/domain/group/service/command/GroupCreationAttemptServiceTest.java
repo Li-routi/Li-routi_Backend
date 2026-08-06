@@ -29,7 +29,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.DayOfWeek;
-import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
@@ -44,8 +43,6 @@ import static org.mockito.Mockito.*;
 class GroupCreationAttemptServiceTest {
     private static final Long MEMBER_ID = 1L;
     private static final Long GROUP_ID = 10L;
-    private static final LocalDateTime INVITE_EXPIRES_AT =
-            LocalDateTime.of(2026, 8, 1, 10, 10);
 
     @Mock
     private GroupValidationService groupValidationService;
@@ -98,7 +95,6 @@ class GroupCreationAttemptServiceTest {
         ArgumentCaptor<Group> groupCaptor = ArgumentCaptor.forClass(Group.class);
         verify(groupRepository).saveAndFlush(groupCaptor.capture());
         assertThat(groupCaptor.getValue().getInviteCode()).isEqualTo("NEW1234");
-        assertThat(groupCaptor.getValue().getInviteCodeExpiresAt()).isEqualTo(INVITE_EXPIRES_AT);
 
         ArgumentCaptor<GroupMember> ownerCaptor = ArgumentCaptor.forClass(GroupMember.class);
         verify(groupMemberRepository).saveAndFlush(ownerCaptor.capture());
@@ -143,7 +139,6 @@ class GroupCreationAttemptServiceTest {
         Group otherGroup = Group.builder()
                 .name("다른 그룹")
                 .inviteCode("OTHER12")
-                .inviteCodeExpiresAt(INVITE_EXPIRES_AT)
                 .build();
         ReflectionTestUtils.setField(otherGroup, "id", 99L);
         GroupRoutineCategory otherCategory = GroupRoutineCategory.builder()
@@ -233,9 +228,7 @@ class GroupCreationAttemptServiceTest {
     private void givenValidRequest(GroupReqDTO.CreateGroup request, Member owner) {
         when(groupValidationService.lockActiveMemberAndValidateParticipationLimit(MEMBER_ID))
                 .thenReturn(owner);
-        when(inviteCodeGenerator.generate()).thenReturn(
-                new GroupInviteCodeGenerator.GeneratedInviteCode("NEW1234", INVITE_EXPIRES_AT)
-        );
+        when(inviteCodeGenerator.generate()).thenReturn("NEW1234");
         when(groupRepository.saveAndFlush(any(Group.class))).thenAnswer(invocation -> {
             Group group = invocation.getArgument(0);
             ReflectionTestUtils.setField(group, "id", GROUP_ID);

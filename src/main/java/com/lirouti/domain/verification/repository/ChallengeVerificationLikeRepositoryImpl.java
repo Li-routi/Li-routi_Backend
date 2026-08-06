@@ -1,6 +1,6 @@
-package com.lirouti.domain.challenge.repository;
+package com.lirouti.domain.verification.repository;
 
-import com.lirouti.domain.challenge.entity.QChallengeVerificationLike;
+import com.lirouti.domain.verification.entity.QChallengeVerificationLike;
 import com.lirouti.domain.member.entity.QMember;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import lombok.RequiredArgsConstructor;
@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import static com.lirouti.domain.challenge.repository.ChallengeQuerySupport.activeMember;
+import static com.lirouti.domain.member.repository.MemberQuerySupport.activeMember;
 import static com.querydsl.core.group.GroupBy.groupBy;
 
 @RequiredArgsConstructor

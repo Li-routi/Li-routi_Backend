@@ -105,7 +105,7 @@ public enum GroupErrorCode implements BaseErrorCode {
     ),
     INVITE_CODE_ISSUE_FAILED(
             HttpStatus.INTERNAL_SERVER_ERROR,
-            "초대코드 발급에 실패했습니다.",
+            "초대코드 생성에 실패했습니다.",
             "GROUP500_1"
     );
 

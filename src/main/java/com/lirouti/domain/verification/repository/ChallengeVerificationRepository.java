@@ -1,6 +1,6 @@
-package com.lirouti.domain.challenge.repository;
+package com.lirouti.domain.verification.repository;
 
-import com.lirouti.domain.challenge.entity.ChallengeVerification;
+import com.lirouti.domain.verification.entity.ChallengeVerification;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -30,7 +30,7 @@ public interface ChallengeVerificationRepository
     );
 
     /**
-     * 그 챌린지에 속한 인증인지까지 확인하며 조회한다(#15 신고용).
+     * 그 챌린지에 속한 인증인지까지 확인하며 조회한다. 신고가 대상 인증을 찾을 때 쓴다.
      *
      * 신고 경로가 /api/challenges/{challengeId}/verifications/{verificationId}/reports라
      * 두 값이 서로 맞는지 확인해야 한다. id만으로 찾으면 다른 챌린지의 인증을 이 챌린지 경로로

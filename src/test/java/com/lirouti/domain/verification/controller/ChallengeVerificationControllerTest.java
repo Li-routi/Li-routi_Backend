@@ -1,7 +1,7 @@
-package com.lirouti.domain.challenge.controller;
+package com.lirouti.domain.verification.controller;
 
 import com.lirouti.domain.challenge.entity.Challenge;
-import com.lirouti.domain.challenge.entity.ChallengeVerification;
+import com.lirouti.domain.verification.entity.ChallengeVerification;
 import com.lirouti.domain.challenge.entity.MemberChallenge;
 import com.lirouti.domain.challenge.enums.ChallengeCategory;
 import com.lirouti.domain.member.entity.Member;
@@ -207,7 +207,7 @@ class ChallengeVerificationControllerTest {
                 .andExpect(status().isNotFound());
     }
 
-    // ── 인증 신고 (#15) ──
+    // ── 인증 신고  ──
     @Test
     @DisplayName("인증 없이 신고를 요청하면 거부된다(401)")
     void report_Unauthenticated_IsRejected() throws Exception {
@@ -302,7 +302,7 @@ class ChallengeVerificationControllerTest {
                 .andExpect(jsonPath("$.result.verifications[0].verificationId").value(v.getId()));
     }
 
-    // ── 내 인증 목록 (#62) ──
+    // ── 내 인증 목록  ──
 
     @Test
     @DisplayName("인증 없이 내 인증 목록을 요청하면 거부된다(401)")

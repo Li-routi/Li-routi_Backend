@@ -345,6 +345,7 @@ public final class GroupReqDTO {
      * @param startTime 수행 시작 시각
      * @param endTime 수행 마감 시각
      */
+    @Schema(name = "GroupRoutineScheduleRequest", description = "그룹 루틴 수행 일정 요청")
     public record RoutineSchedule(
             @NotNull(message = "반복 요일은 필수입니다.")
             DayOfWeek repeatDay,

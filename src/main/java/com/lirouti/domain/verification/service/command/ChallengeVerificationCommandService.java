@@ -1,13 +1,15 @@
-package com.lirouti.domain.challenge.service.command;
+package com.lirouti.domain.verification.service.command;
 
 import com.lirouti.domain.challenge.converter.ChallengeConverter;
-import com.lirouti.domain.challenge.dto.request.ChallengeReqDTO;
 import com.lirouti.domain.challenge.dto.response.ChallengeResDTO;
-import com.lirouti.domain.challenge.entity.ChallengeVerification;
+import com.lirouti.domain.verification.converter.ChallengeVerificationConverter;
+import com.lirouti.domain.verification.dto.response.ChallengeVerificationResDTO;
+import com.lirouti.domain.verification.dto.request.ChallengeVerificationReqDTO;
+import com.lirouti.domain.verification.entity.ChallengeVerification;
 import com.lirouti.domain.challenge.entity.MemberChallenge;
 import com.lirouti.domain.challenge.exception.ChallengeException;
 import com.lirouti.domain.challenge.exception.code.error.ChallengeErrorCode;
-import com.lirouti.domain.challenge.repository.ChallengeVerificationRepository;
+import com.lirouti.domain.verification.repository.ChallengeVerificationRepository;
 import com.lirouti.domain.challenge.repository.MemberChallengeRepository;
 import com.lirouti.domain.media.service.MediaService;
 import com.lirouti.global.util.TimeUtil;
@@ -22,12 +24,14 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZonedDateTime;
 import java.util.Optional;
+import com.lirouti.domain.verification.exception.VerificationException;
+import com.lirouti.domain.verification.exception.code.error.ChallengeVerificationErrorCode;
 
 /**
  * 인증의 <b>저장 단계</b>만 담당한다. 트랜잭션 경계가 이 클래스에 있다.
  *
  * {@link ChallengeCommandService#verify}에서 분리한 이유는 트랜잭션 밖에서 끝내야 하는 일이
- * 앞에 있기 때문이다(#22 바이트 검증, 이어서 #40 AI 심사). 두 단계를 한 메서드에 두면
+ * 앞에 있기 때문이다(업로드 바이트 검증, 이어서 AI 심사). 두 단계를 한 메서드에 두면
  * 외부 API 호출이 트랜잭션 안으로 들어가 DB 커넥션과 행 락을 그 시간만큼 붙잡는다
  * (service_convention: 트랜잭션 내 장시간 외부 API 호출 금지).
  *
@@ -36,7 +40,7 @@ import java.util.Optional;
  * {@code AuthService}가 외부 인증 후 {@code MemberCommandService}에 저장을 위임하는 것과 같은 모양이다.
  *
  * <b>이 메서드 안의 순서는 그대로 유지해야 한다.</b> 행 락 → 오늘 인증 조회 → INSERT/덮어쓰기 →
- * 스트릭 갱신이 한 트랜잭션에 있어야 중복 증가와 stale update가 모두 막힌다(#53, database-schema.md).
+ * 스트릭 갱신이 한 트랜잭션에 있어야 중복 증가와 stale update가 모두 막힌다(database-schema.md).
  */
 @Slf4j
 @Service
@@ -59,13 +63,13 @@ public class ChallengeVerificationCommandService {
      * 끊기지 않게 하기 위해서이며, 이탈(leave)이 챌린지 active를 보지 않는 것과 같은 기준이다.
      */
     @Transactional
-    public ChallengeResDTO.Verification save(
+    public ChallengeVerificationResDTO.Verification save(
             Long memberId,
             Long challengeId,
-            ChallengeReqDTO.Verify request
+            ChallengeVerificationReqDTO.Verify request
     ) {
         // 이탈·재참여와 같은 행을 바꾸므로 잠그고 읽는다. 락 없이 읽으면 이 트랜잭션이 커밋할 때
-        // 그 사이 커밋된 이탈·재참여 결과를 오래된 스냅샷으로 되돌린다(#53).
+        // 그 사이 커밋된 이탈·재참여 결과를 오래된 스냅샷으로 되돌린다.
         // 회차(participation_round)를 읽어 인증 행에 심으므로, 잠그지 않으면 이미 바뀐 회차를
         // 모르고 옛 회차로 인증을 저장한다 — 유니크 제약에도 걸리지 않아 조용히 어긋난다.
         MemberChallenge memberChallenge = memberChallengeRepository
@@ -97,7 +101,7 @@ public class ChallengeVerificationCommandService {
             log.warn("지난 회차에 오늘 인증한 이력이 있어 재인증을 막았습니다."
                             + " memberId={}, challengeId={}, currentRound={}",
                     memberId, challengeId, memberChallenge.getParticipationRound());
-            throw new ChallengeException(ChallengeErrorCode.ALREADY_VERIFIED_TODAY);
+            throw new VerificationException(ChallengeVerificationErrorCode.ALREADY_VERIFIED_TODAY);
         }
 
         boolean reverified = todayVerification.isPresent();
@@ -112,7 +116,7 @@ public class ChallengeVerificationCommandService {
         // 재인증이면 applyVerification이 오늘 날짜를 보고 스트릭을 그대로 둔다.
         memberChallenge.applyVerification(today);
 
-        return ChallengeConverter.toVerification(
+        return ChallengeVerificationConverter.toVerification(
                 verification,
                 mediaService.resolvePublicUrl(verification.getImageUrl()),
                 memberChallenge.currentStreakAsOf(today),
@@ -122,7 +126,7 @@ public class ChallengeVerificationCommandService {
 
     private ChallengeVerification createVerification(
             MemberChallenge memberChallenge,
-            ChallengeReqDTO.Verify request,
+            ChallengeVerificationReqDTO.Verify request,
             LocalDate verifiedDate,
             LocalDateTime verifiedAt
     ) {
@@ -151,7 +155,7 @@ public class ChallengeVerificationCommandService {
             // 같은 사용자의 중복 클릭이므로 409로 알리는 편이 정직하다.
             return challengeVerificationRepository.saveAndFlush(verification);
         } catch (DataIntegrityViolationException | CannotAcquireLockException e) {
-            throw new ChallengeException(ChallengeErrorCode.VERIFICATION_CONFLICT);
+            throw new VerificationException(ChallengeVerificationErrorCode.VERIFICATION_CONFLICT);
         }
     }
 }

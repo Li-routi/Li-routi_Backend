@@ -6,8 +6,10 @@ import com.lirouti.domain.group.entity.Group;
 import com.lirouti.domain.group.entity.GroupMember;
 import com.lirouti.domain.group.entity.GroupRoutine;
 import com.lirouti.domain.group.entity.GroupRoutineCategory;
+import com.lirouti.domain.group.enums.GroupStatus;
 import com.lirouti.domain.group.exception.GroupException;
 import com.lirouti.domain.group.exception.code.error.GroupErrorCode;
+import com.lirouti.domain.group.repository.GroupRepository;
 import com.lirouti.domain.group.repository.GroupRoutineRepository;
 import com.lirouti.domain.group.repository.GroupRoutineCategoryRepository;
 import com.lirouti.domain.group.service.GroupValidationService;
@@ -39,6 +41,8 @@ class GroupCommandServiceTest {
     @Mock
     private GroupValidationService groupValidationService;
     @Mock
+    private GroupRepository groupRepository;
+    @Mock
     private GroupRoutineCategoryRepository groupRoutineCategoryRepository;
     @Mock
     private GroupRoutineRepository groupRoutineRepository;
@@ -53,6 +57,141 @@ class GroupCommandServiceTest {
 
     @InjectMocks
     private GroupCommandService groupCommandService;
+
+    @Test
+    @DisplayName("잠긴 ACTIVE OWNER 그룹을 애그리거트 루트에서 삭제한다")
+    void deleteGroup_ActiveOwner_DeletesGroupRoot() {
+        // given
+        when(groupRepository.findByIdForUpdate(GROUP_ID)).thenReturn(Optional.of(group));
+        when(group.getStatus()).thenReturn(GroupStatus.ACTIVE);
+        when(groupValidationService.validateGroupOwner(group, OWNER_ID))
+                .thenReturn(ownerMembership);
+
+        // when
+        groupCommandService.deleteGroup(GROUP_ID, OWNER_ID);
+
+        // then
+        verify(groupRepository).findByIdForUpdate(GROUP_ID);
+        verify(groupValidationService).validateGroupOwner(group, OWNER_ID);
+        verify(groupRepository).delete(group);
+    }
+
+    @Test
+    @DisplayName("삭제 대상 그룹이 없으면 GROUP_NOT_FOUND를 반환하고 삭제하지 않는다")
+    void deleteGroup_GroupNotFound_ThrowsNotFound() {
+        // given
+        when(groupRepository.findByIdForUpdate(GROUP_ID)).thenReturn(Optional.empty());
+
+        // when & then
+        assertThatThrownBy(() -> groupCommandService.deleteGroup(GROUP_ID, OWNER_ID))
+                .isInstanceOf(GroupException.class)
+                .extracting("code")
+                .isEqualTo(GroupErrorCode.GROUP_NOT_FOUND);
+        verify(groupRepository, never()).delete(any(Group.class));
+        verifyNoInteractions(groupValidationService);
+    }
+
+    @Test
+    @DisplayName("DELETED 그룹은 삭제 API에서 GROUP_NOT_FOUND로 처리한다")
+    void deleteGroup_DeletedGroup_ThrowsNotFound() {
+        // given
+        when(groupRepository.findByIdForUpdate(GROUP_ID)).thenReturn(Optional.of(group));
+        when(group.getStatus()).thenReturn(GroupStatus.DELETED);
+
+        // when & then
+        assertThatThrownBy(() -> groupCommandService.deleteGroup(GROUP_ID, OWNER_ID))
+                .isInstanceOf(GroupException.class)
+                .extracting("code")
+                .isEqualTo(GroupErrorCode.GROUP_NOT_FOUND);
+        verifyNoInteractions(groupValidationService);
+        verify(groupRepository, never()).delete(any(Group.class));
+    }
+
+    @Test
+    @DisplayName("OWNER 검증이 실패하면 그룹을 삭제하지 않는다")
+    void deleteGroup_NotOwner_DoesNotDeleteGroup() {
+        // given
+        when(groupRepository.findByIdForUpdate(GROUP_ID)).thenReturn(Optional.of(group));
+        when(group.getStatus()).thenReturn(GroupStatus.ACTIVE);
+        when(groupValidationService.validateGroupOwner(group, OWNER_ID))
+                .thenThrow(new GroupException(GroupErrorCode.GROUP_OWNER_ACCESS_DENIED));
+
+        // when & then
+        assertThatThrownBy(() -> groupCommandService.deleteGroup(GROUP_ID, OWNER_ID))
+                .isInstanceOf(GroupException.class)
+                .extracting("code")
+                .isEqualTo(GroupErrorCode.GROUP_OWNER_ACCESS_DENIED);
+        verify(groupRepository, never()).delete(any(Group.class));
+    }
+
+    @Test
+    @DisplayName("잠긴 ACTIVE OWNER 그룹은 비관적 잠금과 기존 OWNER 검증 후 잠금 처리한다")
+    void lockGroup_ActiveOwner_LocksGroup() {
+        // given
+        when(groupValidationService.lockActiveGroupForUpdate(GROUP_ID)).thenReturn(group);
+        when(groupValidationService.validateGroupOwner(group, OWNER_ID))
+                .thenReturn(ownerMembership);
+        when(group.getId()).thenReturn(GROUP_ID);
+        when(group.isLocked()).thenReturn(true);
+
+        // when
+        GroupResDTO.LockState result = groupCommandService.lockGroup(GROUP_ID, OWNER_ID);
+
+        // then
+        assertThat(result.groupId()).isEqualTo(GROUP_ID);
+        assertThat(result.isLocked()).isTrue();
+        verify(groupValidationService).lockActiveGroupForUpdate(GROUP_ID);
+        verify(groupValidationService).validateGroupOwner(group, OWNER_ID);
+        verify(group).lock();
+    }
+
+    @Test
+    @DisplayName("잠금 해제는 비관적 잠금과 기존 OWNER 검증 후 잠금 해제 처리한다")
+    void unlockGroup_ActiveOwner_UnlocksGroup() {
+        // given
+        when(groupValidationService.lockActiveGroupForUpdate(GROUP_ID)).thenReturn(group);
+        when(groupValidationService.validateGroupOwner(group, OWNER_ID))
+                .thenReturn(ownerMembership);
+        when(group.getId()).thenReturn(GROUP_ID);
+        when(group.isLocked()).thenReturn(false);
+
+        // when
+        GroupResDTO.LockState result = groupCommandService.unlockGroup(GROUP_ID, OWNER_ID);
+
+        // then
+        assertThat(result.groupId()).isEqualTo(GROUP_ID);
+        assertThat(result.isLocked()).isFalse();
+        verify(groupValidationService).lockActiveGroupForUpdate(GROUP_ID);
+        verify(groupValidationService).validateGroupOwner(group, OWNER_ID);
+        verify(group).unlock();
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 그룹 잠금 요청은 GROUP_NOT_FOUND를 반환한다")
+    void lockGroup_GroupNotFound_ThrowsNotFound() {
+        when(groupValidationService.lockActiveGroupForUpdate(GROUP_ID))
+                .thenThrow(new GroupException(GroupErrorCode.GROUP_NOT_FOUND));
+
+        assertThatThrownBy(() -> groupCommandService.lockGroup(GROUP_ID, OWNER_ID))
+                .isInstanceOf(GroupException.class)
+                .extracting("code")
+                .isEqualTo(GroupErrorCode.GROUP_NOT_FOUND);
+        verifyNoInteractions(group);
+    }
+
+    @Test
+    @DisplayName("OWNER 검증에 실패하면 그룹 잠금 상태를 바꾸지 않는다")
+    void lockGroup_NotOwner_DoesNotLockGroup() {
+        when(groupValidationService.lockActiveGroupForUpdate(GROUP_ID)).thenReturn(group);
+        when(groupValidationService.validateGroupOwner(group, OWNER_ID))
+                .thenThrow(new GroupException(GroupErrorCode.GROUP_OWNER_ACCESS_DENIED));
+
+        assertThatThrownBy(() -> groupCommandService.lockGroup(GROUP_ID, OWNER_ID))
+                .isInstanceOf(GroupException.class)
+                .extracting("code")
+                .isEqualTo(GroupErrorCode.GROUP_OWNER_ACCESS_DENIED);
+        verify(group, never()).lock();
+    }
 
     private void givenValidatedOwner() {
         when(groupValidationService.validateGroupOwner(GROUP_ID, OWNER_ID))

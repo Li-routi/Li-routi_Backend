@@ -20,14 +20,14 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
-import com.lirouti.domain.challenge.dto.request.ChallengeReqDTO;
 import com.lirouti.domain.challenge.entity.Challenge;
-import com.lirouti.domain.challenge.entity.ChallengeVerification;
+import com.lirouti.domain.verification.dto.request.ChallengeVerificationReqDTO;
+import com.lirouti.domain.verification.entity.ChallengeVerification;
 import com.lirouti.domain.challenge.entity.MemberChallenge;
 import com.lirouti.domain.challenge.enums.ChallengeCategory;
 import com.lirouti.domain.challenge.repository.ChallengeRepository;
-import com.lirouti.domain.challenge.repository.ChallengeVerificationReportRepository;
-import com.lirouti.domain.challenge.repository.ChallengeVerificationRepository;
+import com.lirouti.domain.verification.repository.ChallengeVerificationReportRepository;
+import com.lirouti.domain.verification.repository.ChallengeVerificationRepository;
 import com.lirouti.domain.challenge.repository.MemberChallengeRepository;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.enums.Role;
@@ -137,7 +137,7 @@ class ChallengeReportHideConcurrencyTest {
                     ready.countDown();
                     start.await();
                     challengeCommandService.report(reporterId, challengeId, verificationId,
-                            new ChallengeReqDTO.Report("부적절한 사진"));
+                            new ChallengeVerificationReqDTO.Report("부적절한 사진"));
                 } catch (InterruptedException ignored) {
                     Thread.currentThread().interrupt();
                 } catch (RuntimeException e) {

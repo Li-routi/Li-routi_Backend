@@ -20,7 +20,7 @@ public final class RoutineResDTO {
      * @param addableCount 더 추가할 수 있는 사용자 카테고리 수
      */
     @Builder
-    @Schema(name = "CategoryList", description = "루틴 카테고리 목록")
+    @Schema(name = "PersonalRoutineCategoryList", description = "개인 루틴 카테고리 목록")
     public record CategoryList(
             @Schema(description = "노출 순서대로 정렬된 카테고리. 고정 카테고리가 먼저 오고 "
                     + "사용자 카테고리는 생성 순서로 이어진다")
@@ -45,7 +45,7 @@ public final class RoutineResDTO {
      * @param fixed 앱이 제공하는 고정 카테고리인지 여부. 사용자 카테고리면 {@code false}
      */
     @Builder
-    @Schema(name = "Category", description = "루틴 카테고리")
+    @Schema(name = "PersonalRoutineCategory", description = "개인 루틴 카테고리")
     public record Category(
             @Schema(description = "카테고리 ID", example = "2")
             Long categoryId,
@@ -73,7 +73,7 @@ public final class RoutineResDTO {
      * @param templates 기본 제공 루틴 목록
      */
     @Builder
-    @Schema(name = "TemplateList", description = "기본 제공 루틴 목록")
+    @Schema(name = "PersonalRoutineTemplateList", description = "개인 루틴 기본 제공 목록")
     public record TemplateList(
             List<Template> templates
     ) {
@@ -89,7 +89,7 @@ public final class RoutineResDTO {
      * @param alreadyAdded 회원이 이미 등록한 기본 루틴인지 여부. 목록의 체크 상태에 대응한다
      */
     @Builder
-    @Schema(name = "Template", description = "기본 제공 루틴")
+    @Schema(name = "PersonalRoutineTemplate", description = "개인 기본 제공 루틴")
     public record Template(
             @Schema(description = "기본 제공 루틴 ID. 생성 요청의 templateId에 그대로 넣는다",
                     example = "201")
@@ -114,6 +114,14 @@ public final class RoutineResDTO {
     ) {
     }
 
+    @Builder
+    @Schema(name = "PersonalRoutineList", description = "개인 루틴 목록")
+    public record RoutineList(
+            @Schema(description = "카테고리와 루틴 노출 순서대로 정렬된 활성 개인 루틴")
+            List<Routine> routines
+    ) {
+    }
+
     /**
      * 벌크 생성 결과다.
      *
@@ -121,7 +129,7 @@ public final class RoutineResDTO {
      * @param activeRoutineCount 생성 후 회원의 활성 루틴 총 개수
      */
     @Builder
-    @Schema(name = "RoutineCreateResult", description = "개인 루틴 생성 결과")
+    @Schema(name = "PersonalRoutineCreateResult", description = "개인 루틴 생성 결과")
     public record RoutineCreateResult(
             @Schema(description = "이번 요청으로 생성된 루틴. 요청에 담은 순서를 그대로 유지한다")
             List<Routine> routines,
@@ -150,7 +158,7 @@ public final class RoutineResDTO {
      * @param alarmTime 알람 시각. 설정하지 않았으면 {@code null}
      */
     @Builder
-    @Schema(name = "Routine", description = "생성된 개인 루틴")
+    @Schema(name = "PersonalRoutine", description = "개인 루틴")
     public record Routine(
             @Schema(description = "생성된 루틴 ID", example = "12")
             Long routineId,

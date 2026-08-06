@@ -94,10 +94,10 @@ public interface GroupRoutineAssignmentRepository
      * <p>회원과 그룹을 <b>조회 조건에 넣는다.</b> 가져와서 뒤에서 비교하면 남의 할당인지
      * 없는 할당인지가 응답으로 드러난다.
      *
-     * <p>루틴과 그룹을 <b>함께 가져온다.</b> 둘 다 지연 로딩이라, 트랜잭션 밖에서 이 결과의
-     * 연관을 건드리면 LazyInitializationException 이 난다. 호출부(인증)는 트랜잭션 경계를
-     * 갖지 않으므로 여기서 채워 보낸다.
+     * <p>그룹 루틴 인증 CommandService의 트랜잭션 안에서 비관적 쓰기 잠금을 획득한다.
+     * 탈퇴의 미완료 할당 bulk delete와 같은 행을 직렬화해 먼저 확정된 요청의 결과를 보장한다.
      */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
             select assignment
             from GroupRoutineAssignment assignment
@@ -113,6 +113,28 @@ public interface GroupRoutineAssignmentRepository
             @Param("groupId") Long groupId,
             @Param("memberId") Long memberId,
             @Param("assignedDate") LocalDate assignedDate
+    );
+
+    /**
+     * 그룹 탈퇴 회원의 아직 확정되지 않은 할당만 물리 삭제한다.
+     * COMPLETED, MISSED 할당과 그에 연결된 인증 이력은 상태 조건으로 보존한다.
+     *
+     * <p>인증 경로의 {@link #findForVerification(Long, Long, Long, LocalDate)}가 같은 할당 행을
+     * 비관적으로 잠그므로, 탈퇴와 인증은 먼저 확정된 트랜잭션의 결과를 기준으로 직렬화된다.
+     *
+     * @return 삭제된 미완료 할당 수
+     */
+    @Modifying(flushAutomatically = true)
+    @Query("""
+            delete from GroupRoutineAssignment assignment
+            where assignment.member.id = :memberId
+              and assignment.groupRoutine.group.id = :groupId
+              and assignment.status in :statuses
+            """)
+    int deleteUnfinishedByGroupIdAndMemberId(
+            @Param("groupId") Long groupId,
+            @Param("memberId") Long memberId,
+            @Param("statuses") List<GroupRoutineAssignmentStatus> statuses
     );
 
     /**

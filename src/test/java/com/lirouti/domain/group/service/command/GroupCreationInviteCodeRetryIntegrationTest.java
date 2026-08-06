@@ -20,7 +20,6 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.List;
@@ -35,8 +34,6 @@ import static org.mockito.Mockito.when;
 class GroupCreationInviteCodeRetryIntegrationTest {
     private static final String COLLIDING_CODE = "CLASH01";
     private static final String SUCCESS_CODE = "FRESH01";
-    private static final LocalDateTime EXPIRES_AT =
-            LocalDateTime.of(2026, 8, 1, 10, 10);
 
     @Autowired
     private GroupCommandService groupCommandService;
@@ -66,16 +63,11 @@ class GroupCreationInviteCodeRetryIntegrationTest {
                 Group.builder()
                         .name("충돌코드보유")
                         .inviteCode(COLLIDING_CODE)
-                        .inviteCodeExpiresAt(EXPIRES_AT)
                         .build()
         ).getId());
         when(inviteCodeGenerator.generate())
-                .thenReturn(new GroupInviteCodeGenerator.GeneratedInviteCode(
-                        COLLIDING_CODE, EXPIRES_AT
-                ))
-                .thenReturn(new GroupInviteCodeGenerator.GeneratedInviteCode(
-                        SUCCESS_CODE, EXPIRES_AT
-                ));
+                .thenReturn(COLLIDING_CODE)
+                .thenReturn(SUCCESS_CODE);
 
         try {
             GroupResDTO.CreateResult result = groupCommandService.createGroup(

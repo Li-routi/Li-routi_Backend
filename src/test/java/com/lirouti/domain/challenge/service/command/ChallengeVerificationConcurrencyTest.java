@@ -1,13 +1,13 @@
 package com.lirouti.domain.challenge.service.command;
 
-import com.lirouti.domain.challenge.dto.request.ChallengeReqDTO;
 import com.lirouti.domain.challenge.entity.Challenge;
 import com.lirouti.domain.challenge.entity.MemberChallenge;
 import com.lirouti.domain.challenge.enums.ChallengeCategory;
 import com.lirouti.domain.challenge.exception.ChallengeException;
 import com.lirouti.domain.challenge.exception.code.error.ChallengeErrorCode;
 import com.lirouti.domain.challenge.repository.ChallengeRepository;
-import com.lirouti.domain.challenge.repository.ChallengeVerificationRepository;
+import com.lirouti.domain.verification.dto.request.ChallengeVerificationReqDTO;
+import com.lirouti.domain.verification.repository.ChallengeVerificationRepository;
 import com.lirouti.domain.challenge.repository.MemberChallengeRepository;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.enums.Role;
@@ -29,6 +29,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import com.lirouti.domain.verification.exception.code.error.ChallengeVerificationErrorCode;
 
 /**
  * 인증 "따닥" 동시성 테스트. @Transactional을 쓰지 않는다 — 두 스레드가 각자 트랜잭션으로
@@ -106,10 +107,10 @@ class ChallengeVerificationConcurrencyTest {
                     ready.countDown();       // 게이트 앞 도착 알림
                     start.await();
                     challengeCommandService.verify(
-                            memberId, challengeId, new ChallengeReqDTO.Verify(mediaKey, "동시 인증"));
+                            memberId, challengeId, new ChallengeVerificationReqDTO.Verify(mediaKey, "동시 인증"));
                     success.incrementAndGet();
                 } catch (ChallengeException e) {
-                    if (e.getCode() == ChallengeErrorCode.VERIFICATION_CONFLICT) {
+                    if (e.getCode() == ChallengeVerificationErrorCode.VERIFICATION_CONFLICT) {
                         conflict.incrementAndGet();
                     } else {
                         unexpected.compareAndSet(null, e);
