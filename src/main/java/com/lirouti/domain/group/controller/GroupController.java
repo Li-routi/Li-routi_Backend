@@ -5,7 +5,9 @@ import com.lirouti.domain.group.dto.request.GroupReqDTO;
 import com.lirouti.domain.group.dto.response.GroupResDTO;
 import com.lirouti.domain.group.exception.code.success.GroupSuccessCode;
 import com.lirouti.domain.group.service.command.GroupCommandService;
+import com.lirouti.domain.group.service.command.GroupJoinCommandService;
 import com.lirouti.domain.group.service.query.GroupInviteCodeQueryService;
+import com.lirouti.domain.group.service.query.GroupJoinQueryService;
 import com.lirouti.domain.group.service.query.GroupQueryService;
 import com.lirouti.global.apiPayload.ApiResponse;
 import com.lirouti.global.auth.CustomUserDetails;
@@ -22,6 +24,8 @@ public class GroupController implements GroupControllerDocs {
     private final GroupCommandService groupCommandService;
     private final GroupQueryService groupQueryService;
     private final GroupInviteCodeQueryService groupInviteCodeQueryService;
+    private final GroupJoinQueryService groupJoinQueryService;
+    private final GroupJoinCommandService groupJoinCommandService;
 
     /** 모임방과 초기 카테고리·루틴·일정을 한 요청으로 생성한다. */
     @Override
@@ -138,6 +142,31 @@ public class GroupController implements GroupControllerDocs {
                 GroupSuccessCode.GROUP_ROUTINE_TODAY_FETCH_SUCCESS,
                 result
         );
+    }
+
+    /** 초대코드 입력 시 인증 회원이 해당 그룹에 참여할 수 있는지 안내용 정보를 조회한다. */
+    @Override
+    @GetMapping("/join/preview")
+    public ApiResponse<GroupResDTO.JoinPreview> getJoinPreview(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @RequestParam String inviteCode
+    ) {
+        GroupResDTO.JoinPreview result = groupJoinQueryService.getJoinPreview(
+                userDetails.getMemberId(), inviteCode);
+        return ApiResponse.onSuccess(GroupSuccessCode.GROUP_JOIN_PREVIEW_FETCH_SUCCESS, result);
+    }
+
+    /** 초대코드로 그룹 가입과 가입 당일 수행 가능한 루틴 할당을 하나의 트랜잭션으로 처리한다. */
+    @Override
+    @PostMapping("/join")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ApiResponse<GroupResDTO.JoinResult> joinGroup(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @Valid @RequestBody GroupReqDTO.JoinGroup request
+    ) {
+        GroupResDTO.JoinResult result = groupJoinCommandService.join(
+                userDetails.getMemberId(), request);
+        return ApiResponse.onSuccess(GroupSuccessCode.GROUP_JOIN_SUCCESS, result);
     }
 
     /**

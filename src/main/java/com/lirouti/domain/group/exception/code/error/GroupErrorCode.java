@@ -53,6 +53,11 @@ public enum GroupErrorCode implements BaseErrorCode {
             "해당 그룹에서 사용할 수 없는 루틴 카테고리입니다.",
             "GROUP403_4"
     ),
+    GROUP_LOCKED(
+            HttpStatus.FORBIDDEN,
+            "잠긴 그룹에는 참여할 수 없습니다.",
+            "GROUP403_5"
+    ),
     OWNER_CANNOT_LEAVE(
             HttpStatus.CONFLICT,
             "방장은 권한을 위임하거나 그룹을 삭제하기 전까지 탈퇴할 수 없습니다.",
@@ -102,6 +107,16 @@ public enum GroupErrorCode implements BaseErrorCode {
             HttpStatus.CONFLICT,
             "기본 또는 같은 그룹에 동일한 카테고리 이름이 이미 존재합니다.",
             "GROUP409_10"
+    ),
+    ALREADY_ACTIVE_GROUP_MEMBER(
+            HttpStatus.CONFLICT,
+            "이미 해당 그룹의 활성 구성원입니다.",
+            "GROUP409_11"
+    ),
+    KICKED_MEMBER_CANNOT_REJOIN(
+            HttpStatus.CONFLICT,
+            "강제 퇴장된 그룹에는 다시 참여할 수 없습니다.",
+            "GROUP409_12"
     ),
     INVITE_CODE_ISSUE_FAILED(
             HttpStatus.INTERNAL_SERVER_ERROR,

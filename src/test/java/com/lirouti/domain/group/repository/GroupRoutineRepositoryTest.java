@@ -192,6 +192,27 @@ class GroupRoutineRepositoryTest {
     }
 
     @Test
+    @DisplayName("활성 루틴 수는 반복 일정 수와 무관하게 루틴 행 단위로 집계한다")
+    void countByGroupIdAndActiveTrue_MultipleSchedules_CountsRoutineOnce() {
+        // given
+        Group group = group();
+        GroupRoutine active = routine(group, category(), "여러 일정 루틴");
+        active.addSchedule(DayOfWeek.MONDAY, LocalTime.of(9, 0), LocalTime.of(10, 0));
+        active.addSchedule(DayOfWeek.FRIDAY, LocalTime.of(19, 0), LocalTime.of(20, 0));
+        GroupRoutine inactive = routine(group, category(), "비활성 루틴");
+        inactive.delete();
+        groupRoutineRepository.save(active);
+        groupRoutineRepository.saveAndFlush(inactive);
+        em.clear();
+
+        // when
+        long result = groupRoutineRepository.countByGroupIdAndActiveTrue(group.getId());
+
+        // then
+        assertThat(result).isEqualTo(1);
+    }
+
+    @Test
     @DisplayName("삭제한 루틴의 제목은 같은 그룹에서 재사용할 수 있다")
     void save_TitleOfInactiveRoutine_CanBeReused() {
         // given

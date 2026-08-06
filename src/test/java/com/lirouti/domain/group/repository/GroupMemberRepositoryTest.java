@@ -131,6 +131,31 @@ class GroupMemberRepositoryTest {
         assertThat(result).isEqualTo(2);
     }
 
+    @Test
+    @DisplayName("Preview ACTIVE 구성원 ID는 joinedAt, id 순서로 LEFT와 KICKED를 제외해 조회한다")
+    void findIdsByGroupIdAndStatusOrderByJoinedAtAscIdAsc_ReturnsOnlyActiveInStableOrder() {
+        // given
+        Group target = group("P000001");
+        LocalDateTime firstJoinedAt = LocalDateTime.of(2026, 8, 1, 9, 0);
+        LocalDateTime secondJoinedAt = LocalDateTime.of(2026, 8, 1, 10, 0);
+        GroupMember first = membership(member(), target, GroupMemberRole.MEMBER, firstJoinedAt);
+        GroupMember sameTimeSecond = membership(member(), target, GroupMemberRole.MEMBER, firstJoinedAt);
+        GroupMember last = membership(member(), target, GroupMemberRole.MEMBER, secondJoinedAt);
+        GroupMember left = membership(member(), target, GroupMemberRole.MEMBER, secondJoinedAt);
+        GroupMember kicked = membership(member(), target, GroupMemberRole.MEMBER, secondJoinedAt);
+        left.leave();
+        kicked.kick();
+        em.flush();
+        em.clear();
+
+        // when
+        List<Long> result = groupMemberRepository.findIdsByGroupIdAndStatusOrderByJoinedAtAscIdAsc(
+                target.getId(), GroupMemberStatus.ACTIVE);
+
+        // then
+        assertThat(result).containsExactly(first.getId(), sameTimeSecond.getId(), last.getId());
+    }
+
     private Group group(String inviteCode) {
         Group group = Group.builder().name("테스트 그룹").inviteCode(inviteCode).build();
         em.persist(group);
@@ -151,10 +176,20 @@ class GroupMemberRepositoryTest {
     }
 
     private GroupMember membership(Member member, Group group, GroupMemberRole role) {
+        return membership(member, group, role, null);
+    }
+
+    private GroupMember membership(
+            Member member,
+            Group group,
+            GroupMemberRole role,
+            LocalDateTime joinedAt
+    ) {
         GroupMember membership = GroupMember.builder()
                 .member(member)
                 .group(group)
                 .role(role)
+                .joinedAt(joinedAt)
                 .build();
         em.persist(membership);
         return membership;

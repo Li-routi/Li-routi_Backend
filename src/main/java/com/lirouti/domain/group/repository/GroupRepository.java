@@ -16,6 +16,8 @@ public interface GroupRepository extends JpaRepository<Group, Long> {
     @Query("select groupEntity from Group groupEntity where groupEntity.id = :groupId")
     Optional<Group> findByIdForUpdate(@Param("groupId") Long groupId);
 
+    Optional<Group> findByInviteCode(String inviteCode);
+
     // 새 초대코드가 기존 그룹에서 사용 중인지 확인
     boolean existsByInviteCode(String inviteCode);
 }

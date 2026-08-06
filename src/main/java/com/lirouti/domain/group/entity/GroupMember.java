@@ -73,12 +73,31 @@ public class GroupMember extends BaseEntity {
      * 그룹 생성자는 이 빌더에 OWNER role을 전달해 그룹 생성 트랜잭션 안에서 함께 저장한다.
      */
     @Builder
-    private GroupMember(Member member, Group group, GroupMemberRole role) {
+    private GroupMember(
+            Member member,
+            Group group,
+            GroupMemberRole role,
+            LocalDateTime joinedAt
+    ) {
         this.member = member;
         this.group = group;
         this.role = role;
         this.status = GroupMemberStatus.ACTIVE;
-        this.joinedAt = LocalDateTime.now();
+        this.joinedAt = joinedAt == null ? LocalDateTime.now() : joinedAt;
+        this.leftAt = null;
+    }
+
+    /**
+     * 탈퇴 이력을 유지한 채 동일 참여 관계를 다시 활성화한다.
+     * 가입 Command가 한 번 확정한 기준 시각을 전달해 가입 시각과 당일 할당 판정의 기준을 일치시킨다.
+     */
+    public void rejoin(LocalDateTime joinedAt) {
+        if (joinedAt == null) {
+            throw new IllegalArgumentException("재가입 시각은 필수입니다.");
+        }
+        this.role = GroupMemberRole.MEMBER;
+        this.status = GroupMemberStatus.ACTIVE;
+        this.joinedAt = joinedAt;
         this.leftAt = null;
     }
 

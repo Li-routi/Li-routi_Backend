@@ -71,11 +71,27 @@ public class GroupValidationService {
      */
     @Transactional(propagation = Propagation.MANDATORY)
     public JoinLimitContext lockAndValidateJoinLimits(Long groupId, Long memberId) {
+        JoinLimitContext context = lockActiveGroupAndMemberForJoin(groupId, memberId);
+        validateJoinLimits(groupId, memberId);
+        return context;
+    }
+
+    /**
+     * 가입 Command가 관계 상태를 검사하기 전에 그룹과 회원 행을 정해진 순서로 잠근다.
+     * 상한은 관계 상태 검사 이후에 {@link #validateJoinLimits(Long, Long)}로 검증한다.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public JoinLimitContext lockActiveGroupAndMemberForJoin(Long groupId, Long memberId) {
         Group group = lockActiveGroup(groupId);
         Member member = lockActiveMember(memberId);
+        return new JoinLimitContext(group, member);
+    }
+
+    /** 이미 그룹과 회원 잠금을 획득한 가입 Command에서 두 참여 상한을 검사한다. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void validateJoinLimits(Long groupId, Long memberId) {
         validateGroupMemberLimit(groupId);
         validateParticipationLimit(memberId);
-        return new JoinLimitContext(group, member);
     }
 
     private Member lockActiveMember(Long memberId) {

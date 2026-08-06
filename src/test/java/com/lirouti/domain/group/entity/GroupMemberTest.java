@@ -8,6 +8,8 @@ import com.lirouti.domain.member.entity.Member;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDateTime;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
@@ -87,6 +89,29 @@ class GroupMemberTest {
                 .isEqualTo(GroupErrorCode.OWNER_CANNOT_KICK);
         assertThat(owner.getStatus()).isEqualTo(GroupMemberStatus.ACTIVE);
         assertThat(owner.getLeftAt()).isNull();
+    }
+
+    @Test
+    @DisplayName("LEFT 구성원은 전달받은 기준 시각으로 일반 ACTIVE 구성원으로 재가입한다")
+    void rejoin_LeftMember_RestoresActiveStateAtReferenceTime() {
+        // given
+        GroupMember groupMember = GroupMember.builder()
+                .member(mock(Member.class))
+                .group(mock(Group.class))
+                .role(GroupMemberRole.MEMBER)
+                .joinedAt(LocalDateTime.of(2026, 8, 7, 9, 0))
+                .build();
+        groupMember.leave();
+        LocalDateTime rejoinedAt = LocalDateTime.of(2026, 8, 7, 10, 30);
+
+        // when
+        groupMember.rejoin(rejoinedAt);
+
+        // then
+        assertThat(groupMember.getRole()).isEqualTo(GroupMemberRole.MEMBER);
+        assertThat(groupMember.getStatus()).isEqualTo(GroupMemberStatus.ACTIVE);
+        assertThat(groupMember.getJoinedAt()).isEqualTo(rejoinedAt);
+        assertThat(groupMember.getLeftAt()).isNull();
     }
 
 }
