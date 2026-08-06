@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -23,6 +24,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.core.task.TaskRejectedException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -188,6 +190,47 @@ class WebSocketSessionRegistryTest {
 
         // then
         verify(firstSession).close(argThat(this::isPolicyViolation));
+        assertThat(registry.closeMemberSessions(MEMBER_ID)).isZero();
+    }
+
+    @Test
+    @DisplayName("만료 작업 예약이 거부되면 등록된 세션을 즉시 회수한다")
+    void afterConnectionEstablished_ExpirationSchedulingRejected_ExpiresSession() throws Exception {
+        // given
+        givenAuthenticatedSession(firstSession, "session-1", MEMBER_ID);
+        when(firstSession.isOpen()).thenReturn(true);
+        when(taskScheduler.schedule(any(Runnable.class), eq(DEFAULT_EXPIRATION)))
+                .thenThrow(new TaskRejectedException("scheduler is stopped"));
+
+        // when
+        decoratedHandler.afterConnectionEstablished(firstSession);
+
+        // then
+        verify(firstSession).close(argThat(this::isAccessTokenExpired));
+        assertThat(registry.closeMemberSessions(MEMBER_ID)).isZero();
+    }
+
+    @Test
+    @DisplayName("한 세션 종료가 RuntimeException으로 실패해도 나머지 세션 회수를 계속한다")
+    void closeMemberSessions_SessionCloseRuntimeException_ContinuesClosing() throws Exception {
+        // given
+        givenExpirationScheduling();
+        givenAuthenticatedSession(firstSession, "session-1", MEMBER_ID);
+        givenAuthenticatedSession(secondSession, "session-2", MEMBER_ID);
+        when(firstSession.isOpen()).thenReturn(true);
+        when(secondSession.isOpen()).thenReturn(true);
+        doThrow(new IllegalStateException("session already closed"))
+                .when(firstSession).close(any(CloseStatus.class));
+        decoratedHandler.afterConnectionEstablished(firstSession);
+        decoratedHandler.afterConnectionEstablished(secondSession);
+
+        // when
+        int closedSessionCount = registry.closeMemberSessions(MEMBER_ID);
+
+        // then
+        assertThat(closedSessionCount).isEqualTo(2);
+        verify(firstSession).close(argThat(this::isPolicyViolation));
+        verify(secondSession).close(argThat(this::isPolicyViolation));
         assertThat(registry.closeMemberSessions(MEMBER_ID)).isZero();
     }
 

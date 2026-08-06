@@ -6,9 +6,15 @@ import java.security.Principal;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessagingException;
+import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
+import org.springframework.messaging.simp.SimpMessageType;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
+import org.springframework.messaging.simp.user.SimpSession;
+import org.springframework.messaging.simp.user.SimpSubscription;
+import org.springframework.messaging.simp.user.SimpUser;
+import org.springframework.messaging.simp.user.SimpUserRegistry;
 import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.messaging.support.MessageHeaderAccessor;
 import org.springframework.stereotype.Component;
@@ -32,16 +38,20 @@ import tools.jackson.databind.ObjectMapper;
 @Component
 public class StompErrorHandler extends StompSubProtocolErrorHandler {
     private static final String USER_ERROR_DESTINATION = "/queue/errors";
+    private static final String USER_ERROR_SUBSCRIPTION = "/user" + USER_ERROR_DESTINATION;
 
     private final ObjectMapper objectMapper;
     private final SimpMessagingTemplate messagingTemplate;
+    private final SimpUserRegistry simpUserRegistry;
 
     public StompErrorHandler(
             ObjectMapper objectMapper,
-            @Lazy SimpMessagingTemplate messagingTemplate
+            @Lazy SimpMessagingTemplate messagingTemplate,
+            @Lazy SimpUserRegistry simpUserRegistry
     ) {
         this.objectMapper = objectMapper;
         this.messagingTemplate = messagingTemplate;
+        this.simpUserRegistry = simpUserRegistry;
     }
 
     @Override
@@ -100,15 +110,48 @@ public class StompErrorHandler extends StompSubProtocolErrorHandler {
             return false;
         }
 
-        messagingTemplate.convertAndSendToUser(
-                user.getName(),
-                USER_ERROR_DESTINATION,
-                new StompErrorResponse(
-                        errorCode.getCode(),
-                        errorMessage,
-                        resolveClientMessageId(clientMessage))
-        );
-        return true;
+        String sessionId = clientAccessor.getSessionId();
+        if (sessionId == null || sessionId.isBlank()
+                || !hasErrorSubscription(user.getName(), sessionId)) {
+            return false;
+        }
+
+        try {
+            SimpMessageHeaderAccessor targetAccessor =
+                    SimpMessageHeaderAccessor.create(SimpMessageType.MESSAGE);
+            targetAccessor.setSessionId(sessionId);
+            targetAccessor.setLeaveMutable(true);
+
+            // sessionId를 user와 헤더에 함께 넣어 원본 세션 하나로만 user destination을 해석한다.
+            messagingTemplate.convertAndSendToUser(
+                    sessionId,
+                    USER_ERROR_DESTINATION,
+                    new StompErrorResponse(
+                            errorCode.getCode(),
+                            errorMessage,
+                            resolveClientMessageId(clientMessage)),
+                    targetAccessor.getMessageHeaders()
+            );
+            return true;
+        } catch (RuntimeException exception) {
+            return false;
+        }
+    }
+
+    private boolean hasErrorSubscription(String userName, String sessionId) {
+        SimpUser user = simpUserRegistry.getUser(userName);
+        if (user == null) {
+            return false;
+        }
+
+        SimpSession session = user.getSession(sessionId);
+        if (session == null) {
+            return false;
+        }
+
+        return session.getSubscriptions().stream()
+                .map(SimpSubscription::getDestination)
+                .anyMatch(USER_ERROR_SUBSCRIPTION::equals);
     }
 
     private boolean isRecoverableDomainException(Throwable exception) {

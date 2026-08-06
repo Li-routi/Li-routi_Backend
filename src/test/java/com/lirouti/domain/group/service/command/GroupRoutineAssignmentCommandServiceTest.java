@@ -66,6 +66,34 @@ class GroupRoutineAssignmentCommandServiceTest {
     private GroupRoutineAssignmentCommandService assignmentCommandService;
 
     @Test
+    @DisplayName("그룹 탈퇴 회원의 미완료 할당만 제거한다")
+    void deleteUnfinishedAssignmentsForLeaver_DeletesOnlyUnfinishedAssignments() {
+        // given
+        when(assignmentRepository.deleteUnfinishedAssignmentsForLeaver(
+                10L,
+                1L,
+                List.of(
+                        GroupRoutineAssignmentStatus.PENDING,
+                        GroupRoutineAssignmentStatus.IN_PROGRESS
+                )
+        )).thenReturn(2);
+
+        // when
+        int result = assignmentCommandService.deleteUnfinishedAssignmentsForLeaver(10L, 1L);
+
+        // then
+        assertThat(result).isEqualTo(2);
+        verify(assignmentRepository).deleteUnfinishedAssignmentsForLeaver(
+                10L,
+                1L,
+                List.of(
+                        GroupRoutineAssignmentStatus.PENDING,
+                        GroupRoutineAssignmentStatus.IN_PROGRESS
+                )
+        );
+    }
+
+    @Test
     @DisplayName("루틴 생성일이 반복 요일이면 ACTIVE 구성원에게 시간 스냅샷을 할당한다")
     void assignRoutineToActiveMembersToday_MatchingDay_CreatesSnapshot() {
         // given

@@ -1,13 +1,18 @@
 package com.lirouti.global.websocket;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 import java.nio.charset.StandardCharsets;
 import java.security.Principal;
+import java.util.Map;
+import java.util.Set;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -15,9 +20,14 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessagingException;
+import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
+import org.springframework.messaging.simp.user.SimpSession;
+import org.springframework.messaging.simp.user.SimpSubscription;
+import org.springframework.messaging.simp.user.SimpUser;
+import org.springframework.messaging.simp.user.SimpUserRegistry;
 import org.springframework.messaging.support.MessageBuilder;
 
 import com.lirouti.domain.chat.exception.ChatException;
@@ -31,15 +41,19 @@ import tools.jackson.databind.ObjectMapper;
 
 @DisplayName("StompErrorHandler 테스트")
 class StompErrorHandlerTest {
+    private static final String SESSION_ID = "session-1";
+
     private ObjectMapper objectMapper;
     private StompErrorHandler errorHandler;
     private SimpMessagingTemplate messagingTemplate;
+    private SimpUserRegistry simpUserRegistry;
 
     @BeforeEach
     void setUp() {
         objectMapper = new ObjectMapper();
         messagingTemplate = mock(SimpMessagingTemplate.class);
-        errorHandler = new StompErrorHandler(objectMapper, messagingTemplate);
+        simpUserRegistry = mock(SimpUserRegistry.class);
+        errorHandler = new StompErrorHandler(objectMapper, messagingTemplate, simpUserRegistry);
     }
 
     @Test
@@ -79,6 +93,7 @@ class StompErrorHandlerTest {
                 null,
                 () -> "1"
         );
+        givenErrorSubscription("1");
 
         // when
         Message<byte[]> errorMessage = errorHandler.handleClientMessageProcessingError(
@@ -89,15 +104,104 @@ class StompErrorHandlerTest {
         // then
         assertThat(errorMessage).isNull();
         ArgumentCaptor<Object> payloadCaptor = ArgumentCaptor.forClass(Object.class);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Map<String, Object>> headersCaptor = ArgumentCaptor.forClass(Map.class);
         verify(messagingTemplate).convertAndSendToUser(
-                eq("1"),
+                eq(SESSION_ID),
                 eq("/queue/errors"),
-                payloadCaptor.capture()
+                payloadCaptor.capture(),
+                headersCaptor.capture()
         );
+        assertThat(headersCaptor.getValue().get(SimpMessageHeaderAccessor.SESSION_ID_HEADER))
+                .isEqualTo(SESSION_ID);
         JsonNode payload = objectMapper.readTree(objectMapper.writeValueAsBytes(payloadCaptor.getValue()));
         assertThat(payload.get("code").asText())
                 .isEqualTo(ChatErrorCode.MESSAGE_CONTENT_INVALID.getCode());
         assertThat(payload.get("clientMessageId").asText()).isEqualTo("client-1");
+    }
+
+    @Test
+    @DisplayName("다른 세션만 오류 destination을 구독한 경우 원본 세션은 ERROR frame을 받는다")
+    void handleClientMessageProcessingError_OtherSessionSubscribed_UsesErrorFrame() throws Exception {
+        // given
+        Message<byte[]> clientMessage = stompMessage(
+                StompCommand.SEND,
+                "{\"clientMessageId\":\"client-other-session\"}",
+                null,
+                () -> "1"
+        );
+        SimpUser user = mock(SimpUser.class);
+        when(simpUserRegistry.getUser("1")).thenReturn(user);
+        when(user.getSession(SESSION_ID)).thenReturn(null);
+
+        // when
+        Message<byte[]> errorMessage = errorHandler.handleClientMessageProcessingError(
+                clientMessage,
+                new ChatException(ChatErrorCode.MESSAGE_CONTENT_INVALID)
+        );
+
+        // then
+        assertThat(errorHeader(errorMessage).getCommand()).isEqualTo(StompCommand.ERROR);
+        assertThat(errorPayload(errorMessage).get("clientMessageId").asText())
+                .isEqualTo("client-other-session");
+        verifyNoInteractions(messagingTemplate);
+    }
+
+    @Test
+    @DisplayName("오류 destination을 구독하지 않은 사용자는 ERROR frame으로 오류를 받는다")
+    void handleClientMessageProcessingError_WithoutErrorSubscription_UsesErrorFrame() throws Exception {
+        // given
+        Message<byte[]> clientMessage = stompMessage(
+                StompCommand.SEND,
+                "{\"clientMessageId\":\"client-no-subscription\"}",
+                null,
+                () -> "1"
+        );
+        when(simpUserRegistry.getUser("1")).thenReturn(null);
+
+        // when
+        Message<byte[]> errorMessage = errorHandler.handleClientMessageProcessingError(
+                clientMessage,
+                new ChatException(ChatErrorCode.MESSAGE_CONTENT_INVALID)
+        );
+
+        // then
+        assertThat(errorHeader(errorMessage).getCommand()).isEqualTo(StompCommand.ERROR);
+        assertThat(errorPayload(errorMessage).get("clientMessageId").asText())
+                .isEqualTo("client-no-subscription");
+        verifyNoInteractions(messagingTemplate);
+    }
+
+    @Test
+    @DisplayName("오류 destination 전송이 실패하면 ERROR frame으로 fallback한다")
+    void handleClientMessageProcessingError_ErrorDestinationSendFails_UsesErrorFrame() throws Exception {
+        // given
+        Message<byte[]> clientMessage = stompMessage(
+                StompCommand.SEND,
+                "{\"clientMessageId\":\"client-send-failure\"}",
+                null,
+                () -> "1"
+        );
+        givenErrorSubscription("1");
+        doThrow(new IllegalStateException("broker unavailable"))
+                .when(messagingTemplate)
+                .convertAndSendToUser(
+                        eq(SESSION_ID),
+                        eq("/queue/errors"),
+                        any(),
+                        org.mockito.ArgumentMatchers.<Map<String, Object>>any()
+                );
+
+        // when
+        Message<byte[]> errorMessage = errorHandler.handleClientMessageProcessingError(
+                clientMessage,
+                new ChatException(ChatErrorCode.MESSAGE_CONTENT_INVALID)
+        );
+
+        // then
+        assertThat(errorHeader(errorMessage).getCommand()).isEqualTo(StompCommand.ERROR);
+        assertThat(errorPayload(errorMessage).get("clientMessageId").asText())
+                .isEqualTo("client-send-failure");
     }
 
     @Test
@@ -209,6 +313,7 @@ class StompErrorHandlerTest {
         StompHeaderAccessor accessor = StompHeaderAccessor.create(command);
         accessor.setReceipt(receipt);
         accessor.setUser(user);
+        accessor.setSessionId(SESSION_ID);
         return MessageBuilder.createMessage(
                 payload.getBytes(StandardCharsets.UTF_8),
                 accessor.getMessageHeaders()
@@ -221,5 +326,15 @@ class StompErrorHandlerTest {
 
     private JsonNode errorPayload(Message<byte[]> errorMessage) throws Exception {
         return objectMapper.readTree(errorMessage.getPayload());
+    }
+
+    private void givenErrorSubscription(String userName) {
+        SimpUser user = mock(SimpUser.class);
+        SimpSession session = mock(SimpSession.class);
+        SimpSubscription subscription = mock(SimpSubscription.class);
+        when(simpUserRegistry.getUser(userName)).thenReturn(user);
+        when(user.getSession(SESSION_ID)).thenReturn(session);
+        when(session.getSubscriptions()).thenReturn(Set.of(subscription));
+        when(subscription.getDestination()).thenReturn("/user/queue/errors");
     }
 }

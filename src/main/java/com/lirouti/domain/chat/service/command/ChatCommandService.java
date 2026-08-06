@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.lirouti.domain.chat.converter.ChatConverter;
 import com.lirouti.domain.chat.dto.request.ChatReqDTO;
+import com.lirouti.domain.chat.dto.result.ChatSendResult;
 import com.lirouti.domain.chat.dto.response.ChatResDTO;
 import com.lirouti.domain.chat.entity.ChatEmoticon;
 import com.lirouti.domain.chat.entity.ChatMessage;
@@ -37,13 +38,16 @@ public class ChatCommandService {
      * 같은 그룹·발신자의 clientMessageId가 이미 존재하면 payload를 확인한 뒤 재전송 결과를 반환한다.
      */
     @Transactional
-    public ChatResDTO.Message sendMessage(
+    public ChatSendResult sendMessage(
             Long memberId,
             Long groupId,
             ChatReqDTO.SendMessage request
     ) {
-        groupValidationService.validateActiveGroupMember(groupId, memberId);
         validateMessageShape(request);
+
+        // 탈퇴·강퇴와 같은 그룹 행을 먼저 잠가 권한 회수 이후 메시지가 저장되는 경쟁 조건을 막는다.
+        groupValidationService.lockActiveGroupForUpdate(groupId);
+        groupValidationService.validateActiveGroupMember(groupId, memberId);
 
         ChatMessage existing = chatMessageRepository
                 .findByGroupIdAndSenderIdAndClientMessageId(
@@ -56,11 +60,11 @@ public class ChatCommandService {
             if (!hasSamePayload(existing, request)) {
                 throw new ChatException(ChatErrorCode.CLIENT_MESSAGE_ID_INVALID);
             }
-            return toMessageResponse(existing);
+            return new ChatSendResult(toMessageResponse(existing), false);
         }
 
         ChatEmoticon emoticon = resolveActiveEmoticon(request);
-        chatMessageRepository.insertIfAbsent(
+        int insertedCount = chatMessageRepository.insertIfAbsent(
                 groupId,
                 memberId,
                 request.clientMessageId(),
@@ -78,7 +82,7 @@ public class ChatCommandService {
         if (!hasSamePayload(message, request)) {
             throw new ChatException(ChatErrorCode.CLIENT_MESSAGE_ID_INVALID);
         }
-        return toMessageResponse(message);
+        return new ChatSendResult(toMessageResponse(message), insertedCount == 1);
     }
 
     /**

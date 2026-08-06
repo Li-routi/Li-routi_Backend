@@ -73,6 +73,20 @@ public interface GroupRoutineAssignmentRepository
      */
     List<GroupRoutineAssignment> findAllByMemberIdAndAssignedDate(Long memberId, LocalDate assignedDate);
 
+    /** 그룹 탈퇴 회원의 미완료 할당만 제거하고 완료·미이행 이력은 보존한다. */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+            delete from GroupRoutineAssignment assignment
+            where assignment.groupRoutine.group.id = :groupId
+              and assignment.member.id = :memberId
+              and assignment.status in :unfinishedStatuses
+            """)
+    int deleteUnfinishedAssignmentsForLeaver(
+            @Param("groupId") Long groupId,
+            @Param("memberId") Long memberId,
+            @Param("unfinishedStatuses") List<GroupRoutineAssignmentStatus> unfinishedStatuses
+    );
+
     /**
      * 그 회원의 오늘자 할당 한 건. 인증 요청이 실제로 그 사람 몫인지 확인하는 데 쓴다.
      *

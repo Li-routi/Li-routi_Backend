@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.LockSupport;
 
@@ -41,6 +42,7 @@ import org.springframework.web.socket.client.standard.StandardWebSocketClient;
 import org.springframework.web.socket.messaging.WebSocketStompClient;
 
 import com.lirouti.domain.chat.dto.request.ChatReqDTO;
+import com.lirouti.domain.chat.dto.result.ChatSendResult;
 import com.lirouti.domain.chat.dto.response.ChatResDTO;
 import com.lirouti.domain.chat.enums.ChatMessageType;
 import com.lirouti.domain.chat.exception.ChatException;
@@ -145,7 +147,7 @@ class ChatWebSocketIntegrationTest {
                 eq(MEMBER_ID),
                 eq(GROUP_ID),
                 any(ChatReqDTO.SendMessage.class)
-        )).thenReturn(response);
+        )).thenReturn(new ChatSendResult(response, true));
 
         StompSession firstSession = connect();
         StompSession secondSession = connect();
@@ -209,7 +211,10 @@ class ChatWebSocketIntegrationTest {
                 eq(MEMBER_ID),
                 eq(GROUP_ID),
                 any(ChatReqDTO.SendMessage.class)
-        )).thenReturn(firstResponse, secondResponse);
+        )).thenReturn(
+                new ChatSendResult(firstResponse, true),
+                new ChatSendResult(secondResponse, true)
+        );
 
         StompSession session = connect();
         CountDownLatch messagesReceived = new CountDownLatch(2);
@@ -242,6 +247,112 @@ class ChatWebSocketIntegrationTest {
                 .containsExactly(firstRequest.clientMessageId(), secondRequest.clientMessageId());
 
         session.disconnect();
+    }
+
+    @Test
+    @DisplayName("같은 clientMessageId를 일반 재전송해도 한 번만 broadcast한다")
+    void sendMessage_Retry_BroadcastsOnlyOnce() throws Exception {
+        // given
+        ChatReqDTO.SendMessage request = new ChatReqDTO.SendMessage(
+                "client-retry",
+                ChatMessageType.TEXT,
+                "재전송 메시지",
+                null
+        );
+        ChatResDTO.Message response = ChatResDTO.Message.builder()
+                .id(103L)
+                .clientMessageId(request.clientMessageId())
+                .groupId(GROUP_ID)
+                .type(ChatMessageType.TEXT)
+                .content(request.content())
+                .createdAt(LocalDateTime.of(2026, 8, 6, 10, 3))
+                .build();
+        when(chatCommandService.sendMessage(
+                eq(MEMBER_ID),
+                eq(GROUP_ID),
+                eq(request)
+        )).thenReturn(
+                new ChatSendResult(response, true),
+                new ChatSendResult(response, false)
+        );
+
+        StompSession session = connect();
+        CountDownLatch messageReceived = new CountDownLatch(1);
+        AtomicInteger receivedCount = new AtomicInteger();
+        subscribeCounting(session, messageReceived, receivedCount);
+        assertThat(awaitSubscriptionCount(1)).isTrue();
+
+        // when
+        session.send(SEND_DESTINATION, request);
+        session.send(SEND_DESTINATION, request);
+
+        // then
+        assertThat(messageReceived.await(5, TimeUnit.SECONDS)).isTrue();
+        LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(300));
+        assertThat(receivedCount).hasValue(1);
+        verify(chatCommandService, timeout(5000).times(2))
+                .sendMessage(MEMBER_ID, GROUP_ID, request);
+
+        session.disconnect();
+    }
+
+    @Test
+    @DisplayName("동일 메시지 동시 재전송도 한 번만 broadcast한다")
+    void sendMessage_ConcurrentRetry_BroadcastsOnlyOnce() throws Exception {
+        // given
+        ChatReqDTO.SendMessage request = new ChatReqDTO.SendMessage(
+                "client-concurrent-retry",
+                ChatMessageType.TEXT,
+                "동시 재전송 메시지",
+                null
+        );
+        ChatResDTO.Message response = ChatResDTO.Message.builder()
+                .id(104L)
+                .clientMessageId(request.clientMessageId())
+                .groupId(GROUP_ID)
+                .type(ChatMessageType.TEXT)
+                .content(request.content())
+                .createdAt(LocalDateTime.of(2026, 8, 6, 10, 4))
+                .build();
+        CountDownLatch serviceCalls = new CountDownLatch(2);
+        CountDownLatch releaseService = new CountDownLatch(1);
+        AtomicInteger invocationCount = new AtomicInteger();
+        when(chatCommandService.sendMessage(
+                eq(MEMBER_ID),
+                eq(GROUP_ID),
+                eq(request)
+        )).thenAnswer(invocation -> {
+            int invocationNumber = invocationCount.incrementAndGet();
+            serviceCalls.countDown();
+            assertThat(releaseService.await(5, TimeUnit.SECONDS)).isTrue();
+            return new ChatSendResult(
+                    response,
+                    invocationNumber == 1
+            );
+        });
+
+        StompSession firstSession = connect();
+        StompSession secondSession = connect();
+        CountDownLatch messagesReceived = new CountDownLatch(2);
+        AtomicInteger receivedCount = new AtomicInteger();
+        subscribeCounting(firstSession, messagesReceived, receivedCount);
+        subscribeCounting(secondSession, messagesReceived, receivedCount);
+        assertThat(awaitSubscriptionCount(2)).isTrue();
+
+        // when
+        firstSession.send(SEND_DESTINATION, request);
+        secondSession.send(SEND_DESTINATION, request);
+        assertThat(serviceCalls.await(5, TimeUnit.SECONDS)).isTrue();
+        releaseService.countDown();
+
+        // then
+        assertThat(messagesReceived.await(5, TimeUnit.SECONDS)).isTrue();
+        LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(300));
+        assertThat(receivedCount).hasValue(2);
+        assertThat(invocationCount).hasValue(2);
+
+        firstSession.disconnect();
+        secondSession.disconnect();
     }
 
     @Test
@@ -278,7 +389,7 @@ class ChatWebSocketIntegrationTest {
                 eq(MEMBER_ID),
                 eq(GROUP_ID),
                 eq(retryRequest)
-        )).thenReturn(retryResponse);
+        )).thenReturn(new ChatSendResult(retryResponse, true));
 
         StompSession session = connect();
         CountDownLatch errorReceived = new CountDownLatch(1);
@@ -457,6 +568,28 @@ class ChatWebSocketIntegrationTest {
                     public void handleFrame(StompHeaders headers, Object payload) {
                         receivedMessage.set((ChatResDTO.Message) payload);
                         messageReceived.countDown();
+                    }
+                }
+        );
+    }
+
+    private void subscribeCounting(
+            StompSession session,
+            CountDownLatch messagesReceived,
+            AtomicInteger receivedCount
+    ) {
+        session.subscribe(
+                CHAT_DESTINATION,
+                new StompFrameHandler() {
+                    @Override
+                    public java.lang.reflect.Type getPayloadType(StompHeaders headers) {
+                        return ChatResDTO.Message.class;
+                    }
+
+                    @Override
+                    public void handleFrame(StompHeaders headers, Object payload) {
+                        receivedCount.incrementAndGet();
+                        messagesReceived.countDown();
                     }
                 }
         );

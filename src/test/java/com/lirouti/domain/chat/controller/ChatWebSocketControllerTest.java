@@ -18,13 +18,16 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.messaging.MessagingException;
 import org.springframework.messaging.handler.annotation.MessageExceptionHandler;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.messaging.simp.annotation.SendToUser;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 
 import com.lirouti.domain.chat.dto.request.ChatReqDTO;
+import com.lirouti.domain.chat.dto.result.ChatSendResult;
 import com.lirouti.domain.chat.dto.response.ChatResDTO;
 import com.lirouti.domain.chat.enums.ChatMessageType;
 import com.lirouti.domain.chat.exception.ChatException;
+import com.lirouti.domain.chat.exception.code.error.ChatErrorCode;
 import com.lirouti.domain.chat.service.command.ChatCommandService;
 import com.lirouti.domain.member.enums.Role;
 import com.lirouti.global.auth.CustomUserDetails;
@@ -73,7 +76,8 @@ class ChatWebSocketControllerTest {
                 .content("오늘 루틴 완료했어요")
                 .createdAt(LocalDateTime.of(2026, 8, 5, 23, 0))
                 .build();
-        when(chatCommandService.sendMessage(MEMBER_ID, GROUP_ID, request)).thenReturn(response);
+        when(chatCommandService.sendMessage(MEMBER_ID, GROUP_ID, request))
+                .thenReturn(new ChatSendResult(response, true));
 
         // when
         controller.sendMessage(GROUP_ID, request, authentication);
@@ -103,6 +107,35 @@ class ChatWebSocketControllerTest {
     }
 
     @Test
+    @DisplayName("동일 메시지 재전송 결과는 다시 broadcast하지 않는다")
+    void sendMessage_Retry_DoesNotBroadcast() {
+        // given
+        ChatReqDTO.SendMessage request = new ChatReqDTO.SendMessage(
+                "client-1",
+                ChatMessageType.TEXT,
+                "이미 저장된 메시지",
+                null
+        );
+        ChatResDTO.Message response = ChatResDTO.Message.builder()
+                .id(100L)
+                .clientMessageId(request.clientMessageId())
+                .groupId(GROUP_ID)
+                .type(ChatMessageType.TEXT)
+                .content(request.content())
+                .createdAt(LocalDateTime.of(2026, 8, 5, 23, 0))
+                .build();
+        when(chatCommandService.sendMessage(MEMBER_ID, GROUP_ID, request))
+                .thenReturn(new ChatSendResult(response, false));
+
+        // when
+        controller.sendMessage(GROUP_ID, request, authentication);
+
+        // then
+        verify(chatCommandService).sendMessage(MEMBER_ID, GROUP_ID, request);
+        verifyNoInteractions(messagingTemplate);
+    }
+
+    @Test
     @DisplayName("인증 정보가 없는 요청은 service와 broadcast 모두 호출하지 않는다")
     void sendMessage_WithoutAuthentication_ThrowsMessagingException() {
         // given
@@ -120,16 +153,34 @@ class ChatWebSocketControllerTest {
     }
 
     @Test
-    @DisplayName("복구 가능한 WebSocket 도메인 오류는 ChatException만 user queue handler로 처리한다")
-    void recoverableDomainExceptionHandler_HandlesOnlyChatException() throws Exception {
+    @DisplayName("복구 가능한 도메인 오류는 요청 세션의 오류 queue로만 반환한다")
+    void recoverableDomainExceptionHandler_ReturnsErrorToOriginatingSession() throws Exception {
+        ChatReqDTO.SendMessage request = new ChatReqDTO.SendMessage(
+                "client-error",
+                ChatMessageType.TEXT,
+                "실패 메시지",
+                null
+        );
         Method handler = ChatWebSocketController.class.getDeclaredMethod(
                 "handleRecoverableDomainException",
                 com.lirouti.global.apiPayload.exception.GeneralException.class,
-                ChatReqDTO.SendMessage.class,
-                java.security.Principal.class
+                ChatReqDTO.SendMessage.class
         );
 
         assertThat(handler.getAnnotation(MessageExceptionHandler.class).value())
                 .containsExactly(ChatException.class);
+        SendToUser sendToUser = handler.getAnnotation(SendToUser.class);
+        assertThat(sendToUser.destinations()).containsExactly("/queue/errors");
+        assertThat(sendToUser.broadcast()).isFalse();
+
+        ChatWebSocketController.StompErrorResponse response =
+                controller.handleRecoverableDomainException(
+                        new ChatException(ChatErrorCode.MESSAGE_CONTENT_INVALID),
+                        request
+                );
+        assertThat(response.code()).isEqualTo(ChatErrorCode.MESSAGE_CONTENT_INVALID.getCode());
+        assertThat(response.message()).isEqualTo(ChatErrorCode.MESSAGE_CONTENT_INVALID.getMessage());
+        assertThat(response.clientMessageId()).isEqualTo(request.clientMessageId());
+        verifyNoInteractions(messagingTemplate);
     }
 }

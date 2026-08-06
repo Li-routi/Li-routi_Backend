@@ -169,6 +169,22 @@ class WebSocketAuthInterceptorTest {
         verifyNoInteractions(memberQueryService, groupValidationService);
     }
 
+    @Test
+    @DisplayName("prefix와 suffix가 겹치는 채팅 destination은 MessagingException으로 거부한다")
+    void preSend_SendWithOverlappingDestination_ThrowsMessagingException() {
+        // given
+        Message<?> message = stompMessage(
+                StompCommand.SEND,
+                "/app/groups/chat/messages",
+                authentication
+        );
+
+        // when & then
+        assertThatThrownBy(() -> interceptor.preSend(message, channel))
+                .isInstanceOf(MessagingException.class);
+        verifyNoInteractions(memberQueryService, groupValidationService);
+    }
+
     private Message<?> stompMessage(
             StompCommand command,
             String destination,

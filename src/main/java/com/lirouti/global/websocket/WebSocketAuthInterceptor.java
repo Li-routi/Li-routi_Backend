@@ -109,6 +109,9 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
 
         int groupIdStart = prefix.length();
         int groupIdEnd = destination.length() - suffix.length();
+        if (groupIdEnd <= groupIdStart) {
+            throw new MessagingException(message, "채팅 그룹 ID가 올바르지 않습니다.");
+        }
         String groupIdValue = destination.substring(groupIdStart, groupIdEnd);
 
         if (groupIdValue.isBlank() || groupIdValue.indexOf('/') >= 0) {

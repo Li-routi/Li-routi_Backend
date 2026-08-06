@@ -137,10 +137,24 @@ public class WebSocketSessionRegistry {
             return registeredSessions;
         });
 
-        ScheduledFuture<?> expirationTask = taskScheduler.schedule(
-                () -> expireSession(memberId, session.getId(), registeredSession),
-                expiration
-        );
+        ScheduledFuture<?> expirationTask;
+        try {
+            expirationTask = taskScheduler.schedule(
+                    () -> expireSession(memberId, session.getId(), registeredSession),
+                    expiration
+            );
+        } catch (RuntimeException exception) {
+            log.warn(
+                    "WebSocket 세션 만료 작업 예약에 실패해 세션을 회수합니다. memberId={}, sessionId={}, exceptionType={}",
+                    memberId,
+                    session.getId(),
+                    exception.getClass().getSimpleName(),
+                    exception
+            );
+            registeredSession.cancelExpirationTask();
+            expireSession(memberId, session.getId(), registeredSession);
+            return;
+        }
         registeredSession.setExpirationTask(expirationTask);
 
         if (expirationTask == null || !isRegistered(memberId, session.getId(), registeredSession)) {
@@ -244,7 +258,7 @@ public class WebSocketSessionRegistry {
 
         try {
             session.close(closeStatus);
-        } catch (IOException exception) {
+        } catch (IOException | RuntimeException exception) {
             log.warn(
                     "권한이 회수된 WebSocket 세션 종료에 실패했습니다. memberId={}, sessionId={}",
                     memberId,

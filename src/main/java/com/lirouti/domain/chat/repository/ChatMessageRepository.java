@@ -81,7 +81,7 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
             )
             ON DUPLICATE KEY UPDATE id = id
             """, nativeQuery = true)
-    void insertIfAbsent(
+    int insertIfAbsent(
             @Param("groupId") Long groupId,
             @Param("senderId") Long senderId,
             @Param("clientMessageId") String clientMessageId,

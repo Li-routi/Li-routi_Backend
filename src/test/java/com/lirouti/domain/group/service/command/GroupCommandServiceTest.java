@@ -341,6 +341,8 @@ class GroupCommandServiceTest {
 
         // then
         verify(ownerMembership).leave();
+        verify(assignmentCommandService)
+                .deleteUnfinishedAssignmentsForLeaver(GROUP_ID, MEMBER_ID);
         verify(webSocketSessionRegistry).closeMemberSessions(MEMBER_ID);
         InOrder inOrder = inOrder(groupValidationService);
         inOrder.verify(groupValidationService).lockActiveGroupForUpdate(GROUP_ID);

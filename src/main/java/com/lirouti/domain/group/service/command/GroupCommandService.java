@@ -1,10 +1,8 @@
 package com.lirouti.domain.group.service.command;
 
 import java.util.HashSet;
-import java.util.Optional;
 import java.util.Set;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,30 +39,9 @@ public class GroupCommandService {
     private final GroupCreationAttemptService groupCreationAttemptService;
     private final GroupInviteCodeUniqueViolationDetector uniqueViolationDetector;
     private final Validator validator;
-    private final Optional<WebSocketSessionRegistry> webSocketSessionRegistry;
 
-    public GroupCommandService(
-            GroupValidationService groupValidationService,
-            GroupRoutineCategoryRepository groupRoutineCategoryRepository,
-            GroupRoutineRepository groupRoutineRepository,
-            GroupRoutineAssignmentCommandService assignmentCommandService,
-            GroupCreationAttemptService groupCreationAttemptService,
-            GroupInviteCodeUniqueViolationDetector uniqueViolationDetector,
-            Validator validator
-    ) {
-        this(
-                groupValidationService,
-                groupRoutineCategoryRepository,
-                groupRoutineRepository,
-                assignmentCommandService,
-                groupCreationAttemptService,
-                uniqueViolationDetector,
-                validator,
-                Optional.empty()
-        );
-    }
+    private final WebSocketSessionRegistry webSocketSessionRegistry;
 
-    @Autowired
     public GroupCommandService(
             GroupValidationService groupValidationService,
             GroupRoutineCategoryRepository groupRoutineCategoryRepository,
@@ -74,28 +51,6 @@ public class GroupCommandService {
             GroupInviteCodeUniqueViolationDetector uniqueViolationDetector,
             Validator validator,
             WebSocketSessionRegistry webSocketSessionRegistry
-    ) {
-        this(
-                groupValidationService,
-                groupRoutineCategoryRepository,
-                groupRoutineRepository,
-                assignmentCommandService,
-                groupCreationAttemptService,
-                uniqueViolationDetector,
-                validator,
-                Optional.ofNullable(webSocketSessionRegistry)
-        );
-    }
-
-    private GroupCommandService(
-            GroupValidationService groupValidationService,
-            GroupRoutineCategoryRepository groupRoutineCategoryRepository,
-            GroupRoutineRepository groupRoutineRepository,
-            GroupRoutineAssignmentCommandService assignmentCommandService,
-            GroupCreationAttemptService groupCreationAttemptService,
-            GroupInviteCodeUniqueViolationDetector uniqueViolationDetector,
-            Validator validator,
-            Optional<WebSocketSessionRegistry> webSocketSessionRegistry
     ) {
         this.groupValidationService = groupValidationService;
         this.groupRoutineCategoryRepository = groupRoutineCategoryRepository;
@@ -182,6 +137,7 @@ public class GroupCommandService {
         GroupMember groupMember = groupValidationService
                 .validateActiveGroupMember(groupId, memberId);
         groupMember.leave();
+        assignmentCommandService.deleteUnfinishedAssignmentsForLeaver(groupId, memberId);
         closeMemberSessionsAfterCommit(memberId);
     }
 
@@ -203,14 +159,14 @@ public class GroupCommandService {
 
     private void closeMemberSessionsAfterCommit(Long memberId) {
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            webSocketSessionRegistry.ifPresent(registry -> registry.closeMemberSessions(memberId));
+            webSocketSessionRegistry.closeMemberSessions(memberId);
             return;
         }
 
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                webSocketSessionRegistry.ifPresent(registry -> registry.closeMemberSessions(memberId));
+                webSocketSessionRegistry.closeMemberSessions(memberId);
             }
         });
     }

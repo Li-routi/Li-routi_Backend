@@ -8,13 +8,14 @@ import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.MessageExceptionHandler;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.messaging.simp.annotation.SendToUser;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
 import org.springframework.validation.annotation.Validated;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.lirouti.domain.chat.dto.request.ChatReqDTO;
-import com.lirouti.domain.chat.dto.response.ChatResDTO;
+import com.lirouti.domain.chat.dto.result.ChatSendResult;
 import com.lirouti.domain.chat.service.command.ChatCommandService;
 import com.lirouti.domain.chat.exception.ChatException;
 import com.lirouti.global.auth.CustomUserDetails;
@@ -39,29 +40,31 @@ public class ChatWebSocketController {
             Principal principal
     ) {
         Long memberId = getMemberId(principal);
-        ChatResDTO.Message response = chatCommandService.sendMessage(memberId, groupId, request);
+        ChatSendResult result = chatCommandService.sendMessage(
+                memberId,
+                groupId,
+                request
+        );
 
-        // Service 트랜잭션이 반환된 뒤 전송하므로 DB 저장 성공 후에만 broadcast한다.
-        messagingTemplate.convertAndSend(CHAT_TOPIC_FORMAT.formatted(groupId), response);
+        if (result.newlyCreated()) {
+            messagingTemplate.convertAndSend(
+                    CHAT_TOPIC_FORMAT.formatted(groupId),
+                    result.message()
+            );
+        }
     }
 
+    // clientMessageId 오류는 요청 기기의 pending 메시지에 귀속되므로 다른 세션에 broadcast하지 않는다.
     @MessageExceptionHandler(ChatException.class)
-    public void handleRecoverableDomainException(
+    @SendToUser(destinations = "/queue/errors", broadcast = false)
+    public StompErrorResponse handleRecoverableDomainException(
             GeneralException exception,
-            @Payload ChatReqDTO.SendMessage request,
-            Principal principal
+            @Payload ChatReqDTO.SendMessage request
     ) {
-        if (principal == null || principal.getName() == null || principal.getName().isBlank()) {
-            return;
-        }
-
-        messagingTemplate.convertAndSendToUser(
-                principal.getName(),
-                "/queue/errors",
-                new StompErrorResponse(
-                        exception.getCode().getCode(),
-                        exception.getCode().getMessage(),
-                        request == null ? null : request.clientMessageId())
+        return new StompErrorResponse(
+                exception.getCode().getCode(),
+                exception.getCode().getMessage(),
+                request == null ? null : request.clientMessageId()
         );
     }
 
@@ -76,7 +79,7 @@ public class ChatWebSocketController {
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    private record StompErrorResponse(
+    record StompErrorResponse(
             String code,
             String message,
             String clientMessageId
