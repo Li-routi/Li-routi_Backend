@@ -86,7 +86,8 @@ class GroupCreationControllerWebTest {
                 .andExpect(jsonPath("$.code").value("GROUP201_3"))
                 .andExpect(jsonPath("$.result.groupId").value(10L))
                 .andExpect(jsonPath("$.result.name").value("아침 모임"))
-                .andExpect(jsonPath("$.result.inviteCode").doesNotExist());
+                .andExpect(jsonPath("$.result.inviteCode").doesNotExist())
+                .andExpect(jsonPath("$.result.inviteCodeExpiresAt").doesNotExist());
         verify(groupCommandService).createGroup(
                 eq(MEMBER_ID), any(GroupReqDTO.CreateGroup.class)
         );

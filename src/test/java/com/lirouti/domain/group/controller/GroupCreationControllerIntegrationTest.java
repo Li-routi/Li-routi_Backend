@@ -76,11 +76,18 @@ class GroupCreationControllerIntegrationTest {
                     .andExpect(jsonPath("$.result.customCategories.length()").value(1))
                     .andExpect(jsonPath("$.result.routines.length()").value(1))
                     .andExpect(jsonPath("$.result.assignmentCount").value(1))
-                    .andExpect(jsonPath("$.result.inviteCode").doesNotExist());
+                    .andExpect(jsonPath("$.result.inviteCode").doesNotExist())
+                    .andExpect(jsonPath("$.result.inviteCodeExpiresAt").doesNotExist());
 
             new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
                 assertThat(count("select count(g) from Group g where g.name = :value", groupName))
                         .isEqualTo(1);
+                Group createdGroup = entityManager.createQuery(
+                                "select g from Group g where g.name = :name", Group.class
+                        ).setParameter("name", groupName)
+                        .getSingleResult();
+                assertThat(createdGroup.getInviteCode()).isNotBlank();
+                assertThat(createdGroup.isLocked()).isFalse();
                 assertThat(count(
                         "select count(gm) from GroupMember gm where gm.member.id = :value",
                         memberId
