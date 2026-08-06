@@ -10,6 +10,7 @@ import com.lirouti.domain.group.exception.GroupException;
 import com.lirouti.domain.group.exception.code.error.GroupErrorCode;
 import com.lirouti.domain.group.repository.GroupMemberRepository;
 import com.lirouti.domain.group.repository.GroupRoutineAssignmentRepository;
+import com.lirouti.domain.group.repository.GroupRoutineRepository;
 import com.lirouti.domain.group.repository.GroupRoutineScheduleRepository;
 import com.lirouti.domain.group.service.GroupValidationService;
 import com.lirouti.domain.member.entity.Member;
@@ -37,6 +38,8 @@ class GroupRoutineAssignmentCommandServiceTest {
 
     @Mock
     private GroupRoutineAssignmentRepository assignmentRepository;
+    @Mock
+    private GroupRoutineRepository groupRoutineRepository;
     @Mock
     private GroupRoutineScheduleRepository scheduleRepository;
     @Mock
@@ -156,6 +159,7 @@ class GroupRoutineAssignmentCommandServiceTest {
         when(schedule.getEndTime()).thenReturn(LocalTime.of(10, 0));
         when(groupMember.getMember()).thenReturn(member);
         when(member.getId()).thenReturn(1L);
+        when(groupRoutineRepository.findActiveByIdForUpdate(100L)).thenReturn(Optional.of(groupRoutine));
         givenInsertedAssignment();
 
         // when
@@ -196,6 +200,8 @@ class GroupRoutineAssignmentCommandServiceTest {
                 .thenReturn(List.of(groupMember));
         when(groupMember.getMember()).thenReturn(member);
         when(member.getId()).thenReturn(1L);
+        when(groupRoutineRepository.findActiveByIdForUpdate(100L)).thenReturn(Optional.of(groupRoutine));
+        when(groupRoutineRepository.findActiveByIdForUpdate(101L)).thenReturn(Optional.of(secondRoutine));
         givenInsertedAssignment();
 
         // when
@@ -221,6 +227,28 @@ class GroupRoutineAssignmentCommandServiceTest {
                 LocalTime.of(19, 0),
                 GroupRoutineAssignmentStatus.IN_PROGRESS.name()
         );
+    }
+
+    @Test
+    @DisplayName("삭제로 비활성화된 루틴은 일일 할당 생성에서 제외한다")
+    void assignScheduledRoutinesForDate_InactiveRoutineAfterLock_DoesNotAssign() {
+        // given
+        LocalDate assignedDate = LocalDate.of(2026, 7, 23);
+        when(scheduleRepository.findAllWithRoutineAndGroupByRepeatDay(DayOfWeek.THURSDAY))
+                .thenReturn(List.of(schedule));
+        when(schedule.getGroupRoutine()).thenReturn(groupRoutine);
+        when(groupRoutine.getId()).thenReturn(100L);
+        when(groupRoutineRepository.findActiveByIdForUpdate(100L)).thenReturn(Optional.empty());
+
+        // when
+        int result = assignmentCommandService.assignScheduledRoutinesForDate(assignedDate);
+
+        // then
+        assertThat(result).isZero();
+        verify(groupMemberRepository, never())
+                .findAllByGroupIdAndStatus(any(), any());
+        verify(assignmentRepository, never()).insertIfAbsent(
+                any(), any(), any(), any(), any(), any());
     }
 
     @Test
