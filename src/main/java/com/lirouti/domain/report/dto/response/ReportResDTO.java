@@ -51,7 +51,7 @@ public class ReportResDTO {
     }
 
     /**
-     * 월간 리포트, 달력 형태롤 하루마다 완료 여부만 표시한다.
+     * 월간 리포트, 달력 형태로 하루마다 달성률을 표시한다.
      */
     @Builder
     public record Monthly(
