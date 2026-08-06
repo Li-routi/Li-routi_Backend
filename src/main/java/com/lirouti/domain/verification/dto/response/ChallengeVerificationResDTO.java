@@ -5,6 +5,7 @@ import lombok.Builder;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
  * 챌린지 인증의 응답 묶음.
@@ -64,6 +65,7 @@ public final class ChallengeVerificationResDTO {
      * 신고해도 인증은 삭제되지 않는다 — 신고자 본인의 이후 조회에서 빠지고,
      * 신고가 임계값만큼 쌓이면 전체 회원에게 가려진다.
      */
+    @Schema(name = "ChallengeVerificationReportResult", description = "챌린지 인증 신고 결과")
     @Builder
     public record Report(
             Long reportId,

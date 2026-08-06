@@ -87,6 +87,39 @@ class OpenApiSchemaCollisionTest {
     }
 
     @Test
+    @DisplayName("인증 신고 — 요청과 응답이 서로 다른 스키마다")
+    void verificationReport_RequestAndResponse_AreSeparateSchemas() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$['paths']"
+                        + "['/api/challenges/{challengeId}/verifications/{verificationId}/reports']['post']"
+                        + "['requestBody']['content']['application/json']['schema']['$ref']")
+                        .value("#/components/schemas/ChallengeVerificationReportRequest"))
+                .andExpect(jsonPath("$['paths']"
+                        + "['/api/challenges/{challengeId}/verifications/{verificationId}/reports']['post']"
+                        + "['responses']['200']['content']['*/*']['schema']['$ref']")
+                        .value("#/components/schemas/ApiResponseChallengeVerificationReportResult"))
+                .andExpect(jsonPath("$['components']['schemas']"
+                        + "['ApiResponseChallengeVerificationReportResult']['properties']['result']['$ref']")
+                        .value("#/components/schemas/ChallengeVerificationReportResult"))
+                // 요청은 신고 사유, 응답은 만들어진 신고의 식별자. 겹쳐 있을 때는 응답이 사유 하나로 나갔다.
+                .andExpect(jsonPath("$.components.schemas.ChallengeVerificationReportRequest"
+                        + ".properties.reason").exists())
+                .andExpect(jsonPath("$.components.schemas.ChallengeVerificationReportResult"
+                        + ".properties.reportId").exists())
+                .andExpect(jsonPath("$.components.schemas.ChallengeVerificationReportResult"
+                        + ".properties.verificationId").exists())
+                .andExpect(jsonPath("$.components.schemas.ChallengeVerificationReportResult"
+                        + ".properties.reason").doesNotExist())
+                // 반대 방향도 막는다 — 응답 필드가 요청 스키마에 섞여도 통과하면 안 된다
+                .andExpect(jsonPath("$.components.schemas.ChallengeVerificationReportRequest"
+                        + ".properties.reportId").doesNotExist())
+                .andExpect(jsonPath("$.components.schemas.ChallengeVerificationReportRequest"
+                        + ".properties.verificationId").doesNotExist())
+                .andExpect(jsonPath("$.components.schemas.Report").doesNotExist());
+    }
+
+    @Test
     @DisplayName("인증 요청 — 루틴과 챌린지가 서로 다른 스키마다")
     void verifyRequest_RoutineAndChallenge_AreSeparateSchemas() throws Exception {
         // 개인·그룹 루틴은 같은 DTO를 쓰므로 둘이 같은 스키마인 것이 정상이다.
