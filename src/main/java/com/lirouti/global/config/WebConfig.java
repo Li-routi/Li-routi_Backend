@@ -1,6 +1,7 @@
 package com.lirouti.global.config;
 
 import com.lirouti.global.properties.RateLimitProperties;
+import com.lirouti.global.ratelimit.InMemoryRateLimiter;
 import com.lirouti.global.ratelimit.RateLimitInterceptor;
 import com.lirouti.global.ratelimit.RateLimiter;
 import lombok.RequiredArgsConstructor;
@@ -8,6 +9,8 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+
+import java.time.Clock;
 
 /**
  * Spring MVC 인터셉터 등록.
@@ -41,6 +44,10 @@ public class WebConfig implements WebMvcConfigurer {
         }
         // 경로를 제한하지 않는다. @RateLimit이 붙은 핸들러에서만 실제로 동작하므로
         // 여기서 경로를 나열하면 애노테이션과 두 곳에서 관리하게 된다.
-        registry.addInterceptor(new RateLimitInterceptor(limiter, properties));
+        //
+        // 폴백은 여기서 만들어 인터셉터와 수명을 맞춘다. Redis가 죽었을 때만 쓰이므로
+        // 평소에는 비어 있고, 빈으로 올려 다른 곳이 쓰게 할 이유도 없다.
+        registry.addInterceptor(
+                new RateLimitInterceptor(limiter, new InMemoryRateLimiter(Clock.systemUTC()), properties));
     }
 }
