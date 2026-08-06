@@ -52,6 +52,11 @@ public enum GroupSuccessCode implements BaseSuccessCode {
             HttpStatus.OK,
             "그룹 삭제에 성공했습니다.",
             "GROUP200_5"
+    ),
+    GROUP_LEAVE_SUCCESS(
+            HttpStatus.OK,
+            "그룹 탈퇴에 성공했습니다.",
+            "GROUP200_6"
     );
 
     private final HttpStatus httpStatus;

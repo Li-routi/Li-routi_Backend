@@ -29,6 +29,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.matchesPattern;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -253,6 +254,48 @@ class GroupControllerTest {
     void deleteGroup_Unauthenticated_ReturnsUnauthorized() throws Exception {
         mockMvc.perform(delete("/api/groups/{groupId}", 1L))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("ACTIVE MEMBER가 그룹을 나가면 200과 그룹 탈퇴 성공 응답을 반환한다")
+    void leaveGroup_ActiveMember_ReturnsOk() throws Exception {
+        // given
+        Group group = group("GL00001");
+        Member member = member();
+        GroupMember membership = membership(member, group, GroupMemberRole.MEMBER);
+        em.flush();
+
+        // when & then
+        mockMvc.perform(delete("/api/groups/{groupId}/leave", group.getId())
+                        .with(user(principal(member))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.isSuccess").value(true))
+                .andExpect(jsonPath("$.code").value("GROUP200_6"))
+                .andExpect(jsonPath("$.result").doesNotExist());
+
+        em.flush();
+        em.clear();
+        GroupMember persisted = em.find(GroupMember.class, membership.getId());
+        assertThat(persisted.getStatus()).isEqualTo(com.lirouti.domain.group.enums.GroupMemberStatus.LEFT);
+        assertThat(persisted.getLeftAt()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("인증 없이 그룹 방 나가기를 요청하면 401을 반환한다")
+    void leaveGroup_Unauthenticated_ReturnsUnauthorized() throws Exception {
+        mockMvc.perform(delete("/api/groups/{groupId}/leave", 1L))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("OpenAPI 문서에 그룹 방 나가기 경로와 대표 응답 코드가 노출된다")
+    void openApi_GroupLeave_IsDocumented() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("/api/groups/{groupId}/leave")))
+                .andExpect(content().string(containsString("그룹 방 나가기")))
+                .andExpect(content().string(containsString("GROUP409_1")))
+                .andExpect(content().string(containsString("200")));
     }
 
     @Test

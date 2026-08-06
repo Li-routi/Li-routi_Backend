@@ -51,6 +51,17 @@ public class GroupController implements GroupControllerDocs {
         return ApiResponse.onSuccess(GroupSuccessCode.GROUP_DELETE_SUCCESS, null);
     }
 
+    /** ACTIVE 일반 구성원이 그룹을 탈퇴하고 미완료 그룹 루틴 할당을 정리한다. */
+    @Override
+    @DeleteMapping("/{groupId}/leave")
+    public ApiResponse<Void> leaveGroup(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long groupId
+    ) {
+        groupCommandService.leaveGroup(groupId, userDetails.getMemberId());
+        return ApiResponse.onSuccess(GroupSuccessCode.GROUP_LEAVE_SUCCESS, null);
+    }
+
     /** ACTIVE 그룹 구성원이 사용할 수 있는 그룹 루틴 카테고리를 조회한다. */
     @Override
     @GetMapping("/{groupId}/categories")
