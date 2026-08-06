@@ -81,7 +81,7 @@ class GroupRoutineCreationIntegrationTest {
                     request
             )).isInstanceOf(IllegalStateException.class);
             assertThat(groupRoutineRepository
-                    .existsByGroupIdAndTitle(seed.groupId(), "롤백 루틴"))
+                    .existsByGroupIdAndTitleAndActiveTrue(seed.groupId(), "롤백 루틴"))
                     .isFalse();
         } finally {
             transaction.executeWithoutResult(status -> cleanup(seed));

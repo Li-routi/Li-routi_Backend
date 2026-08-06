@@ -129,8 +129,8 @@ class GroupRoutineRepositoryTest {
     }
 
     @Test
-    @DisplayName("수정 제목 중복 검사는 자기 자신을 제외한다")
-    void existsByGroupIdAndTitleAndIdNot_ExcludesTargetRoutine() {
+    @DisplayName("활성 루틴 수정 제목 중복 검사는 자기 자신을 제외한다")
+    void existsByGroupIdAndTitleAndActiveTrueAndIdNot_ExcludesTargetRoutine() {
         // given
         Group group = group();
         GroupRoutineCategory category = category();
@@ -142,10 +142,10 @@ class GroupRoutineRepositoryTest {
         );
 
         // when & then
-        assertThat(groupRoutineRepository.existsByGroupIdAndTitleAndIdNot(
+        assertThat(groupRoutineRepository.existsByGroupIdAndTitleAndActiveTrueAndIdNot(
                 group.getId(), "유지 제목", target.getId()
         )).isFalse();
-        assertThat(groupRoutineRepository.existsByGroupIdAndTitleAndIdNot(
+        assertThat(groupRoutineRepository.existsByGroupIdAndTitleAndActiveTrueAndIdNot(
                 group.getId(), "유지 제목", other.getId()
         )).isTrue();
     }
@@ -192,8 +192,8 @@ class GroupRoutineRepositoryTest {
     }
 
     @Test
-    @DisplayName("비활성 루틴의 제목도 같은 그룹에서 계속 예약된다")
-    void save_TitleOfInactiveRoutine_StillViolatesUniqueConstraint() {
+    @DisplayName("삭제한 루틴의 제목은 같은 그룹에서 재사용할 수 있다")
+    void save_TitleOfInactiveRoutine_CanBeReused() {
         // given
         Group group = group();
         GroupRoutineCategory category = category();
@@ -203,10 +203,16 @@ class GroupRoutineRepositoryTest {
         inactive.delete();
         groupRoutineRepository.flush();
 
-        // when & then
-        assertThatThrownBy(() -> groupRoutineRepository.saveAndFlush(
+        // when
+        GroupRoutine recreated = groupRoutineRepository.saveAndFlush(
                 routine(group, category, "예약 제목")
-        )).isInstanceOf(DataIntegrityViolationException.class);
+        );
+
+        // then
+        assertThat(recreated.getId()).isNotEqualTo(inactive.getId());
+        assertThat(groupRoutineRepository.existsByGroupIdAndTitleAndActiveTrue(
+                group.getId(), "예약 제목"
+        )).isTrue();
     }
 
     private Group group() {

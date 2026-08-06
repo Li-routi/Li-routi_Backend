@@ -321,7 +321,7 @@ public class GroupCommandService {
      * @throws GroupException 동일 제목이 이미 존재하는 경우
      */
     private void validateRoutineTitleNotDuplicated(Long groupId, String title) {
-        if (groupRoutineRepository.existsByGroupIdAndTitle(groupId, title)) {
+        if (groupRoutineRepository.existsByGroupIdAndTitleAndActiveTrue(groupId, title)) {
             log.warn("동일한 제목의 그룹 루틴 생성을 차단했습니다. groupId={}, title={}",
                     groupId, title);
             throw new GroupException(GroupErrorCode.DUPLICATE_GROUP_ROUTINE_TITLE);
@@ -367,7 +367,7 @@ public class GroupCommandService {
             Long routineId,
             String title
     ) {
-        if (groupRoutineRepository.existsByGroupIdAndTitleAndIdNot(groupId, title, routineId)) {
+        if (groupRoutineRepository.existsByGroupIdAndTitleAndActiveTrueAndIdNot(groupId, title, routineId)) {
             log.warn("동일한 제목의 그룹 루틴 수정을 차단했습니다. "
                             + "groupId={}, routineId={}, title={}",
                     groupId, routineId, title);

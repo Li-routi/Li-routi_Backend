@@ -14,13 +14,13 @@ public interface GroupRoutineRepository extends JpaRepository<GroupRoutine, Long
     long countByGroupIdAndActiveTrue(Long groupId);
 
     /**
-     * 대상 그룹에 동일한 제목의 루틴이 존재하는지 확인한다.
+     * 대상 그룹에 동일한 제목의 활성 루틴이 존재하는지 확인한다.
      *
      * @param groupId 대상 그룹 ID
      * @param title 확인할 루틴 제목
      * @return 동일 제목의 루틴이 존재하면 {@code true}
      */
-    boolean existsByGroupIdAndTitle(Long groupId, String title);
+    boolean existsByGroupIdAndTitleAndActiveTrue(Long groupId, String title);
 
     /**
      * 수정 대상 루틴이 요청 그룹에 속하는지 함께 확인하고 해당 루틴 행을 잠근다.
@@ -44,14 +44,14 @@ public interface GroupRoutineRepository extends JpaRepository<GroupRoutine, Long
     );
 
     /**
-     * 수정 대상 자신을 제외하고 동일 그룹에 같은 제목의 다른 루틴이 있는지 확인한다.
+     * 수정 대상 자신을 제외하고 동일 그룹에 같은 제목의 활성 루틴이 있는지 확인한다.
      *
      * @param groupId 대상 그룹 ID
      * @param title 변경할 루틴 제목
      * @param routineId 수정 대상 그룹 루틴 ID
      * @return 같은 제목의 다른 루틴이 존재하면 {@code true}
      */
-    boolean existsByGroupIdAndTitleAndIdNot(Long groupId, String title, Long routineId);
+    boolean existsByGroupIdAndTitleAndActiveTrueAndIdNot(Long groupId, String title, Long routineId);
 
     /**
      * 그 루틴이 그 그룹에 속하는지 확인한다. 조회 경로에서 잠금 없이 쓴다.

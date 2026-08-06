@@ -18,15 +18,7 @@ import java.util.Set;
 @Entity
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@Table(
-        name = "group_routine",
-        uniqueConstraints = {
-                @UniqueConstraint(
-                        name = "uk_group_routine_group_title",
-                        columnNames = {"group_id", "title"}
-                )
-        }
-)
+@Table(name = "group_routine")
 public class GroupRoutine extends BaseEntity {
     /** 한 그룹에 등록할 수 있는 그룹 루틴 수. */
     public static final int MAX_GROUP_ROUTINE_COUNT = 30;

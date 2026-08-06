@@ -67,7 +67,8 @@ class GroupCommandServiceTest {
     }
 
     private void givenNoDuplicateTitle() {
-        when(groupRoutineRepository.existsByGroupIdAndTitle(GROUP_ID, "저녁 루틴")).thenReturn(false);
+        when(groupRoutineRepository.existsByGroupIdAndTitleAndActiveTrue(GROUP_ID, "저녁 루틴"))
+                .thenReturn(false);
     }
 
     private void givenResponseReferences() {
@@ -137,7 +138,7 @@ class GroupCommandServiceTest {
         // given
         givenValidatedOwner();
         givenActiveCategory();
-        when(groupRoutineRepository.existsByGroupIdAndTitle(GROUP_ID, "저녁 루틴"))
+        when(groupRoutineRepository.existsByGroupIdAndTitleAndActiveTrue(GROUP_ID, "저녁 루틴"))
                 .thenReturn(true);
 
         // when & then
@@ -226,7 +227,7 @@ class GroupCommandServiceTest {
         when(groupRoutineRepository.findByIdAndGroupIdForUpdate(ROUTINE_ID, GROUP_ID))
                 .thenReturn(Optional.of(routine));
         givenActiveCategory();
-        when(groupRoutineRepository.existsByGroupIdAndTitleAndIdNot(
+        when(groupRoutineRepository.existsByGroupIdAndTitleAndActiveTrueAndIdNot(
                 GROUP_ID, "수정 루틴", ROUTINE_ID
         )).thenReturn(false);
         givenResponseReferences();
@@ -283,7 +284,7 @@ class GroupCommandServiceTest {
         when(groupRoutineRepository.findByIdAndGroupIdForUpdate(ROUTINE_ID, GROUP_ID))
                 .thenReturn(Optional.of(routine));
         givenActiveCategory();
-        when(groupRoutineRepository.existsByGroupIdAndTitleAndIdNot(
+        when(groupRoutineRepository.existsByGroupIdAndTitleAndActiveTrueAndIdNot(
                 GROUP_ID, "수정 루틴", ROUTINE_ID
         )).thenReturn(true);
 
