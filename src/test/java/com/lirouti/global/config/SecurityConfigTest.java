@@ -4,6 +4,7 @@ import com.lirouti.domain.auth.controller.AuthController;
 import com.lirouti.domain.auth.dto.response.AuthResDTO;
 import com.lirouti.domain.auth.service.AuthService;
 import com.lirouti.domain.member.controller.MemberController;
+import com.lirouti.domain.member.service.MemberProfileService;
 import com.lirouti.domain.member.service.command.MemberCommandService;
 import com.lirouti.domain.member.service.query.MemberQueryService;
 import com.lirouti.global.apiPayload.ApiErrorResponseWriter;
@@ -59,6 +60,9 @@ class SecurityConfigTest {
 
     @MockitoBean
     private MemberQueryService memberQueryService;
+
+    @MockitoBean
+    private MemberProfileService memberProfileService;
 
     @Test
     @DisplayName("인증 없이 공개 인증 API에 접근할 수 있다")

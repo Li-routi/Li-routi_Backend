@@ -2,6 +2,7 @@ package com.lirouti.domain.member.controller;
 
 import com.lirouti.domain.auth.exception.code.error.AuthErrorCode;
 import com.lirouti.domain.member.exception.code.success.MemberSuccessCode;
+import com.lirouti.domain.member.service.MemberProfileService;
 import com.lirouti.domain.member.service.command.MemberCommandService;
 import com.lirouti.domain.member.service.query.MemberQueryService;
 import com.lirouti.global.auth.filter.JwtAuthFilter;
@@ -46,6 +47,9 @@ class MemberControllerTest {
 
     @MockitoBean
     private MemberQueryService memberQueryService;
+
+    @MockitoBean
+    private MemberProfileService memberProfileService;
 
     @Test
     @DisplayName("유효한 Bearer 토큰으로 로그아웃하면 성공 응답을 반환한다")

@@ -56,6 +56,9 @@ public class Member extends BaseEntity {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
+    @Column(name = "profile_image_key")
+    private String profileImageKey; // null = 기본 회색 아바타 (기본 아바타는 프론트에서 처리)
+
     @Builder
     private Member(
             String email,
@@ -94,9 +97,10 @@ public class Member extends BaseEntity {
         this.deletedAt = withdrawnAt;
     }
 
-    // 프로필 내 닉네임 수정 및 온보딩 완료 처리
-    public void updateProfile(String nickname) {
+    // 프로필 내 닉네임 & 이미지 수정 및 온보딩 완료 처리
+    public void updateProfile(String nickname, String profileImageKey) {
         this.nickname = nickname;
+        this.profileImageKey = profileImageKey;
         this.onboardingCompleted = true;
     }
 }
