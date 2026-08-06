@@ -1,5 +1,6 @@
 package com.lirouti.domain.verification.repository;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
@@ -46,5 +47,18 @@ public interface GroupRoutineVerificationRepository
             @Param("groupId") Long groupId,
             @Param("cursor") Long cursor,
             Limit limit
+    );
+
+    @Query("""
+            select v from GroupRoutineVerification v
+            join fetch v.assignment a
+            join fetch a.groupRoutine
+            where a.member.id = :memberId
+              and a.assignedDate = :date
+            order by v.verifiedAt desc
+            """)
+    List<GroupRoutineVerification> findByMemberAndDate(
+            @Param("memberId") Long memberId,
+            @Param("date") LocalDate date
     );
 }
