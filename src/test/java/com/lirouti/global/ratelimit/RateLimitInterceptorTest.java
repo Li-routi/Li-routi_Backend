@@ -148,6 +148,30 @@ class RateLimitInterceptorTest {
     }
 
     @Test
+    @DisplayName("첫 degrade 로그는 반드시 남는다 — 예전에는 오버플로로 이것이 빠졌다")
+    void shouldLogDegraded_FirstCall_Logs() {
+        long now = System.currentTimeMillis();
+
+        assertThat(interceptor.shouldLogDegraded(now))
+                .as("한 번도 안 남긴 상태의 첫 호출")
+                .isTrue();
+    }
+
+    @Test
+    @DisplayName("간격 안에는 다시 남기지 않고, 간격이 지나면 다시 남긴다")
+    void shouldLogDegraded_ThrottlesWithinInterval() {
+        long now = System.currentTimeMillis();
+        interceptor.shouldLogDegraded(now);
+
+        assertThat(interceptor.shouldLogDegraded(now + 59_000))
+                .as("장애가 길어져도 요청마다 찍으면 로그가 넘친다")
+                .isFalse();
+        assertThat(interceptor.shouldLogDegraded(now + 60_000))
+                .as("한 번만 찍으면 장애가 계속되는지 알 수 없다")
+                .isTrue();
+    }
+
+    @Test
     @DisplayName("Redis가 죽어도 한도를 넘으면 막는다 — 예전에는 여기가 무제한이었다")
     void preHandle_RedisFailure_FallbackStillBlocks() throws Exception {
         when(rateLimiter.consume(anyString(), anyInt(), any(Duration.class)))

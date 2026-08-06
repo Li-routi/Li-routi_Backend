@@ -11,6 +11,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.HandlerInterceptor;
 
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -45,7 +46,8 @@ public class RateLimitInterceptor implements HandlerInterceptor {
     private final InMemoryRateLimiter fallbackLimiter;
     private final RateLimitProperties properties;
 
-    private final AtomicLong lastDegradedLogAt = new AtomicLong(Long.MIN_VALUE);
+    private final AtomicBoolean degradedLogged = new AtomicBoolean(false);
+    private final AtomicLong lastDegradedLogAt = new AtomicLong();
 
     @Override
     public boolean preHandle(
@@ -100,14 +102,31 @@ public class RateLimitInterceptor implements HandlerInterceptor {
      * 로그 때문에 의존을 하나 더 갖게 된다.
      */
     private void logDegraded(String key, RuntimeException cause) {
-        long now = System.currentTimeMillis();
-        long last = lastDegradedLogAt.get();
-        if (now - last < DEGRADED_LOG_INTERVAL_MILLIS
-                || !lastDegradedLogAt.compareAndSet(last, now)) {
+        if (!shouldLogDegraded(System.currentTimeMillis())) {
             return;
         }
         log.error("레이트 리밋 저장소를 쓸 수 없어 프로세스 안 카운터로 대신 셉니다"
                 + "(인스턴스가 여럿이면 인스턴스별 제한으로 degrade 됩니다). key={}", key, cause);
+    }
+
+    /**
+     * 지금 남길 차례인지 판단하고, 남길 거면 시각을 갱신한다.
+     *
+     * <p><b>"아직 한 번도 안 남겼다"를 시각으로 표현하지 않는다.</b> 이전에는 {@code Long.MIN_VALUE}
+     * 로 두었는데, {@code now - Long.MIN_VALUE} 가 오버플로해 음수가 되는 바람에
+     * <b>정작 첫 장애 로그가 안 찍혔다.</b> 남기려던 것이 안 남는 정반대 결과라, 첫 회 여부를
+     * 플래그로 따로 들고 시각 비교는 두 번째부터 한다.
+     *
+     * <p>동시 요청 중 하나만 남기도록 CAS 로 자리를 잡는다. 진 쪽은 조용히 지나간다.
+     */
+    boolean shouldLogDegraded(long now) {
+        if (degradedLogged.compareAndSet(false, true)) {
+            lastDegradedLogAt.set(now);
+            return true;
+        }
+        long last = lastDegradedLogAt.get();
+        return now - last >= DEGRADED_LOG_INTERVAL_MILLIS
+                && lastDegradedLogAt.compareAndSet(last, now);
     }
 
     /**

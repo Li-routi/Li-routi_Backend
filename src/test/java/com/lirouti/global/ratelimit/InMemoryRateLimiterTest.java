@@ -106,6 +106,39 @@ class InMemoryRateLimiterTest {
     }
 
     @Test
+    @DisplayName("서로 다른 키가 동시에 들어와도 저장소가 상한을 넘지 않는다")
+    void consume_ConcurrentNewKeys_RespectsMaxEntries() throws Exception {
+        MovableClock clock = new MovableClock();
+        InMemoryRateLimiter limiter = new InMemoryRateLimiter(clock);
+
+        // 상한 직전까지 만료되지 않는 항목으로 채운다.
+        for (int i = 0; i < 9_999; i++) {
+            limiter.consume("fill:" + i, 100, Duration.ofHours(1));
+        }
+        assertThat(limiter.size()).isEqualTo(9_999);
+
+        // 남은 자리는 하나인데 서로 다른 키 64개가 동시에 들어온다.
+        int threads = 64;
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        CountDownLatch start = new CountDownLatch(1);
+        for (int i = 0; i < threads; i++) {
+            int id = i;
+            pool.submit(() -> {
+                start.await();
+                limiter.consume("burst:" + id, 100, Duration.ofHours(1));
+                return null;
+            });
+        }
+        start.countDown();
+        pool.shutdown();
+        assertThat(pool.awaitTermination(10, TimeUnit.SECONDS)).isTrue();
+
+        assertThat(limiter.size())
+                .as("용량 검사와 삽입이 갈라져 있으면 여기서 상한을 넘긴다")
+                .isLessThanOrEqualTo(10_000);
+    }
+
+    @Test
     @DisplayName("같은 키에 동시에 들어와도 한도를 넘겨 통과시키지 않는다")
     void consume_Concurrent_DoesNotOverAllow() throws Exception {
         InMemoryRateLimiter limiter = new InMemoryRateLimiter(new MovableClock());
