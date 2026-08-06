@@ -430,6 +430,22 @@ S3 라이프사이클(“N일 지난 객체 자동 삭제”)이 가장 단순�
 
 `s3:DeleteObject`가 열리면 **탈퇴 시 사진 삭제(#70)도 같은 권한을 쓴다.** 한 번에 넓히는 게 낫다.
 
+> ⚠️ **심사 대기 prefix가 도입되면 `DeleteObject`를 한 번 더 넓혀야 한다(#105).**
+>
+> 심사 전 사진을 `challenge-verifications-staging/`으로 받고 통과한 뒤 승격하는 규칙이다(위 [미디어 서빙] 절의 경고와 짝). **`challenge-verifications/*`는 `challenge-verifications-staging/…`을 포함하지 않는다** — 접두사 뒤의 `/` 때문이다. 그래서 반려·승격 후 대기본을 지우려면 리소스를 배열로 늘려야 한다.
+>
+> ```jsonc
+> // MediaCleanupDelete
+> "Resource": [
+>   "arn:aws:s3:::lirouti-prod-bucket/challenge-verifications/*",
+>   "arn:aws:s3:::lirouti-prod-bucket/challenge-verifications-staging/*"
+> ]
+> ```
+>
+> `PutObject`·`GetObject`는 이미 버킷 전체라 손댈 것이 없고, `ListBucket`도 넓히지 않는다 — 대기본은 나이 기반 수명 주기로 지우므로 앱이 목록을 훑을 일이 없다.
+>
+> **정책이 코드보다 먼저다.** 정책은 콘솔에서 사람이 넓히는 것이라 배포와 함께 나가지 않는다. 순서가 뒤바뀌면 승격은 되는데 **대기본만 계속 쌓인다** — 수명 주기가 결국 지우므로 장애는 아니지만, 그동안 지워야 할 것이 안 지워진다. 규칙 전문은 `database-schema.md`의 [심사가 붙는 용도는 대기 prefix로 먼저 받는다] 절에 있다.
+
 ### 켜는 순서 — 기본값은 “아무것도 안 함”이다
 
 되돌릴 수 없는 작업이라 두 단계로 잠가 두었다.
