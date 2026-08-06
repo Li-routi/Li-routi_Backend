@@ -73,6 +73,36 @@ jobs:
           fi
           echo "✅ 마이그레이션 버전 중복 없음"
 
+      # 중복 검사만으로는 옛 순번 방식이 다시 섞이는 것을 못 잡는다. V14__ 하나가 들어와도
+      # 그 순간에는 중복이 아니므로 통과하고, 다음 사람이 같은 번호를 집을 때 비로소 걸린다.
+      # 그때는 이미 develop에 들어가 있어 고치는 비용이 커진다.
+      #
+      # 기존 V1~V13은 이미 적용돼 이름을 바꿀 수 없으므로(체크섬) 예외로 둔다.
+      # 그 위 번호를 순번으로 새로 만드는 것만 막는다.
+      - name: Check migration version format
+        run: |
+          bad=""
+          for f in src/main/resources/db/migration/V*.sql; do
+            [ -e "$f" ] || continue
+            version=$(basename "$f" | sed 's|^V\([0-9][0-9._]*\)__.*|\1|')
+            # 이미 적용된 옛 파일(V1~V13)은 그대로 둔다.
+            case "$version" in
+              [0-9]|1[0-3]) continue ;;
+            esac
+            # 새 파일은 14자리 타임스탬프여야 한다(yyyyMMddHHmmss).
+            case "$version" in
+              [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]) ;;
+              *) bad="$bad $f" ;;
+            esac
+          done
+          if [ -n "$bad" ]; then
+            echo "::error::마이그레이션 버전은 타임스탬프(yyyyMMddHHmmss)로 씁니다. 순번을 쓰면 두 사람이 같은 번호를 집습니다."
+            for f in $bad; do echo "  $f"; done
+            echo "  예) V$(date -u -d '+9 hours' +%Y%m%d%H%M%S 2>/dev/null || date -u -v+9H +%Y%m%d%H%M%S)__add_something.sql"
+            exit 1
+          fi
+          echo "✅ 마이그레이션 버전 형식 정상"
+
       # Caddyfile은 서버에서만 파싱되므로, 문법이 깨져도 배포가 절반 진행된 뒤에야 드러난다.
       # 그 시점엔 앱만 뜬 채 80·443이 먹통이고 배포 자체는 성공으로 끝난다.
       #

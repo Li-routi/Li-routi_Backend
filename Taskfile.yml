@@ -140,6 +140,53 @@ tasks:
         fi
         echo "✅ 마이그레이션 버전 중복 없음"
 
+  db-check-format:
+    desc: 마이그레이션 파일명이 타임스탬프 형식인지 검사 (CI에서도 실행)
+    # 중복 검사만으로는 옛 순번 방식이 다시 섞이는 것을 못 잡는다. V14__ 하나가 들어와도
+    # 그 순간에는 중복이 아니라 통과하고, 다음 사람이 같은 번호를 집을 때 비로소 걸린다.
+    # 그때는 이미 develop 에 들어가 있어 고치는 비용이 커진다.
+    silent: true
+    cmds:
+      - |
+        bad=""
+        for f in src/main/resources/db/migration/V*.sql; do
+          [ -e "$f" ] || continue
+          version=$(basename "$f" | sed 's|^V\([0-9][0-9._]*\)__.*|\1|')
+          # 이미 적용된 옛 파일(V1~V13)은 이름을 바꿀 수 없다(체크섬). 예외로 둔다.
+          case "$version" in
+            [0-9]|1[0-3]) continue ;;
+          esac
+          # 새 파일은 14자리 타임스탬프여야 한다(yyyyMMddHHmmss).
+          case "$version" in
+            [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]) ;;
+            *) bad="$bad $f" ;;
+          esac
+        done
+        if [ -n "$bad" ]; then
+          echo "❌ 마이그레이션 버전은 타임스탬프(yyyyMMddHHmmss)로 씁니다."
+          for f in $bad; do echo "   $f"; done
+          echo "   순번을 쓰면 두 사람이 같은 번호를 집습니다(database-schema.md 참고)."
+          echo "   예) V$(date -u -d '+9 hours' +%Y%m%d%H%M%S 2>/dev/null || date -u -v+9H +%Y%m%d%H%M%S)__add_something.sql"
+          exit 1
+        fi
+        echo "✅ 마이그레이션 버전 형식 정상"
+
+  db-new:
+    desc: 새 마이그레이션 파일 만들기 — task db-new -- add_something
+    # 손으로 타임스탬프를 치면 초를 빠뜨리거나 UTC 로 적기 쉽다. 이 태스크가 KST 로 찍어준다.
+    silent: true
+    cmds:
+      - |
+        name="{{.CLI_ARGS}}"
+        if [ -z "$name" ]; then
+          echo "❌ 설명을 주세요. 예) task db-new -- add_profile_image_key_to_member"
+          exit 1
+        fi
+        stamp=$(TZ=Asia/Seoul date +%Y%m%d%H%M%S)
+        file="src/main/resources/db/migration/V${stamp}__${name}.sql"
+        printf -- '-- %s\n-- 왜 이 변경이 필요한지 여기에 적습니다.\n\n' "$name" > "$file"
+        echo "✅ $file"
+
   clean:
     desc: build 산출물 및 QueryDSL 생성물 삭제
     cmds:
