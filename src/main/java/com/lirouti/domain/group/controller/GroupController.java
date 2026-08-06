@@ -5,7 +5,6 @@ import com.lirouti.domain.group.dto.request.GroupReqDTO;
 import com.lirouti.domain.group.dto.response.GroupResDTO;
 import com.lirouti.domain.group.exception.code.success.GroupSuccessCode;
 import com.lirouti.domain.group.service.command.GroupCommandService;
-import com.lirouti.domain.group.service.command.GroupInviteCodeCommandService;
 import com.lirouti.domain.group.service.query.GroupInviteCodeQueryService;
 import com.lirouti.domain.group.service.query.GroupQueryService;
 import com.lirouti.global.apiPayload.ApiResponse;
@@ -22,7 +21,6 @@ import org.springframework.web.bind.annotation.*;
 public class GroupController implements GroupControllerDocs {
     private final GroupCommandService groupCommandService;
     private final GroupQueryService groupQueryService;
-    private final GroupInviteCodeCommandService groupInviteCodeCommandService;
     private final GroupInviteCodeQueryService groupInviteCodeQueryService;
 
     /** 모임방과 초기 카테고리·루틴·일정을 한 요청으로 생성한다. */
@@ -38,6 +36,52 @@ public class GroupController implements GroupControllerDocs {
                 request
         );
         return ApiResponse.onSuccess(GroupSuccessCode.GROUP_CREATE_SUCCESS, result);
+    }
+
+    /** ACTIVE OWNER가 그룹과 그룹에 종속된 데이터를 Hard Delete한다. */
+    @Override
+    @DeleteMapping("/{groupId}")
+    public ApiResponse<Void> deleteGroup(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long groupId
+    ) {
+        groupCommandService.deleteGroup(groupId, userDetails.getMemberId());
+        return ApiResponse.onSuccess(GroupSuccessCode.GROUP_DELETE_SUCCESS, null);
+    }
+
+    /** ACTIVE 일반 구성원이 그룹을 탈퇴하고 미완료 그룹 루틴 할당을 정리한다. */
+    @Override
+    @DeleteMapping("/{groupId}/leave")
+    public ApiResponse<Void> leaveGroup(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long groupId
+    ) {
+        groupCommandService.leaveGroup(groupId, userDetails.getMemberId());
+        return ApiResponse.onSuccess(GroupSuccessCode.GROUP_LEAVE_SUCCESS, null);
+    }
+
+    /** ACTIVE OWNER가 신규 참여를 차단하도록 그룹을 잠근다. */
+    @Override
+    @PatchMapping("/{groupId}/lock")
+    public ApiResponse<GroupResDTO.LockState> lockGroup(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long groupId
+    ) {
+        GroupResDTO.LockState result = groupCommandService.lockGroup(
+                groupId, userDetails.getMemberId());
+        return ApiResponse.onSuccess(GroupSuccessCode.GROUP_LOCK_SUCCESS, result);
+    }
+
+    /** ACTIVE OWNER가 그룹 잠금을 해제한다. */
+    @Override
+    @PatchMapping("/{groupId}/unlock")
+    public ApiResponse<GroupResDTO.LockState> unlockGroup(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long groupId
+    ) {
+        GroupResDTO.LockState result = groupCommandService.unlockGroup(
+                groupId, userDetails.getMemberId());
+        return ApiResponse.onSuccess(GroupSuccessCode.GROUP_UNLOCK_SUCCESS, result);
     }
 
     /** ACTIVE 그룹 구성원이 사용할 수 있는 그룹 루틴 카테고리를 조회한다. */
@@ -185,18 +229,4 @@ public class GroupController implements GroupControllerDocs {
         return ApiResponse.onSuccess(GroupSuccessCode.GROUP_INVITE_CODE_FETCH_SUCCESS, result);
     }
 
-    // 그룹 초대 코드 발급&재발급 API
-    @Override
-    @PostMapping("/{groupId}/invite-code")
-    @ResponseStatus(HttpStatus.CREATED)
-    public ApiResponse<GroupResDTO.InviteCode> issueInviteCode(
-            @AuthenticationPrincipal CustomUserDetails userDetails,
-            @PathVariable Long groupId
-    ) {
-        GroupResDTO.InviteCode result = groupInviteCodeCommandService.issueInviteCode(
-                groupId,
-                userDetails.getMemberId()
-        );
-        return ApiResponse.onSuccess(GroupSuccessCode.GROUP_INVITE_CODE_ISSUE_SUCCESS, result);
-    }
 }

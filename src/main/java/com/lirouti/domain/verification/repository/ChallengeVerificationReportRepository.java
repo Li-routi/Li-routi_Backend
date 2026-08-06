@@ -1,6 +1,6 @@
-package com.lirouti.domain.challenge.repository;
+package com.lirouti.domain.verification.repository;
 
-import com.lirouti.domain.challenge.entity.ChallengeVerificationReport;
+import com.lirouti.domain.verification.entity.ChallengeVerificationReport;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface ChallengeVerificationReportRepository

@@ -28,6 +28,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.time.DayOfWeek;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -106,6 +107,96 @@ class RoutineCommandServiceTest {
                 () -> assertThat(result.routines().get(1).repeatDays())
                         .containsExactly(DayOfWeek.MONDAY, DayOfWeek.FRIDAY)
         );
+    }
+
+    @Test
+    @DisplayName("개인 루틴 수정은 설정을 교체하고 변경된 기본 루틴 이름의 원본 참조를 해제한다")
+    void updateRoutine_ChangedTemplateName_UpdatesAndDetachesTemplate() {
+        givenActiveMember();
+        MemberRoutine routine = MemberRoutine.builder()
+                .member(member)
+                .category(health)
+                .template(water)
+                .name(WATER_TEMPLATE_NAME)
+                .build();
+        ReflectionTestUtils.setField(routine, "id", 10L);
+        routine.addSchedule(DayOfWeek.MONDAY);
+        when(memberRoutineRepository.findByIdAndMemberIdAndActiveTrue(10L, MEMBER_ID))
+                .thenReturn(Optional.of(routine));
+        RoutineReqDTO.UpdateRoutine request = new RoutineReqDTO.UpdateRoutine(
+                "  물 2L 마시기  ",
+                LocalTime.of(21, 0),
+                List.of(DayOfWeek.WEDNESDAY, DayOfWeek.FRIDAY),
+                LocalTime.of(20, 30)
+        );
+
+        RoutineResDTO.Routine result = routineCommandService
+                .updateRoutine(MEMBER_ID, 10L, request);
+
+        assertAll(
+                () -> assertThat(result.templateId()).isNull(),
+                () -> assertThat(result.name()).isEqualTo("물 2L 마시기"),
+                () -> assertThat(result.endTime()).isEqualTo(LocalTime.of(21, 0)),
+                () -> assertThat(result.repeatDays())
+                        .containsExactly(DayOfWeek.WEDNESDAY, DayOfWeek.FRIDAY)
+        );
+        verify(memberRoutineRepository, times(2)).flush();
+    }
+
+    @Test
+    @DisplayName("개인 루틴 삭제는 비활성화하고 기본 루틴 참조를 해제한다")
+    void deleteRoutine_OwnedRoutine_DeactivatesAndDetachesTemplate() {
+        givenActiveMember();
+        MemberRoutine routine = MemberRoutine.builder()
+                .member(member)
+                .category(health)
+                .template(water)
+                .name(WATER_TEMPLATE_NAME)
+                .build();
+        when(memberRoutineRepository.findByIdAndMemberIdAndActiveTrue(10L, MEMBER_ID))
+                .thenReturn(Optional.of(routine));
+
+        routineCommandService.deleteRoutine(MEMBER_ID, 10L);
+
+        assertAll(
+                () -> assertThat(routine.getActive()).isFalse(),
+                () -> assertThat(routine.getTemplate()).isNull()
+        );
+        verify(memberRoutineRepository).flush();
+    }
+
+    @Test
+    @DisplayName("본인 소유의 활성 개인 루틴이 아니면 수정할 수 없다")
+    void updateRoutine_NotOwnedOrInactive_ThrowsNotFound() {
+        givenActiveMember();
+        when(memberRoutineRepository.findByIdAndMemberIdAndActiveTrue(10L, MEMBER_ID))
+                .thenReturn(Optional.empty());
+        RoutineReqDTO.UpdateRoutine request = new RoutineReqDTO.UpdateRoutine(
+                "물 챙겨 마시기",
+                LocalTime.of(21, 0),
+                List.of(DayOfWeek.MONDAY),
+                null
+        );
+
+        assertThatThrownBy(() -> routineCommandService.updateRoutine(MEMBER_ID, 10L, request))
+                .isInstanceOf(RoutineException.class)
+                .extracting("code")
+                .isEqualTo(RoutineErrorCode.ROUTINE_NOT_FOUND);
+        verify(memberRoutineRepository, never()).flush();
+    }
+
+    @Test
+    @DisplayName("없는 개인 루틴은 삭제할 수 없다")
+    void deleteRoutine_MissingRoutine_ThrowsNotFound() {
+        givenActiveMember();
+        when(memberRoutineRepository.findByIdAndMemberIdAndActiveTrue(999L, MEMBER_ID))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> routineCommandService.deleteRoutine(MEMBER_ID, 999L))
+                .isInstanceOf(RoutineException.class)
+                .extracting("code")
+                .isEqualTo(RoutineErrorCode.ROUTINE_NOT_FOUND);
+        verify(memberRoutineRepository, never()).flush();
     }
 
     @Test
@@ -316,6 +407,109 @@ class RoutineCommandServiceTest {
                 () -> assertThat(result.color()).isNull(),
                 () -> assertThat(result.fixed()).isFalse()
         );
+    }
+
+    @Test
+    @DisplayName("본인 사용자 카테고리의 이름과 색상을 수정한다")
+    void updateCategory_OwnedCategory_UpdatesNameAndColor() {
+        givenActiveMember();
+        RoutineCategory category = memberCategory(7L, "기존", member);
+        when(routineCategoryRepository.findByIdAndActiveTrue(7L))
+                .thenReturn(Optional.of(category));
+        when(routineCategoryRepository.existsUsableName(MEMBER_ID, "아침 관리"))
+                .thenReturn(false);
+        RoutineReqDTO.UpdateCategory request = new RoutineReqDTO.UpdateCategory(
+                "  아침 관리  ", RoutineCategoryColor.BLUE);
+
+        RoutineResDTO.Category result = routineCommandService
+                .updateCategory(MEMBER_ID, 7L, request);
+
+        assertAll(
+                () -> assertThat(result.name()).isEqualTo("아침 관리"),
+                () -> assertThat(result.color()).isEqualTo(RoutineCategoryColor.BLUE),
+                () -> assertThat(result.fixed()).isFalse()
+        );
+        verify(routineCategoryRepository).saveAndFlush(category);
+    }
+
+    @Test
+    @DisplayName("이름을 유지한 색상 수정은 자기 자신을 중복으로 판단하지 않는다")
+    void updateCategory_SameName_UpdatesWithoutDuplicateQuery() {
+        givenActiveMember();
+        RoutineCategory category = memberCategory(7L, "아침 관리", member);
+        when(routineCategoryRepository.findByIdAndActiveTrue(7L))
+                .thenReturn(Optional.of(category));
+
+        routineCommandService.updateCategory(
+                MEMBER_ID,
+                7L,
+                new RoutineReqDTO.UpdateCategory("아침 관리", RoutineCategoryColor.RED)
+        );
+
+        assertThat(category.getColor()).isEqualTo(RoutineCategoryColor.RED);
+        verify(routineCategoryRepository, never()).existsUsableName(anyLong(), anyString());
+    }
+
+    @Test
+    @DisplayName("고정 카테고리는 수정할 수 없다")
+    void updateCategory_FixedCategory_ThrowsForbidden() {
+        givenActiveMember();
+        when(routineCategoryRepository.findByIdAndActiveTrue(1L))
+                .thenReturn(Optional.of(fixedCategory(1L, "운동")));
+
+        assertThatThrownBy(() -> routineCommandService.updateCategory(
+                MEMBER_ID,
+                1L,
+                new RoutineReqDTO.UpdateCategory("새 이름", null)
+        )).isInstanceOf(RoutineException.class)
+                .extracting("code")
+                .isEqualTo(RoutineErrorCode.FIXED_ROUTINE_CATEGORY_MODIFICATION_NOT_ALLOWED);
+    }
+
+    @Test
+    @DisplayName("다른 회원의 카테고리는 삭제할 수 없다")
+    void deleteCategory_OtherMembersCategory_ThrowsAccessDenied() {
+        givenActiveMember();
+        RoutineCategory category = memberCategory(7L, "남의 카테고리", member(2L));
+        when(routineCategoryRepository.findByIdAndActiveTrue(7L))
+                .thenReturn(Optional.of(category));
+
+        assertThatThrownBy(() -> routineCommandService.deleteCategory(MEMBER_ID, 7L))
+                .isInstanceOf(RoutineException.class)
+                .extracting("code")
+                .isEqualTo(RoutineErrorCode.ROUTINE_CATEGORY_ACCESS_DENIED);
+        verify(routineCategoryRepository, never()).delete(any());
+    }
+
+    @Test
+    @DisplayName("비활성 루틴이라도 포함된 카테고리는 삭제할 수 없다")
+    void deleteCategory_CategoryWithAnyRoutine_ThrowsNotEmpty() {
+        givenActiveMember();
+        RoutineCategory category = memberCategory(7L, "기록 보존", member);
+        when(routineCategoryRepository.findByIdAndActiveTrue(7L))
+                .thenReturn(Optional.of(category));
+        when(memberRoutineRepository.existsByCategoryId(7L)).thenReturn(true);
+
+        assertThatThrownBy(() -> routineCommandService.deleteCategory(MEMBER_ID, 7L))
+                .isInstanceOf(RoutineException.class)
+                .extracting("code")
+                .isEqualTo(RoutineErrorCode.ROUTINE_CATEGORY_NOT_EMPTY);
+        verify(routineCategoryRepository, never()).delete(any());
+    }
+
+    @Test
+    @DisplayName("루틴이 없는 본인 사용자 카테고리는 물리 삭제한다")
+    void deleteCategory_EmptyOwnedCategory_Deletes() {
+        givenActiveMember();
+        RoutineCategory category = memberCategory(7L, "삭제 대상", member);
+        when(routineCategoryRepository.findByIdAndActiveTrue(7L))
+                .thenReturn(Optional.of(category));
+        when(memberRoutineRepository.existsByCategoryId(7L)).thenReturn(false);
+
+        routineCommandService.deleteCategory(MEMBER_ID, 7L);
+
+        verify(routineCategoryRepository).delete(category);
+        verify(routineCategoryRepository).flush();
     }
 
     private void givenActiveMember() {

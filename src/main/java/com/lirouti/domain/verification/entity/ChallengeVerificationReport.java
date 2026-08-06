@@ -1,4 +1,4 @@
-package com.lirouti.domain.challenge.entity;
+package com.lirouti.domain.verification.entity;
 
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.global.entity.BaseEntity;
@@ -12,8 +12,7 @@ import lombok.NoArgsConstructor;
  * 인증 사진에 대한 신고. 신고자 본인의 피드에서 즉시 가리고,
  * 임계값만큼 쌓이면 전체 회원에게 가린다(ChallengeVerification.hiddenAt).
  *
- * 신고해도 인증은 삭제되지 않고 다른 회원에게는 그대로 보인다(database-schema.md).
- * 신고 누적으로 전체에게 숨기는 처리는 이 범위에 없다 — 임계값 기반 자동 숨김은 #60에서 다룬다.
+ * 신고해도 인증은 삭제되지 않는다(database-schema.md). 임계값에 닿기 전까지는 신고자에게만 빠진다.
  *
  * 유니크 제약이 중복 신고를 막는다. "이미 신고했는지" 선조회 후 저장하는 방식은 동시 요청에서
  * 둘 다 통과하므로, 제약 위반을 잡아 409로 바꾸는 쪽을 사용한다(챌린지 인증과 같은 방식).

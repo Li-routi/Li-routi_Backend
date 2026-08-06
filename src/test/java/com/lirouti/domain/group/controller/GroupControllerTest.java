@@ -20,7 +20,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
-import org.springframework.test.context.transaction.TestTransaction;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -199,6 +198,273 @@ class GroupControllerTest {
     void getTodayRoutines_Unauthenticated_ReturnsUnauthorized() throws Exception {
         mockMvc.perform(get("/api/groups/routines/today"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("ACTIVE OWNER가 그룹을 삭제하면 200과 공통 성공 응답을 반환한다")
+    void deleteGroup_Owner_ReturnsOk() throws Exception {
+        // given
+        Group group = group("GD00001");
+        Member owner = member();
+        membership(owner, group, GroupMemberRole.OWNER);
+        em.flush();
+
+        // when & then
+        mockMvc.perform(delete("/api/groups/{groupId}", group.getId())
+                        .with(user(principal(owner))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.isSuccess").value(true))
+                .andExpect(jsonPath("$.code").value("GROUP200_5"))
+                .andExpect(jsonPath("$.result").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("일반 MEMBER는 그룹을 삭제할 수 없다")
+    void deleteGroup_RegularMember_ReturnsOwnerAccessDenied() throws Exception {
+        Group group = group("GDM001");
+        Member owner = member();
+        Member regularMember = member();
+        membership(owner, group, GroupMemberRole.OWNER);
+        membership(regularMember, group, GroupMemberRole.MEMBER);
+        em.flush();
+
+        mockMvc.perform(delete("/api/groups/{groupId}", group.getId())
+                        .with(user(principal(regularMember))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("GROUP403_3"));
+    }
+
+    @Test
+    @DisplayName("비구성원은 그룹을 삭제할 수 없다")
+    void deleteGroup_NonMember_ReturnsMemberAccessDenied() throws Exception {
+        Group group = group("GDN001");
+        Member owner = member();
+        Member outsider = member();
+        membership(owner, group, GroupMemberRole.OWNER);
+        em.flush();
+
+        mockMvc.perform(delete("/api/groups/{groupId}", group.getId())
+                        .with(user(principal(outsider))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("GROUP403_2"));
+    }
+
+    @Test
+    @DisplayName("다른 그룹의 OWNER라도 대상 그룹을 삭제할 수 없다")
+    void deleteGroup_OwnerOfOtherGroup_ReturnsMemberAccessDenied() throws Exception {
+        Group targetGroup = group("GDO001");
+        Group otherGroup = group("GDO002");
+        Member otherOwner = member();
+        membership(otherOwner, otherGroup, GroupMemberRole.OWNER);
+        em.flush();
+
+        mockMvc.perform(delete("/api/groups/{groupId}", targetGroup.getId())
+                        .with(user(principal(otherOwner))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("GROUP403_2"));
+    }
+
+    @Test
+    @DisplayName("LEFT 또는 KICKED 구성원은 그룹을 삭제할 수 없다")
+    void deleteGroup_InactiveMembers_ReturnsMemberAccessDenied() throws Exception {
+        Group group = group("GDI001");
+        Member owner = member();
+        Member leftMember = member();
+        Member kickedMember = member();
+        membership(owner, group, GroupMemberRole.OWNER);
+        GroupMember leftMembership = membership(leftMember, group, GroupMemberRole.MEMBER);
+        GroupMember kickedMembership = membership(kickedMember, group, GroupMemberRole.MEMBER);
+        leftMembership.leave();
+        kickedMembership.kick();
+        em.flush();
+
+        for (Member requester : new Member[]{leftMember, kickedMember}) {
+            mockMvc.perform(delete("/api/groups/{groupId}", group.getId())
+                            .with(user(principal(requester))))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.code").value("GROUP403_2"));
+        }
+    }
+
+    @Test
+    @DisplayName("DELETED 그룹은 삭제 API에서 GROUP404_1로 응답한다")
+    void deleteGroup_DeletedGroup_ReturnsNotFound() throws Exception {
+        Group group = group("GDD001");
+        Member owner = member();
+        membership(owner, group, GroupMemberRole.OWNER);
+        group.delete();
+        em.flush();
+
+        mockMvc.perform(delete("/api/groups/{groupId}", group.getId())
+                        .with(user(principal(owner))))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("GROUP404_1"));
+    }
+
+    @Test
+    @DisplayName("인증 없이 그룹 삭제를 요청하면 기존 보안 동작대로 401을 반환한다")
+    void deleteGroup_Unauthenticated_ReturnsUnauthorized() throws Exception {
+        mockMvc.perform(delete("/api/groups/{groupId}", 1L))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("ACTIVE MEMBER가 그룹을 나가면 200과 그룹 탈퇴 성공 응답을 반환한다")
+    void leaveGroup_ActiveMember_ReturnsOk() throws Exception {
+        // given
+        Group group = group("GL00001");
+        Member member = member();
+        GroupMember membership = membership(member, group, GroupMemberRole.MEMBER);
+        em.flush();
+
+        // when & then
+        mockMvc.perform(delete("/api/groups/{groupId}/leave", group.getId())
+                        .with(user(principal(member))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.isSuccess").value(true))
+                .andExpect(jsonPath("$.code").value("GROUP200_6"))
+                .andExpect(jsonPath("$.result").doesNotExist());
+
+        em.flush();
+        em.clear();
+        GroupMember persisted = em.find(GroupMember.class, membership.getId());
+        assertThat(persisted.getStatus()).isEqualTo(com.lirouti.domain.group.enums.GroupMemberStatus.LEFT);
+        assertThat(persisted.getLeftAt()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("인증 없이 그룹 방 나가기를 요청하면 401을 반환한다")
+    void leaveGroup_Unauthenticated_ReturnsUnauthorized() throws Exception {
+        mockMvc.perform(delete("/api/groups/{groupId}/leave", 1L))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("OpenAPI 문서에 그룹 방 나가기 경로와 대표 응답 코드가 노출된다")
+    void openApi_GroupLeave_IsDocumented() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("/api/groups/{groupId}/leave")))
+                .andExpect(content().string(containsString("그룹 방 나가기")))
+                .andExpect(content().string(containsString("GROUP409_1")))
+                .andExpect(content().string(containsString("200")));
+    }
+
+    @Test
+    @DisplayName("ACTIVE OWNER는 그룹을 잠그고 같은 요청을 반복해도 영구 초대코드를 유지한다")
+    void lockGroup_Owner_ReturnsLockedStateAndPreservesInviteCode() throws Exception {
+        Group group = group("GL00001");
+        Member owner = member();
+        membership(owner, group, GroupMemberRole.OWNER);
+        em.flush();
+
+        mockMvc.perform(patch("/api/groups/{groupId}/lock", group.getId())
+                        .with(user(principal(owner))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.isSuccess").value(true))
+                .andExpect(jsonPath("$.code").value("GROUP200_7"))
+                .andExpect(jsonPath("$.result.groupId").value(group.getId()))
+                .andExpect(jsonPath("$.result.isLocked").value(true));
+
+        mockMvc.perform(patch("/api/groups/{groupId}/lock", group.getId())
+                        .with(user(principal(owner))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.isLocked").value(true));
+
+        em.flush();
+        em.clear();
+        Group persisted = em.find(Group.class, group.getId());
+        assertThat(persisted.isLocked()).isTrue();
+        assertThat(persisted.getInviteCode()).isEqualTo("GL00001");
+    }
+
+    @Test
+    @DisplayName("ACTIVE OWNER는 그룹 잠금을 해제하고 같은 요청을 반복해도 영구 초대코드를 유지한다")
+    void unlockGroup_Owner_ReturnsUnlockedStateAndPreservesInviteCode() throws Exception {
+        Group group = group("GU00001");
+        group.lock();
+        Member owner = member();
+        membership(owner, group, GroupMemberRole.OWNER);
+        em.flush();
+
+        mockMvc.perform(patch("/api/groups/{groupId}/unlock", group.getId())
+                        .with(user(principal(owner))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.isSuccess").value(true))
+                .andExpect(jsonPath("$.code").value("GROUP200_8"))
+                .andExpect(jsonPath("$.result.groupId").value(group.getId()))
+                .andExpect(jsonPath("$.result.isLocked").value(false));
+
+        em.flush();
+        em.clear();
+        Group persisted = em.find(Group.class, group.getId());
+        assertThat(persisted.isLocked()).isFalse();
+        assertThat(persisted.getInviteCode()).isEqualTo("GU00001");
+    }
+
+    @Test
+    @DisplayName("일반 MEMBER는 그룹을 잠글 수 없다")
+    void lockGroup_RegularMember_ReturnsOwnerAccessDenied() throws Exception {
+        Group group = group("GLM0001");
+        Member owner = member();
+        Member regularMember = member();
+        membership(owner, group, GroupMemberRole.OWNER);
+        membership(regularMember, group, GroupMemberRole.MEMBER);
+        em.flush();
+
+        mockMvc.perform(patch("/api/groups/{groupId}/lock", group.getId())
+                        .with(user(principal(regularMember))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("GROUP403_3"));
+    }
+
+    @Test
+    @DisplayName("비구성원은 그룹 잠금을 해제할 수 없다")
+    void unlockGroup_NonMember_ReturnsMemberAccessDenied() throws Exception {
+        Group group = group("GLN0001");
+        Member owner = member();
+        Member outsider = member();
+        membership(owner, group, GroupMemberRole.OWNER);
+        em.flush();
+
+        mockMvc.perform(patch("/api/groups/{groupId}/unlock", group.getId())
+                        .with(user(principal(outsider))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("GROUP403_2"));
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 그룹의 방 잠금 요청은 GROUP404_1을 반환한다")
+    void lockGroup_NotFound_ReturnsGroupNotFound() throws Exception {
+        Member owner = member();
+        em.flush();
+
+        mockMvc.perform(patch("/api/groups/{groupId}/lock", Long.MAX_VALUE)
+                        .with(user(principal(owner))))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("GROUP404_1"));
+    }
+
+    @Test
+    @DisplayName("OpenAPI 문서에 그룹 방 잠금과 잠금 해제 경로가 노출된다")
+    void openApi_GroupLock_IsDocumented() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("/api/groups/{groupId}/lock")))
+                .andExpect(content().string(containsString("/api/groups/{groupId}/unlock")))
+                .andExpect(content().string(containsString("그룹 방 잠금")));
+    }
+
+    @Test
+    @DisplayName("OpenAPI 문서에 그룹 Hard Delete 경로와 응답 코드가 노출된다")
+    void openApi_GroupDelete_IsDocumented() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("/api/groups/{groupId}")))
+                .andExpect(content().string(containsString("그룹 삭제")))
+                .andExpect(content().string(containsString("GROUP403_2")))
+                .andExpect(content().string(containsString("GROUP403_3")))
+                .andExpect(content().string(containsString("GROUP404_1")));
     }
 
     @Test
@@ -437,12 +703,12 @@ class GroupControllerTest {
                         + ".properties.routines").doesNotExist())
                 .andExpect(jsonPath("$.components.schemas.GroupRoutineCreateResult"
                         + ".properties.activeRoutineCount").doesNotExist())
-                .andExpect(jsonPath("$.components.schemas.CreateRoutines.properties"
+                .andExpect(jsonPath("$.components.schemas.PersonalRoutineCreateRequest.properties"
                         + ".routines.items['$ref']")
-                        .value("#/components/schemas/CreateRoutine"))
-                .andExpect(jsonPath("$.components.schemas.CreateRoutine.properties.templateId")
+                        .value("#/components/schemas/PersonalRoutineCreateItem"))
+                .andExpect(jsonPath("$.components.schemas.PersonalRoutineCreateItem.properties.templateId")
                         .exists())
-                .andExpect(jsonPath("$.components.schemas.RoutineCreateResult"
+                .andExpect(jsonPath("$.components.schemas.PersonalRoutineCreateResult"
                         + ".properties.activeRoutineCount").exists());
     }
 
@@ -619,74 +885,10 @@ class GroupControllerTest {
     }
 
     @Test
-    @DisplayName("OWNER가 초대코드를 발급하면 201과 코드 및 말소 시각을 반환한다")
-    void issueInviteCode_Owner_ReturnsCreatedResult() throws Exception {
+    @DisplayName("OWNER는 그룹에 영구 귀속된 초대코드를 조회할 수 있다")
+    void getInviteCode_Owner_ReturnsPermanentCode() throws Exception {
         // given
         Group group = group("IC00001");
-        Member owner = member();
-        membership(owner, group, GroupMemberRole.OWNER);
-        em.flush();
-
-        commitFixtureForRequiresNew();
-        try {
-            // when & then
-            mockMvc.perform(post("/api/groups/{groupId}/invite-code", group.getId())
-                            .with(user(principal(owner))))
-                    .andExpect(status().isCreated())
-                    .andExpect(jsonPath("$.isSuccess").value(true))
-                    .andExpect(jsonPath("$.code").value("GROUP201_2"))
-                    .andExpect(jsonPath("$.result.inviteCode", matchesPattern("[A-Z0-9]{7}")))
-                    .andExpect(jsonPath("$.result.expiresAt").isNotEmpty());
-        } finally {
-            cleanupInviteFixture(group.getId(), owner.getId());
-        }
-    }
-
-    @Test
-    @DisplayName("초대코드를 재발급한 후 조회하면 새 코드를 반환한다")
-    void reissueInviteCode_ThenGet_ReturnsNewCode() throws Exception {
-        // given
-        Group group = group("IC00004");
-        Member owner = member();
-        membership(owner, group, GroupMemberRole.OWNER);
-        em.flush();
-
-        commitFixtureForRequiresNew();
-        try {
-            mockMvc.perform(post("/api/groups/{groupId}/invite-code", group.getId())
-                            .with(user(principal(owner))))
-                    .andExpect(status().isCreated());
-            restartTestTransaction();
-            String firstIssuedCode = findInviteCode(group.getId());
-
-            // when
-            mockMvc.perform(post("/api/groups/{groupId}/invite-code", group.getId())
-                            .with(user(principal(owner))))
-                    .andExpect(status().isCreated());
-            restartTestTransaction();
-            String reissuedCode = findInviteCode(group.getId());
-
-            // then
-            org.assertj.core.api.Assertions.assertThat(reissuedCode)
-                    .isNotEqualTo(firstIssuedCode);
-            em.clear();
-            mockMvc.perform(get("/api/groups/{groupId}/invite-code", group.getId())
-                            .with(user(principal(owner))))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.code").value("GROUP200_2"))
-                    .andExpect(jsonPath("$.result.inviteCode").value(reissuedCode))
-                    .andExpect(jsonPath("$.result.expiresAt").isNotEmpty());
-        } finally {
-            cleanupInviteFixture(group.getId(), owner.getId());
-        }
-    }
-
-    @Test
-    @DisplayName("만료된 초대코드를 조회해도 자동 재발급하지 않는다")
-    void getInviteCode_ExpiredCode_ReturnsStoredCode() throws Exception {
-        // given
-        Group group = group("IC00002");
-        group.issueInviteCode("EXP1234", LocalDateTime.of(2020, 1, 1, 0, 0));
         Member owner = member();
         membership(owner, group, GroupMemberRole.OWNER);
         em.flush();
@@ -698,29 +900,8 @@ class GroupControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.isSuccess").value(true))
                 .andExpect(jsonPath("$.code").value("GROUP200_2"))
-                .andExpect(jsonPath("$.result.inviteCode").value("EXP1234"))
-                .andExpect(jsonPath("$.result.expiresAt").value("2020-01-01T00:00:00"));
-    }
-
-    @Test
-    @DisplayName("일반 구성원은 초대코드를 발급할 수 없다")
-    void issueInviteCode_RegularMember_ReturnsOwnerAccessDenied() throws Exception {
-        // given
-        Group group = group("IC00003");
-        Member regularMember = member();
-        membership(regularMember, group, GroupMemberRole.MEMBER);
-        em.flush();
-
-        commitFixtureForRequiresNew();
-        try {
-            // when & then
-            mockMvc.perform(post("/api/groups/{groupId}/invite-code", group.getId())
-                            .with(user(principal(regularMember))))
-                    .andExpect(status().isForbidden())
-                    .andExpect(jsonPath("$.code").value("GROUP403_3"));
-        } finally {
-            cleanupInviteFixture(group.getId(), regularMember.getId());
-        }
+                .andExpect(jsonPath("$.result.inviteCode").value("IC00001"))
+                .andExpect(jsonPath("$.result.expiresAt").doesNotExist());
     }
 
     private String validRequest(Long categoryId, String title) {
@@ -763,43 +944,6 @@ class GroupControllerTest {
         Group group = Group.builder().name("컨트롤러 그룹").inviteCode(inviteCode).build();
         em.persist(group);
         return group;
-    }
-
-    private void commitFixtureForRequiresNew() {
-        TestTransaction.flagForCommit();
-        TestTransaction.end();
-        TestTransaction.start();
-    }
-
-    private void restartTestTransaction() {
-        TestTransaction.flagForRollback();
-        TestTransaction.end();
-        TestTransaction.start();
-    }
-
-    private String findInviteCode(Long groupId) {
-        em.clear();
-        return em.find(Group.class, groupId).getInviteCode();
-    }
-
-    private void cleanupInviteFixture(Long groupId, Long memberId) {
-        if (TestTransaction.isActive()) {
-            TestTransaction.flagForRollback();
-            TestTransaction.end();
-        }
-        TestTransaction.start();
-        em.clear();
-        em.createNativeQuery("DELETE FROM group_member WHERE group_id = :groupId")
-                .setParameter("groupId", groupId)
-                .executeUpdate();
-        em.createNativeQuery("DELETE FROM member_group WHERE id = :groupId")
-                .setParameter("groupId", groupId)
-                .executeUpdate();
-        em.createNativeQuery("DELETE FROM member WHERE id = :memberId")
-                .setParameter("memberId", memberId)
-                .executeUpdate();
-        TestTransaction.flagForCommit();
-        TestTransaction.end();
     }
 
     private Member member() {

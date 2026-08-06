@@ -3,6 +3,7 @@ package com.lirouti.domain.media.dto.response;
 import lombok.Builder;
 
 import java.time.Instant;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 public final class MediaResDTO {
     private MediaResDTO() {
@@ -15,6 +16,7 @@ public final class MediaResDTO {
      * 것이므로 반드시 이 값을 써야 한다.
      * expiresAt은 S3가 서명에 실제로 부여한 만료 시각(UTC Instant)이다.
      */
+    @Schema(name = "PresignedUrlResult", description = "presigned URL 발급 결과")
     @Builder
     public record PresignedUrl(
             String uploadUrl,

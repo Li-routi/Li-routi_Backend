@@ -25,13 +25,14 @@ import org.springframework.transaction.annotation.Transactional;
 import com.lirouti.domain.challenge.client.AnthropicVerificationReviewClient;
 import com.lirouti.domain.challenge.client.ReviewRejection;
 import com.lirouti.domain.challenge.client.VerificationReview;
-import com.lirouti.domain.challenge.dto.request.ChallengeReqDTO;
 import com.lirouti.domain.challenge.entity.Challenge;
 import com.lirouti.domain.challenge.entity.MemberChallenge;
 import com.lirouti.domain.challenge.enums.ChallengeCategory;
 import com.lirouti.domain.challenge.exception.ChallengeException;
 import com.lirouti.domain.challenge.exception.code.error.ChallengeErrorCode;
-import com.lirouti.domain.challenge.repository.ChallengeVerificationRepository;
+import com.lirouti.domain.verification.exception.VerificationException;
+import com.lirouti.domain.verification.dto.request.ChallengeVerificationReqDTO;
+import com.lirouti.domain.verification.repository.ChallengeVerificationRepository;
 import com.lirouti.domain.media.service.MediaImage;
 import com.lirouti.domain.media.service.MediaService;
 import com.lirouti.domain.member.entity.Member;
@@ -40,6 +41,7 @@ import com.lirouti.domain.member.enums.SocialProvider;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
+import com.lirouti.domain.verification.exception.code.error.ChallengeVerificationErrorCode;
 
 /**
  * 인증 사진 AI 심사.
@@ -101,8 +103,8 @@ class ChallengeAiReviewTest {
                 .thenReturn(Optional.of(new MediaImage(new byte[] {1, 2, 3}, "image/jpeg")));
     }
 
-    private ChallengeReqDTO.Verify request() {
-        return new ChallengeReqDTO.Verify(KEY, "오늘도 마셨어요");
+    private ChallengeVerificationReqDTO.Verify request() {
+        return new ChallengeVerificationReqDTO.Verify(KEY, "오늘도 마셨어요");
     }
 
     private long savedCount() {
@@ -143,7 +145,7 @@ class ChallengeAiReviewTest {
                 .thenReturn(VerificationReview.reject(ReviewRejection.MISMATCH, "무관한 사진"));
         assertThatThrownBy(() -> challengeCommandService.verify(memberId, challengeId, request()))
                 .as("반려는 막힌다")
-                .isInstanceOf(ChallengeException.class);
+                .isInstanceOf(VerificationException.class);
     }
 
     @Test
@@ -156,8 +158,8 @@ class ChallengeAiReviewTest {
 
         // when & then
         assertThatThrownBy(() -> challengeCommandService.verify(memberId, challengeId, request()))
-                .isInstanceOf(ChallengeException.class)
-                .hasFieldOrPropertyWithValue("code", ChallengeErrorCode.VERIFICATION_REJECTED_BY_REVIEW);
+                .isInstanceOf(VerificationException.class)
+                .hasFieldOrPropertyWithValue("code", ChallengeVerificationErrorCode.VERIFICATION_REJECTED_BY_REVIEW);
         assertThat(savedCount()).isEqualTo(before);
     }
 
@@ -200,8 +202,8 @@ class ChallengeAiReviewTest {
 
         // when & then
         assertThatThrownBy(() -> challengeCommandService.verify(memberId, challengeId, request()))
-                .isInstanceOf(ChallengeException.class)
-                .hasFieldOrPropertyWithValue("code", ChallengeErrorCode.VERIFICATION_REJECTED_AS_UNSAFE);
+                .isInstanceOf(VerificationException.class)
+                .hasFieldOrPropertyWithValue("code", ChallengeVerificationErrorCode.VERIFICATION_REJECTED_AS_UNSAFE);
     }
 
     @Test
@@ -213,7 +215,7 @@ class ChallengeAiReviewTest {
 
         // when
         assertThatThrownBy(() -> challengeCommandService.verify(memberId, challengeId, request()))
-                .isInstanceOf(ChallengeException.class);
+                .isInstanceOf(VerificationException.class);
 
         // then
         verify(mediaService).deleteQuietly(KEY);

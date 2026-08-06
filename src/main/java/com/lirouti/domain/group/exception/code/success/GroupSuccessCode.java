@@ -33,11 +33,6 @@ public enum GroupSuccessCode implements BaseSuccessCode {
             "그룹 초대코드 조회에 성공했습니다.",
             "GROUP200_2"
     ),
-    GROUP_INVITE_CODE_ISSUE_SUCCESS(
-            HttpStatus.CREATED,
-            "그룹 초대코드 발급에 성공했습니다.",
-            "GROUP201_2"
-    ),
     GROUP_CREATE_SUCCESS(
             HttpStatus.CREATED,
             "그룹 생성에 성공했습니다.",
@@ -57,6 +52,25 @@ public enum GroupSuccessCode implements BaseSuccessCode {
             HttpStatus.OK,
             "그룹 구성원 강제 퇴장에 성공했습니다.",
             "GROUP200_6"
+    GROUP_DELETE_SUCCESS(
+            HttpStatus.OK,
+            "그룹 삭제에 성공했습니다.",
+            "GROUP200_5"
+    ),
+    GROUP_LEAVE_SUCCESS(
+            HttpStatus.OK,
+            "그룹 탈퇴에 성공했습니다.",
+            "GROUP200_6"
+    ),
+    GROUP_LOCK_SUCCESS(
+            HttpStatus.OK,
+            "그룹을 잠갔습니다.",
+            "GROUP200_7"
+    ),
+    GROUP_UNLOCK_SUCCESS(
+            HttpStatus.OK,
+            "그룹 잠금을 해제했습니다.",
+            "GROUP200_8"
     );
 
     private final HttpStatus httpStatus;
