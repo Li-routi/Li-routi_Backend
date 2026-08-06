@@ -61,7 +61,7 @@ public class ReportQueryService {
                 .displayMonth(displayMonth)
                 .weekOfMonth(weekOfMonth)
                 .weekStart(weekStart)
-                .weekend(weekEnd)
+                .weekEnd(weekEnd)
                 .days(days)
                 .stats(computeActivityStats(memberId, displayMonth))
                 .build();

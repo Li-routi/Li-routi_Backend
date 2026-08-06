@@ -26,7 +26,7 @@ public class ReportResDTO {
             YearMonth displayMonth,
             int weekOfMonth,
             LocalDate weekStart,
-            LocalDate weekend,
+            LocalDate weekEnd,
             List<DailyBar> days,
             ActivityStats stats
     ) {
