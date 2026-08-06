@@ -8,7 +8,6 @@ import lombok.Builder;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 
@@ -129,6 +128,7 @@ public final class GroupResDTO {
      * @param startTime 수행 시작 시각
      * @param endTime 수행 마감 시각
      */
+    @Schema(name = "GroupRoutineScheduleResult", description = "그룹 루틴 수행 일정")
     @Builder
     public record RoutineSchedule(
             DayOfWeek repeatDay,
@@ -165,11 +165,19 @@ public final class GroupResDTO {
     ) {
     }
 
-    // 그룹 설정에서 확인할 초대코드와 말소 시각
+    // 그룹 설정에서 확인할 영구 초대코드
     @Builder
     public record InviteCode(
-            String inviteCode,
-            LocalDateTime expiresAt
+            String inviteCode
+    ) {
+    }
+
+    /** 그룹의 신규 참여 허용 여부를 전달한다. */
+    @Builder
+    @Schema(name = "GroupLockState", description = "그룹 방 잠금 상태")
+    public record LockState(
+            Long groupId,
+            boolean isLocked
     ) {
     }
 }

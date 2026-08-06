@@ -16,8 +16,10 @@ import com.lirouti.domain.group.entity.Group;
 import com.lirouti.domain.group.entity.GroupMember;
 import com.lirouti.domain.group.entity.GroupRoutine;
 import com.lirouti.domain.group.entity.GroupRoutineCategory;
+import com.lirouti.domain.group.enums.GroupStatus;
 import com.lirouti.domain.group.exception.GroupException;
 import com.lirouti.domain.group.exception.code.error.GroupErrorCode;
+import com.lirouti.domain.group.repository.GroupRepository;
 import com.lirouti.domain.group.repository.GroupRoutineCategoryRepository;
 import com.lirouti.domain.group.repository.GroupRoutineRepository;
 import com.lirouti.domain.group.service.GroupValidationService;
@@ -33,6 +35,7 @@ public class GroupCommandService {
     private static final int MAX_CREATE_ATTEMPTS = 10;
 
     private final GroupValidationService groupValidationService;
+    private final GroupRepository groupRepository;
     private final GroupRoutineCategoryRepository groupRoutineCategoryRepository;
     private final GroupRoutineRepository groupRoutineRepository;
     private final GroupRoutineAssignmentCommandService assignmentCommandService;
@@ -44,6 +47,7 @@ public class GroupCommandService {
 
     public GroupCommandService(
             GroupValidationService groupValidationService,
+            GroupRepository groupRepository,
             GroupRoutineCategoryRepository groupRoutineCategoryRepository,
             GroupRoutineRepository groupRoutineRepository,
             GroupRoutineAssignmentCommandService assignmentCommandService,
@@ -53,6 +57,7 @@ public class GroupCommandService {
             WebSocketSessionRegistry webSocketSessionRegistry
     ) {
         this.groupValidationService = groupValidationService;
+        this.groupRepository = groupRepository;
         this.groupRoutineCategoryRepository = groupRoutineCategoryRepository;
         this.groupRoutineRepository = groupRoutineRepository;
         this.assignmentCommandService = assignmentCommandService;
@@ -60,6 +65,38 @@ public class GroupCommandService {
         this.uniqueViolationDetector = uniqueViolationDetector;
         this.validator = validator;
         this.webSocketSessionRegistry = webSocketSessionRegistry;
+    }
+
+    /** 잠긴 ACTIVE OWNER 그룹을 애그리거트 루트에서 Hard Delete한다. */
+    @Transactional
+    public void deleteGroup(Long groupId, Long memberId) {
+        Group group = groupRepository.findByIdForUpdate(groupId)
+                .orElseThrow(() -> new GroupException(GroupErrorCode.GROUP_NOT_FOUND));
+
+        if (group.getStatus() != GroupStatus.ACTIVE) {
+            throw new GroupException(GroupErrorCode.GROUP_NOT_FOUND);
+        }
+
+        groupValidationService.validateGroupOwner(group, memberId);
+        groupRepository.delete(group);
+    }
+
+    /** ACTIVE OWNER가 그룹 행 잠금 안에서 신규 참여를 차단한다. 이미 잠긴 경우에도 성공한다. */
+    @Transactional
+    public GroupResDTO.LockState lockGroup(Long groupId, Long memberId) {
+        Group group = groupValidationService.lockActiveGroupForUpdate(groupId);
+        groupValidationService.validateGroupOwner(group, memberId);
+        group.lock();
+        return GroupConverter.toLockState(group);
+    }
+
+    /** ACTIVE OWNER가 그룹 행 잠금 안에서 신규 참여를 다시 허용한다. 이미 해제된 경우에도 성공한다. */
+    @Transactional
+    public GroupResDTO.LockState unlockGroup(Long groupId, Long memberId) {
+        Group group = groupValidationService.lockActiveGroupForUpdate(groupId);
+        groupValidationService.validateGroupOwner(group, memberId);
+        group.unlock();
+        return GroupConverter.toLockState(group);
     }
 
     /** 그룹 행 잠금 안에서 OWNER 권한, 상한, 이름 중복을 검증하고 사용자 카테고리를 생성한다. */
@@ -98,6 +135,7 @@ public class GroupCommandService {
         GroupRoutineCategory category = GroupConverter
                 .toGroupRoutineCategory(normalizedRequest, group);
         saveGroupRoutineCategory(groupId, memberId, category);
+        group.addRoutineCategory(category);
 
         log.info("그룹 사용자 카테고리를 생성했습니다. groupId={}, memberId={}, categoryId={}",
                 groupId, memberId, category.getId());
@@ -130,15 +168,23 @@ public class GroupCommandService {
         throw new GroupException(GroupErrorCode.INVITE_CODE_ISSUE_FAILED);
     }
 
-    /** ACTIVE 구성원의 그룹 탈퇴를 커밋한 뒤 해당 회원의 모든 채팅 세션을 회수한다. */
+    /**
+     * ACTIVE 구성원을 탈퇴 처리하고 미완료 할당을 정리한 뒤, 커밋 후 채팅 세션을 회수한다.
+     * 완료·미이행 할당과 인증 이력은 보존한다.
+     */
     @Transactional
     public void leaveGroup(Long groupId, Long memberId) {
+        // 채팅 전송도 같은 그룹 행을 잠그므로 권한 회수와 진행 중인 전송의 순서가 확정된다.
         groupValidationService.lockActiveGroupForUpdate(groupId);
         GroupMember groupMember = groupValidationService
                 .validateActiveGroupMember(groupId, memberId);
         groupMember.leave();
-        assignmentCommandService.deleteUnfinishedAssignmentsForLeaver(groupId, memberId);
+        int deletedAssignmentCount = assignmentCommandService
+                .deleteUnfinishedAssignmentsForLeaver(groupId, memberId);
         closeMemberSessionsAfterCommit(memberId);
+
+        log.info("그룹 탈퇴를 완료했습니다. groupId={}, memberId={}, deletedAssignmentCount={}",
+                groupId, memberId, deletedAssignmentCount);
     }
 
     /** ACTIVE OWNER가 대상 구성원을 강제 퇴장시키고 대상 회원의 모든 채팅 세션을 회수한다. */
@@ -225,6 +271,8 @@ public class GroupCommandService {
 
         GroupRoutine groupRoutine = GroupConverter.toGroupRoutine(request, group, category);
         saveGroupRoutine(groupRoutine);
+        group.addRoutine(groupRoutine);
+        category.addRoutine(groupRoutine);
 
         int assignmentCount = assignmentCommandService
                 .assignRoutineToActiveMembersToday(groupRoutine);
@@ -271,7 +319,12 @@ public class GroupCommandService {
         );
         validateRoutineTitleNotDuplicated(groupId, routineId, request.title());
 
+        GroupRoutineCategory previousCategory = groupRoutine.getCategory();
         groupRoutine.update(category, request.title(), request.description());
+        if (previousCategory != category) {
+            previousCategory.removeRoutine(groupRoutine);
+            category.addRoutine(groupRoutine);
+        }
         groupRoutine.replaceSchedules(request.schedules().stream()
                 .map(schedule -> new GroupRoutine.ScheduleUpdate(
                         schedule.repeatDay(),

@@ -1,6 +1,6 @@
-package com.lirouti.domain.challenge.repository;
+package com.lirouti.domain.verification.repository;
 
-import com.lirouti.domain.challenge.entity.ChallengeVerification;
+import com.lirouti.domain.verification.entity.ChallengeVerification;
 
 import java.util.List;
 

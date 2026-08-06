@@ -2,6 +2,7 @@ package com.lirouti.domain.group.entity;
 
 import com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus;
 import com.lirouti.domain.member.entity.Member;
+import com.lirouti.domain.verification.entity.GroupRoutineVerification;
 import com.lirouti.global.entity.BaseEntity;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -69,6 +70,9 @@ public class GroupRoutineAssignment extends BaseEntity {
     @Column(nullable = false)
     private Long version;
 
+    @OneToOne(mappedBy = "assignment", fetch = FetchType.LAZY, cascade = CascadeType.REMOVE)
+    private GroupRoutineVerification verification;
+
     /**
      * 회원에게 특정 날짜의 그룹 루틴을 시간 스냅샷과 함께 할당한다.
      *
@@ -94,5 +98,9 @@ public class GroupRoutineAssignment extends BaseEntity {
         this.scheduledStartTime = scheduledStartTime;
         this.scheduledEndTime = scheduledEndTime;
         this.status = status;
+    }
+
+    public void attachVerification(GroupRoutineVerification verification) {
+        this.verification = verification;
     }
 }

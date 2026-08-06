@@ -359,8 +359,8 @@ class GroupReqDTOValidationTest {
     }
 
     @Test
-    @DisplayName("통합 생성 응답은 clientKey 매핑과 할당 건수를 포함하고 초대코드는 노출하지 않는다")
-    void createResult_ResponseContract_ExcludesInviteCode() {
+    @DisplayName("통합 생성 응답은 clientKey 매핑과 할당 건수를 포함하고 초대 정보는 노출하지 않는다")
+    void createResult_ResponseContract_ExcludesInviteMetadata() {
         // given & when
         GroupResDTO.CreateResult result = GroupResDTO.CreateResult.builder()
                 .groupId(10L)

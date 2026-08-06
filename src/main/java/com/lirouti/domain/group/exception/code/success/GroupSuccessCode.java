@@ -1,9 +1,11 @@
 package com.lirouti.domain.group.exception.code.success;
 
+import org.springframework.http.HttpStatus;
+
 import com.lirouti.global.apiPayload.code.BaseSuccessCode;
+
 import lombok.AllArgsConstructor;
 import lombok.Getter;
-import org.springframework.http.HttpStatus;
 
 @Getter
 @AllArgsConstructor
@@ -33,11 +35,6 @@ public enum GroupSuccessCode implements BaseSuccessCode {
             "그룹 초대코드 조회에 성공했습니다.",
             "GROUP200_2"
     ),
-    GROUP_INVITE_CODE_ISSUE_SUCCESS(
-            HttpStatus.CREATED,
-            "그룹 초대코드 발급에 성공했습니다.",
-            "GROUP201_2"
-    ),
     GROUP_CREATE_SUCCESS(
             HttpStatus.CREATED,
             "그룹 생성에 성공했습니다.",
@@ -48,15 +45,30 @@ public enum GroupSuccessCode implements BaseSuccessCode {
             "그룹 루틴 카테고리 생성에 성공했습니다.",
             "GROUP201_4"
     ),
-    GROUP_MEMBER_LEAVE_SUCCESS(
+    GROUP_DELETE_SUCCESS(
+            HttpStatus.OK,
+            "그룹 삭제에 성공했습니다.",
+            "GROUP200_5"
+    ),
+    GROUP_LEAVE_SUCCESS(
             HttpStatus.OK,
             "그룹 탈퇴에 성공했습니다.",
-            "GROUP200_5"
+            "GROUP200_6"
+    ),
+    GROUP_LOCK_SUCCESS(
+            HttpStatus.OK,
+            "그룹을 잠갔습니다.",
+            "GROUP200_7"
+    ),
+    GROUP_UNLOCK_SUCCESS(
+            HttpStatus.OK,
+            "그룹 잠금을 해제했습니다.",
+            "GROUP200_8"
     ),
     GROUP_MEMBER_KICK_SUCCESS(
             HttpStatus.OK,
             "그룹 구성원 강제 퇴장에 성공했습니다.",
-            "GROUP200_6"
+            "GROUP200_9"
     );
 
     private final HttpStatus httpStatus;

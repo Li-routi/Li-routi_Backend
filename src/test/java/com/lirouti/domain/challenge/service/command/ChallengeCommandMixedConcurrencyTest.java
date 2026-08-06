@@ -1,13 +1,13 @@
 package com.lirouti.domain.challenge.service.command;
 
-import com.lirouti.domain.challenge.dto.request.ChallengeReqDTO;
 import com.lirouti.domain.challenge.entity.Challenge;
 import com.lirouti.domain.challenge.entity.MemberChallenge;
 import com.lirouti.domain.challenge.enums.ChallengeCategory;
 import com.lirouti.domain.challenge.exception.ChallengeException;
 import com.lirouti.domain.challenge.exception.code.error.ChallengeErrorCode;
 import com.lirouti.domain.challenge.repository.ChallengeRepository;
-import com.lirouti.domain.challenge.repository.ChallengeVerificationRepository;
+import com.lirouti.domain.verification.dto.request.ChallengeVerificationReqDTO;
+import com.lirouti.domain.verification.repository.ChallengeVerificationRepository;
 import com.lirouti.domain.challenge.repository.MemberChallengeRepository;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.enums.Role;
@@ -111,7 +111,7 @@ class ChallengeCommandMixedConcurrencyTest {
                 ready.countDown();
                 start.await();
                 challengeCommandService.verify(
-                        memberId, challengeId, new ChallengeReqDTO.Verify(MEDIA_KEY, "동시 인증"));
+                        memberId, challengeId, new ChallengeVerificationReqDTO.Verify(MEDIA_KEY, "동시 인증"));
                 verifySucceeded.incrementAndGet();
             } catch (ChallengeException e) {
                 // 이탈이 먼저 커밋됐다면 참여 중이 아니므로 거절되는 것이 정상이다.

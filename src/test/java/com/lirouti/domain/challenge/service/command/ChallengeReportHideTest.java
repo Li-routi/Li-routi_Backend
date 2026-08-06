@@ -13,10 +13,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.lirouti.domain.challenge.dto.request.ChallengeReqDTO;
 import com.lirouti.domain.challenge.dto.response.ChallengeResDTO;
 import com.lirouti.domain.challenge.entity.Challenge;
-import com.lirouti.domain.challenge.entity.ChallengeVerification;
+import com.lirouti.domain.verification.dto.response.ChallengeVerificationResDTO;
+import com.lirouti.domain.verification.dto.request.ChallengeVerificationReqDTO;
+import com.lirouti.domain.verification.entity.ChallengeVerification;
 import com.lirouti.domain.challenge.entity.MemberChallenge;
 import com.lirouti.domain.challenge.enums.ChallengeCategory;
 import com.lirouti.domain.challenge.service.query.ChallengeQueryService;
@@ -98,7 +99,7 @@ class ChallengeReportHideTest {
         for (int i = 0; i < count; i++) {
             challengeCommandService.report(
                     member().getId(), c.getId(), v.getId(),
-                    new ChallengeReqDTO.Report("부적절한 사진"));
+                    new ChallengeVerificationReqDTO.Report("부적절한 사진"));
         }
         em.flush();
         em.clear();
@@ -138,7 +139,7 @@ class ChallengeReportHideTest {
         // then
         assertThat(challengeQueryService.getVerificationFeed(c.getId(), viewer.getId(), null, BIG)
                 .verifications())
-                .extracting(ChallengeResDTO.FeedItem::verificationId)
+                .extracting(ChallengeVerificationResDTO.FeedItem::verificationId)
                 .containsExactly(v.getId());
     }
 

@@ -15,10 +15,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.lirouti.domain.challenge.dto.request.ChallengeReqDTO;
 import com.lirouti.domain.challenge.dto.response.ChallengeResDTO;
 import com.lirouti.domain.challenge.entity.Challenge;
-import com.lirouti.domain.challenge.entity.ChallengeVerification;
+import com.lirouti.domain.verification.exception.VerificationException;
+import com.lirouti.domain.verification.dto.response.ChallengeVerificationResDTO;
+import com.lirouti.domain.verification.dto.request.ChallengeVerificationReqDTO;
+import com.lirouti.domain.verification.entity.ChallengeVerification;
 import com.lirouti.domain.challenge.entity.MemberChallenge;
 import com.lirouti.domain.challenge.enums.ChallengeCategory;
 import com.lirouti.domain.challenge.exception.ChallengeException;
@@ -29,6 +31,7 @@ import com.lirouti.domain.member.enums.SocialProvider;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
+import com.lirouti.domain.verification.exception.code.error.ChallengeVerificationErrorCode;
 
 /**
  * 인증 메모 수정.
@@ -92,8 +95,8 @@ class VerificationMemoUpdateTest {
         return v;
     }
 
-    private ChallengeReqDTO.UpdateMemo memo(String content) {
-        return new ChallengeReqDTO.UpdateMemo(content);
+    private ChallengeVerificationReqDTO.UpdateMemo memo(String content) {
+        return new ChallengeVerificationReqDTO.UpdateMemo(content);
     }
 
     // ── 테스트 ──
@@ -108,7 +111,7 @@ class VerificationMemoUpdateTest {
         LocalDateTime originalVerifiedAt = v.getVerifiedAt();
 
         // when
-        ChallengeResDTO.MemoUpdate result =
+        ChallengeVerificationResDTO.MemoUpdate result =
                 challengeCommandService.updateMemo(me.getId(), c.getId(), v.getId(), memo("고친 메모"));
         em.flush();
         em.clear();
@@ -136,8 +139,8 @@ class VerificationMemoUpdateTest {
         // when & then
         assertThatThrownBy(() -> challengeCommandService
                 .updateMemo(intruder.getId(), c.getId(), others.getId(), memo("가로챈 메모")))
-                .isInstanceOf(ChallengeException.class)
-                .hasFieldOrPropertyWithValue("code", ChallengeErrorCode.VERIFICATION_NOT_FOUND);
+                .isInstanceOf(VerificationException.class)
+                .hasFieldOrPropertyWithValue("code", ChallengeVerificationErrorCode.VERIFICATION_NOT_FOUND);
 
         em.clear();
         assertThat(em.find(ChallengeVerification.class, others.getId()).getContent())
@@ -171,7 +174,7 @@ class VerificationMemoUpdateTest {
         ChallengeVerification v = verification(me, c, LocalDate.now(KST));
 
         // when: 공백만 보낸다. 빈 문자열로 남으면 "메모 없음"이 두 가지 모양이 된다
-        ChallengeResDTO.MemoUpdate result =
+        ChallengeVerificationResDTO.MemoUpdate result =
                 challengeCommandService.updateMemo(me.getId(), c.getId(), v.getId(), memo("   "));
         em.flush();
         em.clear();
@@ -196,8 +199,8 @@ class VerificationMemoUpdateTest {
         // when & then
         assertThatThrownBy(() -> challengeCommandService
                 .updateMemo(me.getId(), c.getId(), v.getId(), memo("되살리기 시도")))
-                .isInstanceOf(ChallengeException.class)
-                .hasFieldOrPropertyWithValue("code", ChallengeErrorCode.VERIFICATION_NOT_FOUND);
+                .isInstanceOf(VerificationException.class)
+                .hasFieldOrPropertyWithValue("code", ChallengeVerificationErrorCode.VERIFICATION_NOT_FOUND);
     }
 
     @Test
@@ -213,7 +216,7 @@ class VerificationMemoUpdateTest {
         // when & then: 내 인증이지만 경로의 챌린지가 다르다
         assertThatThrownBy(() -> challengeCommandService
                 .updateMemo(me.getId(), other.getId(), v.getId(), memo("엉뚱한 경로")))
-                .isInstanceOf(ChallengeException.class)
-                .hasFieldOrPropertyWithValue("code", ChallengeErrorCode.VERIFICATION_NOT_FOUND);
+                .isInstanceOf(VerificationException.class)
+                .hasFieldOrPropertyWithValue("code", ChallengeVerificationErrorCode.VERIFICATION_NOT_FOUND);
     }
 }

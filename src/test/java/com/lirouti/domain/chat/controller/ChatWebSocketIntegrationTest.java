@@ -467,10 +467,10 @@ class ChatWebSocketIntegrationTest {
         assertThat(awaitSubscriptionCount(2)).isTrue();
 
         // when
-        mockMvc.perform(delete("/api/groups/{groupId}/members/me", GROUP_ID)
+        mockMvc.perform(delete("/api/groups/{groupId}/leave", GROUP_ID)
                         .with(user(new CustomUserDetails(MEMBER_ID, Role.ROLE_USER))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("GROUP200_5"));
+                .andExpect(jsonPath("$.code").value("GROUP200_6"));
 
         // then
         verify(membership).leave();
@@ -526,7 +526,7 @@ class ChatWebSocketIntegrationTest {
                         )
                         .with(user(new CustomUserDetails(OWNER_ID, Role.ROLE_USER))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value("GROUP200_6"));
+                .andExpect(jsonPath("$.code").value("GROUP200_9"));
 
         // then
         verify(targetMembership).kick();

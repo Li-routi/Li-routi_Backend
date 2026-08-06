@@ -1,9 +1,11 @@
-package com.lirouti.domain.challenge.service.command;
+package com.lirouti.domain.verification.service.command;
 
-import com.lirouti.domain.challenge.dto.request.ChallengeReqDTO;
 import com.lirouti.domain.challenge.dto.response.ChallengeResDTO;
 import com.lirouti.domain.challenge.entity.Challenge;
-import com.lirouti.domain.challenge.entity.ChallengeVerification;
+import com.lirouti.domain.challenge.service.command.ChallengeCommandService;
+import com.lirouti.domain.verification.dto.response.ChallengeVerificationResDTO;
+import com.lirouti.domain.verification.dto.request.ChallengeVerificationReqDTO;
+import com.lirouti.domain.verification.entity.ChallengeVerification;
 import com.lirouti.domain.challenge.entity.MemberChallenge;
 import com.lirouti.domain.challenge.enums.ChallengeCategory;
 import com.lirouti.domain.challenge.exception.ChallengeException;
@@ -75,8 +77,8 @@ class ChallengeVerificationCommandServiceTest {
         return mc;
     }
 
-    private ChallengeReqDTO.Verify request(String mediaKey, String content) {
-        return new ChallengeReqDTO.Verify(mediaKey, content);
+    private ChallengeVerificationReqDTO.Verify request(String mediaKey, String content) {
+        return new ChallengeVerificationReqDTO.Verify(mediaKey, content);
     }
 
     private List<ChallengeVerification> verificationsOf(MemberChallenge mc) {
@@ -100,7 +102,7 @@ class ChallengeVerificationCommandServiceTest {
         MemberChallenge mc = join(m, c, true, null, 0);
         em.flush();
 
-        ChallengeResDTO.Verification result =
+        ChallengeVerificationResDTO.Verification result =
                 challengeCommandService.verify(m.getId(), c.getId(), request(KEY_1, "첫 인증"));
 
         assertThat(result.currentStreak()).isEqualTo(1);
@@ -119,7 +121,7 @@ class ChallengeVerificationCommandServiceTest {
         MemberChallenge mc = join(m, c, true, today().minusDays(1), 3);
         em.flush();
 
-        ChallengeResDTO.Verification result =
+        ChallengeVerificationResDTO.Verification result =
                 challengeCommandService.verify(m.getId(), c.getId(), request(KEY_1, null));
 
         assertThat(result.currentStreak()).isEqualTo(4);
@@ -134,7 +136,7 @@ class ChallengeVerificationCommandServiceTest {
         MemberChallenge mc = join(m, c, true, today().minusDays(3), 10);
         em.flush();
 
-        ChallengeResDTO.Verification result =
+        ChallengeVerificationResDTO.Verification result =
                 challengeCommandService.verify(m.getId(), c.getId(), request(KEY_1, null));
 
         assertThat(result.currentStreak()).isEqualTo(1);
@@ -151,7 +153,7 @@ class ChallengeVerificationCommandServiceTest {
         em.flush();
 
         challengeCommandService.verify(m.getId(), c.getId(), request(KEY_1, "처음"));
-        ChallengeResDTO.Verification second =
+        ChallengeVerificationResDTO.Verification second =
                 challengeCommandService.verify(m.getId(), c.getId(), request(KEY_2, "바꿈"));
 
         assertThat(second.reverified()).isTrue();
@@ -173,7 +175,7 @@ class ChallengeVerificationCommandServiceTest {
         em.flush();
 
         challengeCommandService.verify(m.getId(), c.getId(), request(KEY_1, null));
-        ChallengeResDTO.Verification second =
+        ChallengeVerificationResDTO.Verification second =
                 challengeCommandService.verify(m.getId(), c.getId(), request(KEY_2, null));
 
         // 어제 → 오늘로 한 번만 올라 6이어야 하고, 두 번째 인증으로 7이 되면 안 된다.
@@ -217,7 +219,7 @@ class ChallengeVerificationCommandServiceTest {
         join(m, c, true, null, 0);
         em.flush();
 
-        ChallengeResDTO.Verification result =
+        ChallengeVerificationResDTO.Verification result =
                 challengeCommandService.verify(m.getId(), c.getId(), request(KEY_1, null));
 
         assertThat(result.currentStreak()).isEqualTo(1);

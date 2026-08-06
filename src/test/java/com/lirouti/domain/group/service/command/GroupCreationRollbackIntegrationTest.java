@@ -18,7 +18,6 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.List;
@@ -56,12 +55,7 @@ class GroupCreationRollbackIntegrationTest {
         String routineTitle = "루틴" + suffix.substring(suffix.length() - 5);
         Long memberId = new TransactionTemplate(transactionManager)
                 .execute(status -> memberRepository.save(member(suffix)).getId());
-        when(inviteCodeGenerator.generate()).thenReturn(
-                new GroupInviteCodeGenerator.GeneratedInviteCode(
-                        suffix.substring(suffix.length() - 7),
-                        LocalDateTime.of(2026, 8, 1, 10, 10)
-                )
-        );
+        when(inviteCodeGenerator.generate()).thenReturn(suffix.substring(suffix.length() - 7));
         doThrow(new IllegalStateException("assignment failure"))
                 .when(groupRoutineAssignmentRepository)
                 .insertIfAbsent(any(), any(), any(), any(), any(), any());

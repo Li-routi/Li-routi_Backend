@@ -14,7 +14,6 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -27,7 +26,6 @@ class GroupInviteCodeQueryServiceTest {
     private static final Long GROUP_ID = 10L;
     private static final Long OWNER_ID = 1L;
     private static final String INVITE_CODE = "ABC1234";
-    private static final LocalDateTime EXPIRES_AT = LocalDateTime.of(2026, 7, 28, 10, 0);
 
     @Mock
     private GroupValidationService groupValidationService;
@@ -44,12 +42,11 @@ class GroupInviteCodeQueryServiceTest {
                 .name("테스트 그룹")
                 .inviteCode(INVITE_CODE)
                 .build();
-        group.issueInviteCode(INVITE_CODE, EXPIRES_AT);
     }
 
     @Test
-    @DisplayName("방장은 현재 초대코드와 말소 시각을 조회할 수 있다")
-    void getInviteCode_Owner_ReturnsInviteCodeAndExpiration() {
+    @DisplayName("방장은 그룹에 영구 귀속된 초대코드를 조회할 수 있다")
+    void getInviteCode_Owner_ReturnsPermanentInviteCode() {
         // given
         givenOwnerGroup();
 
@@ -59,23 +56,7 @@ class GroupInviteCodeQueryServiceTest {
 
         // then
         assertThat(result.inviteCode()).isEqualTo(INVITE_CODE);
-        assertThat(result.expiresAt()).isEqualTo(EXPIRES_AT);
         verify(groupValidationService).validateGroupOwner(GROUP_ID, OWNER_ID);
-    }
-
-    @Test
-    @DisplayName("만료된 초대코드도 자동 재발급하지 않고 저장된 값을 반환한다")
-    void getInviteCode_ExpiredCode_ReturnsStoredValue() {
-        // given
-        givenOwnerGroup();
-
-        // when
-        GroupResDTO.InviteCode result = groupInviteCodeQueryService
-                .getInviteCode(GROUP_ID, OWNER_ID);
-
-        // then
-        assertThat(result.inviteCode()).isEqualTo(INVITE_CODE);
-        assertThat(result.expiresAt()).isEqualTo(EXPIRES_AT);
     }
 
     @Test

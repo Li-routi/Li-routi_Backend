@@ -23,15 +23,17 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.lirouti.domain.challenge.client.AnthropicVerificationReviewClient;
 import com.lirouti.domain.challenge.client.VerificationReview;
-import com.lirouti.domain.challenge.dto.request.ChallengeReqDTO;
 import com.lirouti.domain.challenge.dto.response.ChallengeResDTO;
 import com.lirouti.domain.challenge.entity.Challenge;
-import com.lirouti.domain.challenge.entity.ChallengeVerification;
+import com.lirouti.domain.verification.exception.VerificationException;
+import com.lirouti.domain.verification.dto.response.ChallengeVerificationResDTO;
+import com.lirouti.domain.verification.dto.request.ChallengeVerificationReqDTO;
+import com.lirouti.domain.verification.entity.ChallengeVerification;
 import com.lirouti.domain.challenge.entity.MemberChallenge;
 import com.lirouti.domain.challenge.enums.ChallengeCategory;
 import com.lirouti.domain.challenge.exception.ChallengeException;
 import com.lirouti.domain.challenge.exception.code.error.ChallengeErrorCode;
-import com.lirouti.domain.challenge.repository.ChallengeVerificationRepository;
+import com.lirouti.domain.verification.repository.ChallengeVerificationRepository;
 import com.lirouti.domain.challenge.service.query.ChallengeQueryService;
 import com.lirouti.domain.media.service.MediaService;
 import com.lirouti.domain.member.entity.Member;
@@ -40,6 +42,7 @@ import com.lirouti.domain.member.enums.SocialProvider;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
+import com.lirouti.domain.verification.exception.code.error.ChallengeVerificationErrorCode;
 
 /**
  * 하루 1회는 참여 회차를 넘어 적용된다.
@@ -117,8 +120,8 @@ class RejoinDailyOnceTest {
         return mc;
     }
 
-    private ChallengeReqDTO.Verify request() {
-        return new ChallengeReqDTO.Verify(KEY, "인증");
+    private ChallengeVerificationReqDTO.Verify request() {
+        return new ChallengeVerificationReqDTO.Verify(KEY, "인증");
     }
 
     private void verify(Member m, Challenge c) {
@@ -148,8 +151,8 @@ class RejoinDailyOnceTest {
 
         // when & then
         assertThatThrownBy(() -> verify(me, c))
-                .isInstanceOf(ChallengeException.class)
-                .hasFieldOrPropertyWithValue("code", ChallengeErrorCode.ALREADY_VERIFIED_TODAY);
+                .isInstanceOf(VerificationException.class)
+                .hasFieldOrPropertyWithValue("code", ChallengeVerificationErrorCode.ALREADY_VERIFIED_TODAY);
 
         // 인증 행이 늘지 않았다 — 예전에는 여기서 하루 두 건이 됐다
         em.flush();
@@ -219,9 +222,9 @@ class RejoinDailyOnceTest {
         em.flush();
 
         // when: 회차가 그대로이므로 덮어쓰기다
-        ChallengeResDTO.Verification result =
+        ChallengeVerificationResDTO.Verification result =
                 challengeCommandService.verify(me.getId(), c.getId(),
-                        new ChallengeReqDTO.Verify(KEY, "고친 코멘트"));
+                        new ChallengeVerificationReqDTO.Verify(KEY, "고친 코멘트"));
         em.flush();
         em.clear();
 
