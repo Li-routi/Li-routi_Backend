@@ -11,13 +11,16 @@ import com.lirouti.domain.member.repository.MemberRepository;
 import com.lirouti.global.properties.JwtProperties;
 import com.lirouti.global.util.JwtUtil;
 import com.lirouti.global.util.RedisUtil;
+import com.lirouti.global.websocket.WebSocketSessionRegistry;
 import io.jsonwebtoken.Claims;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.redis.RedisConnectionFailureException;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -43,6 +46,8 @@ class TokenServiceTest {
     @Mock
     private MemberRepository memberRepository;
     @Mock
+    private WebSocketSessionRegistry webSocketSessionRegistry;
+    @Mock
     private Member member;
     @Mock
     private Claims claims;
@@ -54,7 +59,13 @@ class TokenServiceTest {
         JwtProperties jwtProperties = new JwtProperties();
         jwtProperties.getAccessToken().setExpirationTime(Duration.ofHours(1).toMillis());
         jwtProperties.getRefreshToken().setExpirationTime(Duration.ofDays(14).toMillis());
-        tokenService = new TokenService(jwtUtil, redisUtil, memberRepository, jwtProperties);
+        tokenService = new TokenService(
+                jwtUtil,
+                redisUtil,
+                memberRepository,
+                jwtProperties,
+                webSocketSessionRegistry
+        );
     }
 
     @Test
@@ -231,8 +242,8 @@ class TokenServiceTest {
     }
 
     @Test
-    @DisplayName("유효한 access token이면 블랙리스트 등록 후 refresh 세션을 삭제한다")
-    void logout_ValidAccessToken_BlacklistsTokenAndDeletesRefreshSession() {
+    @DisplayName("유효한 access token이면 토큰 폐기 후 WebSocket 세션을 회수한다")
+    void logout_ValidAccessToken_RevokesTokensBeforeClosingWebSocketSessions() {
         // given
         when(jwtUtil.getClaimsForLogout(ACCESS_TOKEN)).thenReturn(claims);
         when(claims.get("category", String.class)).thenReturn("access");
@@ -243,8 +254,27 @@ class TokenServiceTest {
         tokenService.logout(ACCESS_TOKEN);
 
         // then
-        verify(redisUtil).setBlackList(ACCESS_TOKEN, 3600_000L);
-        verify(redisUtil).delete("auth:refresh:" + MEMBER_ID);
+        InOrder inOrder = inOrder(redisUtil, webSocketSessionRegistry);
+        inOrder.verify(redisUtil).setBlackList(ACCESS_TOKEN, 3600_000L);
+        inOrder.verify(redisUtil).delete("auth:refresh:" + MEMBER_ID);
+        inOrder.verify(webSocketSessionRegistry).closeMemberSessions(MEMBER_ID);
+    }
+
+    @Test
+    @DisplayName("refresh token 폐기에 실패하면 WebSocket 세션을 회수하지 않는다")
+    void logout_RefreshTokenRevocationFailed_DoesNotCloseWebSocketSessions() {
+        // given
+        when(jwtUtil.getClaimsForLogout(ACCESS_TOKEN)).thenReturn(claims);
+        when(claims.get("category", String.class)).thenReturn("access");
+        when(claims.getSubject()).thenReturn(String.valueOf(MEMBER_ID));
+        when(jwtUtil.getExpirationTime(ACCESS_TOKEN)).thenReturn(3600_000L);
+        doThrow(new RedisConnectionFailureException("Redis unavailable"))
+                .when(redisUtil).delete("auth:refresh:" + MEMBER_ID);
+
+        // when & then
+        assertThatThrownBy(() -> tokenService.logout(ACCESS_TOKEN))
+                .isInstanceOf(RedisConnectionFailureException.class);
+        verifyNoInteractions(webSocketSessionRegistry);
     }
 
     @Test
@@ -259,6 +289,7 @@ class TokenServiceTest {
                 .isInstanceOf(AuthException.class)
                 .extracting("code")
                 .isEqualTo(AuthErrorCode.TOKEN_INVALID);
+        verifyNoInteractions(webSocketSessionRegistry);
     }
 
     private String sha256(String value) throws Exception {

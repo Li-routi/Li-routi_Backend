@@ -199,6 +199,25 @@ class MediaServiceTest {
     }
 
     @Test
+    @DisplayName("서비스 소유 이모티콘은 일반 사용자 업로드 URL을 발급하지 않는다")
+    void issuePresignedUrl_ChatEmoticonPurpose_RejectsClientUpload() {
+        // given
+        MediaReqDTO.PresignedUrl request = new MediaReqDTO.PresignedUrl(
+                MediaPurpose.CHAT_EMOTICON, "image/png", 1024L
+        );
+
+        // when & then
+        assertThatThrownBy(() -> mediaService.issuePresignedUrl(request))
+                .isInstanceOf(MediaException.class)
+                .hasFieldOrPropertyWithValue(
+                        "code",
+                        MediaErrorCode.CONTENT_TYPE_NOT_ALLOWED_FOR_PURPOSE
+                );
+
+        verify(s3Presigner, never()).presignPutObject(any(PutObjectPresignRequest.class));
+    }
+
+    @Test
     @DisplayName("이미지 최대 용량을 초과하면 예외를 던진다")
     void issuePresignedUrl_ImageTooLarge_ThrowsException() {
         // given
