@@ -79,6 +79,8 @@ class ChallengeAiReviewTest {
 
     @BeforeEach
     void setUp() {
+        // 승격은 S3 복사라 목으로 둔다. 이 테스트가 보는 것은 심사 결과이지 승격이 아니다.
+        when(mediaService.promote(any(), any())).thenAnswer(i -> i.getArgument(0));
         int n = seq.incrementAndGet();
         Member m = Member.builder()
                 .email("ai" + n + "@ex.com").nickname("ai" + n)

@@ -8,6 +8,7 @@ import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.enums.Role;
 import com.lirouti.domain.member.enums.SocialProvider;
 import com.lirouti.global.auth.CustomUserDetails;
+import com.lirouti.domain.media.enums.MediaPurpose;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.DisplayName;
@@ -39,7 +40,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class ChallengeVerificationControllerTest {
 
     private static final String VALID_KEY =
-            "challenge-verifications/cccccccc-cccc-4ccc-8ccc-cccccccccccc.jpg";
+            "challenge-verifications-staging/cccccccc-cccc-4ccc-8ccc-cccccccccccc.jpg";
+
+    /** 저장·응답에 실리는 것은 승격된 공개 key 다. 업로드로 보낸 대기 key 가 아니다. */
+    private static final String PUBLIC_KEY =
+            MediaPurpose.CHALLENGE_VERIFICATION.toPublicKey(VALID_KEY);
 
     @Autowired
     private MockMvc mockMvc;
@@ -135,7 +140,7 @@ class ChallengeVerificationControllerTest {
                 .andExpect(jsonPath("$.result.reverified").value(false))
                 .andExpect(jsonPath("$.result.content").value("오늘도 완료"))
                 // 응답에는 저장된 key가 아니라 조립된 공개 URL이 나간다.
-                .andExpect(jsonPath("$.result.imageUrl").value(endsWith(VALID_KEY)))
+                .andExpect(jsonPath("$.result.imageUrl").value(endsWith(PUBLIC_KEY)))
                 .andExpect(jsonPath("$.result.imageUrl").value(startsWith("http")));
     }
 

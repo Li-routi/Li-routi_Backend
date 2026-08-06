@@ -29,7 +29,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.when;
 import com.lirouti.domain.verification.exception.code.error.ChallengeVerificationErrorCode;
+import com.lirouti.domain.media.service.MediaService;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 /**
  * 인증 "따닥" 동시성 테스트. @Transactional을 쓰지 않는다 — 두 스레드가 각자 트랜잭션으로
@@ -44,6 +49,10 @@ class ChallengeVerificationConcurrencyTest {
 
     private static final String KEY_A = "challenge-verifications/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.jpg";
     private static final String KEY_B = "challenge-verifications/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.jpg";
+
+    // 미디어는 이 테스트의 관심사가 아니다. 승격이 S3 를 호출하므로 목으로 끊는다.
+    @MockitoBean
+    private MediaService mediaService;
 
     @Autowired
     private ChallengeCommandService challengeCommandService;
@@ -62,6 +71,10 @@ class ChallengeVerificationConcurrencyTest {
 
     @BeforeEach
     void setUp() {
+        doNothing().when(mediaService).validateMediaKey(any(), any());
+        doNothing().when(mediaService).validateUploadedBytes(any(), any());
+        when(mediaService.promote(any(), any())).thenAnswer(i -> i.getArgument(0));
+        when(mediaService.resolvePublicUrl(any())).thenReturn("https://cdn.example.com/x.jpg");
         Member m = memberRepository.save(Member.builder()
                 .email("vconc@ex.com").nickname("vconc")
                 .socialProvider(SocialProvider.GOOGLE).role(Role.ROLE_USER)

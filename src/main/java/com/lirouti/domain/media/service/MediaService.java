@@ -39,6 +39,7 @@ import org.springframework.stereotype.Service;
 import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.CopyObjectRequest;
 import software.amazon.awssdk.services.s3.model.*;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
@@ -111,7 +112,6 @@ public class MediaService {
         return MediaConverter.toPresignedUrl(
                 presigned.url().toString(),
                 mediaKey,
-                resolvePublicUrl(mediaKey),
                 signedContentType,
                 request.contentLength(),
                 presigned.expiration()
@@ -380,15 +380,53 @@ public class MediaService {
      * 안 되고, 못 지운 오브젝트는 미참조 이미지 정리가 결국 가져간다. 즉 이 메서드는
      * "빨리 지우는" 최적화이지 유일한 삭제 경로가 아니다.
      */
+    /**
+     * 심사를 통과한 사진을 대기 prefix 에서 공개 prefix 로 옮기고, 저장할 공개 key 를 돌려준다.
+     *
+     * <p>S3 에는 이동이 없어 <b>복사한 뒤 대기본을 지운다.</b> 내부 복사라 전송비는 들지 않고
+     * PUT 요청 하나가 더 든다.
+     *
+     * <h3>복사가 먼저이고 삭제는 나중이다</h3>
+     * 순서를 뒤집으면 삭제와 복사 사이에 사진이 어디에도 없는 구간이 생긴다. 복사가 실패하면
+     * 대기본이 그대로 남아 수명 주기가 가져가고, 사용자는 저장 실패 응답을 받는다 —
+     * <b>사진이 사라진 채 인증만 저장되는 방향으로는 실패하지 않는다.</b>
+     *
+     * <h3>대기본 삭제는 실패해도 넘어간다</h3>
+     * 이 시점에는 공개본이 이미 만들어져 있다. 대기본 하나를 못 지운 것 때문에 인증 저장을
+     * 되돌리는 편이 더 나쁘다 — 남은 대기본은 나이 기반 수명 주기가 치운다.
+     *
+     * @return 저장하고 내려줄 공개 key. 대기 prefix 가 없는 용도면 받은 key 를 그대로 돌려준다.
+     */
+    public String promote(String uploadKey, MediaPurpose purpose) {
+        if (!purpose.hasStaging()) {
+            return uploadKey;
+        }
+        String publicKey = purpose.toPublicKey(uploadKey);
+        try {
+            s3Client.copyObject(CopyObjectRequest.builder()
+                    .sourceBucket(s3Properties.getBucket())
+                    .sourceKey(uploadKey)
+                    .destinationBucket(s3Properties.getBucket())
+                    .destinationKey(publicKey)
+                    .build());
+        } catch (SdkException e) {
+            log.error("심사를 통과한 사진을 공개 prefix 로 옮기지 못했습니다. uploadKey={}", uploadKey, e);
+            throw new MediaException(MediaErrorCode.MEDIA_PROMOTION_FAILED);
+        }
+        deleteQuietly(uploadKey);
+        log.info("심사를 통과한 사진을 공개했습니다. publicKey={}", publicKey);
+        return publicKey;
+    }
+
     public void deleteQuietly(String mediaKey) {
         try {
             s3Client.deleteObject(DeleteObjectRequest.builder()
                     .bucket(s3Properties.getBucket())
                     .key(mediaKey)
                     .build());
-            log.info("반려된 인증 사진을 삭제했습니다. mediaKey={}", mediaKey);
+            log.info("미디어 오브젝트를 삭제했습니다. mediaKey={}", mediaKey);
         } catch (SdkException e) {
-            log.warn("반려된 인증 사진을 지우지 못했습니다. 미참조 정리가 나중에 가져갑니다. mediaKey={}",
+            log.warn("미디어 오브젝트를 지우지 못했습니다. 정리 배치나 수명 주기가 나중에 가져갑니다. mediaKey={}",
                     mediaKey, e);
         }
     }
@@ -466,7 +504,7 @@ public class MediaService {
         if (mediaKey == null) {
             return false;
         }
-        String prefix = purpose.getPathPrefix() + "/";
+        String prefix = purpose.getUploadPrefix() + "/";
         if (!mediaKey.startsWith(prefix)) {
             return false;
         }
@@ -548,7 +586,7 @@ public class MediaService {
      */
     private String generateMediaKey(MediaPurpose purpose, MediaContentType contentType) {
         return "%s/%s/%s.%s".formatted(
-                purpose.getPathPrefix(),
+                purpose.getUploadPrefix(),
                 LocalDate.now(TimeUtil.KST).format(MediaKeyFormat.KEY_DATE_PATH),
                 UUID.randomUUID(),
                 contentType.getExtension()

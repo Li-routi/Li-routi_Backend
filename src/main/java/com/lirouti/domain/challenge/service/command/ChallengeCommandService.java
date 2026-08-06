@@ -142,8 +142,17 @@ public class ChallengeCommandService {
         //    통과하지 못하면 저장도 스트릭도 없다. 심사기가 답을 못 주면 통과시킨다(아래 참고).
         reviewPhoto(challengeId, request.mediaKey());
 
-        // ⑤ 저장·스트릭 갱신. 여기서부터가 트랜잭션이다.
-        return challengeVerificationCommandService.save(memberId, challengeId, request);
+        // ⑤ 승격. 여기까지 온 사진만 공개 prefix 로 옮긴다 — 업로드는 비공개 대기 prefix 로 받았다.
+        //    이 단계가 있어야 AI 심사가 "공개 전에 거르는" 장치가 된다. 예전에는 업로드 순간부터
+        //    공개 주소가 살아 있어서, 반려해도 그 사이 열람하거나 공유한 것은 회수되지 않았다.
+        //
+        //    S3 호출이라 ②와 같은 트랜잭션 밖 구간이다. 실패하면 대기본이 남고 사용자는 저장
+        //    실패를 받는다 — 사진이 사라진 채 인증만 저장되는 방향으로는 실패하지 않는다.
+        String publicKey = mediaService.promote(request.mediaKey(), MediaPurpose.CHALLENGE_VERIFICATION);
+
+        // ⑥ 저장·스트릭 갱신. 여기서부터가 트랜잭션이다.
+        //    저장하는 것은 요청의 key 가 아니라 승격된 공개 key 다.
+        return challengeVerificationCommandService.save(memberId, challengeId, request, publicKey);
     }
 
     /**
@@ -191,9 +200,9 @@ public class ChallengeCommandService {
             log.info("AI 심사에서 반려했습니다. challengeId={}, mediaKey={}, 종류={}, 사유={}",
                     challengeId, mediaKey, review.rejection(), review.reason());
 
-            // 반려된 사진은 저장하지 않으므로 DB 가 이 key 를 참조하지 않는다. 그대로 두면
-            // 미참조 정리가 며칠 뒤에 가져가는데, 그동안 공개 prefix 라 key 를 아는 사람은
-            // 계속 볼 수 있다. 유해로 반려된 것일 수 있으므로 그 자리에서 치운다.
+            // 반려된 사진은 승격 전이라 대기 prefix 에 있다. 공개된 적이 없으므로 급히 지울
+            // 이유는 사라졌지만(수명 주기가 어차피 가져간다), 유해로 반려된 것을 며칠 두는 것보다
+            // 그 자리에서 치우는 편이 낫다. 실패해도 넘어간다.
             mediaService.deleteQuietly(mediaKey);
 
             throw new VerificationException(review.rejection() == ReviewRejection.UNSAFE

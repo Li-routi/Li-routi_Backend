@@ -16,6 +16,7 @@ import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.enums.Role;
 import com.lirouti.domain.member.enums.SocialProvider;
 import com.lirouti.global.util.TimeUtil;
+import com.lirouti.domain.media.enums.MediaPurpose;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.DisplayName;
@@ -37,8 +38,15 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @DisplayName("ChallengeCommandService 인증 테스트")
 class ChallengeVerificationCommandServiceTest {
 
-    private static final String KEY_1 = "challenge-verifications/11111111-1111-4111-8111-111111111111.jpg";
-    private static final String KEY_2 = "challenge-verifications/22222222-2222-4222-8222-222222222222.png";
+    private static final String KEY_1 = "challenge-verifications-staging/11111111-1111-4111-8111-111111111111.jpg";
+    private static final String KEY_2 = "challenge-verifications-staging/22222222-2222-4222-8222-222222222222.png";
+
+    /**
+     * 업로드는 대기 prefix 로 받지만 <b>저장되고 응답에 실리는 것은 승격된 공개 key</b> 다.
+     * 심사를 통과한 사진만 공개 prefix 로 옮겨지므로 둘은 같을 수 없다.
+     */
+    private static final String KEY_2_PUBLIC =
+            MediaPurpose.CHALLENGE_VERIFICATION.toPublicKey(KEY_2);
 
     @Autowired
     private ChallengeCommandService challengeCommandService;
@@ -158,12 +166,15 @@ class ChallengeVerificationCommandServiceTest {
 
         assertThat(second.reverified()).isTrue();
         assertThat(second.content()).isEqualTo("바꿈");
-        assertThat(second.imageUrl()).endsWith(KEY_2);
+        assertThat(second.imageUrl())
+                .as("응답의 주소는 승격된 공개 key 여야 한다")
+                .endsWith(KEY_2_PUBLIC)
+                .doesNotContain("-staging/");
 
         // 하루에 한 행이라는 사실이 유지되어야 한다.
         List<ChallengeVerification> rows = verificationsOf(mc);
         assertThat(rows).hasSize(1);
-        assertThat(rows.get(0).getImageUrl()).isEqualTo(KEY_2);
+        assertThat(rows.get(0).getImageUrl()).isEqualTo(KEY_2_PUBLIC);
     }
 
     @Test
