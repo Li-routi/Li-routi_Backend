@@ -1,5 +1,6 @@
 package com.lirouti.domain.group.repository;
 
+import com.lirouti.domain.group.dto.projection.DailyScheduleAndCompletion;
 import com.lirouti.domain.group.entity.GroupRoutineAssignment;
 import com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus;
 import jakarta.persistence.LockModeType;
@@ -270,5 +271,29 @@ public interface GroupRoutineAssignmentRepository
             @Param("currentTime") LocalTime currentTime,
             @Param("pendingStatus") GroupRoutineAssignmentStatus pendingStatus,
             @Param("inProgressStatus") GroupRoutineAssignmentStatus inProgressStatus
+    );
+
+    /**
+     * 리포트 집계용. 기간 내 회원의 그룹 루틴 할당을 날짜별로 묶어 예정 건수(총 할당 수)와
+     * 완료 건수를 함께 가져온다. 그룹 루틴은 할당이 날짜마다 실제로 남아 있어, 개인 루틴처럼
+     * "현재 활성 상태로 근사"할 필요 없이 그 날짜의 실제 값을 그대로 쓸 수 있다.
+     * 날짜가 없는 날은 결과에 아예 나오지 않는다.
+     */
+    @Query("""
+            select new com.lirouti.domain.group.dto.projection.DailyScheduleAndCompletion(
+                a.assignedDate,
+                count(a),
+                sum(case when a.status = com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus.COMPLETED
+                         then 1L else 0L end)
+            )
+            from GroupRoutineAssignment a
+            where a.member.id = :memberId
+              and a.assignedDate between :start and :end
+            group by a.assignedDate
+            """)
+    List<DailyScheduleAndCompletion> findDailyScheduleAndCompletion(
+            @Param("memberId") Long memberId,
+            @Param("start") LocalDate start,
+            @Param("end") LocalDate end
     );
 }

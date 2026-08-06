@@ -25,6 +25,11 @@ public enum VerificationSuccessCode implements BaseSuccessCode {
             HttpStatus.OK,
             "그룹 루틴 인증 목록 조회에 성공했습니다.",
             "VERIFICATION200_3"
+    ),
+    MY_VERIFICATION_DAILY_FETCH_SUCCESS(
+            HttpStatus.OK,
+            "내 인증 목록 조회에 성공했습니다.",
+                    "VERIFICATION200_4"
     );
 
     private final HttpStatus httpStatus;

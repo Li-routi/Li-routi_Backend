@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 public interface MemberChallengeRepository
@@ -35,4 +36,21 @@ public interface MemberChallengeRepository
               and mc.challenge.id = :challengeId
             """)
     Optional<MemberChallenge> findByMemberIdAndChallengeIdForUpdate(Long memberId, Long challengeId);
+
+    /**
+     * 리포트 집계용. 대상 월 말 기준으로 참여 중인 챌린지 수를 센다.
+     *
+     * <p>챌린지엔 "완료" 개념이 없어(reward만 있고 종료 조건이 없음) 참여 중인 개수를 대신
+     * 보여주기로 했다. 다만 탈퇴 이력을 시점별로 남기지 않아(active만 있고 탈퇴 시각이 없음)
+     * 과거 달을 조회해도 "지금 활성 상태 + 그 달 말 이전에 참여"로 근사한다 — 개인 루틴의
+     * "예정 수" 근사와 같은 한계다.
+     *
+     * @param memberId 조회할 회원 ID
+     * @param monthEndExclusive 대상 월의 다음 달 1일 0시(이 시각 이전 참여만 포함)
+     * @return 참여 중인 챌린지 수
+     */
+    long countByMemberIdAndActiveTrueAndJoinedAtBefore(
+            Long memberId,
+            LocalDateTime monthEndExclusive
+    );
 }

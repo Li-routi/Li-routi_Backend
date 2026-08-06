@@ -25,6 +25,9 @@ public class MemberProfileMediaReferenceSource implements MediaReferenceSource {
     @Override
     @Transactional(readOnly = true)
     public Set<String> findReferencedKeys(Collection<String> candidateKeys) {
+        if(candidateKeys.isEmpty()) {
+            return Set.of();
+        }
         return new HashSet<>(memberRepository.findProfileImageKeysIn(candidateKeys));
     }
 }
