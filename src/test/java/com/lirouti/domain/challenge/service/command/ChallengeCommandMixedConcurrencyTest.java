@@ -74,7 +74,7 @@ class ChallengeCommandMixedConcurrencyTest {
     void setUp() {
         doNothing().when(mediaService).validateMediaKey(any(), any());
         doNothing().when(mediaService).validateUploadedBytes(any(), any());
-        when(mediaService.promote(any(), any())).thenAnswer(i -> i.getArgument(0));
+        when(mediaService.promote(any(), any(), any())).thenAnswer(i -> i.getArgument(0));
         when(mediaService.resolvePublicUrl(any())).thenReturn("https://cdn.example.com/x.jpg");
         // email·social_id에 유니크 제약이 있다. @Transactional 없이 실제 커밋하므로,
         // 앞선 실행이 비정상 종료해 정리가 안 됐으면 고정값은 setUp 자체를 깨뜨린다.

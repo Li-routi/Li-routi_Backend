@@ -534,8 +534,8 @@ class MediaServiceTest {
     @Test
     @DisplayName("두 형태 모두 같은 규칙으로 공개 URL이 조립된다")
     void resolvePublicUrl_BothKeyShapes() {
-        String dated = "challenge-verifications-staging/2026/07/30/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg";
-        String legacy = "challenge-verifications-staging/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg";
+        String dated = "challenge-verifications/2026/07/30/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg";
+        String legacy = "challenge-verifications/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg";
 
         assertThat(mediaService.resolvePublicUrl(dated)).isEqualTo(PUBLIC_BASE_URL + "/" + dated);
         assertThat(mediaService.resolvePublicUrl(legacy)).isEqualTo(PUBLIC_BASE_URL + "/" + legacy);
@@ -560,7 +560,8 @@ class MediaServiceTest {
     @DisplayName("공개 용도는 서명하지 않고 공개 주소를 그대로 준다")
     void resolveViewUrl_PublicPurpose_ReturnsPublicUrlWithoutSigning() {
         // given
-        String key = "challenge-verifications-staging/2026/07/30/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg";
+        // 공개 URL 조립은 승격된 공개 key 를 받는다. 대기 key 는 여기까지 오지 않는다.
+        String key = "challenge-verifications/2026/07/30/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg";
 
         // when
         String url = mediaService.resolveViewUrl(key, MediaPurpose.CHALLENGE_VERIFICATION);

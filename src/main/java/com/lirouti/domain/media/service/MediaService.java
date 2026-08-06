@@ -40,6 +40,8 @@ import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.CopyObjectRequest;
+import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
+import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.model.*;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
@@ -72,6 +74,9 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class MediaService {
+    /** 조건부 복사에서 조건이 안 맞을 때 S3 가 주는 상태 코드. */
+    private static final int PRECONDITION_FAILED = 412;
+
     private final S3Presigner s3Presigner;
     // 업로드된 바이트를 실제로 읽어 검증하기 위한 클라이언트(#22). presigner와 달리 S3를 호출한다.
     private final S3Client s3Client;
@@ -262,6 +267,7 @@ public class MediaService {
     public Optional<MediaImage> loadForReview(String mediaKey, int maxDimension) {
         byte[] original;
         String mimeType;
+        String etag;
         try {
             GetObjectRequest request = GetObjectRequest.builder()
                     .bucket(s3Properties.getBucket())
@@ -277,13 +283,15 @@ public class MediaService {
                 }
                 original = response.readAllBytes();
                 mimeType = resolveTypeByExtension(mediaKey).getMimeType();
+                // 심사한 바이트를 특정해 둔다. 승격은 이 값과 같을 때만 복사한다.
+                etag = response.response().eTag();
             }
         } catch (SdkException | IOException e) {
             log.warn("심사용 이미지를 읽지 못했습니다. mediaKey={}", mediaKey, e);
             return Optional.empty();
         }
 
-        return Optional.of(downscale(original, mimeType, maxDimension, mediaKey));
+        return Optional.of(downscale(original, mimeType, maxDimension, mediaKey, etag));
     }
 
     /**
@@ -292,12 +300,13 @@ public class MediaService {
      * 실패하면 원본을 그대로 돌려준다. 줄이기는 최적화이지 검증이 아니라서, 여기서 막으면
      * 디코딩 못 하는 형식 하나 때문에 심사가 통째로 사라진다.
      */
-    private MediaImage downscale(byte[] original, String mimeType, int maxDimension, String mediaKey) {
+    private MediaImage downscale(
+            byte[] original, String mimeType, int maxDimension, String mediaKey, String etag) {
         try (ImageInputStream input = ImageIO.createImageInputStream(new ByteArrayInputStream(original))) {
             Iterator<ImageReader> readers = ImageIO.getImageReaders(input);
             if (!readers.hasNext()) {
                 // ImageIO 가 읽지 못하는 형식(WEBP 등). 심사 쪽이 받아주므로 원본을 보낸다.
-                return new MediaImage(original, mimeType);
+                return new MediaImage(original, mimeType, etag);
             }
             ImageReader reader = readers.next();
             try {
@@ -307,18 +316,18 @@ public class MediaService {
                 int sourceHeight = reader.getHeight(0);
                 int longEdge = Math.max(sourceWidth, sourceHeight);
                 if (longEdge <= maxDimension) {
-                    return new MediaImage(original, mimeType);
+                    return new MediaImage(original, mimeType, etag);
                 }
 
                 BufferedImage source = readSubsampled(reader, longEdge, maxDimension);
                 return new MediaImage(toJpeg(source, sourceWidth, sourceHeight, maxDimension),
-                        MediaContentType.JPEG.getMimeType());
+                        MediaContentType.JPEG.getMimeType(), etag);
             } finally {
                 reader.dispose();
             }
         } catch (IOException | RuntimeException e) {
             log.warn("심사용 이미지를 줄이지 못해 원본을 그대로 보냅니다. mediaKey={}", mediaKey, e);
-            return new MediaImage(original, mimeType);
+            return new MediaImage(original, mimeType, etag);
         }
     }
 
@@ -397,25 +406,63 @@ public class MediaService {
      *
      * @return 저장하고 내려줄 공개 key. 대기 prefix 가 없는 용도면 받은 key 를 그대로 돌려준다.
      */
-    public String promote(String uploadKey, MediaPurpose purpose) {
+    public String promote(String uploadKey, MediaPurpose purpose, String reviewedETag) {
         if (!purpose.hasStaging()) {
             return uploadKey;
         }
         String publicKey = purpose.toPublicKey(uploadKey);
+
+        // 심사한 바이트가 아니면 복사하지 않는다. presigned URL 은 만료 전까지 여러 번 쓸 수 있어,
+        // 심사와 승격 사이에 같은 key 로 다른 사진을 올리면 심사하지 않은 바이트가 공개된다.
+        // copySourceIfMatch 는 그 검사를 S3 가 원자적으로 하게 만든다 — 우리가 읽어서 비교하면
+        // 비교와 복사 사이에 또 바뀔 수 있어 같은 문제가 남는다.
+        String expected = reviewedETag != null ? reviewedETag : currentETag(uploadKey);
+
         try {
-            s3Client.copyObject(CopyObjectRequest.builder()
+            CopyObjectRequest.Builder copy = CopyObjectRequest.builder()
                     .sourceBucket(s3Properties.getBucket())
                     .sourceKey(uploadKey)
                     .destinationBucket(s3Properties.getBucket())
-                    .destinationKey(publicKey)
-                    .build());
+                    .destinationKey(publicKey);
+            if (expected != null) {
+                copy.copySourceIfMatch(expected);
+            }
+            s3Client.copyObject(copy.build());
+        } catch (S3Exception e) {
+            // 412 는 그 사이 바이트가 바뀌었다는 뜻이다. 장애가 아니라 거절이므로 구분해 남긴다.
+            if (e.statusCode() == PRECONDITION_FAILED) {
+                log.warn("심사한 사진과 다른 바이트여서 공개하지 않았습니다. uploadKey={}", uploadKey);
+                throw new MediaException(MediaErrorCode.MEDIA_CHANGED_AFTER_REVIEW);
+            }
+            log.error("심사를 통과한 사진을 공개 prefix 로 옮기지 못했습니다. uploadKey={}", uploadKey, e);
+            throw new MediaException(MediaErrorCode.MEDIA_PROMOTION_FAILED);
         } catch (SdkException e) {
             log.error("심사를 통과한 사진을 공개 prefix 로 옮기지 못했습니다. uploadKey={}", uploadKey, e);
             throw new MediaException(MediaErrorCode.MEDIA_PROMOTION_FAILED);
         }
+
         deleteQuietly(uploadKey);
         log.info("심사를 통과한 사진을 공개했습니다. publicKey={}", publicKey);
         return publicKey;
+    }
+
+    /**
+     * 심사를 못 한 경우(설정 꺼짐·읽기 실패)에 쓸 현재 ETag.
+     *
+     * <p><b>심사한 바이트를 특정하지는 못한다.</b> 이 조회와 복사 사이의 교체만 막는다.
+     * 그 앞 구간을 막으려면 심사가 실제로 돌아야 하는데, 심사를 못 한 상황이라 그럴 수가 없다.
+     * 아무 조건 없이 복사하는 것보다는 좁다.
+     */
+    private String currentETag(String uploadKey) {
+        try {
+            return s3Client.headObject(HeadObjectRequest.builder()
+                    .bucket(s3Properties.getBucket())
+                    .key(uploadKey)
+                    .build()).eTag();
+        } catch (SdkException e) {
+            log.warn("승격 전 ETag 를 읽지 못해 조건 없이 복사합니다. uploadKey={}", uploadKey, e);
+            return null;
+        }
     }
 
     public void deleteQuietly(String mediaKey) {

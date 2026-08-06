@@ -8,6 +8,7 @@ import org.springframework.context.annotation.Profile;
 import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 
 /**
  * 테스트에서 S3 를 실제로 부르지 않게 막는다.
@@ -51,6 +52,8 @@ public class TestS3Config {
         // 예외를 던진다. 이 프로젝트의 읽기 경로는 그 예외를 잡아 "심사 건너뜀"으로 처리하므로,
         // 예외를 던지게 해야 테스트가 운영과 같은 갈래를 탄다.
         Mockito.when(mock.getObject(Mockito.any(GetObjectRequest.class)))
+                .thenThrow(SdkClientException.create("테스트에서는 S3 를 읽지 않습니다."));
+        Mockito.when(mock.headObject(Mockito.any(HeadObjectRequest.class)))
                 .thenThrow(SdkClientException.create("테스트에서는 S3 를 읽지 않습니다."));
 
         // 쓰기(복사·삭제)는 성공으로 둔다. 반환값을 쓰지 않으므로 기본값이면 충분하다.

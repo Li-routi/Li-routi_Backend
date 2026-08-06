@@ -88,7 +88,7 @@ class RejoinDailyOnceTest {
         doNothing().when(mediaService).validateMediaKey(any(), any());
         doNothing().when(mediaService).validateUploadedBytes(any(), any());
         // 승격은 S3 복사라 목으로 둔다. 이 테스트가 보는 것은 심사 결과이지 승격이 아니다.
-        when(mediaService.promote(any(), any())).thenAnswer(i -> i.getArgument(0));
+        when(mediaService.promote(any(), any(), any())).thenAnswer(i -> i.getArgument(0));
         when(mediaService.resolvePublicUrl(any())).thenReturn("https://cdn.example.com/" + KEY);
         when(reviewClient.review(any(), any(), any())).thenReturn(VerificationReview.pass());
     }

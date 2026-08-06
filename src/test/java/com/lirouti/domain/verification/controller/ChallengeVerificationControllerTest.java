@@ -42,7 +42,12 @@ class ChallengeVerificationControllerTest {
     private static final String VALID_KEY =
             "challenge-verifications-staging/cccccccc-cccc-4ccc-8ccc-cccccccccccc.jpg";
 
-    /** 저장·응답에 실리는 것은 승격된 공개 key 다. 업로드로 보낸 대기 key 가 아니다. */
+    /**
+     * 저장·응답에 실리는 것은 승격된 공개 key 다. 업로드로 보낸 대기 key 가 아니다.
+     *
+     * <p>이미 저장된 인증을 만드는 fixture 도 이 값을 쓴다. 대기 key 를 넣어 두면 "대기 경로가
+     * DB 에 남는 것"을 정상으로 굳혀, 그런 회귀가 생겨도 테스트가 잡지 못한다.
+     */
     private static final String PUBLIC_KEY =
             MediaPurpose.CHALLENGE_VERIFICATION.toPublicKey(VALID_KEY);
 
@@ -76,7 +81,7 @@ class ChallengeVerificationControllerTest {
                 .memberChallenge(mc).participationRound(1)
                 .verifiedDate(LocalDate.now(ZoneId.of("Asia/Seoul")))
                 .verifiedAt(LocalDateTime.now())
-                .imageUrl(VALID_KEY).content("신고 대상")
+                .imageUrl(PUBLIC_KEY).content("신고 대상")
                 .build();
         em.persist(v);
         return v;

@@ -49,6 +49,13 @@ public enum MediaErrorCode implements BaseErrorCode {
             "MEDIA500_1"
     ),
     // S3 조회 자체가 실패한 경우(권한·네트워크·타임아웃). 사용자 잘못이 아니므로 5xx.
+    // 심사한 뒤 승격 전에 같은 key 로 다른 사진이 올라온 경우. presigned URL 은 만료 전까지
+    // 여러 번 쓸 수 있어서 생긴다. 심사하지 않은 바이트를 공개하지 않으려고 거절한다.
+    MEDIA_CHANGED_AFTER_REVIEW(
+            HttpStatus.CONFLICT,
+            "심사한 사진과 다릅니다. 다시 업로드해 주세요.",
+            "MEDIA409_1"
+    ),
     // 심사를 통과한 사진을 공개 prefix 로 옮기지 못한 경우. 대기본은 그대로 남아 수명 주기가
     // 가져가므로 사진이 사라지지는 않는다. 사용자에게는 저장 실패로 보이고 다시 시도하면 된다.
     MEDIA_PROMOTION_FAILED(

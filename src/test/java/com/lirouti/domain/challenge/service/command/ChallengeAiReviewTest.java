@@ -80,7 +80,7 @@ class ChallengeAiReviewTest {
     @BeforeEach
     void setUp() {
         // 승격은 S3 복사라 목으로 둔다. 이 테스트가 보는 것은 심사 결과이지 승격이 아니다.
-        when(mediaService.promote(any(), any())).thenAnswer(i -> i.getArgument(0));
+        when(mediaService.promote(any(), any(), any())).thenAnswer(i -> i.getArgument(0));
         int n = seq.incrementAndGet();
         Member m = Member.builder()
                 .email("ai" + n + "@ex.com").nickname("ai" + n)
@@ -102,7 +102,7 @@ class ChallengeAiReviewTest {
 
         // 심사 앞단(형식·바이트 검증)은 이 테스트의 관심사가 아니라 통과시킨다.
         when(mediaService.loadForReview(eq(KEY), org.mockito.ArgumentMatchers.anyInt()))
-                .thenReturn(Optional.of(new MediaImage(new byte[] {1, 2, 3}, "image/jpeg")));
+                .thenReturn(Optional.of(new MediaImage(new byte[] {1, 2, 3}, "image/jpeg", "etag-test")));
     }
 
     private ChallengeVerificationReqDTO.Verify request() {

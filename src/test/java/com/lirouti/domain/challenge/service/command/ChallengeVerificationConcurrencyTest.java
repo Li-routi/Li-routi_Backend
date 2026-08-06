@@ -73,7 +73,7 @@ class ChallengeVerificationConcurrencyTest {
     void setUp() {
         doNothing().when(mediaService).validateMediaKey(any(), any());
         doNothing().when(mediaService).validateUploadedBytes(any(), any());
-        when(mediaService.promote(any(), any())).thenAnswer(i -> i.getArgument(0));
+        when(mediaService.promote(any(), any(), any())).thenAnswer(i -> i.getArgument(0));
         when(mediaService.resolvePublicUrl(any())).thenReturn("https://cdn.example.com/x.jpg");
         Member m = memberRepository.save(Member.builder()
                 .email("vconc@ex.com").nickname("vconc")
