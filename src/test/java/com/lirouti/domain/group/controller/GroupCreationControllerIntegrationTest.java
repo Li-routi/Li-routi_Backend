@@ -23,7 +23,6 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -83,6 +82,12 @@ class GroupCreationControllerIntegrationTest {
             new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
                 assertThat(count("select count(g) from Group g where g.name = :value", groupName))
                         .isEqualTo(1);
+                Group createdGroup = entityManager.createQuery(
+                                "select g from Group g where g.name = :name", Group.class
+                        ).setParameter("name", groupName)
+                        .getSingleResult();
+                assertThat(createdGroup.getInviteCode()).isNotBlank();
+                assertThat(createdGroup.isLocked()).isFalse();
                 assertThat(count(
                         "select count(gm) from GroupMember gm where gm.member.id = :value",
                         memberId
@@ -169,7 +174,6 @@ class GroupCreationControllerIntegrationTest {
                 Group group = groupRepository.saveAndFlush(Group.builder()
                         .name("기존모임" + index)
                         .inviteCode("T" + suffix.substring(0, 4) + index + "X")
-                        .inviteCodeExpiresAt(LocalDateTime.of(2026, 8, 1, 10, 10))
                         .build());
                 groupMemberRepository.saveAndFlush(GroupMember.builder()
                         .member(member)

@@ -5,7 +5,6 @@ import com.lirouti.domain.group.dto.response.GroupResDTO;
 import com.lirouti.domain.group.exception.GroupException;
 import com.lirouti.domain.group.exception.code.error.GroupErrorCode;
 import com.lirouti.domain.group.service.command.GroupCommandService;
-import com.lirouti.domain.group.service.command.GroupInviteCodeCommandService;
 import com.lirouti.domain.group.service.query.GroupInviteCodeQueryService;
 import com.lirouti.domain.group.service.query.GroupQueryService;
 import com.lirouti.domain.member.enums.Role;
@@ -54,8 +53,6 @@ class GroupCreationControllerWebTest {
     private GroupCommandService groupCommandService;
     @MockitoBean
     private GroupQueryService groupQueryService;
-    @MockitoBean
-    private GroupInviteCodeCommandService groupInviteCodeCommandService;
     @MockitoBean
     private GroupInviteCodeQueryService groupInviteCodeQueryService;
     @MockitoBean
