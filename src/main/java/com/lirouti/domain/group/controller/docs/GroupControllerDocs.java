@@ -13,6 +13,28 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 public interface GroupControllerDocs {
 
     @Operation(
+            summary = "그룹방 상세 조회",
+            description = """
+                    ACTIVE 그룹 구성원만 그룹명, 초대코드와 ACTIVE 구성원별 활동 현황을 조회할 수 있습니다.
+                    금일 진행도는 완료한 그룹 루틴 할당 수와 전체 할당 수이며, 할당이 없는 구성원은 0/0입니다.
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200", description = "그룹방 상세 조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401", description = "유효하지 않거나 만료된 인증 토큰"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "403", description = "비활성 그룹 또는 ACTIVE 구성원이 아님"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404", description = "회원 또는 그룹을 찾을 수 없음")
+    })
+    ApiResponse<GroupResDTO.Detail> getGroupDetail(
+            @Parameter(hidden = true) CustomUserDetails userDetails,
+            @Parameter(description = "그룹 ID", example = "1") Long groupId
+    );
+
+    @Operation(
             summary = "그룹 루틴 카테고리 목록 조회",
             description = """
                     ACTIVE 그룹 구성원만 조회할 수 있습니다.

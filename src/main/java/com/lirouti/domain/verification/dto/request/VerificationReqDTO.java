@@ -2,6 +2,7 @@ package com.lirouti.domain.verification.dto.request;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 public class VerificationReqDTO {
@@ -19,6 +20,13 @@ public class VerificationReqDTO {
             @Schema(description = "인증 코멘트. 선택", example = "오늘도 완료")
             @Size(max = 255, message = "인증 코멘트는 255자를 넘을 수 없습니다.")
             String content
+    ) {
+    }
+
+    @Schema(name = "GroupRoutineVerificationReadRequest", description = "그룹 루틴 인증 읽음 처리 요청")
+    public record MarkRead(
+            @NotNull(message = "마지막으로 확인한 인증 ID는 필수입니다.")
+            Long lastReadVerificationId
     ) {
     }
 }

@@ -1,5 +1,7 @@
 package com.lirouti.domain.verification.service.query;
 
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -10,6 +12,7 @@ import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.lirouti.domain.group.entity.GroupMember;
 import com.lirouti.domain.group.exception.GroupException;
 import com.lirouti.domain.group.exception.code.error.GroupErrorCode;
 import com.lirouti.domain.group.repository.GroupRoutineRepository;
@@ -21,6 +24,9 @@ import com.lirouti.domain.verification.dto.response.VerificationResDTO;
 import com.lirouti.domain.verification.entity.GroupRoutineVerification;
 import com.lirouti.domain.verification.repository.GroupRoutineVerificationRepository;
 import com.lirouti.domain.verification.repository.GroupRoutineVerificationLikeRepository;
+import com.lirouti.domain.verification.repository.GroupRoutineVerificationReadRepository;
+import com.lirouti.domain.verification.repository.GroupUnreadVerificationQueryRepository;
+import com.lirouti.domain.verification.repository.GroupUnreadVerificationQueryRepository.UnreadVerificationProjection;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -43,12 +49,15 @@ public class RoutineVerificationQueryService {
 
     private static final int DEFAULT_SIZE = 20;
     private static final int MAX_SIZE = 50;
+    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
     private final MediaService mediaService;
     private final GroupValidationService groupValidationService;
     private final GroupRoutineRepository groupRoutineRepository;
     private final GroupRoutineVerificationRepository groupRoutineVerificationRepository;
     private final GroupRoutineVerificationLikeRepository groupRoutineVerificationLikeRepository;
+    private final GroupRoutineVerificationReadRepository groupRoutineVerificationReadRepository;
+    private final GroupUnreadVerificationQueryRepository groupUnreadVerificationQueryRepository;
 
     /**
      * 그룹 루틴 인증 목록. 그 방 멤버 전원의 인증이 최신순으로 함께 나온다.
@@ -93,6 +102,46 @@ public class RoutineVerificationQueryService {
         return VerificationConverter.toGroupRoutineFeed(
                 page.rows(), imageUrls, likeCounts, likedVerificationIds,
                 page.nextCursor(), page.hasNext());
+    }
+
+    /** 현재 가입 회차의 가입일 KST 00:00부터 아직 읽지 않은 타인 인증을 오래된 순으로 조회한다. */
+    @Transactional(readOnly = true)
+    public VerificationResDTO.UnreadGroupRoutineVerificationList getUnreadGroupRoutineVerifications(
+            Long memberId,
+            Long groupId,
+            Long cursor,
+            Integer size
+    ) {
+        GroupMember membership = groupValidationService.validateActiveGroupMember(groupId, memberId);
+        Long lastReadVerificationId = groupRoutineVerificationReadRepository
+                .findLastReadVerificationIdByGroupIdAndMemberId(groupId, memberId)
+                .orElse(null);
+        int appliedSize = clampSize(size);
+        List<UnreadVerificationProjection> rows = groupUnreadVerificationQueryRepository.findUnreadByCursor(
+                groupId,
+                memberId,
+                membershipStartOfDay(membership),
+                lastReadVerificationId,
+                cursor,
+                Limit.of(appliedSize + 1)
+        );
+        CursorPage<UnreadVerificationProjection> page = sliceByCursor(
+                rows, appliedSize, UnreadVerificationProjection::verificationId);
+        return VerificationResDTO.UnreadGroupRoutineVerificationList.builder()
+                .verifications(page.rows().stream().map(row ->
+                        new VerificationResDTO.UnreadGroupRoutineVerification(
+                                row.verificationId(), row.authorMemberId(), row.authorName(),
+                                row.routineName(), mediaService.resolveViewUrl(
+                                        row.imageKey(), MediaPurpose.GROUP_ROUTINE_VERIFICATION),
+                                row.content(), row.verifiedAt()))
+                .toList())
+                .nextCursor(page.nextCursor())
+                .hasNext(page.hasNext())
+                .build();
+    }
+
+    private static LocalDateTime membershipStartOfDay(GroupMember membership) {
+        return membership.getJoinedAt().atZone(KST).toLocalDate().atStartOfDay(KST).toLocalDateTime();
     }
 
     /**

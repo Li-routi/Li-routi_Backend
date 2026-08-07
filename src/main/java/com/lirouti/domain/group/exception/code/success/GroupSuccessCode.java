@@ -84,6 +84,11 @@ public enum GroupSuccessCode implements BaseSuccessCode {
             HttpStatus.CREATED,
             "그룹 참여에 성공했습니다.",
             "GROUP201_5"
+    ),
+    GROUP_DETAIL_FETCH_SUCCESS(
+            HttpStatus.OK,
+            "그룹 상세 조회에 성공했습니다.",
+            "GROUP200_11"
     );
 
     private final HttpStatus httpStatus;

@@ -2,9 +2,12 @@ package com.lirouti.domain.group.service.query;
 
 import com.lirouti.domain.group.dto.response.GroupResDTO;
 import com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus;
+import com.lirouti.domain.group.exception.GroupException;
+import com.lirouti.domain.group.exception.code.error.GroupErrorCode;
 import com.lirouti.domain.group.repository.GroupRoutineAssignmentRepository;
 import com.lirouti.domain.group.repository.GroupRoutineAssignmentRepositoryCustom.TodayAssignmentProjection;
 import com.lirouti.domain.group.repository.GroupRoutineCategoryRepository;
+import com.lirouti.domain.group.repository.GroupDetailQueryRepository;
 import com.lirouti.domain.group.service.GroupValidationService;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.exception.MemberException;
@@ -33,6 +36,8 @@ class GroupQueryServiceTest {
     @Mock
     private GroupRoutineAssignmentRepository assignmentRepository;
     @Mock
+    private GroupDetailQueryRepository groupDetailQueryRepository;
+    @Mock
     private GroupRoutineCategoryRepository categoryRepository;
     @Mock
     private GroupValidationService groupValidationService;
@@ -51,11 +56,63 @@ class GroupQueryServiceTest {
         );
         groupQueryService = new GroupQueryService(
                 assignmentRepository,
+                groupDetailQueryRepository,
                 categoryRepository,
                 groupValidationService,
                 memberQueryService,
                 clock
         );
+    }
+
+    @Test
+    @DisplayName("ACTIVE 구성원의 활동 상태와 오늘 진행도를 그룹 상세 응답으로 조립한다")
+    void getGroupDetail_ActiveMember_ReturnsDetailAndDailyProgress() {
+        // given
+        Long groupId = 301L;
+        when(groupDetailQueryRepository.findActiveMemberDetails(groupId)).thenReturn(List.of(
+                new GroupDetailQueryRepository.GroupMemberDetailProjection(
+                        groupId, "우리 집", "DETAIL1", MEMBER_ID, "리루티",
+                        "profiles/member-1.png", "오늘도 완료", 4, 12L),
+                new GroupDetailQueryRepository.GroupMemberDetailProjection(
+                        groupId, "우리 집", "DETAIL1", 2L, "동료",
+                        null, null, 1, 3L)
+        ));
+        when(groupDetailQueryRepository.findTodayMemberProgress(groupId, TODAY)).thenReturn(List.of(
+                new GroupDetailQueryRepository.TodayMemberProgressProjection(MEMBER_ID, 3L, 2L)
+        ));
+
+        // when
+        GroupResDTO.Detail result = groupQueryService.getGroupDetail(groupId, MEMBER_ID);
+
+        // then
+        verify(groupValidationService).validateActiveGroupMember(groupId, MEMBER_ID);
+        verify(groupDetailQueryRepository).findActiveMemberDetails(groupId);
+        verify(groupDetailQueryRepository).findTodayMemberProgress(groupId, TODAY);
+        assertThat(result.groupId()).isEqualTo(groupId);
+        assertThat(result.groupName()).isEqualTo("우리 집");
+        assertThat(result.inviteCode()).isEqualTo("DETAIL1");
+        assertThat(result.members()).containsExactly(
+                new GroupResDTO.MemberActivity(
+                        MEMBER_ID, "리루티", "profiles/member-1.png", "오늘도 완료",
+                        4, 12L, new GroupResDTO.DailyProgress(2L, 3L)),
+                new GroupResDTO.MemberActivity(
+                        2L, "동료", null, null,
+                        1, 3L, new GroupResDTO.DailyProgress(0L, 0L))
+        );
+    }
+
+    @Test
+    @DisplayName("비구성원은 그룹 상세 집계 조회 전에 거부한다")
+    void getGroupDetail_NonMember_ThrowsAccessDenied() {
+        // given
+        Long groupId = 301L;
+        GroupException exception = new GroupException(GroupErrorCode.GROUP_MEMBER_ACCESS_DENIED);
+        when(groupValidationService.validateActiveGroupMember(groupId, MEMBER_ID)).thenThrow(exception);
+
+        // when & then
+        assertThatThrownBy(() -> groupQueryService.getGroupDetail(groupId, MEMBER_ID))
+                .isSameAs(exception);
+        verifyNoInteractions(groupDetailQueryRepository);
     }
 
     @Test

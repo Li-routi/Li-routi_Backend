@@ -13,6 +13,7 @@ import com.lirouti.domain.group.repository.GroupRepository;
 import com.lirouti.domain.group.repository.GroupRoutineRepository;
 import com.lirouti.domain.group.repository.GroupRoutineCategoryRepository;
 import com.lirouti.domain.group.service.GroupValidationService;
+import com.lirouti.domain.verification.repository.GroupRoutineVerificationReadRepository;
 import com.lirouti.global.websocket.WebSocketSessionRegistry;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -52,6 +53,8 @@ class GroupCommandServiceTest {
     @Mock
     private GroupRoutineAssignmentCommandService assignmentCommandService;
     @Mock
+    private GroupRoutineVerificationReadRepository groupRoutineVerificationReadRepository;
+    @Mock
     private Group group;
     @Mock
     private GroupRoutineCategory category;
@@ -80,6 +83,7 @@ class GroupCommandServiceTest {
         // then
         verify(groupRepository).findByIdForUpdate(GROUP_ID);
         verify(groupValidationService).validateGroupOwner(group, OWNER_ID);
+        verify(groupRoutineVerificationReadRepository).deleteAllByGroupId(GROUP_ID);
         verify(groupRepository).delete(group);
     }
 
