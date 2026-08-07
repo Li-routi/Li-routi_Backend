@@ -38,7 +38,8 @@ public class GroupJoinCommandService {
             throw new IllegalArgumentException("유효하지 않은 그룹 가입 요청입니다.");
         }
 
-        Long groupId = groupRepository.findByInviteCode(request.inviteCode())
+        // 일반 조회가 REPEATABLE READ 스냅샷을 먼저 만들지 않도록 초대코드 조회부터 그룹 행을 잠근다.
+        Long groupId = groupRepository.findByInviteCodeForUpdate(request.inviteCode())
                 .map(Group::getId)
                 .orElseThrow(() -> new GroupException(GroupErrorCode.GROUP_NOT_FOUND));
 

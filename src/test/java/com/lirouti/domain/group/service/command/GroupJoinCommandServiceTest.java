@@ -62,7 +62,8 @@ class GroupJoinCommandServiceTest {
                 assignmentCommandService,
                 clock
         );
-        lenient().when(groupRepository.findByInviteCode(INVITE_CODE)).thenReturn(Optional.of(lookupGroup));
+        lenient().when(groupRepository.findByInviteCodeForUpdate(INVITE_CODE))
+                .thenReturn(Optional.of(lookupGroup));
         lenient().when(lookupGroup.getId()).thenReturn(GROUP_ID);
         lenient().when(groupValidationService.lockActiveGroupAndMemberForJoin(GROUP_ID, MEMBER_ID))
                 .thenReturn(new GroupValidationService.JoinLimitContext(lockedGroup, lockedMember));
