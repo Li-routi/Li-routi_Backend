@@ -25,8 +25,11 @@ public interface GroupMemberRepository extends JpaRepository<GroupMember, Long> 
     @Query("""
             select groupMember.id
             from GroupMember groupMember
+            join groupMember.member member
             where groupMember.group.id = :groupId
               and groupMember.status = :status
+              and member.isActive = true
+              and member.deletedAt is null
             order by groupMember.joinedAt asc, groupMember.id asc
             """)
     List<Long> findIdsByGroupIdAndStatusOrderByJoinedAtAscIdAsc(

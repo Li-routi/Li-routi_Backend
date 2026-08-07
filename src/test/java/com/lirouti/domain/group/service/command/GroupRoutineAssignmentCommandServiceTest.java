@@ -184,10 +184,9 @@ class GroupRoutineAssignmentCommandServiceTest {
         givenInsertedAssignment();
 
         // when
-        int result = assignmentCommandService.assignTodayRoutinesToMember(10L, 1L, now);
+        assignmentCommandService.assignTodayRoutinesToMember(10L, 1L, now);
 
         // then
-        assertThat(result).isEqualTo(1);
         verify(assignmentRepository).insertIfAbsent(
                 100L,
                 1L,
@@ -210,19 +209,23 @@ class GroupRoutineAssignmentCommandServiceTest {
         when(groupRoutine.getId()).thenReturn(100L);
         when(schedule.getStartTime()).thenReturn(LocalTime.of(10, 0));
         when(schedule.getEndTime()).thenReturn(LocalTime.of(11, 0));
+        lenient().when(secondSchedule.getGroupRoutine()).thenReturn(secondRoutine);
+        lenient().when(secondRoutine.getId()).thenReturn(101L);
         when(secondSchedule.getEndTime()).thenReturn(LocalTime.of(9, 0));
         when(groupRoutineRepository.findActiveByIdForUpdate(100L)).thenReturn(Optional.of(groupRoutine));
         givenInsertedAssignment();
 
         // when
-        int result = assignmentCommandService.assignTodayRoutinesToMember(10L, 1L, joinedAt);
+        assignmentCommandService.assignTodayRoutinesToMember(10L, 1L, joinedAt);
 
         // then
-        assertThat(result).isEqualTo(1);
-        verify(assignmentRepository).insertIfAbsent(
+        verify(assignmentRepository, times(1)).insertIfAbsent(
                 100L, 1L, today, LocalTime.of(10, 0), LocalTime.of(11, 0),
                 GroupRoutineAssignmentStatus.PENDING.name());
+        verify(groupRoutineRepository, times(1)).findActiveByIdForUpdate(100L);
         verify(groupRoutineRepository, never()).findActiveByIdForUpdate(101L);
+        verify(assignmentRepository, times(1)).insertIfAbsent(
+                anyLong(), anyLong(), any(), any(), any(), anyString());
     }
 
     @Test

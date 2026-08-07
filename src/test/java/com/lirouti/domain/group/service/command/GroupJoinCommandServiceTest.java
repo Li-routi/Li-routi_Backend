@@ -21,6 +21,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.sql.SQLException;
 import java.time.Clock;
@@ -66,6 +67,7 @@ class GroupJoinCommandServiceTest {
         lenient().when(groupValidationService.lockActiveGroupAndMemberForJoin(GROUP_ID, MEMBER_ID))
                 .thenReturn(new GroupValidationService.JoinLimitContext(lockedGroup, lockedMember));
         lenient().when(lockedGroup.getId()).thenReturn(GROUP_ID);
+        lenient().when(lockedGroup.getName()).thenReturn("아침 루틴 모임");
         lenient().when(lockedGroup.isLocked()).thenReturn(false);
         lenient().when(lockedMember.getId()).thenReturn(MEMBER_ID);
         lenient().when(groupMemberRepository.findByGroupIdAndMemberId(GROUP_ID, MEMBER_ID))
@@ -77,9 +79,6 @@ class GroupJoinCommandServiceTest {
     @Test
     @DisplayName("관계가 없는 회원은 잠긴 그룹·회원 기준으로 가입하고 동일 기준 시각으로 할당을 요청한다")
     void join_NewMember_CreatesMembershipAndAssignments() {
-        when(assignmentCommandService.assignTodayRoutinesToMember(GROUP_ID, MEMBER_ID, JOINED_AT))
-                .thenReturn(2);
-
         GroupResDTO.JoinResult result = groupJoinCommandService.join(
                 MEMBER_ID, new GroupReqDTO.JoinGroup(INVITE_CODE));
 
@@ -91,7 +90,8 @@ class GroupJoinCommandServiceTest {
         assertThat(membershipCaptor.getValue().getJoinedAt()).isEqualTo(JOINED_AT);
         verify(groupValidationService).validateJoinLimits(GROUP_ID, MEMBER_ID);
         verify(assignmentCommandService).assignTodayRoutinesToMember(GROUP_ID, MEMBER_ID, JOINED_AT);
-        assertThat(result).isEqualTo(new GroupResDTO.JoinResult(GROUP_ID, 2));
+        assertThat(result).isEqualTo(new GroupResDTO.JoinResult(
+                GROUP_ID, "아침 루틴 모임", GroupMemberStatus.ACTIVE));
     }
 
     @Test
@@ -101,6 +101,7 @@ class GroupJoinCommandServiceTest {
                 .group(lockedGroup).member(lockedMember).role(GroupMemberRole.MEMBER)
                 .joinedAt(JOINED_AT.minusDays(1)).build();
         leftMembership.leave();
+        ReflectionTestUtils.setField(leftMembership, "id", 500L);
         when(groupMemberRepository.findByGroupIdAndMemberId(GROUP_ID, MEMBER_ID))
                 .thenReturn(Optional.of(leftMembership));
 
@@ -109,6 +110,8 @@ class GroupJoinCommandServiceTest {
         assertThat(leftMembership.getStatus()).isEqualTo(GroupMemberStatus.ACTIVE);
         assertThat(leftMembership.getJoinedAt()).isEqualTo(JOINED_AT);
         assertThat(leftMembership.getLeftAt()).isNull();
+        verify(groupMemberRepository).saveAndFlush(leftMembership);
+        verify(lockedGroup, never()).addMember(any(GroupMember.class));
         verify(assignmentCommandService).assignTodayRoutinesToMember(GROUP_ID, MEMBER_ID, JOINED_AT);
     }
 
@@ -190,8 +193,8 @@ class GroupJoinCommandServiceTest {
         when(groupValidationService.lockActiveGroupAndMemberForJoin(GROUP_ID, MEMBER_ID))
                 .thenReturn(new GroupValidationService.JoinLimitContext(lockedGroup, lockedMember));
         IllegalStateException assignmentFailure = new IllegalStateException("assignment failure");
-        when(assignmentCommandService.assignTodayRoutinesToMember(GROUP_ID, MEMBER_ID, JOINED_AT))
-                .thenThrow(assignmentFailure);
+        doThrow(assignmentFailure).when(assignmentCommandService)
+                .assignTodayRoutinesToMember(GROUP_ID, MEMBER_ID, JOINED_AT);
 
         assertThatThrownBy(() -> groupJoinCommandService.join(
                 MEMBER_ID, new GroupReqDTO.JoinGroup(INVITE_CODE))).isSameAs(assignmentFailure);

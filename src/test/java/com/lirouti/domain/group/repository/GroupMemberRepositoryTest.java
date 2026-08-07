@@ -132,8 +132,8 @@ class GroupMemberRepositoryTest {
     }
 
     @Test
-    @DisplayName("Preview ACTIVE 구성원 ID는 joinedAt, id 순서로 LEFT와 KICKED를 제외해 조회한다")
-    void findIdsByGroupIdAndStatusOrderByJoinedAtAscIdAsc_ReturnsOnlyActiveInStableOrder() {
+    @DisplayName("Preview ACTIVE 구성원 ID는 활성 계정만 joinedAt, id 순서로 조회한다")
+    void findIdsByGroupIdAndStatusOrderByJoinedAtAscIdAsc_ReturnsOnlyActiveAccountsInStableOrder() {
         // given
         Group target = group("P000001");
         LocalDateTime firstJoinedAt = LocalDateTime.of(2026, 8, 1, 9, 0);
@@ -143,8 +143,16 @@ class GroupMemberRepositoryTest {
         GroupMember last = membership(member(), target, GroupMemberRole.MEMBER, secondJoinedAt);
         GroupMember left = membership(member(), target, GroupMemberRole.MEMBER, secondJoinedAt);
         GroupMember kicked = membership(member(), target, GroupMemberRole.MEMBER, secondJoinedAt);
+        Member withdrawn = member();
+        GroupMember withdrawnMembership = membership(
+                withdrawn, target, GroupMemberRole.MEMBER, secondJoinedAt);
         left.leave();
         kicked.kick();
+        withdrawn.withdraw(
+                "withdrawn-preview-member@example.com",
+                "withdrawn-preview-member-social-id",
+                LocalDateTime.of(2026, 8, 1, 11, 0)
+        );
         em.flush();
         em.clear();
 
@@ -154,6 +162,7 @@ class GroupMemberRepositoryTest {
 
         // then
         assertThat(result).containsExactly(first.getId(), sameTimeSecond.getId(), last.getId());
+        assertThat(result).doesNotContain(withdrawnMembership.getId());
     }
 
     private Group group(String inviteCode) {

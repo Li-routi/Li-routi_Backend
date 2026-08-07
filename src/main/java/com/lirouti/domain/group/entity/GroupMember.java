@@ -95,6 +95,9 @@ public class GroupMember extends BaseEntity {
         if (joinedAt == null) {
             throw new IllegalArgumentException("재가입 시각은 필수입니다.");
         }
+        if (status != GroupMemberStatus.LEFT) {
+            throw new IllegalStateException("탈퇴한 관계만 재가입할 수 있습니다.");
+        }
         this.role = GroupMemberRole.MEMBER;
         this.status = GroupMemberStatus.ACTIVE;
         this.joinedAt = joinedAt;

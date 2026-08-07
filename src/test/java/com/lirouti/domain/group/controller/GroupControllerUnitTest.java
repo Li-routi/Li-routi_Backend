@@ -2,6 +2,7 @@ package com.lirouti.domain.group.controller;
 
 import com.lirouti.domain.group.dto.request.GroupReqDTO;
 import com.lirouti.domain.group.dto.response.GroupResDTO;
+import com.lirouti.domain.group.enums.GroupMemberStatus;
 import com.lirouti.domain.group.exception.code.success.GroupSuccessCode;
 import com.lirouti.domain.group.service.command.GroupCommandService;
 import com.lirouti.domain.group.service.command.GroupJoinCommandService;
@@ -217,7 +218,8 @@ class GroupControllerUnitTest {
     void joinGroup_AuthenticatedMember_ReturnsJoinResult() {
         CustomUserDetails principal = new CustomUserDetails(MEMBER_ID, Role.ROLE_USER);
         GroupReqDTO.JoinGroup request = new GroupReqDTO.JoinGroup("AB12CD3");
-        GroupResDTO.JoinResult result = new GroupResDTO.JoinResult(GROUP_ID, 2);
+        GroupResDTO.JoinResult result = new GroupResDTO.JoinResult(
+                GROUP_ID, "아침 모임", GroupMemberStatus.ACTIVE);
         when(groupJoinCommandService.join(MEMBER_ID, request)).thenReturn(result);
 
         ApiResponse<GroupResDTO.JoinResult> response = groupController.joinGroup(principal, request);

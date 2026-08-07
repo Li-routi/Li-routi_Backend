@@ -2,6 +2,7 @@ package com.lirouti.domain.group.dto.response;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.lirouti.domain.group.enums.GroupJoinUnavailableReason;
+import com.lirouti.domain.group.enums.GroupMemberStatus;
 import com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus;
 import com.lirouti.domain.routine.enums.RoutineCategoryColor;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -204,7 +205,8 @@ public final class GroupResDTO {
     @Schema(name = "GroupJoinResult", description = "초대코드 기반 그룹 가입 결과")
     public record JoinResult(
             Long groupId,
-            int assignmentCount
+            String name,
+            GroupMemberStatus memberStatus
     ) {
     }
 

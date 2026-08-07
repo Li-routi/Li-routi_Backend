@@ -62,13 +62,17 @@ public class GroupJoinCommandService {
         GroupMember membership = createOrRejoinMembership(
                 existingMembership, lockedGroup, lockedMember, joinedAt);
 
-        persistMembershipIfNew(membership, lockedGroup);
-        int assignmentCount = assignmentCommandService.assignTodayRoutinesToMember(
+        saveMembership(membership, lockedGroup);
+        assignmentCommandService.assignTodayRoutinesToMember(
                 lockedGroup.getId(), lockedMember.getId(), joinedAt);
 
-        log.info("초대코드 기반 그룹 가입을 완료했습니다. groupId={}, memberId={}, assignmentCount={}",
-                lockedGroup.getId(), lockedMember.getId(), assignmentCount);
-        return new GroupResDTO.JoinResult(lockedGroup.getId(), assignmentCount);
+        log.info("초대코드 기반 그룹 가입을 완료했습니다. groupId={}, memberId={}",
+                lockedGroup.getId(), lockedMember.getId());
+        return new GroupResDTO.JoinResult(
+                lockedGroup.getId(),
+                lockedGroup.getName(),
+                membership.getStatus()
+        );
     }
 
     private void validateJoinableMembership(GroupMember membership) {
@@ -101,17 +105,17 @@ public class GroupJoinCommandService {
         return existingMembership;
     }
 
-    private GroupMember persistMembershipIfNew(
+    private void saveMembership(
             GroupMember membership,
             Group group
     ) {
         if (membership.getId() != null) {
-            return groupMemberRepository.saveAndFlush(membership);
+            groupMemberRepository.saveAndFlush(membership);
+            return;
         }
         try {
             GroupMember saved = groupMemberRepository.saveAndFlush(membership);
             group.addMember(saved);
-            return saved;
         } catch (DataIntegrityViolationException exception) {
             if (GroupConstraintViolationInspector.isUniqueConstraintViolation(
                     exception, GroupDatabaseConstraints.GROUP_MEMBER)) {

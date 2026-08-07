@@ -210,10 +210,9 @@ public class GroupRoutineAssignmentCommandService {
      * @param groupId 잠금 및 가입 검증을 마친 그룹 ID
      * @param memberId 잠금 및 가입 검증을 마친 회원 ID
      * @param joinedAt 가입 Command가 한 번만 확정한 가입 기준 시각
-     * @return 가입 당일 할당 대상 수
      */
     @Transactional(propagation = Propagation.MANDATORY)
-    public int assignTodayRoutinesToMember(
+    public void assignTodayRoutinesToMember(
             Long groupId,
             Long memberId,
             LocalDateTime joinedAt
@@ -233,7 +232,6 @@ public class GroupRoutineAssignmentCommandService {
         log.debug("그룹 가입 회원의 당일 루틴 할당 처리를 완료했습니다. "
                         + "groupId={}, memberId={}, assignedDate={}, assignmentCount={}",
                 groupId, memberId, today, assignmentCount);
-        return assignmentCount;
     }
 
     /**
