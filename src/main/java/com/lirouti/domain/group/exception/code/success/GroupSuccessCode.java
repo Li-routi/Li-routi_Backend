@@ -25,6 +25,11 @@ public enum GroupSuccessCode implements BaseSuccessCode {
             "그룹 루틴 카테고리 조회에 성공했습니다.",
             "GROUP200_4"
     ),
+    GROUP_ROUTINE_DELETE_SUCCESS(
+            HttpStatus.OK,
+            "그룹 루틴 삭제에 성공했습니다.",
+            "GROUP200_5"
+    ),
     GROUP_ROUTINE_CREATE_SUCCESS(
             HttpStatus.CREATED,
             "그룹 루틴 생성에 성공했습니다.",

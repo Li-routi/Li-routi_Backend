@@ -61,6 +61,7 @@ public class GroupRoutineAssignmentRepositoryImpl
                 .where(
                         assignment.member.id.eq(memberId),
                         assignment.assignedDate.eq(assignedDate),
+                        routine.active.isTrue(),
                         group.status.eq(GroupStatus.ACTIVE)
                 )
                 .orderBy(

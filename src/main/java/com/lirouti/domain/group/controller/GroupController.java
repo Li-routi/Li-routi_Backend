@@ -206,6 +206,18 @@ public class GroupController implements GroupControllerDocs {
         return ApiResponse.onSuccess(GroupSuccessCode.GROUP_MEMBER_KICK_SUCCESS, null);
     }
 
+    /** 인증 회원이 소유한 그룹의 공동 루틴을 삭제한다. */
+    @Override
+    @DeleteMapping("/{groupId}/routines/{routineId}")
+    public ApiResponse<Void> deleteRoutine(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long groupId,
+            @PathVariable Long routineId
+    ) {
+        groupCommandService.deleteRoutine(groupId, routineId, userDetails.getMemberId());
+        return ApiResponse.onSuccess(GroupSuccessCode.GROUP_ROUTINE_DELETE_SUCCESS, null);
+    }
+
     // 그룹 초대 코드 조회 API
     @Override
     @GetMapping("/{groupId}/invite-code")

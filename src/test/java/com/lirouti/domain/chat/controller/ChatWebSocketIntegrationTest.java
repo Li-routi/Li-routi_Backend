@@ -26,19 +26,25 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
 import org.springframework.messaging.converter.JacksonJsonMessageConverter;
+import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.stomp.StompFrameHandler;
 import org.springframework.messaging.simp.stomp.StompHeaders;
 import org.springframework.messaging.simp.stomp.StompSession;
 import org.springframework.messaging.simp.stomp.StompSessionHandlerAdapter;
 import org.springframework.messaging.simp.user.SimpUserRegistry;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.socket.WebSocketHttpHeaders;
 import org.springframework.web.socket.client.standard.StandardWebSocketClient;
+import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
 import org.springframework.web.socket.messaging.WebSocketStompClient;
 
 import com.lirouti.domain.chat.dto.request.ChatReqDTO;
@@ -66,6 +72,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
+@Import(ChatWebSocketIntegrationTest.ConcurrentInboundChannelTestConfiguration.class)
 @DisplayName("Chat WebSocket broker 통합 테스트")
 class ChatWebSocketIntegrationTest {
     private static final Long MEMBER_ID = 1L;
@@ -97,6 +104,32 @@ class ChatWebSocketIntegrationTest {
 
     private WebSocketStompClient stompClient;
     private ThreadPoolTaskScheduler taskScheduler;
+
+    @TestConfiguration(proxyBeanMethods = false)
+    static class ConcurrentInboundChannelTestConfiguration {
+
+        @Bean
+        ThreadPoolTaskExecutor chatTestClientInboundExecutor() {
+            ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+            executor.setCorePoolSize(2);
+            executor.setMaxPoolSize(2);
+            executor.setThreadNamePrefix("chat-test-inbound-");
+            return executor;
+        }
+
+        @Bean
+        WebSocketMessageBrokerConfigurer chatTestClientInboundConfigurer(
+                ThreadPoolTaskExecutor chatTestClientInboundExecutor
+        ) {
+            return new WebSocketMessageBrokerConfigurer() {
+                @Override
+                public void configureClientInboundChannel(ChannelRegistration registration) {
+                    // 서로 다른 두 세션의 SEND가 테스트 전용 두 스레드에서 동시에 service에 진입해야 한다.
+                    registration.executor(chatTestClientInboundExecutor);
+                }
+            };
+        }
+    }
 
     @BeforeEach
     void setUp() {

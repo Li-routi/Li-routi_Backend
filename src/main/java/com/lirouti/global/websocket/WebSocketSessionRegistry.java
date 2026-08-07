@@ -10,6 +10,7 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.atomic.AtomicReference;
 
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.http.HttpHeaders;
 import org.springframework.scheduling.TaskScheduler;
@@ -50,7 +51,10 @@ public class WebSocketSessionRegistry {
             new ConcurrentHashMap<>();
 
     // WebSocket broker도 TaskScheduler를 구성하므로 설정 조립 중 즉시 해석하지 않고 첫 예약까지 지연한다.
-    public WebSocketSessionRegistry(JwtUtil jwtUtil, @Lazy TaskScheduler taskScheduler) {
+    public WebSocketSessionRegistry(
+            JwtUtil jwtUtil,
+            @Lazy @Qualifier("messageBrokerTaskScheduler") TaskScheduler taskScheduler
+    ) {
         this.jwtUtil = jwtUtil;
         this.taskScheduler = taskScheduler;
     }

@@ -120,7 +120,7 @@ class GroupRoutineLimitConcurrencyTest {
         assertThat(success.get()).isEqualTo(1);
         assertThat(limitExceeded.get()).isEqualTo(1);
         assertThat(unexpected.get()).isZero();
-        assertThat(groupRoutineRepository.countByGroupId(groupId))
+        assertThat(groupRoutineRepository.countByGroupIdAndActiveTrue(groupId))
                 .isEqualTo(GroupRoutine.MAX_GROUP_ROUTINE_COUNT);
     }
 

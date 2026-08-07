@@ -12,6 +12,7 @@ public final class MemberResDTO {
             Long memberId,
             String email,
             String nickname,
+            String profileImageUrl,
             SocialProvider socialProvider,
             boolean onboardingCompleted
     ){
