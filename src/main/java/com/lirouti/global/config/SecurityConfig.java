@@ -27,7 +27,13 @@ public class SecurityConfig {
             "/api/auth/**",
             "/swagger-ui/**",
             "/v3/api-docs/**",
-            "/health"
+            "/health",
+            // 로컬 개발용 토큰 발급. 토큰을 받으려는데 토큰이 필요하면 안 되므로 공개다.
+            //
+            // 이 목록은 프로파일과 무관하게 항상 적용되지만, 컨트롤러가 local 에서만 등록되고
+            // 배포 산출물에는 아예 들어가지 않아 다른 환경에서는 404 다(DevTokenController).
+            // 경로를 여는 것과 처리할 것이 있는 것은 다른 문제다.
+            "/api/dev/token/**"
     };
 
     @Bean

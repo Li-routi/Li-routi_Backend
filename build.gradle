@@ -88,6 +88,20 @@ tasks.named('bootJar') {
 	// Flyway는 존재하지 않는 location을 경고만 하고 넘어간다(fail-on-missing-locations 기본 false).
 	// bootRun은 jar가 아니라 build/resources/main을 직접 쓰므로 로컬 개발에는 영향이 없다.
 	exclude 'db/dummy/**'
+
+	// 개발용 토큰 발급도 같은 이유로 뺀다. 이쪽은 더 급하다 — 활성 프로파일의 기본값이 local이라
+	// (SPRING_PROFILES_ACTIVE:local) 운영이 프로파일 주입에 실패하면 그대로 local로 뜨고,
+	// 그 순간 @Profile("local")은 막는 것이 아니라 여는 쪽으로 작동한다.
+	// 스웨거가 공개 경로라 주소만 알면 아무나 임의 회원의 토큰을 받게 된다.
+	//
+	// 클래스가 이미지에 없으면 컴포넌트 스캔이 등록할 것이 없다. 이 셋을 참조하는 코드도 없어
+	// NoClassDefFoundError로 이어지지 않는다.
+	//
+	// 응답 DTO(AuthResDTO$DevToken)는 남는다. 바깥 클래스를 통째로 빼지 않고는 중첩 record만
+	// 뺄 수 없고, 만드는 코드가 없으니 남아도 하는 일이 없다.
+	exclude 'com/lirouti/domain/auth/controller/DevTokenController.class'
+	exclude 'com/lirouti/domain/auth/controller/docs/DevTokenControllerDocs.class'
+	exclude 'com/lirouti/domain/auth/service/DevTokenService.class'
 }
 
 tasks.named('test') {

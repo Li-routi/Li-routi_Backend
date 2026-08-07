@@ -43,6 +43,11 @@ public enum AuthSuccessCode implements BaseSuccessCode {
         "Google nonce 발급에 성공했습니다.",
         "AUTH200_6"
     ),
+    DEV_TOKEN_ISSUE_SUCCESS(
+        HttpStatus.OK,
+        "개발용 토큰 발급에 성공했습니다.",
+        "AUTH200_7"
+    ),
     ;
 
     private final HttpStatus httpStatus;

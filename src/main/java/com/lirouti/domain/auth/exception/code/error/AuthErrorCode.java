@@ -53,6 +53,11 @@ public enum AuthErrorCode implements BaseErrorCode {
         "유효하지 않거나 만료된 비밀번호 재설정 토큰입니다.",
         "AUTH400_2"
     ),
+    DEV_TOKEN_MEMBER_NOT_FOUND(
+        HttpStatus.NOT_FOUND,
+        "개발용 토큰을 발급할 회원을 찾지 못했습니다.",
+        "AUTH404_1"
+    ),
     ;
 
     private final HttpStatus httpStatus;

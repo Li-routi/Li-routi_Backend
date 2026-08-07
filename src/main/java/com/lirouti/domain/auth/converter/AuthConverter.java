@@ -12,6 +12,16 @@ public final class AuthConverter {
                 .build();
     }
 
+    public static AuthResDTO.DevToken toDevToken(
+            String accessToken,
+            long accessTokenExpiresIn
+    ) {
+        return AuthResDTO.DevToken.builder()
+                .accessToken(accessToken)
+                .accessTokenExpiresIn(accessTokenExpiresIn)
+                .build();
+    }
+
     public static AuthResDTO.Token toToken(
             String accessToken,
             String refreshToken,
