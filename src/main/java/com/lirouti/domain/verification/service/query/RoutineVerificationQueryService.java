@@ -2,6 +2,7 @@ package com.lirouti.domain.verification.service.query;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -19,6 +20,7 @@ import com.lirouti.domain.verification.converter.VerificationConverter;
 import com.lirouti.domain.verification.dto.response.VerificationResDTO;
 import com.lirouti.domain.verification.entity.GroupRoutineVerification;
 import com.lirouti.domain.verification.repository.GroupRoutineVerificationRepository;
+import com.lirouti.domain.verification.repository.GroupRoutineVerificationLikeRepository;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -46,6 +48,7 @@ public class RoutineVerificationQueryService {
     private final GroupValidationService groupValidationService;
     private final GroupRoutineRepository groupRoutineRepository;
     private final GroupRoutineVerificationRepository groupRoutineVerificationRepository;
+    private final GroupRoutineVerificationLikeRepository groupRoutineVerificationLikeRepository;
 
     /**
      * 그룹 루틴 인증 목록. 그 방 멤버 전원의 인증이 최신순으로 함께 나온다.
@@ -81,9 +84,15 @@ public class RoutineVerificationQueryService {
                 GroupRoutineVerification::getId,
                 GroupRoutineVerification::getImageUrl,
                 MediaPurpose.GROUP_ROUTINE_VERIFICATION);
+        List<Long> verificationIds = page.rows().stream().map(GroupRoutineVerification::getId).toList();
+        Map<Long, Long> likeCounts = groupRoutineVerificationLikeRepository
+                .countByVerificationIds(verificationIds);
+        Set<Long> likedVerificationIds = groupRoutineVerificationLikeRepository
+                .findLikedVerificationIds(verificationIds, memberId);
 
         return VerificationConverter.toGroupRoutineFeed(
-                page.rows(), imageUrls, page.nextCursor(), page.hasNext());
+                page.rows(), imageUrls, likeCounts, likedVerificationIds,
+                page.nextCursor(), page.hasNext());
     }
 
     /**

@@ -30,6 +30,16 @@ public enum VerificationSuccessCode implements BaseSuccessCode {
             HttpStatus.OK,
             "내 인증 목록 조회에 성공했습니다.",
                     "VERIFICATION200_4"
+    ),
+    GROUP_ROUTINE_VERIFICATION_LIKE_SUCCESS(
+            HttpStatus.OK,
+            "그룹 루틴 인증 게시물 좋아요가 반영되었습니다.",
+            "VERIFICATION200_5"
+    ),
+    GROUP_ROUTINE_VERIFICATION_UNLIKE_SUCCESS(
+            HttpStatus.OK,
+            "그룹 루틴 인증 게시물 좋아요가 취소되었습니다.",
+            "VERIFICATION200_6"
     );
 
     private final HttpStatus httpStatus;

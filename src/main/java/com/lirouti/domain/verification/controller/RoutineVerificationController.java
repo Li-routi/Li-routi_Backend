@@ -2,6 +2,7 @@ package com.lirouti.domain.verification.controller;
 
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -13,6 +14,7 @@ import com.lirouti.domain.verification.dto.request.VerificationReqDTO;
 import com.lirouti.domain.verification.dto.response.VerificationResDTO;
 import com.lirouti.domain.verification.exception.code.success.VerificationSuccessCode;
 import com.lirouti.domain.verification.service.RoutineVerificationService;
+import com.lirouti.domain.verification.service.command.GroupRoutineVerificationLikeCommandService;
 import com.lirouti.domain.verification.service.query.RoutineVerificationQueryService;
 import com.lirouti.global.apiPayload.ApiResponse;
 import com.lirouti.global.auth.CustomUserDetails;
@@ -34,6 +36,7 @@ public class RoutineVerificationController implements RoutineVerificationControl
 
     private final RoutineVerificationService routineVerificationService;
     private final RoutineVerificationQueryService routineVerificationQueryService;
+    private final GroupRoutineVerificationLikeCommandService groupRoutineVerificationLikeCommandService;
 
     @Override
     @PostMapping("/api/groups/{groupId}/routines/{routineId}/verifications")
@@ -74,5 +77,31 @@ public class RoutineVerificationController implements RoutineVerificationControl
                         userDetails.getMemberId(), groupId, routineId, cursor, size);
         return ApiResponse.onSuccess(
                 VerificationSuccessCode.GROUP_ROUTINE_VERIFICATION_LIST_SUCCESS, result);
+    }
+
+    @Override
+    @PostMapping("/api/groups/{groupId}/verifications/{verificationId}/likes")
+    public ApiResponse<VerificationResDTO.GroupRoutineLike> likeGroupRoutineVerification(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long groupId,
+            @PathVariable Long verificationId
+    ) {
+        VerificationResDTO.GroupRoutineLike result = groupRoutineVerificationLikeCommandService
+                .like(userDetails.getMemberId(), groupId, verificationId);
+        return ApiResponse.onSuccess(
+                VerificationSuccessCode.GROUP_ROUTINE_VERIFICATION_LIKE_SUCCESS, result);
+    }
+
+    @Override
+    @DeleteMapping("/api/groups/{groupId}/verifications/{verificationId}/likes")
+    public ApiResponse<VerificationResDTO.GroupRoutineLike> unlikeGroupRoutineVerification(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long groupId,
+            @PathVariable Long verificationId
+    ) {
+        VerificationResDTO.GroupRoutineLike result = groupRoutineVerificationLikeCommandService
+                .unlike(userDetails.getMemberId(), groupId, verificationId);
+        return ApiResponse.onSuccess(
+                VerificationSuccessCode.GROUP_ROUTINE_VERIFICATION_UNLIKE_SUCCESS, result);
     }
 }

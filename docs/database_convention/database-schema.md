@@ -890,6 +890,19 @@ WebSocket은 저장된 메시지를 실시간 전달하는 수단이다. 그룹 
 
 `group_routine_verification`이 할당을 참조하는 것이 이 설계의 핵심이다. 그룹은 "완료 여부"를 이미 `status`로 들고 있으므로, 인증 행은 **그 완료에 붙는 증빙**이지 완료 그 자체가 아니다. 반면 개인 루틴은 인증 행이 곧 완료다.
 
+### 그룹 루틴 인증 좋아요
+
+`group_routine_verification_like`는 그룹 루틴 인증 게시물에 대한 회원별 좋아요 이력이다. 좋아요 수는 별도 캐시 컬럼 없이 이 테이블의 현재 행 수로 집계한다. 인증 작성자나 좋아요 작성자의 그룹 회원 상태가 이후 변경되어도 행은 보존한다.
+
+| 컬럼 | 타입 | NULL | 설명 |
+| --- | --- | --- | --- |
+| id | BIGINT | N | 기본 키 |
+| group_routine_verification_id | BIGINT | N | 대상 `group_routine_verification.id` FK |
+| member_id | BIGINT | N | 좋아요를 누른 `member.id` FK |
+| created_at / updated_at | DATETIME(6) | N / N | 생성·수정 시각 |
+
+- UNIQUE: `(group_routine_verification_id, member_id)` — 동일 회원의 중복 좋아요를 DB에서 차단한다.
+
 ### 접근 범위 — 셋이 다르다
 
 **볼 수 있는 사람과 서빙 방식은 구현돼 있고, 경로의 범위 식별자는 아직 목표다.** 표에서 두 열을 갈라 둔 이유가 이것이다.
