@@ -70,7 +70,8 @@ class GroupRoutineVerificationLikeTest {
         assertThat(reliked.likeCount()).isEqualTo(1);
         assertThat(likeRepository.countByVerificationIds(java.util.List.of(fixture.verification().getId()))
                 .getOrDefault(fixture.verification().getId(), 0L)).isEqualTo(1);
-        assertThat(fixture.authorMembership().getTotalLikeCount()).isEqualTo(1);
+        assertThat(em.find(GroupMember.class, fixture.authorMembership().getId()).getTotalLikeCount())
+                .isEqualTo(1);
     }
 
     @Test

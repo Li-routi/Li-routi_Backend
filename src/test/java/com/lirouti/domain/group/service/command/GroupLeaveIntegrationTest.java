@@ -168,7 +168,7 @@ class GroupLeaveIntegrationTest {
     }
 
     @Test
-    @DisplayName("인증이 먼저 Assignment 잠금을 확정하면 탈퇴는 완료·인증 이력을 보존한다")
+    @DisplayName("인증이 먼저 그룹 잠금을 확정하면 탈퇴는 완료·인증 이력을 보존한다")
     void leaveGroup_VerificationCommitsFirst_PreservesCompletedAssignment() throws Exception {
         // given
         Fixture fixture = fixture();
@@ -180,10 +180,7 @@ class GroupLeaveIntegrationTest {
 
         try (ExecutorService pool = Executors.newFixedThreadPool(2)) {
             Future<?> verificationFuture = pool.submit(() -> transaction.executeWithoutResult(status -> {
-                assignmentRepository.findForVerification(
-                                assignment.getGroupRoutine().getId(), fixture.group().getId(),
-                                fixture.member().getId(), assignment.getAssignedDate())
-                        .orElseThrow();
+                groupValidationService.lockActiveGroupForUpdate(fixture.group().getId());
                 verificationLocked.countDown();
                 await(releaseVerification);
                 verificationCommandService.verifyGroupRoutineAndComplete(

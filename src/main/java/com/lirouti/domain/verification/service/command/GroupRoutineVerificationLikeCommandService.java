@@ -9,6 +9,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.lirouti.domain.group.service.GroupValidationService;
 import com.lirouti.domain.group.entity.GroupMember;
 import com.lirouti.domain.group.enums.GroupMemberStatus;
+import com.lirouti.domain.group.repository.GroupMemberRepository;
 import com.lirouti.domain.group.service.command.GroupMemberActivityCommandService;
 import com.lirouti.domain.verification.entity.GroupRoutineVerification;
 import com.lirouti.domain.verification.entity.GroupRoutineVerificationLike;
@@ -27,6 +28,7 @@ import lombok.RequiredArgsConstructor;
 public class GroupRoutineVerificationLikeCommandService {
     private final GroupValidationService groupValidationService;
     private final GroupMemberActivityCommandService groupMemberActivityCommandService;
+    private final GroupMemberRepository groupMemberRepository;
     private final GroupRoutineVerificationRepository groupRoutineVerificationRepository;
     private final GroupRoutineVerificationLikeRepository groupRoutineVerificationLikeRepository;
 
@@ -42,7 +44,7 @@ public class GroupRoutineVerificationLikeCommandService {
             AuthorVerificationContext author = authorContext(verification);
             GroupMember authorMembership = lockAuthorMembership(groupId, author.memberId());
             if (isCurrentActiveAuthorVerification(authorMembership, author)) {
-                authorMembership.increaseTotalLikeCount();
+                increaseAuthorTotalLikeCount(authorMembership);
             }
         }
         return buildResult(verificationId, true);
@@ -66,7 +68,7 @@ public class GroupRoutineVerificationLikeCommandService {
             GroupMember authorMembership = lockAuthorMembership(groupId, author.memberId());
             if (isCurrentActiveAuthorVerification(authorMembership, author)
                     && !existingLike.getCreatedAt().isBefore(authorMembership.getJoinedAt())) {
-                authorMembership.decreaseTotalLikeCount();
+                decreaseAuthorTotalLikeCount(authorMembership);
             }
         }
         return buildResult(verificationId, false);
@@ -106,6 +108,18 @@ public class GroupRoutineVerificationLikeCommandService {
     ) {
         return authorMembership.getStatus() == GroupMemberStatus.ACTIVE
                 && !author.assignmentCreatedAt().isBefore(authorMembership.getJoinedAt());
+    }
+
+    private void increaseAuthorTotalLikeCount(GroupMember authorMembership) {
+        if (groupMemberRepository.incrementTotalLikeCount(authorMembership.getId()) != 1) {
+            throw new IllegalStateException("그룹 멤버 누적 좋아요 수 증가에 실패했습니다.");
+        }
+    }
+
+    private void decreaseAuthorTotalLikeCount(GroupMember authorMembership) {
+        if (groupMemberRepository.decrementTotalLikeCountIfPositive(authorMembership.getId()) != 1) {
+            throw new IllegalStateException("그룹 멤버 누적 좋아요 수 감소에 실패했습니다.");
+        }
     }
 
     private record AuthorVerificationContext(Long memberId, LocalDateTime assignmentCreatedAt) {

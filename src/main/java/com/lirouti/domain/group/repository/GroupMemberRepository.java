@@ -6,6 +6,7 @@ import com.lirouti.domain.group.enums.GroupStatus;
 import com.lirouti.domain.group.entity.GroupRoutineAssignment;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -32,6 +33,25 @@ public interface GroupMemberRepository extends JpaRepository<GroupMember, Long> 
             @Param("groupId") Long groupId,
             @Param("memberId") Long memberId
     );
+
+    /** 실제 Like INSERT와 같은 트랜잭션에서 현재 가입 회차 작성자의 누적 수를 원자적으로 증가시킨다. */
+    @Modifying(flushAutomatically = true)
+    @Query("""
+            update GroupMember groupMember
+               set groupMember.totalLikeCount = groupMember.totalLikeCount + 1
+             where groupMember.id = :groupMemberId
+            """)
+    int incrementTotalLikeCount(@Param("groupMemberId") Long groupMemberId);
+
+    /** 실제 Like DELETE와 같은 트랜잭션에서 음수를 허용하지 않고 누적 수를 원자적으로 감소시킨다. */
+    @Modifying(flushAutomatically = true)
+    @Query("""
+            update GroupMember groupMember
+               set groupMember.totalLikeCount = groupMember.totalLikeCount - 1
+             where groupMember.id = :groupMemberId
+               and groupMember.totalLikeCount > 0
+            """)
+    int decrementTotalLikeCountIfPositive(@Param("groupMemberId") Long groupMemberId);
 
     /** MISSED로 실제 전이된 현재 가입 회차의 ACTIVE 참여 관계만 ID 순서로 잠근다. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)

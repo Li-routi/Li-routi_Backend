@@ -18,10 +18,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.lirouti.domain.group.service.GroupValidationService;
 import com.lirouti.domain.group.service.command.GroupMemberActivityCommandService;
-import com.lirouti.domain.group.entity.Group;
 import com.lirouti.domain.group.entity.GroupMember;
 import com.lirouti.domain.group.entity.GroupRoutineAssignment;
-import com.lirouti.domain.group.enums.GroupMemberRole;
+import com.lirouti.domain.group.enums.GroupMemberStatus;
+import com.lirouti.domain.group.repository.GroupMemberRepository;
 import com.lirouti.domain.verification.entity.GroupRoutineVerification;
 import com.lirouti.domain.verification.entity.GroupRoutineVerificationLike;
 import com.lirouti.domain.verification.repository.GroupRoutineVerificationLikeRepository;
@@ -40,6 +40,7 @@ class GroupRoutineVerificationLikeCommandServiceTest {
 
     @Mock private GroupValidationService groupValidationService;
     @Mock private GroupMemberActivityCommandService groupMemberActivityCommandService;
+    @Mock private GroupMemberRepository groupMemberRepository;
     @Mock private GroupRoutineVerificationRepository verificationRepository;
     @Mock private GroupRoutineVerificationLikeRepository likeRepository;
 
@@ -95,11 +96,7 @@ class GroupRoutineVerificationLikeCommandServiceTest {
     @Test
     @DisplayName("실제 Like INSERT는 ACTIVE 작성자의 현재 가입 회차 누적값만 증가시킨다")
     void like_InsertedForCurrentActiveAuthor_IncreasesTotalLikeCount() {
-        GroupMember authorMembership = GroupMember.builder()
-                .member(mock(Member.class))
-                .group(mock(Group.class))
-                .role(GroupMemberRole.MEMBER)
-                .build();
+        GroupMember authorMembership = mock(GroupMember.class);
         GroupRoutineAssignment assignment = mock(GroupRoutineAssignment.class);
         Member author = mock(Member.class);
         GroupRoutineVerification verification = mock(GroupRoutineVerification.class);
@@ -107,17 +104,21 @@ class GroupRoutineVerificationLikeCommandServiceTest {
         when(author.getId()).thenReturn(9L);
         when(assignment.getCreatedAt()).thenReturn(LocalDateTime.now());
         when(verification.getAssignment()).thenReturn(assignment);
+        when(authorMembership.getId()).thenReturn(10L);
+        when(authorMembership.getStatus()).thenReturn(GroupMemberStatus.ACTIVE);
+        when(authorMembership.getJoinedAt()).thenReturn(LocalDateTime.now().minusSeconds(1));
         when(verificationRepository.findByIdAndGroupId(VERIFICATION_ID, GROUP_ID))
                 .thenReturn(Optional.of(verification));
         when(likeRepository.insertIfAbsent(VERIFICATION_ID, MEMBER_ID)).thenReturn(1);
         when(groupMemberActivityCommandService.lockMembership(GROUP_ID, 9L))
                 .thenReturn(authorMembership);
+        when(groupMemberRepository.incrementTotalLikeCount(10L)).thenReturn(1);
         when(likeRepository.countByVerificationIds(List.of(VERIFICATION_ID)))
                 .thenReturn(Map.of(VERIFICATION_ID, 1L));
 
         service.like(MEMBER_ID, GROUP_ID, VERIFICATION_ID);
 
-        assertThat(authorMembership.getTotalLikeCount()).isEqualTo(1);
+        org.mockito.Mockito.verify(groupMemberRepository).incrementTotalLikeCount(10L);
     }
 
     @Test
