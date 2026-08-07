@@ -70,6 +70,7 @@ class GroupRoutineVerificationLikeTest {
         assertThat(reliked.likeCount()).isEqualTo(1);
         assertThat(likeRepository.countByVerificationIds(java.util.List.of(fixture.verification().getId()))
                 .getOrDefault(fixture.verification().getId(), 0L)).isEqualTo(1);
+        assertThat(fixture.authorMembership().getTotalLikeCount()).isEqualTo(1);
     }
 
     @Test
@@ -122,6 +123,21 @@ class GroupRoutineVerificationLikeTest {
                 .getOrDefault(fixture.verification().getId(), 0L)).isEqualTo(1);
     }
 
+    @Test
+    @DisplayName("작성자가 탈퇴한 과거 인증에는 Like를 남겨도 현재 활동 누적값을 갱신하지 않는다")
+    void like_ForLeftAuthor_DoesNotChangeTotalLikeCount() {
+        Fixture fixture = fixture();
+        fixture.authorMembership().leave();
+        em.flush();
+
+        likeCommandService.like(
+                fixture.liker().getId(), fixture.group().getId(), fixture.verification().getId());
+
+        assertThat(likeRepository.countByVerificationIds(java.util.List.of(fixture.verification().getId()))
+                .getOrDefault(fixture.verification().getId(), 0L)).isEqualTo(1);
+        assertThat(fixture.authorMembership().getTotalLikeCount()).isZero();
+    }
+
     private Fixture fixture() {
         int n = sequence.incrementAndGet();
         Member author = member();
@@ -146,7 +162,7 @@ class GroupRoutineVerificationLikeTest {
                 .imageUrl("group-routine-verifications/test-" + n + ".jpg").content("완료").build();
         em.persist(verification);
         em.flush();
-        return new Fixture(group, author, liker, likerMembership, verification);
+        return new Fixture(group, author, liker, authorMembership, likerMembership, verification);
     }
 
     private Member member() {
@@ -168,6 +184,7 @@ class GroupRoutineVerificationLikeTest {
             Group group,
             Member author,
             Member liker,
+            GroupMember authorMembership,
             GroupMember likerMembership,
             GroupRoutineVerification verification
     ) {}

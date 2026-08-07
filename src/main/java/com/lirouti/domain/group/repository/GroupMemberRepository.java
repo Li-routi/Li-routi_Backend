@@ -3,6 +3,9 @@ package com.lirouti.domain.group.repository;
 import com.lirouti.domain.group.entity.GroupMember;
 import com.lirouti.domain.group.enums.GroupMemberStatus;
 import com.lirouti.domain.group.enums.GroupStatus;
+import com.lirouti.domain.group.entity.GroupRoutineAssignment;
+import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -17,6 +20,38 @@ public interface GroupMemberRepository extends JpaRepository<GroupMember, Long> 
      * 항상 요청 대상 그룹과 회원의 참여 관계를 함께 조회한다.
      */
     Optional<GroupMember> findByGroupIdAndMemberId(Long groupId, Long memberId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select groupMember
+            from GroupMember groupMember
+            where groupMember.group.id = :groupId
+              and groupMember.member.id = :memberId
+            """)
+    Optional<GroupMember> findByGroupIdAndMemberIdForUpdate(
+            @Param("groupId") Long groupId,
+            @Param("memberId") Long memberId
+    );
+
+    /** MISSED로 실제 전이된 현재 가입 회차의 ACTIVE 참여 관계만 ID 순서로 잠근다. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select groupMember
+            from GroupMember groupMember
+            where exists (
+                select assignment
+                from GroupRoutineAssignment assignment
+                where assignment.id in :assignmentIds
+                  and assignment.member.id = groupMember.member.id
+                  and assignment.groupRoutine.group.id = groupMember.group.id
+                  and assignment.createdAt >= groupMember.joinedAt
+            )
+              and groupMember.status = com.lirouti.domain.group.enums.GroupMemberStatus.ACTIVE
+            order by groupMember.group.id, groupMember.member.id
+            """)
+    List<GroupMember> findAllActiveCurrentMembershipsByAssignmentIdsForUpdate(
+            @Param("assignmentIds") List<Long> assignmentIds
+    );
 
     /**
      * Preview에 표시할 ACTIVE 구성원 수만큼의 요약 항목을 ID 순서대로 만든다.
