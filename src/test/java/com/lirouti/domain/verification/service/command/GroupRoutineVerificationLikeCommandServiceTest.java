@@ -6,7 +6,6 @@ import static org.mockito.Mockito.when;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.time.LocalDateTime;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -20,7 +19,6 @@ import com.lirouti.domain.group.service.GroupValidationService;
 import com.lirouti.domain.group.service.command.GroupMemberActivityCommandService;
 import com.lirouti.domain.group.entity.GroupMember;
 import com.lirouti.domain.group.entity.GroupRoutineAssignment;
-import com.lirouti.domain.group.enums.GroupMemberStatus;
 import com.lirouti.domain.group.repository.GroupMemberRepository;
 import com.lirouti.domain.verification.entity.GroupRoutineVerification;
 import com.lirouti.domain.verification.entity.GroupRoutineVerificationLike;
@@ -73,7 +71,6 @@ class GroupRoutineVerificationLikeCommandServiceTest {
         Member author = org.mockito.Mockito.mock(Member.class);
         when(verification.getAssignment()).thenReturn(assignment);
         when(assignment.getMember()).thenReturn(author);
-        when(assignment.getCreatedAt()).thenReturn(LocalDateTime.now());
         when(verificationRepository.findByIdAndGroupId(VERIFICATION_ID, GROUP_ID))
                 .thenReturn(Optional.of(verification));
         when(likeRepository.findByVerificationIdAndMemberIdForUpdate(VERIFICATION_ID, MEMBER_ID))
@@ -102,23 +99,22 @@ class GroupRoutineVerificationLikeCommandServiceTest {
         GroupRoutineVerification verification = mock(GroupRoutineVerification.class);
         when(assignment.getMember()).thenReturn(author);
         when(author.getId()).thenReturn(9L);
-        when(assignment.getCreatedAt()).thenReturn(LocalDateTime.now());
+        when(assignment.getId()).thenReturn(11L);
         when(verification.getAssignment()).thenReturn(assignment);
         when(authorMembership.getId()).thenReturn(10L);
-        when(authorMembership.getStatus()).thenReturn(GroupMemberStatus.ACTIVE);
-        when(authorMembership.getJoinedAt()).thenReturn(LocalDateTime.now().minusSeconds(1));
         when(verificationRepository.findByIdAndGroupId(VERIFICATION_ID, GROUP_ID))
                 .thenReturn(Optional.of(verification));
         when(likeRepository.insertIfAbsent(VERIFICATION_ID, MEMBER_ID)).thenReturn(1);
         when(groupMemberActivityCommandService.lockMembership(GROUP_ID, 9L))
                 .thenReturn(authorMembership);
-        when(groupMemberRepository.incrementTotalLikeCount(10L)).thenReturn(1);
+        when(groupMemberRepository.incrementTotalLikeCountForCurrentActiveMembership(10L, 11L)).thenReturn(1);
         when(likeRepository.countByVerificationIds(List.of(VERIFICATION_ID)))
                 .thenReturn(Map.of(VERIFICATION_ID, 1L));
 
         service.like(MEMBER_ID, GROUP_ID, VERIFICATION_ID);
 
-        org.mockito.Mockito.verify(groupMemberRepository).incrementTotalLikeCount(10L);
+        org.mockito.Mockito.verify(groupMemberRepository)
+                .incrementTotalLikeCountForCurrentActiveMembership(10L, 11L);
     }
 
     @Test

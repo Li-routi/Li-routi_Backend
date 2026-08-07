@@ -12,6 +12,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.lirouti.domain.group.entity.Group;
@@ -41,6 +42,7 @@ import jakarta.persistence.PersistenceContext;
 class GroupRoutineVerificationLikeTest {
     @Autowired private GroupRoutineVerificationLikeCommandService likeCommandService;
     @Autowired private GroupRoutineVerificationLikeRepository likeRepository;
+    @Autowired private JdbcTemplate jdbcTemplate;
 
     @PersistenceContext private EntityManager em;
     private final AtomicInteger sequence = new AtomicInteger();
@@ -70,8 +72,7 @@ class GroupRoutineVerificationLikeTest {
         assertThat(reliked.likeCount()).isEqualTo(1);
         assertThat(likeRepository.countByVerificationIds(java.util.List.of(fixture.verification().getId()))
                 .getOrDefault(fixture.verification().getId(), 0L)).isEqualTo(1);
-        assertThat(em.find(GroupMember.class, fixture.authorMembership().getId()).getTotalLikeCount())
-                .isEqualTo(1);
+        assertThat(totalLikeCount(fixture.authorMembership().getId())).isEqualTo(1);
     }
 
     @Test
@@ -137,6 +138,65 @@ class GroupRoutineVerificationLikeTest {
         assertThat(likeRepository.countByVerificationIds(java.util.List.of(fixture.verification().getId()))
                 .getOrDefault(fixture.verification().getId(), 0L)).isEqualTo(1);
         assertThat(fixture.authorMembership().getTotalLikeCount()).isZero();
+    }
+
+    @Test
+    @DisplayName("현재 가입 회차 인증글 Like는 DB 시각이 가입 시각보다 앞서 보여도 취소 시 누적값을 감소시킨다")
+    void unlike_CurrentRoundLikeWithEarlierDatabaseTimestamp_DecreasesTotalLikeCount() {
+        Fixture fixture = fixture();
+        likeCommandService.like(fixture.liker().getId(), fixture.group().getId(), fixture.verification().getId());
+
+        jdbcTemplate.update("""
+                update group_routine_verification_like
+                   set created_at = ?
+                 where group_routine_verification_id = ?
+                   and member_id = ?
+                """, fixture.authorMembership().getJoinedAt().minusSeconds(1),
+                fixture.verification().getId(), fixture.liker().getId());
+
+        likeCommandService.unlike(fixture.liker().getId(), fixture.group().getId(), fixture.verification().getId());
+
+        assertThat(likeRepository.countByVerificationIds(java.util.List.of(fixture.verification().getId()))
+                .getOrDefault(fixture.verification().getId(), 0L)).isZero();
+        assertThat(totalLikeCount(fixture.authorMembership().getId())).isZero();
+    }
+
+    @Test
+    @DisplayName("이전 가입 회차 인증글 Like는 생성·취소해도 현재 누적 좋아요 수에 영향을 주지 않는다")
+    void likeAndUnlike_PreviousRoundVerification_DoNotChangeCurrentTotalLikeCount() {
+        Fixture fixture = fixture();
+        jdbcTemplate.update("""
+                update group_routine_assignment
+                   set created_at = ?
+                 where id = ?
+                """, fixture.authorMembership().getJoinedAt().minusSeconds(1),
+                fixture.verification().getAssignment().getId());
+
+        likeCommandService.like(fixture.liker().getId(), fixture.group().getId(), fixture.verification().getId());
+        likeCommandService.unlike(fixture.liker().getId(), fixture.group().getId(), fixture.verification().getId());
+
+        assertThat(totalLikeCount(fixture.authorMembership().getId())).isZero();
+    }
+
+    @Test
+    @DisplayName("누적 좋아요 수가 0이면 실제 Like 삭제 후에도 음수가 되지 않는다")
+    void unlike_WhenTotalLikeCountIsZero_DoesNotBecomeNegative() {
+        Fixture fixture = fixture();
+        likeCommandService.like(fixture.liker().getId(), fixture.group().getId(), fixture.verification().getId());
+        jdbcTemplate.update("""
+                update group_member
+                   set total_like_count = 0
+                 where id = ?
+                """, fixture.authorMembership().getId());
+
+        likeCommandService.unlike(fixture.liker().getId(), fixture.group().getId(), fixture.verification().getId());
+
+        assertThat(totalLikeCount(fixture.authorMembership().getId())).isZero();
+    }
+
+    private long totalLikeCount(Long groupMemberId) {
+        em.clear();
+        return em.find(GroupMember.class, groupMemberId).getTotalLikeCount();
     }
 
     private Fixture fixture() {

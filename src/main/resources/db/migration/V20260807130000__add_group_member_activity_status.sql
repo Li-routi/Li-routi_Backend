@@ -25,6 +25,5 @@ SET `total_like_count` = (
     WHERE assignment.member_id = group_member.member_id
       AND routine.group_id = group_member.group_id
       AND assignment.created_at >= group_member.joined_at
-      AND verification_like.created_at >= group_member.joined_at
 )
 WHERE group_member.status = 'ACTIVE';

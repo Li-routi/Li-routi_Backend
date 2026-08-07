@@ -34,24 +34,42 @@ public interface GroupMemberRepository extends JpaRepository<GroupMember, Long> 
             @Param("memberId") Long memberId
     );
 
-    /** 실제 Like INSERT와 같은 트랜잭션에서 현재 가입 회차 작성자의 누적 수를 원자적으로 증가시킨다. */
+    /** 실제 Like INSERT와 같은 트랜잭션에서 DB의 현재 가입 회차·ACTIVE 조건을 만족할 때만 증가시킨다. */
     @Modifying(flushAutomatically = true)
-    @Query("""
-            update GroupMember groupMember
-               set groupMember.totalLikeCount = groupMember.totalLikeCount + 1
-             where groupMember.id = :groupMemberId
-            """)
-    int incrementTotalLikeCount(@Param("groupMemberId") Long groupMemberId);
+    @Query(value = """
+            update group_member group_member
+            join group_routine_assignment assignment on assignment.id = :assignmentId
+            join group_routine routine on routine.id = assignment.group_routine_id
+               set group_member.total_like_count = group_member.total_like_count + 1
+             where group_member.id = :groupMemberId
+               and group_member.status = 'ACTIVE'
+               and group_member.member_id = assignment.member_id
+               and group_member.group_id = routine.group_id
+               and assignment.created_at >= group_member.joined_at
+            """, nativeQuery = true)
+    int incrementTotalLikeCountForCurrentActiveMembership(
+            @Param("groupMemberId") Long groupMemberId,
+            @Param("assignmentId") Long assignmentId
+    );
 
-    /** 실제 Like DELETE와 같은 트랜잭션에서 음수를 허용하지 않고 누적 수를 원자적으로 감소시킨다. */
+    /** 실제 Like DELETE와 같은 트랜잭션에서 DB의 현재 가입 회차·ACTIVE 조건과 음수 방지를 함께 확인한다. */
     @Modifying(flushAutomatically = true)
-    @Query("""
-            update GroupMember groupMember
-               set groupMember.totalLikeCount = groupMember.totalLikeCount - 1
-             where groupMember.id = :groupMemberId
-               and groupMember.totalLikeCount > 0
-            """)
-    int decrementTotalLikeCountIfPositive(@Param("groupMemberId") Long groupMemberId);
+    @Query(value = """
+            update group_member group_member
+            join group_routine_assignment assignment on assignment.id = :assignmentId
+            join group_routine routine on routine.id = assignment.group_routine_id
+               set group_member.total_like_count = group_member.total_like_count - 1
+             where group_member.id = :groupMemberId
+               and group_member.status = 'ACTIVE'
+               and group_member.member_id = assignment.member_id
+               and group_member.group_id = routine.group_id
+               and assignment.created_at >= group_member.joined_at
+               and group_member.total_like_count > 0
+            """, nativeQuery = true)
+    int decrementTotalLikeCountForCurrentActiveMembershipIfPositive(
+            @Param("groupMemberId") Long groupMemberId,
+            @Param("assignmentId") Long assignmentId
+    );
 
     /** MISSED로 실제 전이된 현재 가입 회차의 ACTIVE 참여 관계만 ID 순서로 잠근다. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)

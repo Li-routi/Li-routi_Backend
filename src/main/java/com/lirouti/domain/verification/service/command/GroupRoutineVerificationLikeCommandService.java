@@ -1,6 +1,5 @@
 package com.lirouti.domain.verification.service.command;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
 import org.springframework.stereotype.Service;
@@ -8,7 +7,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.lirouti.domain.group.service.GroupValidationService;
 import com.lirouti.domain.group.entity.GroupMember;
-import com.lirouti.domain.group.enums.GroupMemberStatus;
 import com.lirouti.domain.group.repository.GroupMemberRepository;
 import com.lirouti.domain.group.service.command.GroupMemberActivityCommandService;
 import com.lirouti.domain.verification.entity.GroupRoutineVerification;
@@ -43,9 +41,8 @@ public class GroupRoutineVerificationLikeCommandService {
         if (inserted == 1) {
             AuthorVerificationContext author = authorContext(verification);
             GroupMember authorMembership = lockAuthorMembership(groupId, author.memberId());
-            if (isCurrentActiveAuthorVerification(authorMembership, author)) {
-                increaseAuthorTotalLikeCount(authorMembership);
-            }
+            groupMemberRepository.incrementTotalLikeCountForCurrentActiveMembership(
+                    authorMembership.getId(), author.assignmentId());
         }
         return buildResult(verificationId, true);
     }
@@ -66,10 +63,8 @@ public class GroupRoutineVerificationLikeCommandService {
                 return buildResult(verificationId, false);
             }
             GroupMember authorMembership = lockAuthorMembership(groupId, author.memberId());
-            if (isCurrentActiveAuthorVerification(authorMembership, author)
-                    && !existingLike.getCreatedAt().isBefore(authorMembership.getJoinedAt())) {
-                decreaseAuthorTotalLikeCount(authorMembership);
-            }
+            groupMemberRepository.decrementTotalLikeCountForCurrentActiveMembershipIfPositive(
+                    authorMembership.getId(), author.assignmentId());
         }
         return buildResult(verificationId, false);
     }
@@ -94,7 +89,7 @@ public class GroupRoutineVerificationLikeCommandService {
     private AuthorVerificationContext authorContext(GroupRoutineVerification verification) {
         return new AuthorVerificationContext(
                 verification.getAssignment().getMember().getId(),
-                verification.getAssignment().getCreatedAt()
+                verification.getAssignment().getId()
         );
     }
 
@@ -102,27 +97,7 @@ public class GroupRoutineVerificationLikeCommandService {
         return groupMemberActivityCommandService.lockMembership(groupId, authorMemberId);
     }
 
-    private boolean isCurrentActiveAuthorVerification(
-            GroupMember authorMembership,
-            AuthorVerificationContext author
-    ) {
-        return authorMembership.getStatus() == GroupMemberStatus.ACTIVE
-                && !author.assignmentCreatedAt().isBefore(authorMembership.getJoinedAt());
-    }
-
-    private void increaseAuthorTotalLikeCount(GroupMember authorMembership) {
-        if (groupMemberRepository.incrementTotalLikeCount(authorMembership.getId()) != 1) {
-            throw new IllegalStateException("그룹 멤버 누적 좋아요 수 증가에 실패했습니다.");
-        }
-    }
-
-    private void decreaseAuthorTotalLikeCount(GroupMember authorMembership) {
-        if (groupMemberRepository.decrementTotalLikeCountIfPositive(authorMembership.getId()) != 1) {
-            throw new IllegalStateException("그룹 멤버 누적 좋아요 수 감소에 실패했습니다.");
-        }
-    }
-
-    private record AuthorVerificationContext(Long memberId, LocalDateTime assignmentCreatedAt) {
+    private record AuthorVerificationContext(Long memberId, Long assignmentId) {
     }
 
     private VerificationResDTO.GroupRoutineLike buildResult(Long verificationId, boolean liked) {
