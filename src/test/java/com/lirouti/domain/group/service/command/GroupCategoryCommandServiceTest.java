@@ -11,6 +11,7 @@ import com.lirouti.domain.group.repository.GroupRoutineCategoryRepository;
 import com.lirouti.domain.group.repository.GroupRoutineRepository;
 import com.lirouti.domain.group.service.GroupValidationService;
 import com.lirouti.domain.routine.enums.RoutineCategoryColor;
+import com.lirouti.global.websocket.WebSocketSessionRegistry;
 import jakarta.validation.Validator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -39,6 +40,7 @@ class GroupCategoryCommandServiceTest {
     @Mock private GroupInviteCodeUniqueViolationDetector uniqueViolationDetector;
     @Mock private Validator validator;
     @Mock private Group group;
+    @Mock private WebSocketSessionRegistry webSocketSessionRegistry;
 
     private GroupCommandService commandService;
 
@@ -46,7 +48,8 @@ class GroupCategoryCommandServiceTest {
     void setUp() {
         commandService = new GroupCommandService(
                 validationService, groupRepository, categoryRepository, routineRepository,
-                assignmentService, creationAttemptService, uniqueViolationDetector, validator
+                assignmentService, creationAttemptService, uniqueViolationDetector, validator,
+                webSocketSessionRegistry
         );
         when(validationService.lockActiveGroupForUpdate(GROUP_ID)).thenReturn(group);
     }

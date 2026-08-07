@@ -152,6 +152,19 @@ public class GroupRoutineAssignmentCommandService {
         return activeMembersByMemberId.size();
     }
 
+    /** 그룹 탈퇴 회원의 미완료 할당을 제거하고 확정된 수행 이력은 보존한다. */
+    @Transactional
+    public int deleteUnfinishedAssignmentsForLeaver(Long groupId, Long memberId) {
+        int deletedCount = groupRoutineAssignmentRepository.deleteUnfinishedAssignmentsForLeaver(
+                groupId,
+                memberId,
+                MUTABLE_STATUSES
+        );
+        log.debug("그룹 탈퇴 회원의 미완료 할당을 제거했습니다. groupId={}, memberId={}, deletedCount={}",
+                groupId, memberId, deletedCount);
+        return deletedCount;
+    }
+
     /**
      * 지정한 날짜의 반복 요일에 해당하는 그룹 루틴을 ACTIVE 그룹원에게 멱등하게 할당한다.
      *
@@ -212,21 +225,6 @@ public class GroupRoutineAssignmentCommandService {
                         + "groupId={}, memberId={}, assignedDate={}, assignmentCount={}",
                 groupId, memberId, today, assignmentCount);
         return assignmentCount;
-    }
-
-    /**
-     * 그룹 탈퇴 회원의 PENDING, IN_PROGRESS 할당만 삭제한다.
-     * COMPLETED, MISSED 할당과 인증 이력은 상태 조건으로 보존한다.
-     *
-     * @return 삭제된 미완료 할당 수
-     */
-    @Transactional
-    public int deleteUnfinishedAssignmentsForLeaver(Long groupId, Long memberId) {
-        return groupRoutineAssignmentRepository.deleteUnfinishedByGroupIdAndMemberId(
-                groupId,
-                memberId,
-                MUTABLE_STATUSES
-        );
     }
 
     /**

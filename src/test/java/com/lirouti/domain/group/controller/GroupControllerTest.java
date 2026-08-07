@@ -5,6 +5,7 @@ import com.lirouti.domain.group.entity.GroupMember;
 import com.lirouti.domain.group.entity.GroupRoutine;
 import com.lirouti.domain.group.entity.GroupRoutineAssignment;
 import com.lirouti.domain.group.enums.GroupMemberRole;
+import com.lirouti.domain.group.enums.GroupMemberStatus;
 import com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.enums.Role;
@@ -126,6 +127,34 @@ class GroupControllerTest {
                         .with(user(principal(member))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.routines").isEmpty());
+    }
+
+    @Test
+    @DisplayName("OWNER가 구성원 강퇴 요청을 보내면 대상 멤버십을 KICKED로 변경한다")
+    void kickMember_Owner_UpdatesTargetMembershipStatus() throws Exception {
+        // given
+        Group group = group("GM00002");
+        Member owner = member();
+        Member member = member();
+        membership(owner, group, GroupMemberRole.OWNER);
+        GroupMember targetMembership = membership(member, group, GroupMemberRole.MEMBER);
+        em.flush();
+        Long membershipId = targetMembership.getId();
+
+        // when & then
+        mockMvc.perform(delete(
+                                "/api/groups/{groupId}/members/{targetMemberId}",
+                                group.getId(),
+                                member.getId()
+                        )
+                        .with(user(principal(owner))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("GROUP200_9"));
+
+        em.flush();
+        em.clear();
+        assertThat(em.find(GroupMember.class, membershipId).getStatus())
+                .isEqualTo(GroupMemberStatus.KICKED);
     }
 
     @Test

@@ -1,5 +1,14 @@
 package com.lirouti.domain.group.service.command;
 
+import java.util.HashSet;
+import java.util.Set;
+
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+
 import com.lirouti.domain.group.converter.GroupConverter;
 import com.lirouti.domain.group.dto.request.GroupReqDTO;
 import com.lirouti.domain.group.dto.response.GroupResDTO;
@@ -14,20 +23,14 @@ import com.lirouti.domain.group.repository.GroupRepository;
 import com.lirouti.domain.group.repository.GroupRoutineCategoryRepository;
 import com.lirouti.domain.group.repository.GroupRoutineRepository;
 import com.lirouti.domain.group.service.GroupValidationService;
+import com.lirouti.global.websocket.WebSocketSessionRegistry;
+
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.util.HashSet;
-import java.util.Set;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class GroupCommandService {
     private static final int MAX_CREATE_ATTEMPTS = 10;
 
@@ -39,6 +42,30 @@ public class GroupCommandService {
     private final GroupCreationAttemptService groupCreationAttemptService;
     private final GroupInviteCodeUniqueViolationDetector uniqueViolationDetector;
     private final Validator validator;
+
+    private final WebSocketSessionRegistry webSocketSessionRegistry;
+
+    public GroupCommandService(
+            GroupValidationService groupValidationService,
+            GroupRepository groupRepository,
+            GroupRoutineCategoryRepository groupRoutineCategoryRepository,
+            GroupRoutineRepository groupRoutineRepository,
+            GroupRoutineAssignmentCommandService assignmentCommandService,
+            GroupCreationAttemptService groupCreationAttemptService,
+            GroupInviteCodeUniqueViolationDetector uniqueViolationDetector,
+            Validator validator,
+            WebSocketSessionRegistry webSocketSessionRegistry
+    ) {
+        this.groupValidationService = groupValidationService;
+        this.groupRepository = groupRepository;
+        this.groupRoutineCategoryRepository = groupRoutineCategoryRepository;
+        this.groupRoutineRepository = groupRoutineRepository;
+        this.assignmentCommandService = assignmentCommandService;
+        this.groupCreationAttemptService = groupCreationAttemptService;
+        this.uniqueViolationDetector = uniqueViolationDetector;
+        this.validator = validator;
+        this.webSocketSessionRegistry = webSocketSessionRegistry;
+    }
 
     /** 잠긴 ACTIVE OWNER 그룹을 애그리거트 루트에서 Hard Delete한다. */
     @Transactional
@@ -52,23 +79,6 @@ public class GroupCommandService {
 
         groupValidationService.validateGroupOwner(group, memberId);
         groupRepository.delete(group);
-    }
-
-    /**
-     * ACTIVE 일반 구성원을 그룹에서 탈퇴 처리하고, 아직 확정되지 않은 그룹 루틴 할당을 삭제한다.
-     * 완료·미이행 할당과 인증 이력은 상태 조건으로 보존한다.
-     */
-    @Transactional
-    public void leaveGroup(Long groupId, Long memberId) {
-        GroupMember groupMember = groupValidationService
-                .validateActiveGroupMember(groupId, memberId);
-
-        groupMember.leave();
-        int deletedAssignmentCount = assignmentCommandService
-                .deleteUnfinishedAssignmentsForLeaver(groupId, memberId);
-
-        log.info("그룹 탈퇴를 완료했습니다. groupId={}, memberId={}, deletedAssignmentCount={}",
-                groupId, memberId, deletedAssignmentCount);
     }
 
     /** ACTIVE OWNER가 그룹 행 잠금 안에서 신규 참여를 차단한다. 이미 잠긴 경우에도 성공한다. */
@@ -156,6 +166,55 @@ public class GroupCommandService {
         log.error("그룹 통합 생성의 초대코드 unique 충돌 재시도 횟수를 초과했습니다. "
                         + "memberId={}, maxAttempts={}", memberId, MAX_CREATE_ATTEMPTS);
         throw new GroupException(GroupErrorCode.INVITE_CODE_ISSUE_FAILED);
+    }
+
+    /**
+     * ACTIVE 구성원을 탈퇴 처리하고 미완료 할당을 정리한 뒤, 커밋 후 채팅 세션을 회수한다.
+     * 완료·미이행 할당과 인증 이력은 보존한다.
+     */
+    @Transactional
+    public void leaveGroup(Long groupId, Long memberId) {
+        // 채팅 전송도 같은 그룹 행을 잠그므로 권한 회수와 진행 중인 전송의 순서가 확정된다.
+        groupValidationService.lockActiveGroupForUpdate(groupId);
+        GroupMember groupMember = groupValidationService
+                .validateActiveGroupMember(groupId, memberId);
+        groupMember.leave();
+        int deletedAssignmentCount = assignmentCommandService
+                .deleteUnfinishedAssignmentsForLeaver(groupId, memberId);
+        closeMemberSessionsAfterCommit(memberId);
+
+        log.info("그룹 탈퇴를 완료했습니다. groupId={}, memberId={}, deletedAssignmentCount={}",
+                groupId, memberId, deletedAssignmentCount);
+    }
+
+    /** ACTIVE OWNER가 대상 구성원을 강제 퇴장시키고 대상 회원의 모든 채팅 세션을 회수한다. */
+    @Transactional
+    public void kickMember(Long groupId, Long ownerId, Long targetMemberId) {
+        groupValidationService.lockActiveGroupForUpdate(groupId);
+        groupValidationService.validateGroupOwner(groupId, ownerId);
+        if (targetMemberId == null) {
+            throw new GroupException(GroupErrorCode.GROUP_MEMBER_ACCESS_DENIED);
+        }
+
+        GroupMember target = groupValidationService
+                .validateActiveGroupMember(groupId, targetMemberId);
+
+        target.kick();
+        closeMemberSessionsAfterCommit(targetMemberId);
+    }
+
+    private void closeMemberSessionsAfterCommit(Long memberId) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            webSocketSessionRegistry.closeMemberSessions(memberId);
+            return;
+        }
+
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                webSocketSessionRegistry.closeMemberSessions(memberId);
+            }
+        });
     }
 
     private void validateCreateGroupRequest(GroupReqDTO.CreateGroup request) {

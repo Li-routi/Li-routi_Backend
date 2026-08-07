@@ -190,6 +190,22 @@ public class GroupController implements GroupControllerDocs {
         return ApiResponse.onSuccess(GroupSuccessCode.GROUP_ROUTINE_UPDATE_SUCCESS, result);
     }
 
+    /** ACTIVE OWNER가 대상 구성원을 그룹에서 강제 퇴장시킨다. */
+    @Override
+    @DeleteMapping("/{groupId}/members/{targetMemberId}")
+    public ApiResponse<Void> kickMember(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long groupId,
+            @PathVariable Long targetMemberId
+    ) {
+        groupCommandService.kickMember(
+                groupId,
+                userDetails.getMemberId(),
+                targetMemberId
+        );
+        return ApiResponse.onSuccess(GroupSuccessCode.GROUP_MEMBER_KICK_SUCCESS, null);
+    }
+
     /** 인증 회원이 소유한 그룹의 공동 루틴을 삭제한다. */
     @Override
     @DeleteMapping("/{groupId}/routines/{routineId}")
