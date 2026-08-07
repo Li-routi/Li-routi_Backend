@@ -1,6 +1,9 @@
 package com.lirouti.domain.verification.service.command;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.reset;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -9,7 +12,9 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -19,6 +24,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 
 import com.lirouti.domain.group.entity.Group;
 import com.lirouti.domain.group.entity.GroupMember;
@@ -36,6 +42,7 @@ import com.lirouti.domain.group.repository.GroupRoutineAssignmentRepository;
 import com.lirouti.domain.group.repository.GroupRoutineCategoryRepository;
 import com.lirouti.domain.group.repository.GroupRoutineRepository;
 import com.lirouti.domain.group.service.command.GroupCommandService;
+import com.lirouti.domain.group.service.GroupValidationService;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.enums.Role;
 import com.lirouti.domain.member.enums.SocialProvider;
@@ -53,6 +60,7 @@ import com.lirouti.domain.verification.repository.GroupRoutineVerificationReposi
 class GroupRoutineVerificationLikeConcurrencyTest {
     @Autowired private GroupRoutineVerificationLikeCommandService likeCommandService;
     @Autowired private GroupCommandService groupCommandService;
+    @MockitoSpyBean private GroupValidationService groupValidationService;
     @Autowired private MemberRepository memberRepository;
     @Autowired private GroupRepository groupRepository;
     @Autowired private GroupMemberRepository groupMemberRepository;
@@ -106,6 +114,7 @@ class GroupRoutineVerificationLikeConcurrencyTest {
 
     @AfterEach
     void tearDown() {
+        reset(groupValidationService);
         verificationRepository.deleteById(verificationId);
         groupRepository.deleteById(groupId);
         memberRepository.deleteById(memberId);
@@ -182,9 +191,9 @@ class GroupRoutineVerificationLikeConcurrencyTest {
     }
 
     @Test
-    @DisplayName("좋아요 생성과 탈퇴가 경합하면 새 Like는 탈퇴 커밋 이전에만 생성된다")
-    void concurrentLikeAndLeave_LikeIsCreatedOnlyBeforeLeave() throws InterruptedException {
-        MembershipRaceResult result = runMembershipRace(
+    @DisplayName("좋아요의 ACTIVE 검증 뒤 탈퇴는 그룹 잠금 해제 전까지 대기한다")
+    void likeThenLeave_LeaveWaitsForLikeGroupLock() throws Exception {
+        MembershipRaceResult result = runMembershipRaceAfterLikeMembershipValidation(
                 () -> likeCommandService.like(memberId, groupId, verificationId),
                 () -> groupCommandService.leaveGroup(groupId, memberId));
 
@@ -192,13 +201,18 @@ class GroupRoutineVerificationLikeConcurrencyTest {
         assertThat(result.likeFailure()).isNull();
         assertThat(groupMemberRepository.findByGroupIdAndMemberId(groupId, memberId).orElseThrow()
                 .getStatus()).isEqualTo(GroupMemberStatus.LEFT);
-        assertLikeWasCreatedBeforeExitOrRejected(result.likeSucceeded());
+        assertThat(result.likeSucceeded()).isTrue();
+        assertThat(likeRepository.countByVerificationIds(List.of(verificationId))
+                .getOrDefault(verificationId, 0L)).isEqualTo(1L);
+        assertThatThrownBy(() -> likeCommandService.like(memberId, groupId, verificationId))
+                .isInstanceOf(GroupException.class)
+                .hasFieldOrPropertyWithValue("code", GroupErrorCode.GROUP_MEMBER_ACCESS_DENIED);
     }
 
     @Test
-    @DisplayName("좋아요 생성과 강제퇴장이 경합하면 새 Like는 강제퇴장 커밋 이전에만 생성된다")
-    void concurrentLikeAndKick_LikeIsCreatedOnlyBeforeKick() throws InterruptedException {
-        MembershipRaceResult result = runMembershipRace(
+    @DisplayName("좋아요의 ACTIVE 검증 뒤 강제퇴장은 그룹 잠금 해제 전까지 대기한다")
+    void likeThenKick_KickWaitsForLikeGroupLock() throws Exception {
+        MembershipRaceResult result = runMembershipRaceAfterLikeMembershipValidation(
                 () -> likeCommandService.like(memberId, groupId, verificationId),
                 () -> groupCommandService.kickMember(groupId, ownerId, memberId));
 
@@ -206,15 +220,20 @@ class GroupRoutineVerificationLikeConcurrencyTest {
         assertThat(result.likeFailure()).isNull();
         assertThat(groupMemberRepository.findByGroupIdAndMemberId(groupId, memberId).orElseThrow()
                 .getStatus()).isEqualTo(GroupMemberStatus.KICKED);
-        assertLikeWasCreatedBeforeExitOrRejected(result.likeSucceeded());
+        assertThat(result.likeSucceeded()).isTrue();
+        assertThat(likeRepository.countByVerificationIds(List.of(verificationId))
+                .getOrDefault(verificationId, 0L)).isEqualTo(1L);
+        assertThatThrownBy(() -> likeCommandService.like(memberId, groupId, verificationId))
+                .isInstanceOf(GroupException.class)
+                .hasFieldOrPropertyWithValue("code", GroupErrorCode.GROUP_MEMBER_ACCESS_DENIED);
     }
 
     @Test
-    @DisplayName("좋아요 취소와 탈퇴가 경합하면 취소는 탈퇴 전 완료될 때만 Like 행을 지운다")
-    void concurrentUnlikeAndLeave_UnlikeIsAppliedOnlyBeforeLeave() throws InterruptedException {
+    @DisplayName("좋아요 취소의 ACTIVE 검증 뒤 탈퇴는 그룹 잠금 해제 전까지 대기한다")
+    void unlikeThenLeave_LeaveWaitsForUnlikeGroupLock() throws Exception {
         likeCommandService.like(memberId, groupId, verificationId);
 
-        MembershipRaceResult result = runMembershipRace(
+        MembershipRaceResult result = runMembershipRaceAfterLikeMembershipValidation(
                 () -> likeCommandService.unlike(memberId, groupId, verificationId),
                 () -> groupCommandService.leaveGroup(groupId, memberId));
 
@@ -222,74 +241,78 @@ class GroupRoutineVerificationLikeConcurrencyTest {
         assertThat(result.likeFailure()).isNull();
         assertThat(groupMemberRepository.findByGroupIdAndMemberId(groupId, memberId).orElseThrow()
                 .getStatus()).isEqualTo(GroupMemberStatus.LEFT);
+        assertThat(result.likeSucceeded()).isTrue();
         assertThat(likeRepository.countByVerificationIds(List.of(verificationId))
-                .getOrDefault(verificationId, 0L)).isEqualTo(result.likeSucceeded() ? 0L : 1L);
+                .getOrDefault(verificationId, 0L)).isZero();
+        assertThatThrownBy(() -> likeCommandService.unlike(memberId, groupId, verificationId))
+                .isInstanceOf(GroupException.class)
+                .hasFieldOrPropertyWithValue("code", GroupErrorCode.GROUP_MEMBER_ACCESS_DENIED);
     }
 
-    private void assertLikeWasCreatedBeforeExitOrRejected(boolean likeSucceeded) {
-        long likeCount = likeRepository.countByVerificationIds(List.of(verificationId))
-                .getOrDefault(verificationId, 0L);
-        GroupMember membership = groupMemberRepository.findByGroupIdAndMemberId(groupId, memberId)
-                .orElseThrow();
-
-        assertThat(likeCount).isEqualTo(likeSucceeded ? 1L : 0L);
-        if (likeSucceeded) {
-            assertThat(membership.getLeftAt()).isNotNull();
-            assertThat(likeRepository.findByGroupRoutineVerificationIdAndMemberId(verificationId, memberId)
-                    .orElseThrow().getCreatedAt()).isBeforeOrEqualTo(membership.getLeftAt());
-        }
-    }
-
-    private MembershipRaceResult runMembershipRace(Runnable likeCommand, Runnable exitCommand)
-            throws InterruptedException {
+    /**
+     * 좋아요 명령이 그룹 행 잠금과 ACTIVE 검증을 마친 직후 멈춘다. 이때 탈퇴·강제퇴장은
+     * 같은 그룹 행 PESSIMISTIC_WRITE 잠금에서 기다려야 한다.
+     */
+    private MembershipRaceResult runMembershipRaceAfterLikeMembershipValidation(
+            Runnable likeCommand,
+            Runnable exitCommand
+    ) throws Exception {
         ExecutorService pool = Executors.newFixedThreadPool(2);
-        CountDownLatch ready = new CountDownLatch(2);
-        CountDownLatch start = new CountDownLatch(1);
-        CountDownLatch done = new CountDownLatch(2);
+        CountDownLatch membershipValidated = new CountDownLatch(1);
+        CountDownLatch allowLikeToContinue = new CountDownLatch(1);
+        CountDownLatch exitStarted = new CountDownLatch(1);
         AtomicReference<Throwable> likeFailure = new AtomicReference<>();
         AtomicReference<Throwable> exitFailure = new AtomicReference<>();
         AtomicInteger likeSucceeded = new AtomicInteger();
 
-        pool.submit(() -> runRaceTask(
-                likeCommand, ready, start, done,
-                likeSucceeded, likeFailure));
-        pool.submit(() -> runRaceTask(exitCommand, ready, start, done, null, exitFailure));
+        doAnswer(invocation -> {
+            Object groupMember = invocation.callRealMethod();
+            membershipValidated.countDown();
+            if (!allowLikeToContinue.await(10, TimeUnit.SECONDS)) {
+                throw new IllegalStateException("timed out waiting to continue like command");
+            }
+            return groupMember;
+        }).doCallRealMethod().when(groupValidationService)
+                .validateActiveGroupMember(groupId, memberId);
 
-        assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
-        start.countDown();
-        assertThat(done.await(20, TimeUnit.SECONDS)).isTrue();
-        pool.shutdownNow();
+        try {
+            Future<?> likeFuture = pool.submit(() -> runRaceTask(
+                    likeCommand, likeSucceeded, likeFailure));
+            assertThat(membershipValidated.await(10, TimeUnit.SECONDS)).isTrue();
 
-        Throwable failure = likeFailure.get();
-        if (failure instanceof GroupException exception
-                && exception.getCode() == GroupErrorCode.GROUP_MEMBER_ACCESS_DENIED) {
-            failure = null;
+            Future<?> exitFuture = pool.submit(() -> {
+                exitStarted.countDown();
+                runRaceTask(exitCommand, null, exitFailure);
+            });
+            assertThat(exitStarted.await(10, TimeUnit.SECONDS)).isTrue();
+
+            // 좋아요가 검증을 마쳤지만 아직 반환되지 않았다. 탈퇴·강퇴는 그룹 행 잠금 때문에 대기한다.
+            assertThatThrownBy(() -> exitFuture.get(500, TimeUnit.MILLISECONDS))
+                    .isInstanceOf(TimeoutException.class);
+
+            allowLikeToContinue.countDown();
+            likeFuture.get(10, TimeUnit.SECONDS);
+            exitFuture.get(10, TimeUnit.SECONDS);
+        } finally {
+            allowLikeToContinue.countDown();
+            pool.shutdownNow();
+            pool.awaitTermination(10, TimeUnit.SECONDS);
         }
-        return new MembershipRaceResult(likeSucceeded.get() == 1, failure, exitFailure.get());
+        return new MembershipRaceResult(likeSucceeded.get() == 1, likeFailure.get(), exitFailure.get());
     }
 
     private void runRaceTask(
             Runnable task,
-            CountDownLatch ready,
-            CountDownLatch start,
-            CountDownLatch done,
             AtomicInteger success,
             AtomicReference<Throwable> failure
     ) {
         try {
-            ready.countDown();
-            start.await();
             task.run();
             if (success != null) {
                 success.incrementAndGet();
             }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            failure.compareAndSet(null, e);
         } catch (RuntimeException e) {
             failure.compareAndSet(null, e);
-        } finally {
-            done.countDown();
         }
     }
 
