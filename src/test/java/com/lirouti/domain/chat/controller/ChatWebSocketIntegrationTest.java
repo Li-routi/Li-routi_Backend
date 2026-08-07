@@ -32,6 +32,7 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.messaging.converter.JacksonJsonMessageConverter;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.stomp.StompFrameHandler;
 import org.springframework.messaging.simp.stomp.StompHeaders;
@@ -91,6 +92,8 @@ class ChatWebSocketIntegrationTest {
     private JwtUtil jwtUtil;
     @Autowired
     private SimpUserRegistry simpUserRegistry;
+    @Autowired
+    private SimpMessagingTemplate messagingTemplate;
     @Autowired
     private WebSocketSessionRegistry webSocketSessionRegistry;
     @MockitoBean
@@ -514,6 +517,7 @@ class ChatWebSocketIntegrationTest {
         when(groupValidationService.validateActiveGroupMember(GROUP_ID, MEMBER_ID))
                 .thenThrow(new GroupException(GroupErrorCode.GROUP_MEMBER_ACCESS_DENIED));
         StompSession reconnectedSession = connect();
+        CountDownLatch rejectedSubscriptionMessage = new CountDownLatch(1);
         reconnectedSession.subscribe(
                 CHAT_DESTINATION,
                 new StompFrameHandler() {
@@ -524,12 +528,13 @@ class ChatWebSocketIntegrationTest {
 
                     @Override
                     public void handleFrame(StompHeaders headers, Object payload) {
+                        rejectedSubscriptionMessage.countDown();
                     }
                 }
         );
         verify(groupValidationService, timeout(5_000))
                 .validateActiveGroupMember(GROUP_ID, MEMBER_ID);
-        assertThat(awaitSubscriptionCount(0)).isTrue();
+        assertThat(receivesProbe(rejectedSubscriptionMessage)).isFalse();
         reconnectedSession.disconnect();
     }
 
@@ -655,6 +660,26 @@ class ChatWebSocketIntegrationTest {
                 return true;
             }
             LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(10));
+        }
+        return false;
+    }
+
+    private boolean receivesProbe(CountDownLatch messageReceived) throws InterruptedException {
+        ChatResDTO.Message probe = ChatResDTO.Message.builder()
+                .id(Long.MAX_VALUE)
+                .clientMessageId("subscription-probe")
+                .groupId(GROUP_ID)
+                .type(ChatMessageType.TEXT)
+                .content("구독 검증 메시지")
+                .createdAt(LocalDateTime.now())
+                .build();
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1);
+        while (System.nanoTime() < deadline) {
+            // 거부된 SUBSCRIBE의 내부 이벤트 수가 아니라 실제 broker 전달 여부를 검증한다.
+            messagingTemplate.convertAndSend(CHAT_DESTINATION, probe);
+            if (messageReceived.await(50, TimeUnit.MILLISECONDS)) {
+                return true;
+            }
         }
         return false;
     }
