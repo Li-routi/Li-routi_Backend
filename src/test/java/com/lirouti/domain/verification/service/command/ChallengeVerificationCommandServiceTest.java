@@ -165,6 +165,8 @@ class ChallengeVerificationCommandServiceTest {
         em.flush();
 
         challengeCommandService.verify(m.getId(), c.getId(), request(KEY_1, "처음"));
+        String firstStoredKey = verificationsOf(mc).get(0).getImageUrl();
+
         ChallengeVerificationResDTO.Verification second =
                 challengeCommandService.verify(m.getId(), c.getId(), request(KEY_2, "바꿈"));
 
@@ -181,7 +183,10 @@ class ChallengeVerificationCommandServiceTest {
                 .matches(PROMOTED_KEY)
                 .doesNotContain("-staging/")
                 // 승격이 UUID 를 새로 뽑았는지. 올린 key 를 그대로 쓰면 재승격이 공개본을 덮어쓴다.
-                .doesNotContain("22222222-2222-4222-8222-222222222222");
+                .doesNotContain("22222222-2222-4222-8222-222222222222")
+                // 앞 인증의 공개본을 다시 쓰면 그 사진이 조용히 바뀐다. 대기 key 만 봐서는
+                // 이 경우를 못 잡으므로 앞서 저장된 공개 key 와도 대조한다.
+                .isNotEqualTo(firstStoredKey);
         assertThat(second.imageUrl())
                 .as("응답의 주소는 저장된 key 로 조립된다")
                 .endsWith(storedKey);
