@@ -178,6 +178,51 @@ class GroupValidationServiceTest {
     }
 
     @Test
+    @DisplayName("가입용 잠금 획득은 상한 집계 전에 그룹과 회원만 잠근다")
+    void lockActiveGroupAndMemberForJoin_LocksWithoutCounting() {
+        // given
+        when(groupRepository.findByIdForUpdate(GROUP_ID)).thenReturn(Optional.of(group));
+        when(group.getStatus()).thenReturn(GroupStatus.ACTIVE);
+        when(memberRepository.findByIdForUpdate(MEMBER_ID)).thenReturn(Optional.of(member));
+        when(member.getIsActive()).thenReturn(true);
+
+        // when
+        GroupValidationService.JoinLimitContext result = groupValidationService
+                .lockActiveGroupAndMemberForJoin(GROUP_ID, MEMBER_ID);
+
+        // then
+        assertThat(result.group()).isSameAs(group);
+        assertThat(result.member()).isSameAs(member);
+        InOrder inOrder = inOrder(groupRepository, memberRepository, groupMemberRepository);
+        inOrder.verify(groupRepository).findByIdForUpdate(GROUP_ID);
+        inOrder.verify(memberRepository).findByIdForUpdate(MEMBER_ID);
+        verifyNoInteractions(groupMemberRepository);
+    }
+
+    @Test
+    @DisplayName("가입 상한 검증은 잠금 획득 뒤 별도로 수행할 수 있다")
+    void validateJoinLimits_UnderLimit_ValidatesBothLimits() {
+        // given
+        when(groupMemberRepository.countActiveMembersByGroupId(
+                GROUP_ID, GroupMemberStatus.ACTIVE
+        )).thenReturn(5L);
+        when(groupMemberRepository.countByMemberIdAndStatusAndGroupStatus(
+                MEMBER_ID, GroupMemberStatus.ACTIVE, GroupStatus.ACTIVE
+        )).thenReturn(5L);
+
+        // when
+        groupValidationService.validateJoinLimits(GROUP_ID, MEMBER_ID);
+
+        // then
+        verify(groupMemberRepository).countActiveMembersByGroupId(
+                GROUP_ID, GroupMemberStatus.ACTIVE
+        );
+        verify(groupMemberRepository).countByMemberIdAndStatusAndGroupStatus(
+                MEMBER_ID, GroupMemberStatus.ACTIVE, GroupStatus.ACTIVE
+        );
+    }
+
+    @Test
     @DisplayName("현재 회원이 대상 그룹의 ACTIVE OWNER이면 방장 검증에 성공한다")
     void validateGroupOwner_ActiveOwner_ReturnsGroupMember() {
         // given

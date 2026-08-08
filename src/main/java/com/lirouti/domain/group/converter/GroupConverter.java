@@ -7,13 +7,19 @@ import com.lirouti.domain.group.entity.GroupRoutine;
 import com.lirouti.domain.group.entity.GroupRoutineCategory;
 import com.lirouti.domain.group.entity.GroupRoutineSchedule;
 import com.lirouti.domain.group.entity.GroupMember;
+import com.lirouti.domain.group.enums.GroupJoinUnavailableReason;
 import com.lirouti.domain.group.enums.GroupMemberRole;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.group.repository.GroupRoutineAssignmentRepositoryCustom.TodayAssignmentProjection;
+import com.lirouti.domain.group.repository.GroupDetailQueryRepository.GroupMemberDetailProjection;
+import com.lirouti.domain.group.repository.GroupDetailQueryRepository.TodayMemberProgressProjection;
 import com.lirouti.domain.routine.enums.RoutineCategoryColor;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 public final class GroupConverter {
     private GroupConverter() {
@@ -87,6 +93,47 @@ public final class GroupConverter {
                 .name(category.getName())
                 .color(category.getColor())
                 .fixed(category.isFixed())
+                .build();
+    }
+
+    /** 그룹 상세 멤버 projection과 오늘 진행도 집계를 진입 화면 응답으로 조립한다. */
+    public static GroupResDTO.Detail toGroupDetail(
+            List<GroupMemberDetailProjection> memberDetails,
+            List<TodayMemberProgressProjection> progresses
+    ) {
+        GroupMemberDetailProjection group = memberDetails.getFirst();
+        Map<Long, TodayMemberProgressProjection> progressByMemberId = progresses.stream()
+                .collect(Collectors.toMap(
+                        TodayMemberProgressProjection::memberId,
+                        Function.identity()
+                ));
+
+        return GroupResDTO.Detail.builder()
+                .groupId(group.groupId())
+                .groupName(group.groupName())
+                .inviteCode(group.inviteCode())
+                .members(memberDetails.stream()
+                        .map(member -> toMemberActivity(
+                                member,
+                                progressByMemberId.get(member.memberId())))
+                        .toList())
+                .build();
+    }
+
+    private static GroupResDTO.MemberActivity toMemberActivity(
+            GroupMemberDetailProjection member,
+            TodayMemberProgressProjection progress
+    ) {
+        long completedCount = progress == null ? 0L : progress.completedCount();
+        long totalCount = progress == null ? 0L : progress.totalCount();
+        return GroupResDTO.MemberActivity.builder()
+                .memberId(member.memberId())
+                .name(member.name())
+                .profileImageKey(member.profileImageKey())
+                .statusMessage(member.statusMessage())
+                .currentStreak(member.currentStreak())
+                .totalLikeCount(member.totalLikeCount())
+                .dailyProgress(new GroupResDTO.DailyProgress(completedCount, totalCount))
                 .build();
     }
 
@@ -287,6 +334,29 @@ public final class GroupConverter {
     public static GroupResDTO.InviteCode toInviteCodeResult(Group group) {
         return GroupResDTO.InviteCode.builder()
                 .inviteCode(group.getInviteCode())
+                .build();
+    }
+
+    /** 초대코드 Preview에 필요한 그룹 정보와 참여 가능 상태를 응답으로 변환한다. */
+    public static GroupResDTO.JoinPreview toJoinPreview(
+            Group group,
+            long activeMemberCount,
+            long totalRoutineCount,
+            List<Long> activeMembershipIds,
+            boolean joinable,
+            GroupJoinUnavailableReason unavailableReason
+    ) {
+        return GroupResDTO.JoinPreview.builder()
+                .groupId(group.getId())
+                .name(group.getName())
+                .activeMemberCount((int) activeMemberCount)
+                .maxMemberCount(GroupMember.MAX_ACTIVE_MEMBER_COUNT_PER_GROUP)
+                .totalRoutineCount((int) totalRoutineCount)
+                .members(activeMembershipIds.stream()
+                        .map(ignored -> new GroupResDTO.JoinPreviewMember(null))
+                        .toList())
+                .joinable(joinable)
+                .unavailableReason(unavailableReason)
                 .build();
     }
 

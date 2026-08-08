@@ -1,6 +1,8 @@
 package com.lirouti.domain.group.dto.response;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.lirouti.domain.group.enums.GroupJoinUnavailableReason;
+import com.lirouti.domain.group.enums.GroupMemberStatus;
 import com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus;
 import com.lirouti.domain.routine.enums.RoutineCategoryColor;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -32,6 +34,39 @@ public final class GroupResDTO {
             String name,
             RoutineCategoryColor color,
             boolean fixed
+    ) {
+    }
+
+    /** 그룹방 진입 화면의 기본 정보와 ACTIVE 구성원 활동 현황이다. */
+    @Builder
+    @Schema(name = "GroupDetail", description = "그룹방 상세 정보")
+    public record Detail(
+            Long groupId,
+            String groupName,
+            String inviteCode,
+            List<MemberActivity> members
+    ) {
+    }
+
+    /** ACTIVE 그룹 구성원 한 명의 프로필·활동 현황이다. */
+    @Builder
+    @Schema(name = "GroupMemberActivity", description = "그룹 구성원 활동 현황")
+    public record MemberActivity(
+            Long memberId,
+            String name,
+            String profileImageKey,
+            String statusMessage,
+            int currentStreak,
+            long totalLikeCount,
+            DailyProgress dailyProgress
+    ) {
+    }
+
+    /** 금일 그룹 루틴 할당의 완료 수와 전체 수다. */
+    @Builder
+    public record DailyProgress(
+            long completedCount,
+            long totalCount
     ) {
     }
 
@@ -169,6 +204,42 @@ public final class GroupResDTO {
     @Builder
     public record InviteCode(
             String inviteCode
+    ) {
+    }
+
+    /** 초대코드 입력 후 참여 팝업에 표시할 그룹 정보와 현재 회원의 참여 가능 상태다. */
+    @Builder
+    @Schema(name = "GroupJoinPreview", description = "초대코드 기반 그룹 참여 Preview")
+    public record JoinPreview(
+            Long groupId,
+            String name,
+            int activeMemberCount,
+            int maxMemberCount,
+            int totalRoutineCount,
+            List<JoinPreviewMember> members,
+            boolean joinable,
+            GroupJoinUnavailableReason unavailableReason
+    ) {
+    }
+
+    /**
+     * 참여 Preview에 표시하는 ACTIVE 구성원 요약이다.
+     * 캐릭터 도메인이 도입되기 전에는 characterImageUrl이 null이며 내부 식별자는 노출하지 않는다.
+     */
+    @Builder
+    @Schema(name = "GroupJoinPreviewMember", description = "그룹 참여 Preview 구성원 요약")
+    public record JoinPreviewMember(
+            String characterImageUrl
+    ) {
+    }
+
+    /** 초대코드로 그룹 가입을 완료한 결과다. */
+    @Builder
+    @Schema(name = "GroupJoinResult", description = "초대코드 기반 그룹 가입 결과")
+    public record JoinResult(
+            Long groupId,
+            String name,
+            GroupMemberStatus memberStatus
     ) {
     }
 

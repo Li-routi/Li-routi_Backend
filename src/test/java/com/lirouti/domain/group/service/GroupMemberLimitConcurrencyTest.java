@@ -6,8 +6,10 @@ import com.lirouti.domain.group.enums.GroupMemberRole;
 import com.lirouti.domain.group.enums.GroupMemberStatus;
 import com.lirouti.domain.group.exception.GroupException;
 import com.lirouti.domain.group.exception.code.error.GroupErrorCode;
+import com.lirouti.domain.group.dto.request.GroupReqDTO;
 import com.lirouti.domain.group.repository.GroupMemberRepository;
 import com.lirouti.domain.group.repository.GroupRepository;
+import com.lirouti.domain.group.service.command.GroupJoinCommandService;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.enums.Role;
 import com.lirouti.domain.member.enums.SocialProvider;
@@ -17,10 +19,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.ArrayList;
@@ -35,11 +35,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest
-@Import(GroupMemberLimitConcurrencyTest.JoinHarness.class)
 @DisplayName("그룹별 활성 그룹원 상한 동시성 테스트")
 class GroupMemberLimitConcurrencyTest {
     @Autowired
-    private JoinHarness joinHarness;
+    private GroupJoinCommandService groupJoinCommandService;
     @Autowired
     private GroupMemberRepository groupMemberRepository;
     @Autowired
@@ -52,6 +51,7 @@ class GroupMemberLimitConcurrencyTest {
     private JdbcTemplate jdbcTemplate;
 
     private Long groupId;
+    private String inviteCode;
     private final List<Long> memberIds = new ArrayList<>();
 
     @AfterEach
@@ -105,9 +105,10 @@ class GroupMemberLimitConcurrencyTest {
 
     private Long[] createSeed() {
         String suffix = UUID.randomUUID().toString().replace("-", "");
+        inviteCode = suffix.substring(0, 7).toUpperCase();
         Group group = groupRepository.save(Group.builder()
                 .name("그룹원 상한 그룹")
-                .inviteCode(suffix.substring(0, 7).toUpperCase())
+                .inviteCode(inviteCode)
                 .build());
         groupId = group.getId();
 
@@ -147,7 +148,7 @@ class GroupMemberLimitConcurrencyTest {
             try {
                 ready.countDown();
                 start.await();
-                joinHarness.join(memberId, groupId);
+                groupJoinCommandService.join(memberId, new GroupReqDTO.JoinGroup(inviteCode));
                 success.incrementAndGet();
             } catch (GroupException exception) {
                 if (exception.getCode() == GroupErrorCode.GROUP_MEMBER_LIMIT_EXCEEDED) {
@@ -166,27 +167,4 @@ class GroupMemberLimitConcurrencyTest {
         };
     }
 
-    static class JoinHarness {
-        private final GroupValidationService groupValidationService;
-        private final GroupMemberRepository groupMemberRepository;
-
-        JoinHarness(
-                GroupValidationService groupValidationService,
-                GroupMemberRepository groupMemberRepository
-        ) {
-            this.groupValidationService = groupValidationService;
-            this.groupMemberRepository = groupMemberRepository;
-        }
-
-        @Transactional
-        public void join(Long memberId, Long groupId) {
-            GroupValidationService.JoinLimitContext context = groupValidationService
-                    .lockAndValidateJoinLimits(groupId, memberId);
-            groupMemberRepository.saveAndFlush(GroupMember.builder()
-                    .member(context.member())
-                    .group(context.group())
-                    .role(GroupMemberRole.MEMBER)
-                    .build());
-        }
-    }
 }

@@ -12,7 +12,6 @@ import com.lirouti.domain.group.repository.GroupMemberRepository;
 import com.lirouti.domain.group.repository.GroupRoutineAssignmentRepository;
 import com.lirouti.domain.group.repository.GroupRoutineRepository;
 import com.lirouti.domain.group.repository.GroupRoutineScheduleRepository;
-import com.lirouti.domain.group.service.GroupValidationService;
 import com.lirouti.domain.member.entity.Member;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -45,7 +44,9 @@ class GroupRoutineAssignmentCommandServiceTest {
     @Mock
     private GroupMemberRepository groupMemberRepository;
     @Mock
-    private GroupValidationService groupValidationService;
+    private GroupMemberActivityCommandService groupMemberActivityCommandService;
+    @Mock
+    private GroupRoutineAssignmentStatusRefreshBatchService statusRefreshBatchService;
     @Mock
     private Clock clock;
     @Mock
@@ -170,13 +171,11 @@ class GroupRoutineAssignmentCommandServiceTest {
     }
 
     @Test
-    @DisplayName("가입 당일에는 현재 시간과 관계없이 오늘 반복 루틴을 즉시 할당한다")
-    void assignTodayRoutinesToMember_ActiveMember_AssignsTodaySchedules() {
+    @DisplayName("가입 기준 시각이 수행 시간 안이면 진행 중 상태로 오늘 반복 루틴을 할당한다")
+    void assignTodayRoutinesToMember_InProgress_AssignsTodaySchedules() {
         // given
         LocalDateTime now = LocalDateTime.of(2026, 7, 23, 9, 30);
-        givenNow(now);
         LocalDate today = now.toLocalDate();
-        when(groupValidationService.validateActiveGroupMember(10L, 1L)).thenReturn(groupMember);
         when(scheduleRepository.findAllWithRoutineByGroupIdAndRepeatDay(
                 10L,
                 today.getDayOfWeek()
@@ -185,16 +184,13 @@ class GroupRoutineAssignmentCommandServiceTest {
         when(groupRoutine.getId()).thenReturn(100L);
         when(schedule.getStartTime()).thenReturn(LocalTime.of(9, 0));
         when(schedule.getEndTime()).thenReturn(LocalTime.of(10, 0));
-        when(groupMember.getMember()).thenReturn(member);
-        when(member.getId()).thenReturn(1L);
         when(groupRoutineRepository.findActiveByIdForUpdate(100L)).thenReturn(Optional.of(groupRoutine));
         givenInsertedAssignment();
 
         // when
-        int result = assignmentCommandService.assignTodayRoutinesToMember(10L, 1L);
+        assignmentCommandService.assignTodayRoutinesToMember(10L, 1L, now);
 
         // then
-        assertThat(result).isEqualTo(1);
         verify(assignmentRepository).insertIfAbsent(
                 100L,
                 1L,
@@ -203,6 +199,37 @@ class GroupRoutineAssignmentCommandServiceTest {
                 LocalTime.of(10, 0),
                 GroupRoutineAssignmentStatus.IN_PROGRESS.name()
         );
+    }
+
+    @Test
+    @DisplayName("가입 기준 시각이 시작 전이면 PENDING으로 할당하고 종료 시각 이상이면 생성하지 않는다")
+    void assignTodayRoutinesToMember_PendingAndExpired_AssignsOnlyPerformableSchedules() {
+        // given
+        LocalDateTime joinedAt = LocalDateTime.of(2026, 7, 23, 9, 0);
+        LocalDate today = joinedAt.toLocalDate();
+        when(scheduleRepository.findAllWithRoutineByGroupIdAndRepeatDay(10L, today.getDayOfWeek()))
+                .thenReturn(List.of(schedule, secondSchedule));
+        when(schedule.getGroupRoutine()).thenReturn(groupRoutine);
+        when(groupRoutine.getId()).thenReturn(100L);
+        when(schedule.getStartTime()).thenReturn(LocalTime.of(10, 0));
+        when(schedule.getEndTime()).thenReturn(LocalTime.of(11, 0));
+        lenient().when(secondSchedule.getGroupRoutine()).thenReturn(secondRoutine);
+        lenient().when(secondRoutine.getId()).thenReturn(101L);
+        when(secondSchedule.getEndTime()).thenReturn(LocalTime.of(9, 0));
+        when(groupRoutineRepository.findActiveByIdForUpdate(100L)).thenReturn(Optional.of(groupRoutine));
+        givenInsertedAssignment();
+
+        // when
+        assignmentCommandService.assignTodayRoutinesToMember(10L, 1L, joinedAt);
+
+        // then
+        verify(assignmentRepository, times(1)).insertIfAbsent(
+                100L, 1L, today, LocalTime.of(10, 0), LocalTime.of(11, 0),
+                GroupRoutineAssignmentStatus.PENDING.name());
+        verify(groupRoutineRepository, times(1)).findActiveByIdForUpdate(100L);
+        verify(groupRoutineRepository, never()).findActiveByIdForUpdate(101L);
+        verify(assignmentRepository, times(1)).insertIfAbsent(
+                anyLong(), anyLong(), any(), any(), any(), anyString());
     }
 
     @Test
@@ -356,26 +383,37 @@ class GroupRoutineAssignmentCommandServiceTest {
         // given
         LocalDateTime currentDateTime = LocalDateTime.of(2026, 7, 23, 10, 0);
 
+        when(statusRefreshBatchService.markExpiredAssignmentsMissed(currentDateTime, 100))
+                .thenReturn(0);
+
         // when
         assignmentCommandService.refreshAssignmentStatuses(currentDateTime);
 
         // then
-        InOrder inOrder = inOrder(assignmentRepository);
-        inOrder.verify(assignmentRepository).markExpiredAssignmentsMissed(
-                currentDateTime.toLocalDate(),
-                currentDateTime.toLocalTime(),
-                List.of(
-                        GroupRoutineAssignmentStatus.PENDING,
-                        GroupRoutineAssignmentStatus.IN_PROGRESS
-                ),
-                GroupRoutineAssignmentStatus.MISSED
-        );
-        inOrder.verify(assignmentRepository).markStartedAssignmentsInProgress(
-                currentDateTime.toLocalDate(),
-                currentDateTime.toLocalTime(),
-                GroupRoutineAssignmentStatus.PENDING,
-                GroupRoutineAssignmentStatus.IN_PROGRESS
-        );
+        InOrder inOrder = inOrder(statusRefreshBatchService);
+        inOrder.verify(statusRefreshBatchService)
+                .markExpiredAssignmentsMissed(currentDateTime, 100);
+        inOrder.verify(statusRefreshBatchService)
+                .markStartedAssignmentsInProgress(currentDateTime);
+    }
+
+    @Test
+    @DisplayName("마감 처리는 남은 대상이 없을 때까지 batch 단위로 반복한다")
+    void refreshAssignmentStatuses_RepeatsUntilNoMissedAssignmentsRemain() {
+        // given
+        LocalDateTime currentDateTime = LocalDateTime.of(2026, 7, 23, 10, 0);
+        when(statusRefreshBatchService.markExpiredAssignmentsMissed(currentDateTime, 100))
+                .thenReturn(100, 40, 0);
+
+        // when
+        assignmentCommandService.refreshAssignmentStatuses(currentDateTime);
+
+        // then
+        InOrder inOrder = inOrder(statusRefreshBatchService);
+        inOrder.verify(statusRefreshBatchService, times(3))
+                .markExpiredAssignmentsMissed(currentDateTime, 100);
+        inOrder.verify(statusRefreshBatchService)
+                .markStartedAssignmentsInProgress(currentDateTime);
     }
 
     @Test

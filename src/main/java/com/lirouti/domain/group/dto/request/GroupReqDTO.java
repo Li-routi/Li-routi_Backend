@@ -22,6 +22,19 @@ public final class GroupReqDTO {
     private GroupReqDTO() {
     }
 
+    /** 영구 초대코드로 그룹 가입을 요청한다. */
+    @Schema(name = "JoinGroup", description = "초대코드 기반 그룹 가입 요청")
+    public record JoinGroup(
+            @Schema(description = "그룹에 영구 귀속된 7자리 초대코드", example = "AB12CD3")
+            @NotBlank(message = "초대코드는 필수입니다.")
+            @Size(min = 7, max = 7, message = "초대코드는 7자여야 합니다.")
+            String inviteCode
+    ) {
+        public JoinGroup {
+            inviteCode = inviteCode == null ? null : inviteCode.trim().toUpperCase(Locale.ROOT);
+        }
+    }
+
     /** 그룹 설정에서 사용자 카테고리를 추가하는 요청이다. */
     @Schema(name = "CreateGroupRoutineCategory", description = "그룹 사용자 카테고리 생성 요청")
     public record CreateCategory(

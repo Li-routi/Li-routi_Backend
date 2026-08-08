@@ -23,6 +23,7 @@ import com.lirouti.domain.group.repository.GroupRepository;
 import com.lirouti.domain.group.repository.GroupRoutineCategoryRepository;
 import com.lirouti.domain.group.repository.GroupRoutineRepository;
 import com.lirouti.domain.group.service.GroupValidationService;
+import com.lirouti.domain.verification.repository.GroupRoutineVerificationReadRepository;
 import com.lirouti.global.websocket.WebSocketSessionRegistry;
 
 import jakarta.validation.ConstraintViolation;
@@ -38,6 +39,7 @@ public class GroupCommandService {
     private final GroupRepository groupRepository;
     private final GroupRoutineCategoryRepository groupRoutineCategoryRepository;
     private final GroupRoutineRepository groupRoutineRepository;
+    private final GroupRoutineVerificationReadRepository groupRoutineVerificationReadRepository;
     private final GroupRoutineAssignmentCommandService assignmentCommandService;
     private final GroupCreationAttemptService groupCreationAttemptService;
     private final GroupInviteCodeUniqueViolationDetector uniqueViolationDetector;
@@ -50,6 +52,7 @@ public class GroupCommandService {
             GroupRepository groupRepository,
             GroupRoutineCategoryRepository groupRoutineCategoryRepository,
             GroupRoutineRepository groupRoutineRepository,
+            GroupRoutineVerificationReadRepository groupRoutineVerificationReadRepository,
             GroupRoutineAssignmentCommandService assignmentCommandService,
             GroupCreationAttemptService groupCreationAttemptService,
             GroupInviteCodeUniqueViolationDetector uniqueViolationDetector,
@@ -60,6 +63,7 @@ public class GroupCommandService {
         this.groupRepository = groupRepository;
         this.groupRoutineCategoryRepository = groupRoutineCategoryRepository;
         this.groupRoutineRepository = groupRoutineRepository;
+        this.groupRoutineVerificationReadRepository = groupRoutineVerificationReadRepository;
         this.assignmentCommandService = assignmentCommandService;
         this.groupCreationAttemptService = groupCreationAttemptService;
         this.uniqueViolationDetector = uniqueViolationDetector;
@@ -78,6 +82,8 @@ public class GroupCommandService {
         }
 
         groupValidationService.validateGroupOwner(group, memberId);
+        // 읽음 행은 Group 애그리거트의 JPA cascade 대상이 아니다. 먼저 지워 FK 삭제를 열어 둔다.
+        groupRoutineVerificationReadRepository.deleteAllByGroupId(groupId);
         groupRepository.delete(group);
     }
 

@@ -12,10 +12,10 @@ import com.lirouti.domain.group.repository.GroupMemberRepository;
 import com.lirouti.domain.group.repository.GroupRoutineAssignmentRepository;
 import com.lirouti.domain.group.repository.GroupRoutineRepository;
 import com.lirouti.domain.group.repository.GroupRoutineScheduleRepository;
-import com.lirouti.domain.group.service.GroupValidationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
@@ -29,6 +29,7 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class GroupRoutineAssignmentCommandService {
+    private static final int EXPIRED_ASSIGNMENT_GROUP_BATCH_SIZE = 100;
     private static final Set<GroupRoutineAssignmentStatus> TERMINAL_STATUSES = EnumSet.of(
             GroupRoutineAssignmentStatus.COMPLETED,
             GroupRoutineAssignmentStatus.MISSED
@@ -42,7 +43,8 @@ public class GroupRoutineAssignmentCommandService {
     private final GroupRoutineRepository groupRoutineRepository;
     private final GroupRoutineScheduleRepository groupRoutineScheduleRepository;
     private final GroupMemberRepository groupMemberRepository;
-    private final GroupValidationService groupValidationService;
+    private final GroupMemberActivityCommandService groupMemberActivityCommandService;
+    private final GroupRoutineAssignmentStatusRefreshBatchService statusRefreshBatchService;
     private final Clock clock;
 
     /** 루틴 삭제 시 완료되지 않은 모든 회원의 할당을 한 번에 물리 삭제한다. */
@@ -205,26 +207,34 @@ public class GroupRoutineAssignmentCommandService {
     /**
      * 그룹 가입 흐름에서 호출해 가입 당일의 반복 루틴을 회원에게 즉시 할당한다.
      *
-     * @param groupId 가입한 그룹 ID
-     * @param memberId 가입한 회원 ID
-     * @return 가입 당일 할당 대상 수
+     * 가입 상태 검증은 호출한 가입 Command가 담당한다. 이 서비스는 전달받은 가입 기준 시각을
+     * 기준으로 루틴 조회·상태 판정·멱등 생성만 수행한다.
+     *
+     * @param groupId 잠금 및 가입 검증을 마친 그룹 ID
+     * @param memberId 잠금 및 가입 검증을 마친 회원 ID
+     * @param joinedAt 가입 Command가 한 번만 확정한 가입 기준 시각
      */
-    @Transactional
-    public int assignTodayRoutinesToMember(Long groupId, Long memberId) {
-        GroupMember groupMember = groupValidationService
-                .validateActiveGroupMember(groupId, memberId);
-        LocalDate today = LocalDate.now(clock);
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void assignTodayRoutinesToMember(
+            Long groupId,
+            Long memberId,
+            LocalDateTime joinedAt
+    ) {
+        if (groupId == null || memberId == null || joinedAt == null) {
+            throw new IllegalArgumentException("그룹 ID, 회원 ID와 가입 기준 시각은 필수입니다.");
+        }
+        LocalDate today = joinedAt.toLocalDate();
         List<GroupRoutineSchedule> schedules = groupRoutineScheduleRepository
                 .findAllWithRoutineByGroupIdAndRepeatDay(groupId, today.getDayOfWeek());
 
         int assignmentCount = schedules.stream()
+                .filter(schedule -> schedule.getEndTime().isAfter(joinedAt.toLocalTime()))
                 .filter(this::lockActiveRoutine)
-                .mapToInt(schedule -> insertAssignment(schedule, groupMember, today))
+                .mapToInt(schedule -> insertAssignment(schedule, memberId, today, joinedAt))
                 .sum();
         log.debug("그룹 가입 회원의 당일 루틴 할당 처리를 완료했습니다. "
                         + "groupId={}, memberId={}, assignedDate={}, assignmentCount={}",
                 groupId, memberId, today, assignmentCount);
-        return assignmentCount;
     }
 
     /**
@@ -276,29 +286,43 @@ public class GroupRoutineAssignmentCommandService {
         throw new GroupException(GroupErrorCode.GROUP_ROUTINE_ASSIGNMENT_NOT_IN_PROGRESS);
     }
 
+    /** 실제 완료 전이와 현재 가입 회차 스트릭 갱신을 같은 트랜잭션으로 묶는다. */
+    @Transactional
+    public void completeAssignmentAndRecordActivity(
+            GroupRoutineAssignment assignment,
+            LocalDateTime verifiedAt
+    ) {
+        if (assignment == null) {
+            throw new IllegalArgumentException("그룹 루틴 할당은 필수입니다.");
+        }
+        completeAssignment(assignment.getId(), verifiedAt);
+        groupMemberActivityCommandService.recordStreakIfAllAssignmentsCompleted(
+                assignment.getGroupRoutine().getGroup().getId(),
+                assignment.getMember().getId(),
+                assignment.getAssignedDate()
+        );
+    }
+
     /**
      * 기준 시각에 마감된 할당을 먼저 미이행 처리한 뒤 시작된 할당을 진행 중으로 전이한다.
      *
      * @param currentDateTime 상태 전이 기준 시각
      */
-    @Transactional
     public void refreshAssignmentStatuses(LocalDateTime currentDateTime) {
-        LocalDate today = currentDateTime.toLocalDate();
-        int missedCount = groupRoutineAssignmentRepository.markExpiredAssignmentsMissed(
-                today,
-                currentDateTime.toLocalTime(),
-                List.of(
-                        GroupRoutineAssignmentStatus.PENDING,
-                        GroupRoutineAssignmentStatus.IN_PROGRESS
-                ),
-                GroupRoutineAssignmentStatus.MISSED
-        );
-        int inProgressCount = groupRoutineAssignmentRepository.markStartedAssignmentsInProgress(
-                today,
-                currentDateTime.toLocalTime(),
-                GroupRoutineAssignmentStatus.PENDING,
-                GroupRoutineAssignmentStatus.IN_PROGRESS
-        );
+        int missedCount = 0;
+        while (true) {
+            int batchMissedCount = statusRefreshBatchService
+                    .markExpiredAssignmentsMissed(
+                            currentDateTime,
+                            EXPIRED_ASSIGNMENT_GROUP_BATCH_SIZE
+                    );
+            if (batchMissedCount == 0) {
+                break;
+            }
+            missedCount += batchMissedCount;
+        }
+        int inProgressCount = statusRefreshBatchService
+                .markStartedAssignmentsInProgress(currentDateTime);
         if (missedCount > 0 || inProgressCount > 0) {
             log.info("그룹 루틴 할당 상태 갱신을 완료했습니다. "
                             + "currentDateTime={}, missedCount={}, inProgressCount={}",
@@ -383,9 +407,18 @@ public class GroupRoutineAssignmentCommandService {
             LocalDate assignedDate,
             LocalDateTime referenceTime
     ) {
+        return insertAssignment(schedule, groupMember.getMember().getId(), assignedDate, referenceTime);
+    }
+
+    private int insertAssignment(
+            GroupRoutineSchedule schedule,
+            Long memberId,
+            LocalDate assignedDate,
+            LocalDateTime referenceTime
+    ) {
         return groupRoutineAssignmentRepository.insertIfAbsent(
                 schedule.getGroupRoutine().getId(),
-                groupMember.getMember().getId(),
+                memberId,
                 assignedDate,
                 schedule.getStartTime(),
                 schedule.getEndTime(),

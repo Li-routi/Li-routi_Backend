@@ -41,6 +41,11 @@ public enum VerificationErrorCode implements BaseErrorCode {
             HttpStatus.CONFLICT,
             "인증 처리 중 중복 요청이 감지되었습니다. 잠시 후 다시 시도해 주세요.",
             "VERIFICATION409_3"
+    ),
+    GROUP_ROUTINE_VERIFICATION_NOT_FOUND(
+            HttpStatus.NOT_FOUND,
+            "그룹 루틴 인증 게시물을 찾을 수 없습니다.",
+            "VERIFICATION404_3"
     );
 
     private final HttpStatus httpStatus;

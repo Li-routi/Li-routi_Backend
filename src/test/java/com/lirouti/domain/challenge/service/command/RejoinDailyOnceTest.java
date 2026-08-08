@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.when;
 
@@ -21,6 +22,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.lirouti.domain.media.service.MediaImageLoad;
 import com.lirouti.domain.challenge.client.AnthropicVerificationReviewClient;
 import com.lirouti.domain.challenge.client.VerificationReview;
 import com.lirouti.domain.challenge.dto.response.ChallengeResDTO;
@@ -63,8 +65,10 @@ import com.lirouti.domain.verification.exception.code.error.ChallengeVerificatio
 class RejoinDailyOnceTest {
 
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
-    private static final String KEY =
-            "challenge-verifications/eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee.jpg";
+    private static final String STAGING_KEY =
+            "challenge-verifications-staging/eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee.jpg";
+    private static final String PUBLIC_KEY =
+            "challenge-verifications/11111111-1111-4111-8111-111111111111.jpg";
 
     @Autowired
     private ChallengeCommandService challengeCommandService;
@@ -87,7 +91,14 @@ class RejoinDailyOnceTest {
     void setUp() {
         doNothing().when(mediaService).validateMediaKey(any(), any());
         doNothing().when(mediaService).validateUploadedBytes(any(), any());
-        when(mediaService.resolvePublicUrl(any())).thenReturn("https://cdn.example.com/" + KEY);
+        // 심사용 사진을 읽는 단계. 이 테스트들의 관심사가 아니라 "못 읽음"으로 둔다 —
+        // 그러면 심사를 건너뛰고 통과한다. 스텁이 없으면 record 기본값이 null 이라 NPE 다.
+        when(mediaService.loadForReview(any(), anyInt())).thenReturn(MediaImageLoad.readFailed());
+        // 승격은 S3 복사라 목으로 둔다. 이 테스트가 보는 것은 심사 결과이지 승격이 아니다.
+        // promote 는 대기 key 를 받아 UUID 가 새로 뽑힌 공개 key 를 돌려준다.
+        // 받은 값을 그대로 돌려주면 승격이 아무 일도 안 해도 테스트가 통과한다.
+        when(mediaService.promote(any(), any(), any())).thenReturn(PUBLIC_KEY);
+        when(mediaService.resolvePublicUrl(any())).thenReturn("https://cdn.example.com/" + PUBLIC_KEY);
         when(reviewClient.review(any(), any(), any())).thenReturn(VerificationReview.pass());
     }
 
@@ -121,7 +132,7 @@ class RejoinDailyOnceTest {
     }
 
     private ChallengeVerificationReqDTO.Verify request() {
-        return new ChallengeVerificationReqDTO.Verify(KEY, "인증");
+        return new ChallengeVerificationReqDTO.Verify(STAGING_KEY, "인증");
     }
 
     private void verify(Member m, Challenge c) {
@@ -201,7 +212,7 @@ class RejoinDailyOnceTest {
                 .memberChallenge(mc).participationRound(1)
                 .verifiedDate(LocalDate.now(KST).minusDays(1))
                 .verifiedAt(LocalDateTime.now().minusDays(1))
-                .imageUrl(KEY).content("어제").build();
+                .imageUrl(PUBLIC_KEY).content("어제").build();
         em.persist(yesterday);
 
         leaveAndRejoin(mc);
@@ -224,7 +235,7 @@ class RejoinDailyOnceTest {
         // when: 회차가 그대로이므로 덮어쓰기다
         ChallengeVerificationResDTO.Verification result =
                 challengeCommandService.verify(me.getId(), c.getId(),
-                        new ChallengeVerificationReqDTO.Verify(KEY, "고친 코멘트"));
+                        new ChallengeVerificationReqDTO.Verify(STAGING_KEY, "고친 코멘트"));
         em.flush();
         em.clear();
 

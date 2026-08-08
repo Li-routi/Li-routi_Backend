@@ -15,6 +15,41 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 public interface RoutineVerificationControllerDocs {
 
     @Operation(
+            summary = "미조회 그룹 루틴 인증 조회",
+            description = """
+                    ACTIVE 그룹 구성원이 현재 가입 회차의 가입일 KST 00:00 이후 작성된 타인 인증을
+                    오래된 순으로 조회합니다. 조회 자체는 읽음 위치를 바꾸지 않습니다.
+                    cursor와 size는 기존 그룹 인증 목록의 커서 규약을 따릅니다.
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "ACTIVE 그룹 구성원이 아님"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "그룹을 찾을 수 없음")
+    })
+    ApiResponse<VerificationResDTO.UnreadGroupRoutineVerificationList> getUnreadGroupRoutineVerifications(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            Long groupId,
+            Long cursor,
+            Integer size
+    );
+
+    @Operation(
+            summary = "그룹 루틴 인증 읽음 처리",
+            description = "실제로 순차 확인한 마지막 타인 인증 ID까지 읽음 커서를 전진시킵니다. 커서는 뒤로 이동하지 않습니다."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "읽음 처리 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "ACTIVE 그룹 구성원이 아님"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "현재 가입 회차에서 볼 수 있는 인증이 아님")
+    })
+    ApiResponse<VerificationResDTO.GroupRoutineVerificationRead> markGroupRoutineVerificationsRead(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            Long groupId,
+            VerificationReqDTO.MarkRead request
+    );
+
+    @Operation(
             summary = "그룹 루틴 인증",
             description = """
                     오늘 배정된 그룹 루틴을 사진으로 인증합니다. 인증이 곧 완료 처리입니다.
@@ -112,6 +147,45 @@ public interface RoutineVerificationControllerDocs {
             Long routineId,
             Long cursor,
             Integer size
+    );
+
+    @Operation(
+            summary = "그룹 루틴 인증 게시물 좋아요",
+            description = """
+                    그룹 루틴 인증 게시물에 좋아요를 남깁니다. 해당 그룹의 활성 멤버만 호출할 수 있습니다.
+
+                    이미 좋아요한 게시물에 다시 호출해도 성공합니다. 좋아요는 인증 한 건에 붙고,
+                    응답의 likeCount·liked로 화면을 재조회 없이 갱신할 수 있습니다.
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "좋아요 성공(이미 좋아요한 상태 포함)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "그룹의 활성 멤버가 아님 / 인증 필요"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "그룹에 없는 인증 게시물")
+    })
+    ApiResponse<VerificationResDTO.GroupRoutineLike> likeGroupRoutineVerification(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            Long groupId,
+            Long verificationId
+    );
+
+    @Operation(
+            summary = "그룹 루틴 인증 게시물 좋아요 취소",
+            description = """
+                    그룹 루틴 인증 게시물의 좋아요를 취소합니다. 해당 그룹의 활성 멤버만 호출할 수 있습니다.
+
+                    좋아요가 없는 상태에서 호출해도 성공합니다. 실제 Like 행만 물리 삭제합니다.
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "좋아요 취소 성공(좋아요가 없는 상태 포함)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "그룹의 활성 멤버가 아님 / 인증 필요"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "그룹에 없는 인증 게시물")
+    })
+    ApiResponse<VerificationResDTO.GroupRoutineLike> unlikeGroupRoutineVerification(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            Long groupId,
+            Long verificationId
     );
 
 }

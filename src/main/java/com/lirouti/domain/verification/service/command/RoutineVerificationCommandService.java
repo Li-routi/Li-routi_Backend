@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.lirouti.domain.group.entity.GroupRoutineAssignment;
 import com.lirouti.domain.group.repository.GroupRoutineAssignmentRepository;
+import com.lirouti.domain.group.service.GroupValidationService;
 import com.lirouti.domain.group.service.command.GroupRoutineAssignmentCommandService;
 import com.lirouti.domain.routine.entity.MemberRoutine;
 import com.lirouti.domain.verification.entity.GroupRoutineVerification;
@@ -39,6 +40,7 @@ public class RoutineVerificationCommandService {
     private final GroupRoutineVerificationRepository groupRoutineVerificationRepository;
     private final GroupRoutineAssignmentRepository groupRoutineAssignmentRepository;
     private final GroupRoutineAssignmentCommandService assignmentCommandService;
+    private final GroupValidationService groupValidationService;
     private final MemberRoutineVerificationRepository memberRoutineVerificationRepository;
 
     /**
@@ -55,6 +57,8 @@ public class RoutineVerificationCommandService {
             String content,
             LocalDateTime verifiedAt
     ) {
+        groupValidationService.lockActiveGroupForUpdate(groupId);
+        groupValidationService.validateActiveGroupMember(groupId, memberId);
         GroupRoutineAssignment assignment = groupRoutineAssignmentRepository
                 .findForVerification(routineId, groupId, memberId, assignedDate)
                 .orElseThrow(() -> {
@@ -102,7 +106,7 @@ public class RoutineVerificationCommandService {
                 save(() -> groupRoutineVerificationRepository.saveAndFlush(verification));
 
         // 같은 트랜잭션에 참여한다(REQUIRED). 여기서 예외가 나면 위 저장도 함께 롤백된다.
-        assignmentCommandService.completeAssignment(assignment.getId(), verifiedAt);
+        assignmentCommandService.completeAssignmentAndRecordActivity(assignment, verifiedAt);
         return saved;
     }
 

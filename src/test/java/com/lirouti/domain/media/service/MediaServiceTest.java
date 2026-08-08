@@ -88,7 +88,7 @@ class MediaServiceTest {
     }
 
     @Test
-    @DisplayName("허용된 사진 형식이면 업로드 URL과 key를 발급한다")
+    @DisplayName("챌린지 인증은 비공개 대기 prefix로 받는다 — 심사 전에는 공개 주소가 없다")
     void issuePresignedUrl_ValidImage_ReturnsUploadUrlAndKey() {
         // given
         mockPresign();
@@ -101,8 +101,11 @@ class MediaServiceTest {
 
         // then
         assertThat(response.uploadUrl()).isEqualTo(UPLOAD_URL);
-        assertThat(response.mediaKey()).startsWith("challenge-verifications/").endsWith(".jpg");
-        assertThat(response.mediaUrl()).isEqualTo(PUBLIC_BASE_URL + "/" + response.mediaKey());
+        // 공개 prefix 가 아니라 대기 prefix 다. 뒤의 슬래시 때문에 둘은 서로 접두사가 아니다 —
+        // 그래서 버킷 정책의 challenge-verifications/* 와일드카드에 걸리지 않는다.
+        assertThat(response.mediaKey())
+                .startsWith("challenge-verifications-staging/")
+                .endsWith(".jpg");
         // 만료 시각은 로컬 재계산이 아니라 SDK가 서명에 부여한 값을 그대로 사용한다.
         assertThat(response.expiresAt()).isEqualTo(EXPIRES_AT);
     }
@@ -287,16 +290,16 @@ class MediaServiceTest {
     @DisplayName("발급 규칙에 맞지 않는 key는 거부한다")
     @ValueSource(strings = {
             "profiles/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg",   // 다른 용도의 경로
-            "challenge-verifications/../../etc/passwd",             // 경로 조작 시도
-            "challenge-verifications/not-a-uuid.jpg",               // UUID가 아님
-            "challenge-verifications/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.mp4", // 사진 전용 용도인데 영상 확장자
-            "challenge-verifications/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f",     // 확장자 없음
+            "challenge-verifications-staging/../../etc/passwd",             // 경로 조작 시도
+            "challenge-verifications-staging/not-a-uuid.jpg",               // UUID가 아님
+            "challenge-verifications-staging/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.mp4", // 사진 전용 용도인데 영상 확장자
+            "challenge-verifications-staging/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f",     // 확장자 없음
             "6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg",             // 용도 경로 없음
             // 날짜 구간이 형식에 안 맞는 경우(#39). 임의 세그먼트를 끼워 넣지 못하게 한다.
-            "challenge-verifications/2026/7/30/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg",  // 월·일이 두 자리 아님
-            "challenge-verifications/2026/07/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg",    // 구간이 둘뿐
-            "challenge-verifications/3/412/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg",      // 식별자를 끼워 넣음
-            "challenge-verifications/2026/07/30/31/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg" // 구간이 넷
+            "challenge-verifications-staging/2026/7/30/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg",  // 월·일이 두 자리 아님
+            "challenge-verifications-staging/2026/07/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg",    // 구간이 둘뿐
+            "challenge-verifications-staging/3/412/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg",      // 식별자를 끼워 넣음
+            "challenge-verifications-staging/2026/07/30/31/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg" // 구간이 넷
     })
     void validateMediaKey_NotIssuedFormat_ThrowsInvalidMediaKey(String mediaKey) {
         assertThatThrownBy(() ->
@@ -599,7 +602,7 @@ class MediaServiceTest {
     // ── 업로드 바이트 검증 (#22) ──
 
     private static final String JPEG_KEY =
-            "challenge-verifications/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.jpg";
+            "challenge-verifications-staging/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.jpg";
 
     /** S3가 Range GET으로 돌려줄 앞부분 바이트를 흉내낸다. */
     private void mockHeadBytes(int... bytes) {
@@ -722,7 +725,7 @@ class MediaServiceTest {
     // WEBP만 시그니처가 두 구간(0~3 "RIFF", 8~11 "WEBP")으로 나뉜다.
     // 앞 구간만 보는 구현이면 다른 RIFF 컨테이너가 통과해버리므로 따로 덮는다.
     private static final String WEBP_KEY =
-            "challenge-verifications/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.webp";
+            "challenge-verifications-staging/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.webp";
 
     @Test
     @DisplayName("WEBP 바이트가 맞으면 통과한다 — RIFF와 오프셋 8의 WEBP를 모두 본다")
@@ -766,18 +769,18 @@ class MediaServiceTest {
         java.time.LocalDate after = java.time.LocalDate.now(KST);
 
         assertThat(key).satisfiesAnyOf(
-                k -> assertThat(k).startsWith("challenge-verifications/" + before.format(KEY_DATE_PATH) + "/"),
-                k -> assertThat(k).startsWith("challenge-verifications/" + after.format(KEY_DATE_PATH) + "/"));
+                k -> assertThat(k).startsWith("challenge-verifications-staging/" + before.format(KEY_DATE_PATH) + "/"),
+                k -> assertThat(k).startsWith("challenge-verifications-staging/" + after.format(KEY_DATE_PATH) + "/"));
         assertThat(key).endsWith(".jpg");
     }
 
     @ParameterizedTest
     @DisplayName("달력에 없는 날짜가 든 key는 거부한다 — 정규식은 자릿수만 보기 때문")
     @ValueSource(strings = {
-            "challenge-verifications/2026/02/30/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg", // 2월 30일
-            "challenge-verifications/2025/13/99/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg", // 13월 99일
-            "challenge-verifications/2025/02/29/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg", // 평년의 2월 29일
-            "challenge-verifications/2026/00/10/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg"  // 0월
+            "challenge-verifications-staging/2026/02/30/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg", // 2월 30일
+            "challenge-verifications-staging/2025/13/99/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg", // 13월 99일
+            "challenge-verifications-staging/2025/02/29/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg", // 평년의 2월 29일
+            "challenge-verifications-staging/2026/00/10/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg"  // 0월
     })
     void validateMediaKey_ImpossibleDate_ThrowsInvalidMediaKey(String mediaKey) {
         assertThatThrownBy(() ->
@@ -790,7 +793,7 @@ class MediaServiceTest {
     @DisplayName("윤년의 2월 29일은 통과한다 — 실재하는 날짜는 막지 않는다")
     void validateMediaKey_LeapDay_Passes() {
         String leapDayKey =
-                "challenge-verifications/2028/02/29/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg";
+                "challenge-verifications-staging/2028/02/29/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg";
 
         assertThatCode(() ->
                 mediaService.validateMediaKey(leapDayKey, MediaPurpose.CHALLENGE_VERIFICATION))
@@ -812,7 +815,7 @@ class MediaServiceTest {
     @Test
     @DisplayName("날짜 도입 전에 발급된 flat key도 검증을 통과한다 — 기존 데이터를 옮기지 않는다")
     void validateMediaKey_LegacyFlatKey_StillPasses() {
-        String legacyKey = "challenge-verifications/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg";
+        String legacyKey = "challenge-verifications-staging/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg";
 
         assertThatCode(() ->
                 mediaService.validateMediaKey(legacyKey, MediaPurpose.CHALLENGE_VERIFICATION))
@@ -848,6 +851,7 @@ class MediaServiceTest {
     @DisplayName("공개 용도는 서명하지 않고 공개 주소를 그대로 준다")
     void resolveViewUrl_PublicPurpose_ReturnsPublicUrlWithoutSigning() {
         // given
+        // 공개 URL 조립은 승격된 공개 key 를 받는다. 대기 key 는 여기까지 오지 않는다.
         String key = "challenge-verifications/2026/07/30/6d3f5a20-1b2c-4d5e-8f90-0a1b2c3d4e5f.jpg";
 
         // when

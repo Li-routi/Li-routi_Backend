@@ -27,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.regex.Pattern;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -37,8 +38,19 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @DisplayName("ChallengeCommandService 인증 테스트")
 class ChallengeVerificationCommandServiceTest {
 
-    private static final String KEY_1 = "challenge-verifications/11111111-1111-4111-8111-111111111111.jpg";
-    private static final String KEY_2 = "challenge-verifications/22222222-2222-4222-8222-222222222222.png";
+    private static final String KEY_1 = "challenge-verifications-staging/11111111-1111-4111-8111-111111111111.jpg";
+    private static final String KEY_2 = "challenge-verifications-staging/22222222-2222-4222-8222-222222222222.png";
+
+    /**
+     * 업로드는 대기 prefix 로 받지만 <b>저장되고 응답에 실리는 것은 승격된 공개 key</b> 다.
+     * 심사를 통과한 사진만 공개 prefix 로 옮겨지므로 둘은 같을 수 없다.
+     *
+     * <p><b>값으로 못 박지 못한다.</b> 승격은 UUID 를 새로 뽑기 때문이다 — 대기 key 가 남은 채
+     * 다시 승격되면 같은 공개본을 덮어쓰는 것을 막기 위해서다(MediaService#promote).
+     * 그래서 모양만 본다.
+     */
+    private static final Pattern PROMOTED_KEY = Pattern.compile(
+            "challenge-verifications/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.png");
 
     @Autowired
     private ChallengeCommandService challengeCommandService;
@@ -153,17 +165,31 @@ class ChallengeVerificationCommandServiceTest {
         em.flush();
 
         challengeCommandService.verify(m.getId(), c.getId(), request(KEY_1, "처음"));
+        String firstStoredKey = verificationsOf(mc).get(0).getImageUrl();
+
         ChallengeVerificationResDTO.Verification second =
                 challengeCommandService.verify(m.getId(), c.getId(), request(KEY_2, "바꿈"));
 
         assertThat(second.reverified()).isTrue();
         assertThat(second.content()).isEqualTo("바꿈");
-        assertThat(second.imageUrl()).endsWith(KEY_2);
 
         // 하루에 한 행이라는 사실이 유지되어야 한다.
         List<ChallengeVerification> rows = verificationsOf(mc);
         assertThat(rows).hasSize(1);
-        assertThat(rows.get(0).getImageUrl()).isEqualTo(KEY_2);
+
+        String storedKey = rows.get(0).getImageUrl();
+        assertThat(storedKey)
+                .as("저장되는 것은 승격된 공개 key 다")
+                .matches(PROMOTED_KEY)
+                .doesNotContain("-staging/")
+                // 승격이 UUID 를 새로 뽑았는지. 올린 key 를 그대로 쓰면 재승격이 공개본을 덮어쓴다.
+                .doesNotContain("22222222-2222-4222-8222-222222222222")
+                // 앞 인증의 공개본을 다시 쓰면 그 사진이 조용히 바뀐다. 대기 key 만 봐서는
+                // 이 경우를 못 잡으므로 앞서 저장된 공개 key 와도 대조한다.
+                .isNotEqualTo(firstStoredKey);
+        assertThat(second.imageUrl())
+                .as("응답의 주소는 저장된 key 로 조립된다")
+                .endsWith(storedKey);
     }
 
     @Test

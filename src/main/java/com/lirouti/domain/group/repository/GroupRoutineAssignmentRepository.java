@@ -133,6 +133,48 @@ public interface GroupRoutineAssignmentRepository
             @Param("assignedDate") LocalDate assignedDate
     );
 
+    /** 현재 가입 회차의 한 그룹·회원·날짜 Assignment를 잠가 스트릭 판정을 직렬화한다. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select assignment
+            from GroupRoutineAssignment assignment
+            where assignment.groupRoutine.group.id = :groupId
+              and assignment.member.id = :memberId
+              and assignment.assignedDate = :assignedDate
+              and assignment.createdAt >= :joinedAt
+            order by assignment.id
+            """)
+    List<GroupRoutineAssignment>
+            findAllByGroupIdAndMemberIdAndAssignedDateAndCreatedAtAfterOrEqualForUpdate(
+                    @Param("groupId") Long groupId,
+                    @Param("memberId") Long memberId,
+                    @Param("assignedDate") LocalDate assignedDate,
+                    @Param("joinedAt") java.time.LocalDateTime joinedAt
+            );
+
+    /** 마감 batch가 잠근 그룹 안에서 실제 MISSED 전이 후보를 ID 순서로 조회한다. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select assignment
+            from GroupRoutineAssignment assignment
+            where assignment.groupRoutine.group.id in :groupIds
+              and assignment.status in :unfinishedStatuses
+              and (
+                    assignment.assignedDate < :today
+                    or (
+                        assignment.assignedDate = :today
+                        and assignment.scheduledEndTime <= :currentTime
+                    )
+              )
+            order by assignment.groupRoutine.group.id, assignment.member.id, assignment.id
+            """)
+    List<GroupRoutineAssignment> findExpiredAssignmentsByGroupIdsForUpdate(
+            @Param("groupIds") List<Long> groupIds,
+            @Param("today") LocalDate today,
+            @Param("currentTime") LocalTime currentTime,
+            @Param("unfinishedStatuses") List<GroupRoutineAssignmentStatus> unfinishedStatuses
+    );
+
     /**
      * 한 루틴의 특정 날짜 할당을 ID 순서로 잠가 수정·완료·상태 전이 경합을 직렬화한다.
      * 회원 식별에는 지연 프록시의 ID를 사용하므로 불필요한 회원 엔티티 조회를 수행하지 않는다.
@@ -238,6 +280,21 @@ public interface GroupRoutineAssignmentRepository
     int markExpiredAssignmentsMissed(
             @Param("today") LocalDate today,
             @Param("currentTime") LocalTime currentTime,
+            @Param("unfinishedStatuses") List<GroupRoutineAssignmentStatus> unfinishedStatuses,
+            @Param("missedStatus") GroupRoutineAssignmentStatus missedStatus
+    );
+
+    /** batch에서 잠근 후보만 한 번에 MISSED로 전이한다. */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+            update GroupRoutineAssignment assignment
+            set assignment.status = :missedStatus,
+                assignment.version = assignment.version + 1
+            where assignment.id in :assignmentIds
+              and assignment.status in :unfinishedStatuses
+            """)
+    int markAssignmentsMissedByIds(
+            @Param("assignmentIds") List<Long> assignmentIds,
             @Param("unfinishedStatuses") List<GroupRoutineAssignmentStatus> unfinishedStatuses,
             @Param("missedStatus") GroupRoutineAssignmentStatus missedStatus
     );

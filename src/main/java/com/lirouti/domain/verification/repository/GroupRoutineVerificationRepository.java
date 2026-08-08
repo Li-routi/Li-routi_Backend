@@ -1,6 +1,7 @@
 package com.lirouti.domain.verification.repository;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -16,6 +17,38 @@ public interface GroupRoutineVerificationRepository
 
     /** 그 할당에 이미 인증이 있는지. 할당 1건에 인증 1건이므로 단건이다. */
     Optional<GroupRoutineVerification> findByAssignmentId(Long assignmentId);
+
+    /** 좋아요 경로의 groupId와 인증의 실제 소속을 한 번에 검증한다. */
+    @Query("""
+            select verification
+            from GroupRoutineVerification verification
+            join verification.assignment assignment
+            join assignment.groupRoutine routine
+            where verification.id = :verificationId
+              and routine.group.id = :groupId
+            """)
+    Optional<GroupRoutineVerification> findByIdAndGroupId(
+            @Param("verificationId") Long verificationId,
+            @Param("groupId") Long groupId
+    );
+
+    /** 읽음 커서 대상이 현재 가입 회차에서 볼 수 있는 타인 인증인지 확인한다. */
+    @Query("""
+            select count(verification) > 0
+            from GroupRoutineVerification verification
+            join verification.assignment assignment
+            join assignment.groupRoutine routine
+            where verification.id = :verificationId
+              and routine.group.id = :groupId
+              and assignment.member.id <> :memberId
+              and verification.createdAt >= :membershipStartOfDay
+            """)
+    boolean existsReadableByIdAndGroupIdAndViewerIdAndMembershipStartOfDay(
+            @Param("verificationId") Long verificationId,
+            @Param("groupId") Long groupId,
+            @Param("memberId") Long memberId,
+            @Param("membershipStartOfDay") LocalDateTime membershipStartOfDay
+    );
 
     /**
      * 그 그룹 루틴의 인증을 <b>방 멤버 전원의 것</b>으로 최신순으로 가져온다.

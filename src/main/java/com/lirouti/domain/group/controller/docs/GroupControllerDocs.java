@@ -13,6 +13,28 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 public interface GroupControllerDocs {
 
     @Operation(
+            summary = "그룹방 상세 조회",
+            description = """
+                    ACTIVE 그룹 구성원만 그룹명, 초대코드와 ACTIVE 구성원별 활동 현황을 조회할 수 있습니다.
+                    금일 진행도는 완료한 그룹 루틴 할당 수와 전체 할당 수이며, 할당이 없는 구성원은 0/0입니다.
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200", description = "그룹방 상세 조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401", description = "유효하지 않거나 만료된 인증 토큰"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "403", description = "비활성 그룹 또는 ACTIVE 구성원이 아님"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404", description = "회원 또는 그룹을 찾을 수 없음")
+    })
+    ApiResponse<GroupResDTO.Detail> getGroupDetail(
+            @Parameter(hidden = true) CustomUserDetails userDetails,
+            @Parameter(description = "그룹 ID", example = "1") Long groupId
+    );
+
+    @Operation(
             summary = "그룹 루틴 카테고리 목록 조회",
             description = """
                     ACTIVE 그룹 구성원만 조회할 수 있습니다.
@@ -263,6 +285,82 @@ public interface GroupControllerDocs {
     })
     ApiResponse<GroupResDTO.TodayRoutineList> getTodayRoutines(
             @Parameter(hidden = true) CustomUserDetails userDetails
+    );
+
+    @Operation(
+            summary = "초대코드 기반 그룹 참여 Preview 조회",
+            description = """
+                    인증 회원이 입력한 초대코드로 그룹명, 현재 ACTIVE 인원 및 참여 가능 여부를 조회합니다.
+                    Preview는 안내용 읽기 전용 스냅샷으로 가입 관계나 그룹 루틴 할당을 생성하지 않으며,
+                    실제 가입 API는 잠금 후 모든 조건을 다시 검증합니다.
+
+                    잠긴 그룹과 비활성 그룹은 조회할 수 없습니다. ACTIVE 구성원, KICKED 구성원,
+                    회원의 ACTIVE 그룹 6개 상한, 그룹 ACTIVE 구성원 6명 상한은 200 응답의
+                    `joinable=false` 및 `unavailableReason`으로 반환합니다. LEFT 구성원은 재가입 가능으로 판단합니다.
+
+                    ### 에러 코드
+
+                    | code | HTTP | 설명 |
+                    | --- | --- | --- |
+                    | `GROUP403_1` | 403 | 비활성 그룹 |
+                    | `GROUP403_5` | 403 | 잠긴 그룹 |
+                    | `GROUP404_1` | 404 | 초대코드에 해당하는 그룹 없음 |
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200", description = "그룹 참여 Preview 조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401", description = "유효하지 않거나 만료된 인증 토큰"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "403", description = "비활성 회원, 비활성 그룹 또는 잠긴 그룹"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404", description = "회원 또는 초대코드에 해당하는 그룹을 찾을 수 없음")
+    })
+    ApiResponse<GroupResDTO.JoinPreview> getJoinPreview(
+            @Parameter(hidden = true) CustomUserDetails userDetails,
+            @Parameter(description = "그룹 영구 초대코드", required = true, example = "AB12CD3") String inviteCode
+    );
+
+    @Operation(
+            summary = "초대코드 기반 그룹 가입",
+            description = """
+                    초대코드로 그룹을 식별한 뒤 그룹 행과 회원 행을 그룹→회원 순서로 비관적 잠금합니다.
+                    Preview 결과를 신뢰하지 않고 ACTIVE 상태, 방 잠금, 기존 가입 관계 및 두 참여 상한을
+                    모두 다시 검증합니다. 신규 가입과 LEFT 재가입은 가입 당일 아직 종료되지 않은 ACTIVE
+                    반복 루틴을 같은 트랜잭션에서 멱등하게 할당하며, 할당 실패 시 가입도 롤백됩니다.
+                    성공 시 가입한 그룹의 식별자·이름과 회원 상태(`ACTIVE`)를 반환합니다.
+
+                    ### 에러 코드
+
+                    | code | HTTP | 설명 |
+                    | --- | --- | --- |
+                    | `GROUP403_1` | 403 | 비활성 그룹 |
+                    | `GROUP403_5` | 403 | 잠긴 그룹 |
+                    | `GROUP404_1` | 404 | 초대코드에 해당하는 그룹 없음 |
+                    | `GROUP409_6` | 409 | 회원 ACTIVE 그룹 6개 상한 |
+                    | `GROUP409_8` | 409 | 그룹 ACTIVE 구성원 6명 상한 |
+                    | `GROUP409_11` | 409 | 이미 ACTIVE 구성원 |
+                    | `GROUP409_12` | 409 | KICKED 회원 재가입 불가 |
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "201", description = "그룹 가입 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "400", description = "초대코드 요청 형식 오류"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401", description = "유효하지 않거나 만료된 인증 토큰"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "403", description = "비활성 회원, 비활성 그룹 또는 잠긴 그룹"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404", description = "회원 또는 초대코드에 해당하는 그룹을 찾을 수 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "409", description = "가입 관계 또는 참여 인원 상한 충돌")
+    })
+    ApiResponse<GroupResDTO.JoinResult> joinGroup(
+            @Parameter(hidden = true) CustomUserDetails userDetails,
+            GroupReqDTO.JoinGroup request
     );
 
     /**
