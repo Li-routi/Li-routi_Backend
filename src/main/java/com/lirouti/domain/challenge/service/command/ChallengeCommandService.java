@@ -320,9 +320,10 @@ public class ChallengeCommandService {
             ChallengeVerificationReqDTO.Report request
     ) {
         // 경로의 challengeId와 실제 인증의 챌린지가 맞는지까지 확인한다. 어긋나면 404다.
-        ChallengeVerification verification = challengeVerificationRepository
-                .findByIdAndMemberChallengeChallengeId(verificationId, challengeId)
-                .orElseThrow(() -> new VerificationException(ChallengeVerificationErrorCode.VERIFICATION_NOT_FOUND));
+        // 보류 건도 여기서 걸러진다 — 남에게 보이지 않는 글이라 신고 대상이 아니다.
+        // 거르지 않으면 공개된 적도 없는 사진이 숨김 임계값에 걸리고, 신고 행이 붙으면
+        // 반려 확정 때 인증 삭제가 외래 키에 막혀 그 행이 영원히 보류로 남는다.
+        ChallengeVerification verification = findVerificationInChallenge(challengeId, verificationId);
 
         // 숨김 판정을 직렬화하기 위해 인증 행을 잠근다. 신고 INSERT 전에 잡아야 한다 —
         // 저장 후에 잠그면 그 사이 다른 트랜잭션이 이미 세기를 마치고 지나갈 수 있다.
@@ -458,6 +459,12 @@ public class ChallengeCommandService {
     private ChallengeVerification findVerificationInChallenge(Long challengeId, Long verificationId) {
         return challengeVerificationRepository
                 .findByIdAndMemberChallengeChallengeId(verificationId, challengeId)
+                // 보류 건은 남에게 보이지 않으므로 좋아요·신고 대상이 아니다. 없는 것처럼 다룬다.
+                //
+                // 거르지 않으면 두 가지가 깨진다. 신고가 임계값에 닿으면 공개된 적도 없는 사진이
+                // 숨겨지고, 좋아요·신고 행이 붙으면 반려 확정 때 인증 삭제가 외래 키에 걸려
+                // 실패한다 — 그 행은 영원히 보류로 남는다.
+                .filter(v -> !v.isPending())
                 .orElseThrow(() -> new VerificationException(ChallengeVerificationErrorCode.VERIFICATION_NOT_FOUND));
     }
 

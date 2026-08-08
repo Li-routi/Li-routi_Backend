@@ -6,6 +6,8 @@ import com.lirouti.domain.challenge.client.VerificationReview;
 import com.lirouti.domain.challenge.entity.Challenge;
 import com.lirouti.domain.challenge.entity.MemberChallenge;
 import com.lirouti.domain.challenge.enums.ChallengeCategory;
+import com.lirouti.domain.media.exception.MediaException;
+import com.lirouti.domain.media.exception.code.error.MediaErrorCode;
 import com.lirouti.domain.media.service.MediaImage;
 import com.lirouti.domain.media.service.MediaImageLoad;
 import com.lirouti.domain.media.service.MediaService;
@@ -221,6 +223,37 @@ class PendingResweepTest {
         // then
         assertThat(challengeVerificationRepository.findById(verificationId).orElseThrow()
                 .getReviewStatus()).isEqualTo(ReviewStatus.APPROVED);
+    }
+
+    @Test
+    @DisplayName("원본이 사라졌으면 정리한다 — 안 그러면 10분마다 영원히 실패한다")
+    void resweep_SourceGone_CleansUpInsteadOfLoopingForever() {
+        // given — 대기본이 수명 주기에 지워졌거나 앞 단계가 중간에 죽은 상태
+        givenPending(LocalDateTime.now().minusHours(25), 0);
+        when(mediaService.promote(any(), any(), any()))
+                .thenThrow(new MediaException(MediaErrorCode.MEDIA_SOURCE_GONE));
+
+        // when
+        pendingReviewService.sweepPending();
+
+        // then — 되살릴 수 없으므로 남겨 두지 않는다. 남기면 "심사 중" 이 영원히 표시된다.
+        assertThat(challengeVerificationRepository.findById(verificationId)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("일시적 승격 실패는 보류를 유지한다 — 다시 하면 될 수 있다")
+    void resweep_PromotionFails_KeepsPending() {
+        // given
+        givenPending(LocalDateTime.now().minusHours(25), 0);
+        when(mediaService.promote(any(), any(), any()))
+                .thenThrow(new MediaException(MediaErrorCode.MEDIA_PROMOTION_FAILED));
+
+        // when
+        pendingReviewService.sweepPending();
+
+        // then
+        assertThat(challengeVerificationRepository.findById(verificationId).orElseThrow()
+                .getReviewStatus()).isEqualTo(ReviewStatus.PENDING);
     }
 
     @Test

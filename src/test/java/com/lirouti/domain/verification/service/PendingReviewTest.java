@@ -202,6 +202,37 @@ class PendingReviewTest {
     }
 
     @Test
+    @DisplayName("보류 건에는 좋아요를 못 누른다 — 남에게 보이지 않는 글이다")
+    void pendingVerification_CannotBeLiked() {
+        // given
+        when(reviewClient.review(any(), any(), any()))
+                .thenReturn(VerificationReview.transientFailure("타임아웃"));
+        Long verificationId = challengeCommandService
+                .verify(memberId, challengeId, request()).verificationId();
+
+        // when & then — 좋아요 행이 붙으면 반려 확정 때 인증 삭제가 외래 키에 걸려 실패하고,
+        // 그 행은 영원히 보류로 남는다.
+        assertThatThrownBy(() -> challengeCommandService.like(memberId, challengeId, verificationId))
+                .isInstanceOf(RuntimeException.class);
+    }
+
+    @Test
+    @DisplayName("보류 건은 신고할 수 없다 — 공개된 적 없는 사진이 숨김 임계값에 걸리면 안 된다")
+    void pendingVerification_CannotBeReported() {
+        // given
+        when(reviewClient.review(any(), any(), any()))
+                .thenReturn(VerificationReview.transientFailure("타임아웃"));
+        Long verificationId = challengeCommandService
+                .verify(memberId, challengeId, request()).verificationId();
+
+        // when & then
+        assertThatThrownBy(() -> challengeCommandService.report(
+                memberId, challengeId, verificationId,
+                new ChallengeVerificationReqDTO.Report(null)))
+                .isInstanceOf(RuntimeException.class);
+    }
+
+    @Test
     @DisplayName("보류 건은 공개 피드에 담기지 않는다 — 승격 전이라 열리지 않는 사진이다")
     void pendingVerification_IsNotInPublicFeed() {
         // given

@@ -5,6 +5,7 @@ import com.lirouti.domain.challenge.client.VerificationReview;
 import com.lirouti.domain.challenge.entity.Challenge;
 import com.lirouti.domain.media.enums.MediaPurpose;
 import com.lirouti.domain.media.exception.MediaException;
+import com.lirouti.domain.media.exception.code.error.MediaErrorCode;
 import com.lirouti.domain.media.service.MediaImage;
 import com.lirouti.domain.media.service.MediaImageLoad;
 import com.lirouti.domain.media.service.MediaService;
@@ -110,10 +111,13 @@ public class PendingReviewService {
             return Outcome.HELD;
         }
         if (review.rejected()) {
-            // 사진부터 지운다. 행을 먼저 지우면 그 사이 프로세스가 죽었을 때 대기본을 가리키는
-            // 것이 아무것도 없어져, 수명 주기가 가져갈 때까지 반려 사진이 남는다.
-            mediaService.deleteQuietly(verification.getImageUrl());
+            // 행을 먼저 지우고 사진을 지운다. 순서를 뒤집으면 그 사이에 죽었을 때 사진 없는
+            // 보류 행이 남고, 그 행은 승격할 원본이 없어 영원히 풀리지 않는다.
+            //
+            // 이 순서로 죽으면 대기본만 고아로 남는데, 그건 나이 기반 수명 주기가 가져간다.
+            // 남는 방향의 실패는 스스로 낫고, 사라지는 방향의 실패는 낫지 않는다.
             pendingReviewCommandService.reject(verification.getId());
+            mediaService.deleteQuietly(verification.getImageUrl());
             return Outcome.REJECTED;
         }
         return promoteAndApprove(verification) ? Outcome.APPROVED : Outcome.HELD;
@@ -133,6 +137,15 @@ public class PendingReviewService {
             // 비교할 값이 없다. promote 가 현재 ETag 로 조건을 걸어 조회-복사 사이의 교체만 막는다.
             publicKey = mediaService.promote(stagingKey, MediaPurpose.CHALLENGE_VERIFICATION, null);
         } catch (MediaException e) {
+            // 원본이 아예 없으면 다시 해도 같다. 보류로 두면 10분마다 영원히 실패하고,
+            // 사용자 화면에는 "심사 중" 만 남는다. 되살릴 수 없으므로 정리한다 —
+            // 대기본이 수명 주기에 지워졌거나 그 앞 단계가 중간에 죽은 경우다.
+            if (e.getCode() == MediaErrorCode.MEDIA_SOURCE_GONE) {
+                log.error("보류 건의 원본이 사라져 인증을 정리합니다. verificationId={}, key={}",
+                        verification.getId(), stagingKey);
+                pendingReviewCommandService.reject(verification.getId());
+                return false;
+            }
             log.warn("보류 건을 공개 prefix 로 옮기지 못해 보류를 유지합니다. verificationId={}",
                     verification.getId(), e);
             return false;

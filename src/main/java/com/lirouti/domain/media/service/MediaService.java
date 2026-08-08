@@ -465,6 +465,12 @@ public class MediaService {
                 log.warn("심사한 사진과 다른 바이트여서 공개하지 않았습니다. uploadKey={}", uploadKey);
                 throw new MediaException(MediaErrorCode.MEDIA_CHANGED_AFTER_REVIEW);
             }
+            // 원본이 없다. 다시 시도해도 같으므로 "일시 실패" 와 구분해 알려야 한다 —
+            // 구분하지 않으면 부르는 쪽이 영원히 재시도한다.
+            if (e.statusCode() == HttpStatus.NOT_FOUND.value() || e instanceof NoSuchKeyException) {
+                log.warn("옮길 원본이 없습니다. uploadKey={}", uploadKey);
+                throw new MediaException(MediaErrorCode.MEDIA_SOURCE_GONE);
+            }
             log.error("심사를 통과한 사진을 공개 prefix 로 옮기지 못했습니다. uploadKey={}", uploadKey, e);
             throw new MediaException(MediaErrorCode.MEDIA_PROMOTION_FAILED);
         } catch (SdkException e) {
