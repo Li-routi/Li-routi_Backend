@@ -190,10 +190,15 @@ public class ChallengeVerificationCommandService {
     }
 
     /**
-     * 글을 내리고, 오늘 것이면 스트릭을 다시 센다.
+     * 글을 내린다.
      *
-     * <p><b>잠금 순서는 저장 경로와 같다</b> — 참여 행을 먼저 잠근다. 뒤집으면 삭제와 당일
-     * 재인증이 서로의 잠금을 기다린다.
+     * <p><b>스트릭은 건드리지 않는다.</b> 삭제는 "글을 내리는 것" 이지 "인증을 취소하는 것" 이
+     * 아니다 — 사진을 올려 심사를 통과했다면 그 사람은 루틴을 실제로 했고, 공개를 원치 않아
+     * 내렸다고 "며칠째 이어왔다" 는 사실까지 부정할 이유는 약하다.
+     *
+     * <p>"올리고 기록만 챙긴 뒤 지우기" 는 <b>재화 회수가 막는다</b>(재화 이슈). 회수는 시간과
+     * 무관해 한 달 전 글을 지워도 적용되는 반면, 스트릭을 시간 기준으로 깎는 방식은 그만큼
+     * 기다리면 우회된다 — 어느 값을 잡아도 마찬가지다.
      *
      * <p>이미 내려간 글이면 아무것도 하지 않고 성공으로 답한다. 삭제는 멱등한 편이 클라이언트가
      * 다루기 쉽다.
@@ -210,34 +215,18 @@ public class ChallengeVerificationCommandService {
                     return new VerificationException(ChallengeVerificationErrorCode.VERIFICATION_NOT_FOUND);
                 });
 
-        MemberChallenge locked = memberChallengeRepository
-                .findByMemberIdAndChallengeIdForUpdate(memberId, challengeId)
-                .orElseThrow(() -> new ChallengeException(ChallengeErrorCode.NOT_PARTICIPATING));
-
-        LocalDate today = LocalDate.now(TimeUtil.KST);
+        // 참여 행을 잠그지 않는다. member_challenge 를 바꾸지 않으므로 잠글 이유가 없다.
+        // 참여 중인지도 보지 않는다 — 이탈해도 기록은 남으므로 지난 참여의 글도 지울 수 있다.
         String imageKey = verification.getImageUrl();
-        boolean deletedNow = verification.softDelete(LocalDateTime.now(TimeUtil.KST));
-
-        // 오늘 것을 내렸을 때만 스트릭에서 뺀다. 과거로 소급하지 않는 것이 요점이다.
-        // 이미 내려가 있던 글이면 스트릭은 그때 이미 정리됐으므로 다시 세지 않는다.
-        if (deletedNow && today.equals(verification.getVerifiedDate())
-                && verification.getParticipationRound().equals(locked.getParticipationRound())) {
-            challengeVerificationRepository.flush();
-            List<LocalDate> remaining = challengeVerificationRepository.findApprovedDatesInRoundExcept(
-                    locked.getId(), locked.getParticipationRound(), verificationId);
-            locked.recalculateStreak(remaining);
-        }
-
-        return new DeleteResult(deletedNow, imageKey, locked.currentStreakAsOf(today));
+        return new DeleteResult(verification.softDelete(LocalDateTime.now(TimeUtil.KST)), imageKey);
     }
 
     /**
-     * 삭제 결과. 사진을 지울지와 응답에 실을 스트릭을 호출부에 넘긴다.
+     * 삭제 결과.
      *
-     * @param deletedNow    이번 호출로 실제 내려갔는가. 이미 내려가 있었으면 false
-     * @param imageKey      내린 글이 들고 있던 사진 key
-     * @param currentStreak 내린 뒤의 스트릭
+     * @param deletedNow 이번 호출로 실제 내려갔는가. 이미 내려가 있었으면 false
+     * @param imageKey   내린 글이 들고 있던 사진 key
      */
-    public record DeleteResult(boolean deletedNow, String imageKey, int currentStreak) {
+    public record DeleteResult(boolean deletedNow, String imageKey) {
     }
 }

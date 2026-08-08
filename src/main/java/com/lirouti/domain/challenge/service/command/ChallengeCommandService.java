@@ -462,10 +462,9 @@ public class ChallengeCommandService {
      * <p>글과 사진만 안 보이게 하고 "그날 인증했다" 는 사실은 남긴다 — 지운 뒤 다시 인증할 수
      * 있으면 하루 1회가 뚫린다. 그래서 버튼은 완료 상태 그대로다.
      *
-     * <h3>오늘 것을 내리면 스트릭에서 뺀다</h3>
-     * 그러지 않으면 <b>올리고 스트릭만 챙긴 뒤 바로 지우는</b> 것이 가능하다 — 피드에 아무것도
-     * 안 내놓고 기록만 가져간다. 다만 <b>과거로 소급하지는 않는다.</b> 오래된 글을 내렸다고
-     * 그 지점에서 연속을 끊으면, 남용과 무관한 사용자가 며칠치를 한꺼번에 잃는다.
+     * <h3>스트릭은 건드리지 않는다</h3>
+     * "올리고 기록만 챙긴 뒤 지우기" 는 <b>재화 회수가 막는다</b>(재화 이슈). 스트릭을 시간
+     * 기준으로 깎는 방식은 그만큼 기다리면 우회되고, 정작 정당하게 지우는 사람만 다친다.
      *
      * <h3>사진은 지운다</h3>
      * 공개 prefix 라 조회에서 빼도 <b>URL 을 아는 사람은 계속 볼 수 있다.</b> 지우고 싶어 지운
@@ -492,7 +491,7 @@ public class ChallengeCommandService {
             mediaService.deleteQuietly(result.imageKey());
         }
 
-        return ChallengeVerificationConverter.toDeletion(verificationId, result.currentStreak());
+        return ChallengeVerificationConverter.toDeletion(verificationId);
     }
 
     private ChallengeVerification findVerificationInChallenge(Long challengeId, Long verificationId) {

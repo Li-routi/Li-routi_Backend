@@ -9,7 +9,6 @@ import com.lirouti.domain.media.service.MediaService;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.enums.Role;
 import com.lirouti.domain.member.enums.SocialProvider;
-import com.lirouti.domain.verification.dto.response.ChallengeVerificationResDTO;
 import com.lirouti.domain.verification.entity.ChallengeVerification;
 import com.lirouti.global.util.TimeUtil;
 import jakarta.persistence.EntityManager;
@@ -36,8 +35,8 @@ import static org.mockito.Mockito.when;
 /**
  * 인증 게시글 삭제.
  *
- * <p>핵심은 <b>"인증을 취소하는 것이 아니라 글을 내리는 것"</b> 이다. 그날 인증한 사실은 남아
- * 버튼이 완료 상태로 유지되고, 오늘 것을 내렸을 때만 스트릭에서 빠진다.
+ * <p>핵심은 <b>"인증을 취소하는 것이 아니라 글을 내리는 것"</b> 이다. 그날 인증한 사실도
+ * 스트릭도 그대로 남고, 글과 사진만 내려간다.
  */
 @SpringBootTest
 @Transactional
@@ -125,28 +124,26 @@ class VerificationDeleteTest {
     }
 
     @Test
-    @DisplayName("오늘 것을 내리면 스트릭에서 빠진다 — 올리고 기록만 챙긴 뒤 지우는 것을 막는다")
-    void delete_Today_RemovesFromStreak() {
+    @DisplayName("오늘 것을 내려도 스트릭은 그대로다 — 남용은 재화 회수가 막는다")
+    void delete_Today_KeepsStreak() {
         // given: 어제·오늘 이어서 인증해 스트릭 2
         verificationOn(today().minusDays(1));
         ChallengeVerification todayOne = verificationOn(today());
         participation.applyVerification(today().minusDays(1));
         participation.applyVerification(today());
         em.flush();
-        assertThat(participation.getCurrentStreak()).isEqualTo(2);
 
         // when
-        ChallengeVerificationResDTO.Deletion result = challengeCommandService
-                .deleteVerification(me.getId(), challenge.getId(), todayOne.getId());
+        challengeCommandService.deleteVerification(me.getId(), challenge.getId(), todayOne.getId());
         em.flush();
 
-        // then — 어제까지만 남는다
-        assertThat(result.currentStreak()).isEqualTo(1);
-        assertThat(participation.getLastVerifiedDate()).isEqualTo(today().minusDays(1));
+        // then — 시간 기준으로 깎으면 그만큼 기다려 우회되고, 정당하게 지우는 사람만 다친다.
+        assertThat(participation.getCurrentStreak()).isEqualTo(2);
+        assertThat(participation.getLastVerifiedDate()).isEqualTo(today());
     }
 
     @Test
-    @DisplayName("지난 글을 내려도 스트릭은 그대로다 — 소급하면 남용과 무관한 사람이 며칠치를 잃는다")
+    @DisplayName("지난 글을 내려도 스트릭은 그대로다")
     void delete_PastVerification_KeepsStreak() {
         // given: 사흘 연속 인증해 스트릭 3
         ChallengeVerification twoDaysAgo = verificationOn(today().minusDays(2));
@@ -157,13 +154,12 @@ class VerificationDeleteTest {
         participation.applyVerification(today());
         em.flush();
 
-        // when — 가운데가 아니라 가장 오래된 것을 지운다
-        ChallengeVerificationResDTO.Deletion result = challengeCommandService
-                .deleteVerification(me.getId(), challenge.getId(), twoDaysAgo.getId());
+        // when
+        challengeCommandService.deleteVerification(me.getId(), challenge.getId(), twoDaysAgo.getId());
         em.flush();
 
         // then
-        assertThat(result.currentStreak()).isEqualTo(3);
+        assertThat(participation.getCurrentStreak()).isEqualTo(3);
         assertThat(participation.getLastVerifiedDate()).isEqualTo(today());
     }
 

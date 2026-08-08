@@ -177,10 +177,9 @@ public final class ChallengeVerificationConverter {
                 .build();
     }
 
-    public static ChallengeVerificationResDTO.Deletion toDeletion(Long verificationId, int currentStreak) {
+    public static ChallengeVerificationResDTO.Deletion toDeletion(Long verificationId) {
         return ChallengeVerificationResDTO.Deletion.builder()
                 .verificationId(verificationId)
-                .currentStreak(currentStreak)
                 .build();
     }
 }

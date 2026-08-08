@@ -225,25 +225,4 @@ public interface ChallengeVerificationRepository
             @Param("participationRound") Integer participationRound
     );
 
-    /**
-     * 그 회차의 유효한 인증 날짜를 오름차순으로, <b>지정한 한 건만 빼고</b>.
-     *
-     * <p>글을 내렸을 때 스트릭을 다시 셀 때 쓴다. {@link #findApprovedDatesInRound} 와 달리
-     * <b>이미 내려간 다른 행들은 그대로 센다</b> — 삭제는 그날 것만 스트릭에서 빼고 과거로
-     * 소급하지 않기 때문이다. 과거 삭제까지 빼면 오래된 글 하나를 내렸을 때 그 지점에서 연속이
-     * 끊겨, 남용과 무관한 사용자가 며칠치를 한꺼번에 잃는다.
-     */
-    @Query("""
-            select v.verifiedDate from ChallengeVerification v
-            where v.memberChallenge.id = :memberChallengeId
-              and v.participationRound = :participationRound
-              and v.reviewStatus = com.lirouti.domain.verification.enums.ReviewStatus.APPROVED
-              and v.id <> :excludedId
-            order by v.verifiedDate asc
-            """)
-    List<LocalDate> findApprovedDatesInRoundExcept(
-            @Param("memberChallengeId") Long memberChallengeId,
-            @Param("participationRound") Integer participationRound,
-            @Param("excludedId") Long excludedId
-    );
 }
