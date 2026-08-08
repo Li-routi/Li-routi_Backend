@@ -55,6 +55,7 @@ import com.lirouti.domain.chat.enums.ChatMessageType;
 import com.lirouti.domain.chat.exception.ChatException;
 import com.lirouti.domain.chat.exception.code.error.ChatErrorCode;
 import com.lirouti.domain.chat.service.command.ChatCommandService;
+import com.lirouti.domain.group.entity.Group;
 import com.lirouti.domain.group.entity.GroupMember;
 import com.lirouti.domain.group.exception.GroupException;
 import com.lirouti.domain.group.exception.code.error.GroupErrorCode;
@@ -491,9 +492,10 @@ class ChatWebSocketIntegrationTest {
     @DisplayName("그룹 탈퇴 커밋 후 실제 세션을 종료하고 재연결 구독을 차단한다")
     void leaveGroup_AfterCommit_ClosesSessionsAndRejectsReconnect() throws Exception {
         // given
+        Group group = mock(Group.class);
         GroupMember membership = mock(GroupMember.class);
-        when(groupValidationService.lockActiveGroupForUpdate(GROUP_ID)).thenReturn(null);
-        when(groupValidationService.validateActiveGroupMember(GROUP_ID, MEMBER_ID))
+        when(groupValidationService.lockActiveGroupForUpdate(GROUP_ID)).thenReturn(group);
+        when(groupValidationService.validateActiveGroupMemberForUpdate(group, MEMBER_ID))
                 .thenReturn(membership);
 
         StompSession firstSession = connect();
@@ -542,12 +544,13 @@ class ChatWebSocketIntegrationTest {
     @DisplayName("그룹 강퇴 커밋 후 대상 회원의 모든 실제 세션을 종료한다")
     void kickMember_AfterCommit_ClosesTargetSessions() throws Exception {
         // given
+        Group group = mock(Group.class);
         GroupMember ownerMembership = mock(GroupMember.class);
         GroupMember targetMembership = mock(GroupMember.class);
-        when(groupValidationService.lockActiveGroupForUpdate(GROUP_ID)).thenReturn(null);
+        when(groupValidationService.lockActiveGroupForUpdate(GROUP_ID)).thenReturn(group);
         when(groupValidationService.validateGroupOwner(GROUP_ID, OWNER_ID))
                 .thenReturn(ownerMembership);
-        when(groupValidationService.validateActiveGroupMember(GROUP_ID, MEMBER_ID))
+        when(groupValidationService.validateActiveGroupMemberForUpdate(group, MEMBER_ID))
                 .thenReturn(targetMembership);
 
         StompSession firstSession = connect();
