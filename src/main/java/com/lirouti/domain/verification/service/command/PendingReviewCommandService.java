@@ -47,10 +47,22 @@ public class PendingReviewCommandService {
      * 스트릭은 건드리지 않는다 — 보류 시점에 이미 올려 뒀다.
      */
     @Transactional
-    public void approve(Long verificationId, String publicKey) {
-        challengeVerificationRepository.findById(verificationId)
+    public boolean approve(Long verificationId, String reviewedKey, String publicKey) {
+        return challengeVerificationRepository.findById(verificationId)
                 .filter(ChallengeVerification::isPending)
-                .ifPresent(v -> v.approveWith(publicKey));
+                // 심사를 시작할 때 보던 그 사진이어야 한다. 그 사이 당일 재인증이 들어오면
+                // 행의 사진이 새것으로 바뀌는데, 그대로 확정하면 옛 사진의 판정으로 새 사진을
+                // 공개하게 된다. 어긋나면 아무것도 하지 않는다 — 새 사진은 자기 판정을 따른다.
+                .filter(v -> reviewedKey.equals(v.getImageUrl()))
+                .map(v -> {
+                    v.approveWith(publicKey);
+                    return true;
+                })
+                .orElseGet(() -> {
+                    log.info("그 사이 사진이 바뀌어 승격 결과를 버립니다. verificationId={}, 심사한 key={}",
+                            verificationId, reviewedKey);
+                    return false;
+                });
     }
 
     /**
@@ -66,12 +78,17 @@ public class PendingReviewCommandService {
      * 잠금을 쓰면 둘이 서로를 덮어쓴다.
      */
     @Transactional
-    public void reject(Long verificationId) {
+    public boolean reject(Long verificationId, String reviewedKey) {
         ChallengeVerification verification = challengeVerificationRepository.findById(verificationId)
                 .filter(ChallengeVerification::isPending)
+                // 승격과 같은 이유다. 그 사이 재인증이 들어왔으면 옛 사진의 반려로 새 사진을
+                // 지우게 된다 — 사용자가 방금 올린 멀쩡한 사진이 사라진다.
+                .filter(v -> reviewedKey.equals(v.getImageUrl()))
                 .orElse(null);
         if (verification == null) {
-            return;
+            log.info("그 사이 사진이 바뀌어 반려 결과를 버립니다. verificationId={}, 심사한 key={}",
+                    verificationId, reviewedKey);
+            return false;
         }
 
         MemberChallenge unlocked = verification.getMemberChallenge();
@@ -79,23 +96,26 @@ public class PendingReviewCommandService {
         Long challengeId = unlocked.getChallenge().getId();
         Integer round = verification.getParticipationRound();
 
+        // 참여 행을 먼저 잠근다. 저장 경로가 같은 순서로 잠그므로(참여 → 인증), 여기서
+        // 뒤집으면 반려 확정과 당일 재인증이 서로의 잠금을 기다리다 데드락이 된다.
+        MemberChallenge locked = memberChallengeRepository
+                .findByMemberIdAndChallengeIdForUpdate(memberId, challengeId)
+                .orElse(null);
+
         challengeVerificationRepository.delete(verification);
         // 지운 행이 아래 재계산 조회에 잡히지 않도록 먼저 반영한다.
         challengeVerificationRepository.flush();
 
-        memberChallengeRepository.findByMemberIdAndChallengeIdForUpdate(memberId, challengeId)
-                .ifPresent(locked -> {
-                    // 지난 회차의 인증을 지운 것이면 지금 스트릭과 무관하다. 그 회차 날짜로
-                    // 다시 세면 오히려 현재 회차의 스트릭을 옛 기록으로 덮어쓴다.
-                    if (!round.equals(locked.getParticipationRound())) {
-                        return;
-                    }
-                    List<LocalDate> approved = challengeVerificationRepository
-                            .findApprovedDatesInRound(locked.getId(), round);
-                    locked.recalculateStreak(approved);
-                });
+        // 지난 회차의 인증을 지운 것이면 지금 스트릭과 무관하다. 그 회차 날짜로 다시 세면
+        // 오히려 현재 회차의 스트릭을 옛 기록으로 덮어쓴다.
+        if (locked != null && round.equals(locked.getParticipationRound())) {
+            List<LocalDate> approved = challengeVerificationRepository
+                    .findApprovedDatesInRound(locked.getId(), round);
+            locked.recalculateStreak(approved);
+        }
 
         log.info("보류가 반려로 확정돼 인증을 지웠습니다. verificationId={}, memberId={}, challengeId={}",
                 verificationId, memberId, challengeId);
+        return true;
     }
 }

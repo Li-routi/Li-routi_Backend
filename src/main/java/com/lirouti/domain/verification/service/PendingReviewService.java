@@ -116,9 +116,12 @@ public class PendingReviewService {
             //
             // 이 순서로 죽으면 대기본만 고아로 남는데, 그건 나이 기반 수명 주기가 가져간다.
             // 남는 방향의 실패는 스스로 낫고, 사라지는 방향의 실패는 낫지 않는다.
-            pendingReviewCommandService.reject(verification.getId());
-            mediaService.deleteQuietly(verification.getImageUrl());
-            return Outcome.REJECTED;
+            // 심사한 그 사진일 때만 지운다. 그 사이 재인증이 들어왔으면 아무것도 하지 않는다.
+            if (pendingReviewCommandService.reject(verification.getId(), verification.getImageUrl())) {
+                mediaService.deleteQuietly(verification.getImageUrl());
+                return Outcome.REJECTED;
+            }
+            return Outcome.HELD;
         }
         return promoteAndApprove(verification) ? Outcome.APPROVED : Outcome.HELD;
     }
@@ -143,7 +146,7 @@ public class PendingReviewService {
             if (e.getCode() == MediaErrorCode.MEDIA_SOURCE_GONE) {
                 log.error("보류 건의 원본이 사라져 인증을 정리합니다. verificationId={}, key={}",
                         verification.getId(), stagingKey);
-                pendingReviewCommandService.reject(verification.getId());
+                pendingReviewCommandService.reject(verification.getId(), stagingKey);
                 return false;
             }
             log.warn("보류 건을 공개 prefix 로 옮기지 못해 보류를 유지합니다. verificationId={}",
@@ -151,7 +154,11 @@ public class PendingReviewService {
             return false;
         }
 
-        pendingReviewCommandService.approve(verification.getId(), publicKey);
+        if (!pendingReviewCommandService.approve(verification.getId(), stagingKey, publicKey)) {
+            // 그 사이 사진이 바뀌었다. 방금 만든 공개본은 아무도 참조하지 않으므로 미참조
+            // 정리가 가져간다. 대기본은 새 흐름이 알아서 다룬다.
+            return false;
+        }
         mediaService.deleteQuietly(stagingKey);
 
         log.info("보류가 풀려 인증을 공개했습니다. verificationId={}, 보류={}시간, 시도={}회",

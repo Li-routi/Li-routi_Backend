@@ -467,8 +467,20 @@ public class MediaService {
             }
             // 원본이 없다. 다시 시도해도 같으므로 "일시 실패" 와 구분해 알려야 한다 —
             // 구분하지 않으면 부르는 쪽이 영원히 재시도한다.
-            if (e.statusCode() == HttpStatus.NOT_FOUND.value() || e instanceof NoSuchKeyException) {
-                log.warn("옮길 원본이 없습니다. uploadKey={}", uploadKey);
+            //
+            // 403 도 함께 본다. IAM 역할의 ListBucket 은 공개 prefix 에만 있어서, 대기
+            // prefix 의 없는 key 에는 S3 가 존재 여부를 숨기려고 NoSuchKey 대신 AccessDenied 를
+            // 준다(바이트 검증 쪽에 같은 분기가 있다). 403 을 일시 실패로 두면 이미 사라진
+            // 원본을 10분마다 영원히 승격하려 든다.
+            //
+            // 대신 진짜 권한 문제도 소실로 보이는 맹점이 생긴다. 다만 그 경우 개별 건이 아니라
+            // 모든 승격이 실패하므로, 아래 로그가 몰려 찍히면 권한 문제로 봐야 한다.
+            int status = e.statusCode();
+            if (status == HttpStatus.NOT_FOUND.value()
+                    || status == HttpStatus.FORBIDDEN.value()
+                    || e instanceof NoSuchKeyException) {
+                log.warn("옮길 원본이 없습니다(status={}). 이 로그가 몰려 찍히면 s3:GetObject"
+                        + " 권한을 확인하세요. uploadKey={}", status, uploadKey);
                 throw new MediaException(MediaErrorCode.MEDIA_SOURCE_GONE);
             }
             log.error("심사를 통과한 사진을 공개 prefix 로 옮기지 못했습니다. uploadKey={}", uploadKey, e);

@@ -45,6 +45,7 @@ public final class ChallengeVerificationConverter {
                 .content(verification.getContent())
                 .currentStreak(currentStreak)
                 .reverified(reverified)
+                .reviewStatus(verification.getReviewStatus())
                 .build();
     }
 

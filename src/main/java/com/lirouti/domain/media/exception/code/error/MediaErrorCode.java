@@ -69,7 +69,7 @@ public enum MediaErrorCode implements BaseErrorCode {
     MEDIA_SOURCE_GONE(
             HttpStatus.NOT_FOUND,
             "인증 사진을 찾을 수 없습니다. 다시 업로드해 주세요.",
-            "MEDIA404_1"
+            "MEDIA404_2"
     ),
     MEDIA_VALIDATION_FAILED(
             HttpStatus.INTERNAL_SERVER_ERROR,

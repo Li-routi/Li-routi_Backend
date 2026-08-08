@@ -44,6 +44,16 @@ public interface ChallengeVerificationControllerDocs {
                     두 기준은 판단 방향이 반대입니다. 챌린지 일치는 애매하면 통과시키고,
                     공개 가능 여부는 애매하면 반려합니다.
 
+                    **심사기가 답을 못 주면 보류됩니다(reviewStatus=PENDING).** 장애·타임아웃이
+                    그 경우이고, 막히는 것이 아니라 저장은 되며 스트릭도 오릅니다. 다만 아직
+                    공개되지 않아 피드에는 안 보이고 **본인에게만** 보입니다.
+
+                    보류일 때 imageUrl 은 공개 주소가 아니라 **한시적 서명 주소**입니다.
+                    오래 들고 있다가 쓰면 만료됩니다.
+
+                    서버가 10분마다 다시 심사하고, 통과하면 그때 공개됩니다. 24시간이 지나면
+                    더 기다리지 않고 통과시킵니다 — 남의 장애로 반려하지 않습니다.
+
                     반려 응답의 message는 코드별 고정 문구입니다. 구체적인 판단 근거는
                     서버 로그에만 남고 응답에는 실리지 않습니다.
 
@@ -146,6 +156,12 @@ public interface ChallengeVerificationControllerDocs {
                     응답 result: verifications[{ verificationId, imageUrl, content, verifiedDate,
                     verifiedAt, likeCount, participationRound }], currentStreak,
                     currentParticipationRound, nextCursor, hasNext.
+
+                    reviewStatus 로 심사 상태가 함께 내려갑니다. PENDING 이면 아직 공개되지 않은
+                    인증이라 피드에는 없고 여기서만 보이며, imageUrl 은 한시적 서명 주소입니다.
+                    화면에는 "심사 중" 으로 표시해 주세요.
+
+                    status=PENDING 으로 좁히면 심사 중인 것만 내려갑니다. 생략하면 전부입니다.
                     """
     )
     @ApiResponses({

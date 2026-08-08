@@ -33,7 +33,15 @@ public final class ChallengeVerificationResDTO {
             String imageUrl,
             String content,
             int currentStreak,
-            boolean reverified
+            boolean reverified,
+            /**
+             * 심사 상태. {@code PENDING} 이면 <b>아직 공개되지 않았다</b> — 심사기가 답을 못 줘
+             * 보류 중이고, 복구되면 다시 심사한다. 그동안 사진은 본인에게만 보인다.
+             *
+             * <p>이 값이 {@code PENDING} 이면 {@code imageUrl} 은 <b>공개 주소가 아니라 한시적
+             * 서명 주소</b>다. 오래 들고 있다가 쓰면 만료된다.
+             */
+            ReviewStatus reviewStatus
     ) {
     }
 

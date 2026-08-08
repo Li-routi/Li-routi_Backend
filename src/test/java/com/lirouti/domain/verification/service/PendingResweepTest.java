@@ -225,6 +225,61 @@ class PendingResweepTest {
                 .getReviewStatus()).isEqualTo(ReviewStatus.APPROVED);
     }
 
+    /** 당일 재인증이 들어와 사진이 갈린 상황. 별도 트랜잭션으로 즉시 커밋한다. */
+    private void replacePhoto(String newKey) {
+        tx().executeWithoutResult(status -> {
+            ChallengeVerification v = em.find(ChallengeVerification.class, verificationId);
+            v.reverify(newKey, "새 사진", LocalDateTime.now(),
+                    ReviewStatus.PENDING, LocalDateTime.now());
+        });
+    }
+
+    @Test
+    @DisplayName("그 사이 재인증이 들어왔으면 옛 심사 결과를 버린다 — 새 사진을 옛 판정으로 공개하면 안 된다")
+    void resweep_PhotoReplacedMidReview_DiscardsResult() {
+        // given — 보류 건을 잡아 두고, 심사하는 사이에 당일 재인증이 들어와 사진이 바뀐 상황
+        givenPending(LocalDateTime.now().minusMinutes(30), 0);
+
+        String replacedKey = "challenge-verifications-staging/2026/08/08/"
+                + "99999999-9999-4999-8999-999999999999.jpg";
+        // 심사가 도는 "동안" 사진이 바뀌어야 경합이다. 심사 응답 직전에 갈아끼운다 —
+        // 미리 바꿔 두면 재심사가 처음부터 새 사진을 보게 되어 경합이 아니다.
+        when(reviewClient.review(any(), any(), any())).thenAnswer(invocation -> {
+            replacePhoto(replacedKey);
+            return VerificationReview.pass();
+        });
+
+        // when
+        pendingReviewService.sweepPending();
+
+        // then — 옛 사진의 통과 결과로 새 사진을 공개하면 안 된다.
+        ChallengeVerification row = challengeVerificationRepository.findById(verificationId).orElseThrow();
+        assertThat(row.getReviewStatus()).isEqualTo(ReviewStatus.PENDING);
+        assertThat(row.getImageUrl()).isEqualTo(replacedKey);
+    }
+
+    @Test
+    @DisplayName("그 사이 사진이 바뀌었으면 반려도 버린다 — 방금 올린 멀쩡한 사진이 사라지면 안 된다")
+    void resweep_PhotoReplacedMidReview_DiscardsRejection() {
+        // given
+        givenPending(LocalDateTime.now().minusMinutes(30), 0);
+
+        String replacedKey = "challenge-verifications-staging/2026/08/08/"
+                + "88888888-8888-4888-8888-888888888888.jpg";
+        when(reviewClient.review(any(), any(), any())).thenAnswer(invocation -> {
+            replacePhoto(replacedKey);
+            return VerificationReview.reject(ReviewRejection.MISMATCH, "관계 없는 사진");
+        });
+
+        // when
+        pendingReviewService.sweepPending();
+
+        // then
+        assertThat(challengeVerificationRepository.findById(verificationId))
+                .as("옛 사진의 반려로 새 사진을 지우면 안 된다")
+                .isPresent();
+    }
+
     @Test
     @DisplayName("원본이 사라졌으면 정리한다 — 안 그러면 10분마다 영원히 실패한다")
     void resweep_SourceGone_CleansUpInsteadOfLoopingForever() {

@@ -35,10 +35,15 @@ public class MyVerificationQueryService {
     ) {
         List<ChallengeVerification> challengeVerifications =
                 challengeVerificationRepository.findByMemberAndDate(memberId, date, statusFilter);
-        List<MemberRoutineVerification> memberRoutineVerifications =
-                memberRoutineVerificationRepository.findByMemberAndDate(memberId, date);
-        List<GroupRoutineVerification> groupRoutineVerifications =
-                groupRoutineVerificationRepository.findByMemberAndDate(memberId, date);
+        // 심사는 챌린지 인증에만 붙는다. PENDING 으로 좁혀 달라는 요청에 심사 자체가 없는
+        // 루틴 인증을 섞어 주면 "심사 중인 것만" 이라는 요청과 답이 어긋난다.
+        boolean pendingOnly = statusFilter == ReviewStatus.PENDING;
+        List<MemberRoutineVerification> memberRoutineVerifications = pendingOnly
+                ? List.of()
+                : memberRoutineVerificationRepository.findByMemberAndDate(memberId, date);
+        List<GroupRoutineVerification> groupRoutineVerifications = pendingOnly
+                ? List.of()
+                : groupRoutineVerificationRepository.findByMemberAndDate(memberId, date);
 
         List<MyVerificationResDTO.Item> items = new ArrayList<>();
 
