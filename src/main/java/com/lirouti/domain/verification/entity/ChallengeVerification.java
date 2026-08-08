@@ -114,9 +114,20 @@ public class ChallengeVerification extends BaseEntity {
         this.content = content;
         // 빌더가 값을 안 주면 정상 인증이다. 보류는 명시적으로 지정해야만 만들어진다 —
         // 기본이 PENDING 이면 어디선가 빠뜨렸을 때 사진이 조용히 안 보이게 된다.
-        this.reviewStatus = reviewStatus != null ? reviewStatus : ReviewStatus.APPROVED;
+        ReviewStatus status = reviewStatus != null ? reviewStatus : ReviewStatus.APPROVED;
+
+        // 보류인데 시작 시각이 없으면 상한 조회(review_status, pending_since)에 안 잡혀
+        // 무기한 보류가 된다. 사진은 대기 prefix 에 있다가 수명 주기가 가져가고, 사용자
+        // 화면에는 "심사 중"만 영영 남는다. 만들 때 막지 않으면 찾기 어려운 자리다.
+        if (status == ReviewStatus.PENDING && pendingSince == null) {
+            throw new IllegalArgumentException("보류 인증에는 pendingSince 가 있어야 합니다.");
+        }
+
+        this.reviewStatus = status;
         this.reviewAttempts = 0;
-        this.pendingSince = pendingSince;
+        // 보류가 아니면 시작 시각을 남기지 않는다. 남겨 두면 "지난번에 보류였던 흔적"과
+        // "지금 보류 중"이 같은 컬럼에 섞여, 상한 조회가 무엇을 뜻하는지 흐려진다.
+        this.pendingSince = status == ReviewStatus.PENDING ? pendingSince : null;
     }
 
     /**
