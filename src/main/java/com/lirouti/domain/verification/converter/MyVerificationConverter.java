@@ -22,6 +22,7 @@ public class MyVerificationConverter {
                 .content(verification.getContent())
                 .imageUrl(imageUrl)
                 .verifiedAt(verification.getVerifiedAt())
+                .reviewStatus(verification.getReviewStatus())
                 .build();
     }
 

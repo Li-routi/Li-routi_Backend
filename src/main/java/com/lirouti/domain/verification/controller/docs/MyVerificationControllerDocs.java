@@ -1,6 +1,7 @@
 package com.lirouti.domain.verification.controller.docs;
 
 import com.lirouti.domain.verification.dto.response.MyVerificationResDTO;
+import com.lirouti.domain.verification.enums.ReviewStatus;
 import com.lirouti.global.apiPayload.ApiResponse;
 import com.lirouti.global.auth.CustomUserDetails;
 import io.swagger.v3.oas.annotations.Operation;
@@ -32,6 +33,9 @@ public interface MyVerificationControllerDocs {
     })
     ApiResponse<MyVerificationResDTO.DailyFeed> getMyVerifications(
             @AuthenticationPrincipal CustomUserDetails userDetails,
-            @Parameter(description = "조회할 날짜(yyyy-MM-dd). 생략 시 오늘(KST)") LocalDate date
+            @Parameter(description = "조회할 날짜(yyyy-MM-dd). 생략 시 오늘(KST)") LocalDate date,
+            @Parameter(description = "심사 상태로 좁힌다. 생략하면 전부. "
+                    + "PENDING 이면 심사 중인 챌린지 인증만 — 루틴 인증은 심사가 없어 빠진다")
+            ReviewStatus status
     );
 }

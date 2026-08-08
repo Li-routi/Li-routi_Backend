@@ -152,6 +152,22 @@ public class MediaService {
      * <p>실패하면 예외를 던져 조회 자체를 실패시킨다. 여기서 삼키고 null 을 내리면 화면에는
      * 원인 없는 깨진 이미지만 남아, 설정 문제가 사용자 문제처럼 보인다.
      */
+    /**
+     * <b>용도와 무관하게</b> 서명 URL 을 발급한다. 보류 중인 사진처럼 <b>공개 prefix 규칙을
+     * 따르면 안 되는 경우</b>에만 쓴다.
+     *
+     * <p>{@link #resolveViewUrl} 은 {@link MediaPurpose} 만 보고 갈리는데, 챌린지 인증은
+     * {@code publicRead = true} 라 공개 주소를 조립해 돌려준다. <b>보류 사진은 아직 대기
+     * prefix 에 있어 그 주소로 열면 403 이다.</b>
+     *
+     * <p><b>권한은 여기서 못 막는다.</b> key 만 알아서 소유자를 모르기 때문이다. 부르는 쪽이
+     * "본인 것" 을 보장한 뒤에만 불러야 한다 — 그러지 않으면 그 순간 대기 prefix 가 공개된 것과
+     * 같아진다.
+     */
+    public String presignedViewUrl(String mediaKey) {
+        return presignViewUrl(mediaKey);
+    }
+
     private String presignViewUrl(String mediaKey) {
         GetObjectRequest getObjectRequest = GetObjectRequest.builder()
                 .bucket(s3Properties.getBucket())

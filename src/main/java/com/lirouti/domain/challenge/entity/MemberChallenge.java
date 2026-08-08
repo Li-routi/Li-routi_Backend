@@ -9,6 +9,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.time.LocalDateTime;
 
 /**
@@ -130,5 +131,41 @@ public class MemberChallenge extends BaseEntity {
             return 0;
         }
         return currentStreak;
+    }
+
+    /**
+     * 유효한 인증 날짜 목록으로 스트릭을 <b>다시 센다.</b>
+     *
+     * <p>보류가 반려로 확정되거나 인증이 지워지면 그 한 건이 사라진다. 이때
+     * {@code currentStreak} 을 1 줄이거나 {@code lastVerifiedDate} 를 전날로 되돌리면
+     * <b>틀린 값이 남는다</b> — 사라진 인증 뒤에 다른 인증이 붙어 있었다면 단순 감산은 그것까지
+     * 지운 셈이 된다.
+     *
+     * <p>그래서 남은 인증으로 처음부터 센다. {@code verifiedDates} 는 <b>그 회차의 유효한
+     * 인증 날짜</b>(보류·반려 제외)이고 <b>오름차순</b>이어야 한다.
+     *
+     * <p>빈 목록이면 인증이 하나도 없는 상태로 되돌린다.
+     */
+    public void recalculateStreak(List<LocalDate> verifiedDates) {
+        if (verifiedDates.isEmpty()) {
+            this.currentStreak = 0;
+            this.lastVerifiedDate = null;
+            return;
+        }
+
+        int streak = 1;
+        LocalDate previous = verifiedDates.get(0);
+        for (int i = 1; i < verifiedDates.size(); i++) {
+            LocalDate current = verifiedDates.get(i);
+            // 같은 날이 두 번 오는 일은 유니크 제약이 막지만, 들어와도 스트릭이 부풀지 않게 둔다.
+            if (current.isEqual(previous)) {
+                continue;
+            }
+            streak = current.isEqual(previous.plusDays(1)) ? streak + 1 : 1;
+            previous = current;
+        }
+
+        this.currentStreak = streak;
+        this.lastVerifiedDate = previous;
     }
 }

@@ -231,7 +231,7 @@ class ChallengeLikeTest {
                 .getVerificationFeed(c.getId(), author.getId(), null, null)
                 .verifications().get(0).likeCount();
         long mineCount = challengeQueryService
-                .getMyVerifications(author.getId(), c.getId(), null, null)
+                .getMyVerifications(author.getId(), c.getId(), null, null, null)
                 .verifications().get(0).likeCount();
 
         assertThat(mineCount).isEqualTo(feedCount).isEqualTo(1);

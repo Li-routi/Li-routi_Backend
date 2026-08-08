@@ -147,6 +147,18 @@ ai:
     # AI 에 보내기 전에 줄일 긴 변 픽셀. 이보다 큰 이미지는 심사 쪽이 어차피 축소해서 보므로
     # 원본을 그대로 보내면 판정은 같고 전송만 느려진다. 원본은 S3 에 그대로 남는다.
     max-image-dimension: ${AI_REVIEW_MAX_IMAGE_DIMENSION:1568}
+    # 심사가 장애로 답을 못 주면 통과시키지 않고 보류한 뒤, 복구되면 다시 심사한다.
+    pending:
+      # 끄면 보류 자체를 하지 않는다 — 답을 못 주면 예전처럼 바로 통과시킨다.
+      # 재심사가 오작동해 보류만 쌓일 때의 탈출구다.
+      enabled: ${AI_REVIEW_PENDING_ENABLED:true}
+      # 이 시간이 지나면 심사 없이 통과시킨다. 대기 prefix 수명 주기(3일)보다 반드시 짧아야
+      # 한다 — 길면 재심사할 사진이 먼저 지워진다. 상한과 수명 주기 사이의 이틀이 여유다.
+      max-age: ${AI_REVIEW_PENDING_MAX_AGE:PT24H}
+      # 시간과 함께 두는 이유는 스케줄러가 멈춰 있던 구간을 시간이 받아 주기 때문이다.
+      max-attempts: ${AI_REVIEW_PENDING_MAX_ATTEMPTS:12}
+      # 장애가 길어 한꺼번에 쌓였을 때 한 실행이 과도해지지 않게 막는다.
+      batch-size: ${AI_REVIEW_PENDING_BATCH_SIZE:100}
 
 # 신고 누적 자동 숨김. 데모 전까지의 임시 조치다.
 challenge:

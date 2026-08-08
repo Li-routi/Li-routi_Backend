@@ -6,6 +6,7 @@ import com.lirouti.domain.verification.converter.ChallengeVerificationConverter;
 import com.lirouti.domain.verification.dto.response.ChallengeVerificationResDTO;
 import com.lirouti.domain.verification.dto.request.ChallengeVerificationReqDTO;
 import com.lirouti.domain.verification.entity.ChallengeVerification;
+import com.lirouti.domain.verification.enums.ReviewStatus;
 import com.lirouti.domain.challenge.entity.MemberChallenge;
 import com.lirouti.domain.challenge.exception.ChallengeException;
 import com.lirouti.domain.challenge.exception.code.error.ChallengeErrorCode;
@@ -71,7 +72,8 @@ public class ChallengeVerificationCommandService {
             Long memberId,
             Long challengeId,
             ChallengeVerificationReqDTO.Verify request,
-            String storedMediaKey
+            String storedMediaKey,
+            ReviewStatus reviewStatus
     ) {
         // 이탈·재참여와 같은 행을 바꾸므로 잠그고 읽는다. 락 없이 읽으면 이 트랜잭션이 커밋할 때
         // 그 사이 커밋된 이탈·재참여 결과를 오래된 스냅샷으로 되돌린다.
@@ -113,18 +115,25 @@ public class ChallengeVerificationCommandService {
 
         ChallengeVerification verification = todayVerification
                 .map(existing -> {
-                    existing.reverify(storedMediaKey, request.content(), verifiedAt);
+                    existing.reverify(storedMediaKey, request.content(), verifiedAt,
+                            reviewStatus, pendingSinceFor(reviewStatus, verifiedAt));
                     return existing;
                 })
-                .orElseGet(() ->
-                        createVerification(memberChallenge, request, storedMediaKey, today, verifiedAt));
+                .orElseGet(() -> createVerification(
+                        memberChallenge, request, storedMediaKey, today, verifiedAt, reviewStatus));
 
         // 재인증이면 applyVerification이 오늘 날짜를 보고 스트릭을 그대로 둔다.
         memberChallenge.applyVerification(today);
 
+        // 보류 건은 아직 대기 prefix 에 있어 공개 주소가 없다. 그 주소로 열면 403 이므로
+        // 서명을 발급한다 — 본인이 방금 올린 사진이라 여기서 보여 주는 것은 문제가 없다.
+        String viewUrl = verification.isPending()
+                ? mediaService.presignedViewUrl(verification.getImageUrl())
+                : mediaService.resolvePublicUrl(verification.getImageUrl());
+
         return ChallengeVerificationConverter.toVerification(
                 verification,
-                mediaService.resolvePublicUrl(verification.getImageUrl()),
+                viewUrl,
                 memberChallenge.currentStreakAsOf(today),
                 reverified
         );
@@ -135,7 +144,8 @@ public class ChallengeVerificationCommandService {
             ChallengeVerificationReqDTO.Verify request,
             String storedMediaKey,
             LocalDate verifiedDate,
-            LocalDateTime verifiedAt
+            LocalDateTime verifiedAt,
+            ReviewStatus reviewStatus
     ) {
         ChallengeVerification verification = ChallengeVerification.builder()
                 .memberChallenge(memberChallenge)
@@ -144,6 +154,8 @@ public class ChallengeVerificationCommandService {
                 .verifiedAt(verifiedAt)
                 .imageUrl(storedMediaKey)
                 .content(request.content())
+                .reviewStatus(reviewStatus)
+                .pendingSince(pendingSinceFor(reviewStatus, verifiedAt))
                 .build();
         try {
             // "오늘 인증이 없다"는 선검사와 저장 사이의 동시 요청 경합은 유니크 제약이 막는다.
@@ -164,5 +176,15 @@ public class ChallengeVerificationCommandService {
         } catch (DataIntegrityViolationException | CannotAcquireLockException e) {
             throw new VerificationException(ChallengeVerificationErrorCode.VERIFICATION_CONFLICT);
         }
+    }
+
+    /**
+     * 보류 시작 시각. <b>인증 시각을 그대로 쓴다.</b>
+     *
+     * <p>따로 {@code now()} 를 부르지 않는 이유는 기준일·인증 시각과 같은 순간에서 뽑아야
+     * 하기 때문이다. 자정 경계에서 두 값이 다른 날을 가리키면 상한 계산이 하루 어긋난다.
+     */
+    private LocalDateTime pendingSinceFor(ReviewStatus reviewStatus, LocalDateTime verifiedAt) {
+        return reviewStatus == ReviewStatus.PENDING ? verifiedAt : null;
     }
 }

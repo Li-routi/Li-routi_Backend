@@ -9,6 +9,7 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import com.lirouti.domain.verification.dto.response.ChallengeVerificationResDTO;
+import com.lirouti.domain.verification.enums.ReviewStatus;
 import com.lirouti.domain.verification.dto.request.ChallengeVerificationReqDTO;
 
 @Tag(name = "Challenge", description = "챌린지 인증 API")
@@ -156,7 +157,9 @@ public interface ChallengeVerificationControllerDocs {
             CustomUserDetails userDetails,
             @Parameter(description = "챌린지 ID") Long challengeId,
             @Parameter(description = "이전 응답의 nextCursor. 첫 요청에서는 생략") Long cursor,
-            @Parameter(description = "페이지 크기(기본 20, 최대 50)") Integer size
+            @Parameter(description = "페이지 크기(기본 20, 최대 50)") Integer size,
+            @Parameter(description = "심사 상태로 좁힌다. 생략하면 전부. PENDING 이면 심사 중인 것만")
+            ReviewStatus status
     );
 
     @Operation(

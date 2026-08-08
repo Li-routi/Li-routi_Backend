@@ -137,10 +137,50 @@ public class ChallengeVerification extends BaseEntity {
      * 이 인증을 참조하는 신고 데이터의 외래 키도 깨지지 않는다.
      * 인증 기준일(verifiedDate)과 회차는 바뀌지 않으므로 건드리지 않는다.
      */
-    public void reverify(String imageUrl, String content, LocalDateTime verifiedAt) {
+    public void reverify(
+            String imageUrl,
+            String content,
+            LocalDateTime verifiedAt,
+            ReviewStatus reviewStatus,
+            LocalDateTime pendingSince
+    ) {
+        if (reviewStatus == ReviewStatus.PENDING && pendingSince == null) {
+            throw new IllegalArgumentException("보류 인증에는 pendingSince 가 있어야 합니다.");
+        }
         this.imageUrl = imageUrl;
         this.content = content;
         this.verifiedAt = verifiedAt;
+
+        // 심사 결과도 함께 갈아끼운다. 사진이 바뀌었으니 지난 심사 결과는 이 사진의 것이 아니다.
+        // 보류였다가 통과로 올라오거나 그 반대도 되며, 어느 쪽이든 시도 횟수는 0 부터 다시 센다.
+        this.reviewStatus = reviewStatus;
+        this.reviewAttempts = 0;
+        this.pendingSince = reviewStatus == ReviewStatus.PENDING ? pendingSince : null;
+    }
+
+    /**
+     * 보류가 풀려 공개된다. 재심사가 통과했거나, 상한에 닿아 통과시킨 경우다.
+     *
+     * <p>사진이 대기 prefix 에서 공개 prefix 로 옮겨졌으므로 <b>key 도 함께 바뀐다.</b>
+     * 시도 횟수는 남긴다 — "몇 번 만에 풀렸는가"를 나중에 되짚을 수 있어야 한다.
+     */
+    public void approveWith(String publicKey) {
+        this.imageUrl = publicKey;
+        this.reviewStatus = ReviewStatus.APPROVED;
+        this.pendingSince = null;
+    }
+
+    /**
+     * 재심사를 한 번 시도했다. <b>성공·실패와 무관하게 올린다.</b>
+     *
+     * <p>실패할 때만 올리면 계속 죽는 호출이 상한에 영영 닿지 않는다.
+     */
+    public void recordReviewAttempt() {
+        this.reviewAttempts = this.reviewAttempts + 1;
+    }
+
+    public boolean isPending() {
+        return reviewStatus == ReviewStatus.PENDING;
     }
 
     /**

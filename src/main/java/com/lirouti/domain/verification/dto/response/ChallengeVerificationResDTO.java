@@ -1,5 +1,6 @@
 package com.lirouti.domain.verification.dto.response;
 
+import com.lirouti.domain.verification.enums.ReviewStatus;
 import lombok.Builder;
 
 import java.time.LocalDate;
@@ -158,7 +159,12 @@ public final class ChallengeVerificationResDTO {
             LocalDate verifiedDate,
             LocalDateTime verifiedAt,
             long likeCount,
-            int participationRound
+            int participationRound,
+            /**
+             * 심사 상태. {@code PENDING} 이면 아직 공개되지 않았고 <b>본인에게만</b> 보인다 —
+             * 그 경우 {@code imageUrl} 은 공개 주소가 아니라 한시적 서명 주소다.
+             */
+            ReviewStatus reviewStatus
     ) {
     }
 }

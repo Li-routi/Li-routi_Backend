@@ -2,6 +2,7 @@ package com.lirouti.domain.verification.controller;
 
 import com.lirouti.domain.verification.controller.docs.MyVerificationControllerDocs;
 import com.lirouti.domain.verification.dto.response.MyVerificationResDTO;
+import com.lirouti.domain.verification.enums.ReviewStatus;
 import com.lirouti.domain.verification.exception.code.success.VerificationSuccessCode;
 import com.lirouti.domain.verification.service.query.MyVerificationQueryService;
 import com.lirouti.global.apiPayload.ApiResponse;
@@ -29,11 +30,12 @@ public class MyVerificationController implements MyVerificationControllerDocs {
             @AuthenticationPrincipal CustomUserDetails userDetails,
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
-            LocalDate date
+            LocalDate date,
+            @RequestParam(required = false) ReviewStatus status
     ) {
         LocalDate targetDate = (date != null) ? date : LocalDate.now(TimeUtil.KST);
-        MyVerificationResDTO.DailyFeed result =
-                myVerificationQueryService.getMyVerifications(userDetails.getMemberId(), targetDate);
+        MyVerificationResDTO.DailyFeed result = myVerificationQueryService
+                .getMyVerifications(userDetails.getMemberId(), targetDate, status);
         return ApiResponse.onSuccess(VerificationSuccessCode.MY_VERIFICATION_DAILY_FETCH_SUCCESS, result);
     }
 }
