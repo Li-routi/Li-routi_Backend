@@ -361,6 +361,28 @@ public interface GroupControllerDocs {
     );
 
     @Operation(
+            summary = "그룹 구성원 강제 퇴장",
+            description = "ACTIVE OWNER가 대상 ACTIVE 구성원을 그룹에서 강제 퇴장시킵니다. OWNER는 강제 퇴장시킬 수 없습니다."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200", description = "그룹 구성원 강제 퇴장 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401", description = "유효하지 않거나 만료된 인증 토큰"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "403", description = "미인증, 비활성 그룹·구성원 또는 OWNER 권한 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404", description = "그룹 또는 회원을 찾을 수 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "409", description = "OWNER는 강제 퇴장시킬 수 없음")
+    })
+    ApiResponse<Void> kickMember(
+            @Parameter(hidden = true) CustomUserDetails userDetails,
+            @Parameter(description = "그룹 ID", required = true) Long groupId,
+            @Parameter(description = "강제 퇴장할 회원 ID", required = true) Long targetMemberId
+    );
+
+    @Operation(
             summary = "그룹 루틴 삭제",
             description = """
                     그룹의 ACTIVE OWNER가 요청 그룹에 속한 활성 그룹 루틴을 삭제합니다.

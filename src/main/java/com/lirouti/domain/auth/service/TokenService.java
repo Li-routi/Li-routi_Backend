@@ -12,6 +12,7 @@ import com.lirouti.global.properties.JwtProperties;
 import com.lirouti.global.util.JwtUtil;
 import com.lirouti.global.util.RedisUtil;
 import com.lirouti.global.util.TokenHashUtil;
+import com.lirouti.global.websocket.WebSocketSessionRegistry;
 import io.jsonwebtoken.Claims;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -28,6 +29,7 @@ public class TokenService {
     private final JwtUtil jwtUtil;
     private final RedisUtil redisUtil;
     private final MemberRepository memberRepository;
+    private final WebSocketSessionRegistry webSocketSessionRegistry;
     private final Duration accessTokenExpiration;
     private final Duration refreshTokenExpiration;
 
@@ -35,11 +37,13 @@ public class TokenService {
             JwtUtil jwtUtil,
             RedisUtil redisUtil,
             MemberRepository memberRepository,
-            JwtProperties jwtProperties
+            JwtProperties jwtProperties,
+            WebSocketSessionRegistry webSocketSessionRegistry
     ) {
         this.jwtUtil = jwtUtil;
         this.redisUtil = redisUtil;
         this.memberRepository = memberRepository;
+        this.webSocketSessionRegistry = webSocketSessionRegistry;
         this.accessTokenExpiration = Duration.ofMillis(
                 jwtProperties.getAccessToken().getExpirationTime());
         this.refreshTokenExpiration = Duration.ofMillis(
@@ -115,6 +119,14 @@ public class TokenService {
 
         redisUtil.setBlackList(accessToken, remainingTime);
         invalidateRefreshToken(memberId);
+
+        // 토큰 폐기가 실패했는데 연결만 끊기는 불일치를 막기 위해 Redis 반영 이후 세션을 회수한다.
+        int closedSessionCount = webSocketSessionRegistry.closeMemberSessions(memberId);
+        log.info(
+                "로그아웃 후 WebSocket 세션을 회수했습니다. memberId={}, closedSessionCount={}",
+                memberId,
+                closedSessionCount
+        );
 
         return memberId;
     }

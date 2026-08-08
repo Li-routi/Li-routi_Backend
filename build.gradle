@@ -52,6 +52,9 @@ dependencies {
     // webmvc
 	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
 
+    // websocket / STOMP
+	implementation 'org.springframework.boot:spring-boot-starter-websocket'
+
 	// QueryDSL : OpenFeign
     implementation "io.github.openfeign.querydsl:querydsl-jpa:7.0"
     implementation "io.github.openfeign.querydsl:querydsl-core:7.0"

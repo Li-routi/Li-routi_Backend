@@ -90,6 +90,23 @@ public interface GroupRoutineAssignmentRepository
     );
 
     /**
+     * 그룹 탈퇴 회원의 미완료 할당만 제거하고 완료·미이행 이력은 보존한다.
+     * 인증 경로가 같은 할당 행을 잠그므로 탈퇴와 인증은 먼저 잠근 트랜잭션 순서로 처리된다.
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+            delete from GroupRoutineAssignment assignment
+            where assignment.groupRoutine.group.id = :groupId
+              and assignment.member.id = :memberId
+              and assignment.status in :unfinishedStatuses
+            """)
+    int deleteUnfinishedAssignmentsForLeaver(
+            @Param("groupId") Long groupId,
+            @Param("memberId") Long memberId,
+            @Param("unfinishedStatuses") List<GroupRoutineAssignmentStatus> unfinishedStatuses
+    );
+
+    /**
      * 그 회원의 오늘자 할당 한 건. 인증 요청이 실제로 그 사람 몫인지 확인하는 데 쓴다.
      *
      * <p>회원과 그룹을 <b>조회 조건에 넣는다.</b> 가져와서 뒤에서 비교하면 남의 할당인지
@@ -114,28 +131,6 @@ public interface GroupRoutineAssignmentRepository
             @Param("groupId") Long groupId,
             @Param("memberId") Long memberId,
             @Param("assignedDate") LocalDate assignedDate
-    );
-
-    /**
-     * 그룹 탈퇴 회원의 아직 확정되지 않은 할당만 물리 삭제한다.
-     * COMPLETED, MISSED 할당과 그에 연결된 인증 이력은 상태 조건으로 보존한다.
-     *
-     * <p>인증 경로의 {@link #findForVerification(Long, Long, Long, LocalDate)}가 같은 할당 행을
-     * 비관적으로 잠그므로, 탈퇴와 인증은 먼저 확정된 트랜잭션의 결과를 기준으로 직렬화된다.
-     *
-     * @return 삭제된 미완료 할당 수
-     */
-    @Modifying(flushAutomatically = true)
-    @Query("""
-            delete from GroupRoutineAssignment assignment
-            where assignment.member.id = :memberId
-              and assignment.groupRoutine.group.id = :groupId
-              and assignment.status in :statuses
-            """)
-    int deleteUnfinishedByGroupIdAndMemberId(
-            @Param("groupId") Long groupId,
-            @Param("memberId") Long memberId,
-            @Param("statuses") List<GroupRoutineAssignmentStatus> statuses
     );
 
     /**
