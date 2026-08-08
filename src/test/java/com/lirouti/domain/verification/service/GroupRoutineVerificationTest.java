@@ -98,6 +98,7 @@ class GroupRoutineVerificationTest {
         em.persist(routine);
         em.persist(GroupMember.builder()
                 .group(group).member(member).role(GroupMemberRole.MEMBER).build());
+        em.flush();
 
         GroupRoutineAssignment assignment = GroupRoutineAssignment.builder()
                 .groupRoutine(routine).member(member)
@@ -125,6 +126,7 @@ class GroupRoutineVerificationTest {
         em.persist(routine);
         em.persist(GroupMember.builder()
                 .group(group).member(member).role(GroupMemberRole.MEMBER).build());
+        em.flush();
 
         GroupRoutineAssignment assignment = GroupRoutineAssignment.builder()
                 .groupRoutine(routine).member(member)

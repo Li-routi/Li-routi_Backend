@@ -12,7 +12,6 @@ import com.lirouti.domain.group.repository.GroupMemberRepository;
 import com.lirouti.domain.group.repository.GroupRoutineAssignmentRepository;
 import com.lirouti.domain.group.repository.GroupRoutineRepository;
 import com.lirouti.domain.group.repository.GroupRoutineScheduleRepository;
-import com.lirouti.domain.group.service.GroupValidationService;
 import com.lirouti.domain.member.entity.Member;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -44,8 +43,6 @@ class GroupRoutineAssignmentCommandServiceTest {
     private GroupRoutineScheduleRepository scheduleRepository;
     @Mock
     private GroupMemberRepository groupMemberRepository;
-    @Mock
-    private GroupValidationService groupValidationService;
     @Mock
     private GroupMemberActivityCommandService groupMemberActivityCommandService;
     @Mock
@@ -395,6 +392,25 @@ class GroupRoutineAssignmentCommandServiceTest {
         // then
         InOrder inOrder = inOrder(statusRefreshBatchService);
         inOrder.verify(statusRefreshBatchService)
+                .markExpiredAssignmentsMissed(currentDateTime, 100);
+        inOrder.verify(statusRefreshBatchService)
+                .markStartedAssignmentsInProgress(currentDateTime);
+    }
+
+    @Test
+    @DisplayName("마감 처리는 남은 대상이 없을 때까지 batch 단위로 반복한다")
+    void refreshAssignmentStatuses_RepeatsUntilNoMissedAssignmentsRemain() {
+        // given
+        LocalDateTime currentDateTime = LocalDateTime.of(2026, 7, 23, 10, 0);
+        when(statusRefreshBatchService.markExpiredAssignmentsMissed(currentDateTime, 100))
+                .thenReturn(100, 40, 0);
+
+        // when
+        assignmentCommandService.refreshAssignmentStatuses(currentDateTime);
+
+        // then
+        InOrder inOrder = inOrder(statusRefreshBatchService);
+        inOrder.verify(statusRefreshBatchService, times(3))
                 .markExpiredAssignmentsMissed(currentDateTime, 100);
         inOrder.verify(statusRefreshBatchService)
                 .markStartedAssignmentsInProgress(currentDateTime);

@@ -12,7 +12,6 @@ import com.lirouti.domain.group.repository.GroupMemberRepository;
 import com.lirouti.domain.group.repository.GroupRoutineAssignmentRepository;
 import com.lirouti.domain.group.repository.GroupRoutineRepository;
 import com.lirouti.domain.group.repository.GroupRoutineScheduleRepository;
-import com.lirouti.domain.group.service.GroupValidationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -44,7 +43,6 @@ public class GroupRoutineAssignmentCommandService {
     private final GroupRoutineRepository groupRoutineRepository;
     private final GroupRoutineScheduleRepository groupRoutineScheduleRepository;
     private final GroupMemberRepository groupMemberRepository;
-    private final GroupValidationService groupValidationService;
     private final GroupMemberActivityCommandService groupMemberActivityCommandService;
     private final GroupRoutineAssignmentStatusRefreshBatchService statusRefreshBatchService;
     private final Clock clock;
