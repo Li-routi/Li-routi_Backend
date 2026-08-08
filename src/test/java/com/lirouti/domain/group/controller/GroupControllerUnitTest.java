@@ -2,9 +2,12 @@ package com.lirouti.domain.group.controller;
 
 import com.lirouti.domain.group.dto.request.GroupReqDTO;
 import com.lirouti.domain.group.dto.response.GroupResDTO;
+import com.lirouti.domain.group.enums.GroupMemberStatus;
 import com.lirouti.domain.group.exception.code.success.GroupSuccessCode;
 import com.lirouti.domain.group.service.command.GroupCommandService;
+import com.lirouti.domain.group.service.command.GroupJoinCommandService;
 import com.lirouti.domain.group.service.query.GroupInviteCodeQueryService;
+import com.lirouti.domain.group.service.query.GroupJoinQueryService;
 import com.lirouti.domain.group.service.query.GroupQueryService;
 import com.lirouti.domain.member.enums.Role;
 import com.lirouti.domain.routine.enums.RoutineCategoryColor;
@@ -36,6 +39,10 @@ class GroupControllerUnitTest {
     private GroupQueryService groupQueryService;
     @Mock
     private GroupInviteCodeQueryService groupInviteCodeQueryService;
+    @Mock
+    private GroupJoinQueryService groupJoinQueryService;
+    @Mock
+    private GroupJoinCommandService groupJoinCommandService;
     @InjectMocks
     private GroupController groupController;
 
@@ -187,5 +194,39 @@ class GroupControllerUnitTest {
         assertThat(response.getCode()).isEqualTo(GroupSuccessCode.GROUP_UNLOCK_SUCCESS.getCode());
         assertThat(response.getResult()).isSameAs(result);
         verify(groupCommandService).unlockGroup(GROUP_ID, MEMBER_ID);
+    }
+
+    @Test
+    @DisplayName("참여 Preview 조회에 인증 회원 ID와 초대코드를 전달한다")
+    void getJoinPreview_AuthenticatedMember_ReturnsPreview() {
+        CustomUserDetails principal = new CustomUserDetails(MEMBER_ID, Role.ROLE_USER);
+        GroupResDTO.JoinPreview result = new GroupResDTO.JoinPreview(
+                GROUP_ID, "아침 모임", 3, 6, 2, List.of(), true, null);
+        when(groupJoinQueryService.getJoinPreview(MEMBER_ID, "AB12CD3")).thenReturn(result);
+
+        ApiResponse<GroupResDTO.JoinPreview> response = groupController
+                .getJoinPreview(principal, "AB12CD3");
+
+        assertThat(response.getCode()).isEqualTo(
+                GroupSuccessCode.GROUP_JOIN_PREVIEW_FETCH_SUCCESS.getCode());
+        assertThat(response.getResult()).isSameAs(result);
+        verify(groupJoinQueryService).getJoinPreview(MEMBER_ID, "AB12CD3");
+    }
+
+    @Test
+    @DisplayName("인증 회원 ID와 초대코드를 가입 Command에 전달하고 가입 결과를 반환한다")
+    void joinGroup_AuthenticatedMember_ReturnsJoinResult() {
+        CustomUserDetails principal = new CustomUserDetails(MEMBER_ID, Role.ROLE_USER);
+        GroupReqDTO.JoinGroup request = new GroupReqDTO.JoinGroup("AB12CD3");
+        GroupResDTO.JoinResult result = new GroupResDTO.JoinResult(
+                GROUP_ID, "아침 모임", GroupMemberStatus.ACTIVE);
+        when(groupJoinCommandService.join(MEMBER_ID, request)).thenReturn(result);
+
+        ApiResponse<GroupResDTO.JoinResult> response = groupController.joinGroup(principal, request);
+
+        assertThat(response.getIsSuccess()).isTrue();
+        assertThat(response.getCode()).isEqualTo(GroupSuccessCode.GROUP_JOIN_SUCCESS.getCode());
+        assertThat(response.getResult()).isSameAs(result);
+        verify(groupJoinCommandService).join(MEMBER_ID, request);
     }
 }

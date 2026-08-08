@@ -74,6 +74,16 @@ public enum GroupSuccessCode implements BaseSuccessCode {
             HttpStatus.OK,
             "그룹 구성원 강제 퇴장에 성공했습니다.",
             "GROUP200_9"
+    ),
+    GROUP_JOIN_PREVIEW_FETCH_SUCCESS(
+            HttpStatus.OK,
+            "초대코드로 참여할 그룹 조회에 성공했습니다.",
+            "GROUP200_10"
+    ),
+    GROUP_JOIN_SUCCESS(
+            HttpStatus.CREATED,
+            "그룹 참여에 성공했습니다.",
+            "GROUP201_5"
     );
 
     private final HttpStatus httpStatus;

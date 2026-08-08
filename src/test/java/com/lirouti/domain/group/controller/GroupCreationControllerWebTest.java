@@ -5,7 +5,9 @@ import com.lirouti.domain.group.dto.response.GroupResDTO;
 import com.lirouti.domain.group.exception.GroupException;
 import com.lirouti.domain.group.exception.code.error.GroupErrorCode;
 import com.lirouti.domain.group.service.command.GroupCommandService;
+import com.lirouti.domain.group.service.command.GroupJoinCommandService;
 import com.lirouti.domain.group.service.query.GroupInviteCodeQueryService;
+import com.lirouti.domain.group.service.query.GroupJoinQueryService;
 import com.lirouti.domain.group.service.query.GroupQueryService;
 import com.lirouti.domain.member.enums.Role;
 import com.lirouti.global.auth.CustomUserDetails;
@@ -55,6 +57,10 @@ class GroupCreationControllerWebTest {
     private GroupQueryService groupQueryService;
     @MockitoBean
     private GroupInviteCodeQueryService groupInviteCodeQueryService;
+    @MockitoBean
+    private GroupJoinQueryService groupJoinQueryService;
+    @MockitoBean
+    private GroupJoinCommandService groupJoinCommandService;
     @MockitoBean
     private JwtUtil jwtUtil;
     @MockitoBean

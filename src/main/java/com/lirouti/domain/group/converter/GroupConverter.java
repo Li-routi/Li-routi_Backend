@@ -7,6 +7,7 @@ import com.lirouti.domain.group.entity.GroupRoutine;
 import com.lirouti.domain.group.entity.GroupRoutineCategory;
 import com.lirouti.domain.group.entity.GroupRoutineSchedule;
 import com.lirouti.domain.group.entity.GroupMember;
+import com.lirouti.domain.group.enums.GroupJoinUnavailableReason;
 import com.lirouti.domain.group.enums.GroupMemberRole;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.group.repository.GroupRoutineAssignmentRepositoryCustom.TodayAssignmentProjection;
@@ -287,6 +288,29 @@ public final class GroupConverter {
     public static GroupResDTO.InviteCode toInviteCodeResult(Group group) {
         return GroupResDTO.InviteCode.builder()
                 .inviteCode(group.getInviteCode())
+                .build();
+    }
+
+    /** 초대코드 Preview에 필요한 그룹 정보와 참여 가능 상태를 응답으로 변환한다. */
+    public static GroupResDTO.JoinPreview toJoinPreview(
+            Group group,
+            long activeMemberCount,
+            long totalRoutineCount,
+            List<Long> activeMembershipIds,
+            boolean joinable,
+            GroupJoinUnavailableReason unavailableReason
+    ) {
+        return GroupResDTO.JoinPreview.builder()
+                .groupId(group.getId())
+                .name(group.getName())
+                .activeMemberCount((int) activeMemberCount)
+                .maxMemberCount(GroupMember.MAX_ACTIVE_MEMBER_COUNT_PER_GROUP)
+                .totalRoutineCount((int) totalRoutineCount)
+                .members(activeMembershipIds.stream()
+                        .map(ignored -> new GroupResDTO.JoinPreviewMember(null))
+                        .toList())
+                .joinable(joinable)
+                .unavailableReason(unavailableReason)
                 .build();
     }
 

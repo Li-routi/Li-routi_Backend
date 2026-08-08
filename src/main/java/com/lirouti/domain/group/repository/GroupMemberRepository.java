@@ -19,6 +19,25 @@ public interface GroupMemberRepository extends JpaRepository<GroupMember, Long> 
     Optional<GroupMember> findByGroupIdAndMemberId(Long groupId, Long memberId);
 
     /**
+     * Preview에 표시할 ACTIVE 구성원 수만큼의 요약 항목을 ID 순서대로 만든다.
+     * 캐릭터 저장 모델이 아직 없으므로 Member를 fetch join하지 않고 GroupMember ID만 조회한다.
+     */
+    @Query("""
+            select groupMember.id
+            from GroupMember groupMember
+            join groupMember.member member
+            where groupMember.group.id = :groupId
+              and groupMember.status = :status
+              and member.isActive = true
+              and member.deletedAt is null
+            order by groupMember.joinedAt asc, groupMember.id asc
+            """)
+    List<Long> findIdsByGroupIdAndStatusOrderByJoinedAtAscIdAsc(
+            @Param("groupId") Long groupId,
+            @Param("status") GroupMemberStatus status
+    );
+
+    /**
      * 회원이 현재 참여 중인 활성 그룹 수를 역할과 관계없이 집계한다.
      * 탈퇴·강제 퇴장 이력과 삭제된 그룹은 참여 상한에서 제외한다.
      */

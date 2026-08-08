@@ -1,6 +1,8 @@
 package com.lirouti.domain.group.dto.response;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.lirouti.domain.group.enums.GroupJoinUnavailableReason;
+import com.lirouti.domain.group.enums.GroupMemberStatus;
 import com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus;
 import com.lirouti.domain.routine.enums.RoutineCategoryColor;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -169,6 +171,42 @@ public final class GroupResDTO {
     @Builder
     public record InviteCode(
             String inviteCode
+    ) {
+    }
+
+    /** 초대코드 입력 후 참여 팝업에 표시할 그룹 정보와 현재 회원의 참여 가능 상태다. */
+    @Builder
+    @Schema(name = "GroupJoinPreview", description = "초대코드 기반 그룹 참여 Preview")
+    public record JoinPreview(
+            Long groupId,
+            String name,
+            int activeMemberCount,
+            int maxMemberCount,
+            int totalRoutineCount,
+            List<JoinPreviewMember> members,
+            boolean joinable,
+            GroupJoinUnavailableReason unavailableReason
+    ) {
+    }
+
+    /**
+     * 참여 Preview에 표시하는 ACTIVE 구성원 요약이다.
+     * 캐릭터 도메인이 도입되기 전에는 characterImageUrl이 null이며 내부 식별자는 노출하지 않는다.
+     */
+    @Builder
+    @Schema(name = "GroupJoinPreviewMember", description = "그룹 참여 Preview 구성원 요약")
+    public record JoinPreviewMember(
+            String characterImageUrl
+    ) {
+    }
+
+    /** 초대코드로 그룹 가입을 완료한 결과다. */
+    @Builder
+    @Schema(name = "GroupJoinResult", description = "초대코드 기반 그룹 가입 결과")
+    public record JoinResult(
+            Long groupId,
+            String name,
+            GroupMemberStatus memberStatus
     ) {
     }
 

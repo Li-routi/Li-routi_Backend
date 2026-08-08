@@ -8,6 +8,8 @@ import com.lirouti.domain.member.entity.Member;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDateTime;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
@@ -87,6 +89,72 @@ class GroupMemberTest {
                 .isEqualTo(GroupErrorCode.OWNER_CANNOT_KICK);
         assertThat(owner.getStatus()).isEqualTo(GroupMemberStatus.ACTIVE);
         assertThat(owner.getLeftAt()).isNull();
+    }
+
+    @Test
+    @DisplayName("LEFT 구성원은 전달받은 기준 시각으로 일반 ACTIVE 구성원으로 재가입한다")
+    void rejoin_LeftMember_RestoresActiveStateAtReferenceTime() {
+        // given
+        GroupMember groupMember = GroupMember.builder()
+                .member(mock(Member.class))
+                .group(mock(Group.class))
+                .role(GroupMemberRole.MEMBER)
+                .joinedAt(LocalDateTime.of(2026, 8, 7, 9, 0))
+                .build();
+        groupMember.leave();
+        LocalDateTime rejoinedAt = LocalDateTime.of(2026, 8, 7, 10, 30);
+
+        // when
+        groupMember.rejoin(rejoinedAt);
+
+        // then
+        assertThat(groupMember.getRole()).isEqualTo(GroupMemberRole.MEMBER);
+        assertThat(groupMember.getStatus()).isEqualTo(GroupMemberStatus.ACTIVE);
+        assertThat(groupMember.getJoinedAt()).isEqualTo(rejoinedAt);
+        assertThat(groupMember.getLeftAt()).isNull();
+    }
+
+    @Test
+    @DisplayName("ACTIVE 또는 KICKED 구성원은 재가입할 수 없고 기존 상태를 유지한다")
+    void rejoin_NonLeftMember_ThrowsWithoutChangingFields() {
+        LocalDateTime joinedAt = LocalDateTime.of(2026, 8, 7, 9, 0);
+        LocalDateTime rejoinedAt = LocalDateTime.of(2026, 8, 7, 10, 30);
+        GroupMember active = GroupMember.builder()
+                .member(mock(Member.class)).group(mock(Group.class))
+                .role(GroupMemberRole.MEMBER).joinedAt(joinedAt).build();
+        GroupMember kicked = GroupMember.builder()
+                .member(mock(Member.class)).group(mock(Group.class))
+                .role(GroupMemberRole.MEMBER).joinedAt(joinedAt).build();
+        kicked.kick();
+        LocalDateTime kickedLeftAt = kicked.getLeftAt();
+
+        assertThatThrownBy(() -> active.rejoin(rejoinedAt)).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> kicked.rejoin(rejoinedAt)).isInstanceOf(IllegalStateException.class);
+
+        assertThat(active.getStatus()).isEqualTo(GroupMemberStatus.ACTIVE);
+        assertThat(active.getRole()).isEqualTo(GroupMemberRole.MEMBER);
+        assertThat(active.getJoinedAt()).isEqualTo(joinedAt);
+        assertThat(active.getLeftAt()).isNull();
+        assertThat(kicked.getStatus()).isEqualTo(GroupMemberStatus.KICKED);
+        assertThat(kicked.getRole()).isEqualTo(GroupMemberRole.MEMBER);
+        assertThat(kicked.getJoinedAt()).isEqualTo(joinedAt);
+        assertThat(kicked.getLeftAt()).isEqualTo(kickedLeftAt);
+    }
+
+    @Test
+    @DisplayName("재가입 기준 시각이 없으면 LEFT 관계도 거부하고 상태를 유지한다")
+    void rejoin_NullJoinedAt_ThrowsWithoutChangingFields() {
+        GroupMember groupMember = GroupMember.builder()
+                .member(mock(Member.class)).group(mock(Group.class))
+                .role(GroupMemberRole.MEMBER).build();
+        groupMember.leave();
+        LocalDateTime leftAt = groupMember.getLeftAt();
+
+        assertThatThrownBy(() -> groupMember.rejoin(null)).isInstanceOf(IllegalArgumentException.class);
+
+        assertThat(groupMember.getStatus()).isEqualTo(GroupMemberStatus.LEFT);
+        assertThat(groupMember.getRole()).isEqualTo(GroupMemberRole.MEMBER);
+        assertThat(groupMember.getLeftAt()).isEqualTo(leftAt);
     }
 
 }
