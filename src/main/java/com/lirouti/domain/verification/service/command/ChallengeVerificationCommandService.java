@@ -215,10 +215,21 @@ public class ChallengeVerificationCommandService {
                     return new VerificationException(ChallengeVerificationErrorCode.VERIFICATION_NOT_FOUND);
                 });
 
-        // 참여 행을 잠그지 않는다. member_challenge 를 바꾸지 않으므로 잠글 이유가 없다.
-        // 참여 중인지도 보지 않는다 — 이탈해도 기록은 남으므로 지난 참여의 글도 지울 수 있다.
-        String imageKey = verification.getImageUrl();
-        return new DeleteResult(verification.softDelete(LocalDateTime.now(TimeUtil.KST)), imageKey);
+        // 참여 행은 잠그지 않는다. member_challenge 를 바꾸지 않으므로 잠글 이유가 없고,
+        // 참여 중인지도 보지 않는다 — 이탈해도 인증은 피드에 남으므로 지난 참여의 글도 내릴 수
+        // 있어야 한다. 못 지우게 하면 나간 사람의 사진이 계속 공개된 채로 남는다.
+
+        // 인증 행은 잠그고 다시 읽는다. 위 조회는 소유자·챌린지를 확인하는 용도라 잠금이 없어,
+        // 그 사이 당일 재인증이 사진을 갈아끼우면 여기서 옛 key 를 들고 나간다. 그러면 S3 에서
+        // 지워지는 것은 옛 사진이고, 내려간 글의 현재 사진은 공개 prefix 에 그대로 남는다.
+        // 신고가 같은 방식으로 잠그고 다시 읽는다.
+        ChallengeVerification locked = challengeVerificationRepository
+                .findByIdForUpdate(verificationId)
+                .orElseThrow(() -> new VerificationException(
+                        ChallengeVerificationErrorCode.VERIFICATION_NOT_FOUND));
+
+        String imageKey = locked.getImageUrl();
+        return new DeleteResult(locked.softDelete(LocalDateTime.now(TimeUtil.KST)), imageKey);
     }
 
     /**

@@ -5,10 +5,12 @@ import com.lirouti.domain.challenge.entity.MemberChallenge;
 import com.lirouti.domain.challenge.enums.ChallengeCategory;
 import com.lirouti.domain.challenge.service.command.ChallengeCommandService;
 import com.lirouti.domain.challenge.service.query.ChallengeQueryService;
+import com.lirouti.domain.media.service.MediaImageLoad;
 import com.lirouti.domain.media.service.MediaService;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.enums.Role;
 import com.lirouti.domain.member.enums.SocialProvider;
+import com.lirouti.domain.verification.dto.request.ChallengeVerificationReqDTO;
 import com.lirouti.domain.verification.entity.ChallengeVerification;
 import com.lirouti.global.util.TimeUtil;
 import jakarta.persistence.EntityManager;
@@ -28,6 +30,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -45,6 +49,10 @@ class VerificationDeleteTest {
 
     private static final String PUBLIC_KEY =
             "challenge-verifications/2026/08/09/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.jpg";
+    private static final String NEW_STAGING_KEY =
+            "challenge-verifications-staging/2026/08/09/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.jpg";
+    private static final String NEW_PUBLIC_KEY =
+            "challenge-verifications/2026/08/09/cccccccc-cccc-4ccc-8ccc-cccccccccccc.jpg";
 
     @Autowired
     private ChallengeCommandService challengeCommandService;
@@ -85,6 +93,11 @@ class VerificationDeleteTest {
         em.flush();
 
         when(mediaService.resolvePublicUrl(any())).thenReturn("https://cdn.example.com/" + PUBLIC_KEY);
+        // 다시 올리는 경로용. 심사용 사진 읽기는 실패로 두면 심사를 건너뛰고 통과한다.
+        doNothing().when(mediaService).validateMediaKey(any(), any());
+        doNothing().when(mediaService).validateUploadedBytes(any(), any());
+        when(mediaService.loadForReview(any(), anyInt())).thenReturn(MediaImageLoad.readFailed());
+        when(mediaService.promote(any(), any(), any())).thenReturn(NEW_PUBLIC_KEY);
     }
 
     private LocalDate today() {
@@ -214,26 +227,52 @@ class VerificationDeleteTest {
     }
 
     @Test
-    @DisplayName("내린 뒤 다시 올리면 그 자리가 되살아난다 — 하루 한 건이라는 성질이 유지된다")
-    void delete_ThenVerifyAgain_RevivesSameRow() {
-        // given
+    @DisplayName("삭제 직전에 사진이 갈렸어도 현재 사진을 지운다 — 옛 key 만 지우면 지운 글의 사진이 남는다")
+    void delete_PhotoReplacedJustBefore_RemovesCurrentPhoto() {
+        // given: 오늘 인증이 있고, 그 사이 당일 재인증으로 사진이 갈렸다
         ChallengeVerification v = verificationOn(today());
+        participation.applyVerification(today());
+        em.flush();
+
+        challengeCommandService.verify(me.getId(), challenge.getId(),
+                new ChallengeVerificationReqDTO.Verify(NEW_STAGING_KEY, "사진 교체"));
+        em.flush();
+        assertThat(v.getImageUrl()).isEqualTo(NEW_PUBLIC_KEY);
+
+        // when
+        challengeCommandService.deleteVerification(me.getId(), challenge.getId(), v.getId());
+
+        // then — 잠그고 다시 읽지 않으면 옛 key(PUBLIC_KEY)를 지워, 현재 사진이 공개 prefix 에 남는다.
+        verify(mediaService).deleteQuietly(NEW_PUBLIC_KEY);
+        verify(mediaService, never()).deleteQuietly(PUBLIC_KEY);
+    }
+
+    @Test
+    @DisplayName("내린 뒤 다시 올리면 그 자리가 되살아난다 — 저장 경로가 내린 행을 찾아야 한다")
+    void delete_ThenVerifyAgain_RevivesSameRow() {
+        // given: 오늘 인증했다가 내렸다
+        ChallengeVerification v = verificationOn(today());
+        participation.applyVerification(today());
+        em.flush();
         challengeCommandService.deleteVerification(me.getId(), challenge.getId(), v.getId());
         em.flush();
 
-        // when — 덮어쓰기 경로가 내린 행을 찾아야 한다. 못 찾으면 INSERT 해서 유니크 제약에 걸린다.
-        v.reverify(PUBLIC_KEY, "다시 올림", LocalDateTime.now(),
-                v.getReviewStatus(), null);
+        // when: 실제 인증 경로로 다시 올린다.
+        // 저장 경로가 "오늘 인증 찾기" 에서 내린 행을 못 찾으면 새로 INSERT 하고
+        // 유니크 제약에 걸린다 — 소프트 삭제가 성립하는지를 여기서 본다.
+        challengeCommandService.verify(me.getId(), challenge.getId(),
+                new ChallengeVerificationReqDTO.Verify(NEW_STAGING_KEY, "다시 올림"));
         em.flush();
 
         // then
-        assertThat(v.isDeleted()).isFalse();
+        assertThat(v.isDeleted()).as("되살아난다").isFalse();
+        assertThat(v.getImageUrl()).as("새 사진으로 덮인다").isEqualTo(NEW_PUBLIC_KEY);
         assertThat(em.createQuery(
                         "select count(v) from ChallengeVerification v where v.memberChallenge.id = :id",
                         Long.class)
                 .setParameter("id", participation.getId())
                 .getSingleResult())
-                .as("행이 늘지 않는다")
+                .as("행이 늘지 않는다 — 하루 한 건이 유지된다")
                 .isEqualTo(1L);
     }
 }

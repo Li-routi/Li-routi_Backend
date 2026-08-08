@@ -312,8 +312,10 @@ public interface ChallengeVerificationControllerDocs {
     @Operation(
             summary = "인증 게시글 삭제",
             description = """
-                    내가 올린 인증 게시글을 내립니다. 본인 글만 지울 수 있고, 남의 글은 없는 글과
-                    같은 404 로 답합니다.
+                    내가 올린 인증 게시글을 내립니다. 본인 글만 지울 수 있습니다.
+
+                    남의 글, 없는 글, 경로의 챌린지와 다른 인증, 신고로 가려진 글은 **전부 같은
+                    404** 입니다 — 존재 여부를 알려 주지 않습니다.
 
                     **인증을 취소하는 것이 아니라 글을 내리는 것입니다.** "그날 인증했다" 는 사실은
                     남아서, 지운 뒤에도 그날 버튼은 완료 상태 그대로입니다. 다시 올리면 그 자리가
@@ -335,7 +337,8 @@ public interface ChallengeVerificationControllerDocs {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "삭제 성공"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증 필요(미로그인)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
-                    description = "없는 인증이거나 내 글이 아니거나 가려진 글(CHALLENGE404_2)")
+                    description = "없는 인증 · 내 글이 아님 · 경로의 챌린지와 다른 인증 · "
+                            + "신고로 가려진 글 — 전부 같은 404 다(CHALLENGE404_2)")
     })
     ApiResponse<ChallengeVerificationResDTO.Deletion> deleteVerification(
             CustomUserDetails userDetails,
