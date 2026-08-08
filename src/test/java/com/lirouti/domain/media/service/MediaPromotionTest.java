@@ -8,7 +8,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InOrder;
 import org.mockito.Mockito;
 import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.services.s3.S3Client;
@@ -18,6 +17,8 @@ import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+
+import java.util.regex.Pattern;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -38,8 +39,10 @@ class MediaPromotionTest {
     private static final String BUCKET = "lirouti-test";
     private static final String STAGING_KEY =
             "challenge-verifications-staging/2026/08/07/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.jpg";
-    private static final String PUBLIC_KEY =
-            "challenge-verifications/2026/08/07/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.jpg";
+    /** 승격된 key 의 모양. UUID 는 매번 달라 값으로 못 박지 못한다. */
+    private static final Pattern PROMOTED_KEY = Pattern.compile(
+            "challenge-verifications/2026/08/07/"
+                    + "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.jpg");
 
     /** 심사 때 읽은 오브젝트의 ETag. 승격은 이 값과 같을 때만 복사한다. */
     private static final String REVIEWED_ETAG = "\"abc123\"";
@@ -56,31 +59,41 @@ class MediaPromotionTest {
     }
 
     @Test
-    @DisplayName("prefix만 갈아끼운다 — 날짜와 UUID는 그대로다")
-    void promote_KeepsDateAndUuid() {
+    @DisplayName("날짜는 그대로 두고 UUID는 새로 뽑는다")
+    void promote_KeepsDate_ButMintsNewUuid() {
         String promoted = mediaService.promote(STAGING_KEY, MediaPurpose.CHALLENGE_VERIFICATION, REVIEWED_ETAG);
 
-        // 정리 배치가 날짜 prefix로 목록을 훑으므로, 승격 전후 key가 한 글자만 달라야 한다.
-        assertThat(promoted).isEqualTo(PUBLIC_KEY);
+        assertThat(promoted)
+                // 날짜를 유지하는 이유는 미참조 정리가 날짜 prefix로 목록을 훑기 때문이다.
+                .matches(PROMOTED_KEY)
+                .doesNotContain("-staging/")
+                .doesNotContain("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
     }
 
     @Test
-    @DisplayName("복사한 뒤 대기본을 지운다 — 순서가 뒤집히면 사진이 없는 구간이 생긴다")
-    void promote_CopiesThenDeletes() {
-        mediaService.promote(STAGING_KEY, MediaPurpose.CHALLENGE_VERIFICATION, REVIEWED_ETAG);
+    @DisplayName("같은 대기 key를 두 번 승격해도 공개 key가 겹치지 않는다")
+    void promote_Twice_ProducesDifferentPublicKeys() {
+        // 대기본 삭제는 실패해도 넘어가므로 대기본이 남을 수 있다. 그 상태에서 만료 전
+        // presigned URL로 다른 사진을 올려 다시 승격하면, key가 같으면 이미 DB가 참조하는
+        // 공개본을 덮어써 지난 인증의 사진이 조용히 바뀐다.
+        String first = mediaService.promote(STAGING_KEY, MediaPurpose.CHALLENGE_VERIFICATION, REVIEWED_ETAG);
+        String second = mediaService.promote(STAGING_KEY, MediaPurpose.CHALLENGE_VERIFICATION, REVIEWED_ETAG);
 
-        // 각각 불렸는지만 보면 삭제 → 복사로 뒤집혀도 통과한다. 순서까지 고정한다.
-        InOrder inOrder = Mockito.inOrder(s3Client);
+        assertThat(first).isNotEqualTo(second);
+    }
+
+    @Test
+    @DisplayName("복사만 하고 대기본은 지우지 않는다 — 삭제는 저장이 커밋된 뒤다")
+    void promote_CopiesOnly_LeavesStagingToCaller() {
+        String promoted = mediaService.promote(STAGING_KEY, MediaPurpose.CHALLENGE_VERIFICATION, REVIEWED_ETAG);
+
         ArgumentCaptor<CopyObjectRequest> copy = ArgumentCaptor.forClass(CopyObjectRequest.class);
-        inOrder.verify(s3Client).copyObject(copy.capture());
+        verify(s3Client).copyObject(copy.capture());
         assertThat(copy.getValue().sourceKey()).isEqualTo(STAGING_KEY);
-        assertThat(copy.getValue().destinationKey()).isEqualTo(PUBLIC_KEY);
+        assertThat(copy.getValue().destinationKey()).isEqualTo(promoted);
 
-        ArgumentCaptor<DeleteObjectRequest> delete = ArgumentCaptor.forClass(DeleteObjectRequest.class);
-        inOrder.verify(s3Client).deleteObject(delete.capture());
-        assertThat(delete.getValue().key())
-                .as("지우는 것은 대기본이다. 공개본을 지우면 방금 공개한 사진이 사라진다")
-                .isEqualTo(STAGING_KEY);
+        // 여기서 지우면 저장보다 앞서게 되어 문서가 정한 순서(복사 → 저장 → 삭제)와 어긋난다.
+        verify(s3Client, never()).deleteObject(any(DeleteObjectRequest.class));
     }
 
     @Test
@@ -95,18 +108,6 @@ class MediaPromotionTest {
                 .hasFieldOrPropertyWithValue("code", MediaErrorCode.MEDIA_PROMOTION_FAILED);
 
         verify(s3Client, never()).deleteObject(any(DeleteObjectRequest.class));
-    }
-
-    @Test
-    @DisplayName("대기본 삭제가 실패해도 승격은 성공이다 — 이미 공개본이 만들어져 있다")
-    void promote_DeleteFails_StillSucceeds() {
-        when(s3Client.deleteObject(any(DeleteObjectRequest.class)))
-                .thenThrow(SdkClientException.create("delete failed"));
-
-        // 대기본 하나를 못 지운 것 때문에 이미 저장될 인증을 되돌리는 편이 더 나쁘다.
-        // 남은 대기본은 나이 기반 수명 주기가 치운다.
-        assertThat(mediaService.promote(STAGING_KEY, MediaPurpose.CHALLENGE_VERIFICATION, REVIEWED_ETAG))
-                .isEqualTo(PUBLIC_KEY);
     }
 
     @Test

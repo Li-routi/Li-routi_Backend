@@ -47,8 +47,9 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 @DisplayName("챌린지 인증 동시성 테스트")
 class ChallengeVerificationConcurrencyTest {
 
-    private static final String KEY_A = "challenge-verifications/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.jpg";
-    private static final String KEY_B = "challenge-verifications/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.jpg";
+    private static final String KEY_A = "challenge-verifications-staging/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.jpg";
+    private static final String KEY_B = "challenge-verifications-staging/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.jpg";
+    private static final String PUBLIC_KEY = "challenge-verifications/11111111-1111-4111-8111-111111111111.jpg";
 
     // 미디어는 이 테스트의 관심사가 아니다. 승격이 S3 를 호출하므로 목으로 끊는다.
     @MockitoBean
@@ -73,7 +74,9 @@ class ChallengeVerificationConcurrencyTest {
     void setUp() {
         doNothing().when(mediaService).validateMediaKey(any(), any());
         doNothing().when(mediaService).validateUploadedBytes(any(), any());
-        when(mediaService.promote(any(), any(), any())).thenAnswer(i -> i.getArgument(0));
+        // promote 는 대기 key 를 받아 UUID 가 새로 뽑힌 공개 key 를 돌려준다.
+        // 받은 값을 그대로 돌려주면 승격이 아무 일도 안 해도 테스트가 통과한다.
+        when(mediaService.promote(any(), any(), any())).thenReturn(PUBLIC_KEY);
         when(mediaService.resolvePublicUrl(any())).thenReturn("https://cdn.example.com/x.jpg");
         Member m = memberRepository.save(Member.builder()
                 .email("vconc@ex.com").nickname("vconc")

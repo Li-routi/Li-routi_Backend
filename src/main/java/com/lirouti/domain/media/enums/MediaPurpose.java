@@ -83,17 +83,4 @@ public enum MediaPurpose {
     public String getUploadPrefix() {
         return hasStaging() ? stagingPrefix : pathPrefix;
     }
-
-    /**
-     * 대기 key 를 공개 key 로 바꾼다. <b>날짜와 UUID 는 그대로 두고 prefix 만 갈아끼운다.</b>
-     *
-     * <p>새로 만들지 않는 이유는 정리 배치 때문이다. 승격 전후 key 가 한 글자만 달라야
-     * 날짜 prefix 훑기가 양쪽에서 똑같이 동작한다.
-     */
-    public String toPublicKey(String uploadKey) {
-        if (!hasStaging()) {
-            return uploadKey;
-        }
-        return pathPrefix + uploadKey.substring(stagingPrefix.length());
-    }
 }

@@ -154,17 +154,21 @@ public class ChallengeCommandService {
         String publicKey = mediaService.promote(
                 request.mediaKey(), MediaPurpose.CHALLENGE_VERIFICATION, reviewedETag);
 
-        // ⑥ 저장·스트릭 갱신. 여기서부터가 트랜잭션이다.
+        // ⑥ 저장·스트릭 갱신. 여기서부터가 트랜잭션이고, 여기가 커밋 지점이다.
         //    저장하는 것은 요청의 key 가 아니라 승격된 공개 key 다.
         //
-        //    저장이 실패하면 방금 만든 공개본은 아무도 참조하지 않는다. 미참조 정리가 며칠 뒤
-        //    가져가지만, 그동안 공개 prefix 에 놓여 있으므로 그 자리에서 치운다.
-        try {
-            return challengeVerificationCommandService.save(memberId, challengeId, request, publicKey);
-        } catch (RuntimeException e) {
-            mediaService.deleteQuietly(publicKey);
-            throw e;
-        }
+        //    저장이 실패해도 방금 만든 공개본을 지우지 않는다. 아무도 참조하지 않으므로 미참조
+        //    정리가 가져간다 — database-schema.md 가 정한 실패 처리다. 그 자리에서 지우면
+        //    같은 공개본을 다른 인증이 참조하고 있을 때 멀쩡한 사진을 지우게 된다.
+        ChallengeVerificationResDTO.Verification saved =
+                challengeVerificationCommandService.save(memberId, challengeId, request, publicKey);
+
+        // ⑦ 대기본 삭제. 커밋된 뒤라 여기서 실패해도 인증은 이미 저장돼 있다.
+        //    대기본 하나를 못 지운 것 때문에 저장을 되돌리는 편이 더 나쁘다 — 남은 것은
+        //    나이 기반 수명 주기가 치운다. 그래서 성공 조건에 넣지 않는다.
+        mediaService.deleteQuietly(request.mediaKey());
+
+        return saved;
     }
 
     /**

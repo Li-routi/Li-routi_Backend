@@ -50,7 +50,9 @@ import static org.mockito.Mockito.when;
 class ChallengeCommandMixedConcurrencyTest {
 
     private static final String MEDIA_KEY =
-            "challenge-verifications/cccccccc-cccc-4ccc-8ccc-cccccccccccc.jpg";
+            "challenge-verifications-staging/cccccccc-cccc-4ccc-8ccc-cccccccccccc.jpg";
+    private static final String PUBLIC_KEY =
+            "challenge-verifications/11111111-1111-4111-8111-111111111111.jpg";
 
     // 미디어는 이 테스트의 관심사가 아니다. 승격이 S3 를 호출하므로 목으로 끊는다.
     @MockitoBean
@@ -74,7 +76,9 @@ class ChallengeCommandMixedConcurrencyTest {
     void setUp() {
         doNothing().when(mediaService).validateMediaKey(any(), any());
         doNothing().when(mediaService).validateUploadedBytes(any(), any());
-        when(mediaService.promote(any(), any(), any())).thenAnswer(i -> i.getArgument(0));
+        // promote 는 대기 key 를 받아 UUID 가 새로 뽑힌 공개 key 를 돌려준다.
+        // 받은 값을 그대로 돌려주면 승격이 아무 일도 안 해도 테스트가 통과한다.
+        when(mediaService.promote(any(), any(), any())).thenReturn(PUBLIC_KEY);
         when(mediaService.resolvePublicUrl(any())).thenReturn("https://cdn.example.com/x.jpg");
         // email·social_id에 유니크 제약이 있다. @Transactional 없이 실제 커밋하므로,
         // 앞선 실행이 비정상 종료해 정리가 안 됐으면 고정값은 setUp 자체를 깨뜨린다.
