@@ -35,6 +35,41 @@ public interface GroupControllerDocs {
     );
 
     @Operation(
+            summary = "내 그룹별 상태 메시지 수정",
+            description = """
+                    ACTIVE OWNER 또는 MEMBER가 인증 회원 기준으로 자신의 그룹별 상태 메시지를 수정합니다.
+                    메시지는 앞뒤 공백을 제거한 뒤 1~255자여야 합니다. 그룹 잠금은 신규 가입만 제어하므로
+                    이 수정 권한에는 영향을 주지 않습니다. 다른 그룹의 상태 메시지는 변경하지 않습니다.
+
+                    ### 에러 코드
+
+                    | code | HTTP | 설명 |
+                    | --- | --- | --- |
+                    | `COMMON400_1` | 400 | 요청 DTO 검증 실패 |
+                    | `GROUP403_1` | 403 | 비활성 그룹 |
+                    | `GROUP403_2` | 403 | ACTIVE 그룹 구성원이 아님 |
+                    | `GROUP404_1` | 404 | 그룹을 찾을 수 없음 |
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200", description = "그룹별 상태 메시지 수정 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "400", description = "상태 메시지 요청 검증 실패"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401", description = "유효하지 않거나 만료된 인증 토큰"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "403", description = "비활성 그룹 또는 ACTIVE 구성원이 아님"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404", description = "그룹 또는 회원을 찾을 수 없음")
+    })
+    ApiResponse<GroupResDTO.StatusMessageUpdate> updateMyStatusMessage(
+            @Parameter(hidden = true) CustomUserDetails userDetails,
+            @Parameter(description = "그룹 ID", required = true, example = "1") Long groupId,
+            GroupReqDTO.UpdateMyStatusMessage request
+    );
+
+    @Operation(
             summary = "그룹 루틴 카테고리 목록 조회",
             description = """
                     ACTIVE 그룹 구성원만 조회할 수 있습니다.

@@ -209,6 +209,32 @@ public class GroupCommandService {
         closeMemberSessionsAfterCommit(targetMemberId);
     }
 
+    /** ACTIVE OWNER 또는 MEMBER가 자신이 참여한 그룹 안의 상태 메시지만 수정한다. */
+    @Transactional
+    public GroupResDTO.StatusMessageUpdate updateMyStatusMessage(
+            Long groupId,
+            Long memberId,
+            GroupReqDTO.UpdateMyStatusMessage request
+    ) {
+        validateStatusMessageRequest(request);
+        GroupMember groupMember = groupValidationService
+                .validateActiveGroupMember(groupId, memberId);
+        groupMember.updateStatusMessage(request.statusMessage());
+
+        log.info("그룹별 상태 메시지를 수정했습니다. groupId={}, memberId={}", groupId, memberId);
+        return GroupConverter.toStatusMessageUpdate(groupMember);
+    }
+
+    /** Controller 밖의 호출도 strip된 최종 상태 메시지 정책을 우회하지 못하게 한다. */
+    private void validateStatusMessageRequest(GroupReqDTO.UpdateMyStatusMessage request) {
+        if (request == null
+                || request.statusMessage() == null
+                || request.statusMessage().isBlank()
+                || request.statusMessage().length() > GroupMember.MAX_STATUS_MESSAGE_LENGTH) {
+            throw new IllegalArgumentException("유효하지 않은 그룹별 상태 메시지 요청입니다.");
+        }
+    }
+
     private void closeMemberSessionsAfterCommit(Long memberId) {
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
             webSocketSessionRegistry.closeMemberSessions(memberId);

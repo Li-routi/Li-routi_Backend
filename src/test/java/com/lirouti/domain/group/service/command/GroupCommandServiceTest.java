@@ -204,6 +204,41 @@ class GroupCommandServiceTest {
         verify(group, never()).lock();
     }
 
+    @Test
+    @DisplayName("ACTIVE 구성원은 자신의 그룹별 상태 메시지만 수정한다")
+    void updateMyStatusMessage_ActiveMember_ReturnsUpdatedMessage() {
+        GroupMember membership = mock(GroupMember.class);
+        when(groupValidationService.validateActiveGroupMember(GROUP_ID, MEMBER_ID))
+                .thenReturn(membership);
+        when(membership.getGroup()).thenReturn(group);
+        when(group.getId()).thenReturn(GROUP_ID);
+        when(membership.getStatusMessage()).thenReturn("오늘도 루틴 완료!");
+
+        GroupResDTO.StatusMessageUpdate result = groupCommandService.updateMyStatusMessage(
+                GROUP_ID,
+                MEMBER_ID,
+                new GroupReqDTO.UpdateMyStatusMessage("  오늘도 루틴 완료!  ")
+        );
+
+        assertThat(result).isEqualTo(
+                new GroupResDTO.StatusMessageUpdate(GROUP_ID, "오늘도 루틴 완료!"));
+        verify(groupValidationService).validateActiveGroupMember(GROUP_ID, MEMBER_ID);
+        verify(membership).updateStatusMessage("오늘도 루틴 완료!");
+    }
+
+    @Test
+    @DisplayName("그룹별 상태 메시지의 strip된 최종 값이 비어 있거나 255자를 넘으면 검증 전에 거부한다")
+    void updateMyStatusMessage_InvalidRequest_RejectsBeforeMembershipValidation() {
+        assertThatThrownBy(() -> groupCommandService.updateMyStatusMessage(
+                GROUP_ID, MEMBER_ID, new GroupReqDTO.UpdateMyStatusMessage("   ")
+        )).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> groupCommandService.updateMyStatusMessage(
+                GROUP_ID, MEMBER_ID, new GroupReqDTO.UpdateMyStatusMessage("a".repeat(256))
+        )).isInstanceOf(IllegalArgumentException.class);
+
+        verifyNoInteractions(groupValidationService);
+    }
+
     private void givenValidatedOwner() {
         when(groupValidationService.validateGroupOwner(GROUP_ID, OWNER_ID))
                 .thenReturn(ownerMembership);

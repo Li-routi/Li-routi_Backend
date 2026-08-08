@@ -2,6 +2,7 @@ package com.lirouti.domain.group.dto.request;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.lirouti.domain.group.entity.GroupMember;
 import com.lirouti.domain.group.entity.GroupRoutine;
 import com.lirouti.domain.group.entity.GroupRoutineCategory;
 import com.lirouti.domain.routine.enums.RoutineCategoryColor;
@@ -32,6 +33,22 @@ public final class GroupReqDTO {
     ) {
         public JoinGroup {
             inviteCode = inviteCode == null ? null : inviteCode.trim().toUpperCase(Locale.ROOT);
+        }
+    }
+
+    /** 로그인 회원이 대상 그룹 안에서만 보이는 상태 메시지를 수정한다. */
+    @Schema(name = "UpdateGroupMemberStatusMessage", description = "내 그룹별 상태 메시지 수정 요청")
+    public record UpdateMyStatusMessage(
+            @Schema(description = "앞뒤 공백을 제거한 1~255자 상태 메시지", example = "오늘도 루틴 완료!")
+            @NotBlank(message = "상태 메시지는 필수입니다.")
+            @Size(
+                    max = GroupMember.MAX_STATUS_MESSAGE_LENGTH,
+                    message = "상태 메시지는 255자 이하여야 합니다."
+            )
+            String statusMessage
+    ) {
+        public UpdateMyStatusMessage {
+            statusMessage = statusMessage == null ? null : statusMessage.strip();
         }
     }
 

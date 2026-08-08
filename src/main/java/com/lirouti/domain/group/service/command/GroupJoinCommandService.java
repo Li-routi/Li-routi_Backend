@@ -92,15 +92,15 @@ public class GroupJoinCommandService {
             GroupMember existingMembership,
             Group group,
             Member member,
-            LocalDateTime joinedAt
+        LocalDateTime joinedAt
     ) {
         if (existingMembership == null) {
-            return GroupMember.builder()
-                        .group(group)
-                        .member(member)
-                        .role(GroupMemberRole.MEMBER)
-                        .joinedAt(joinedAt)
-                        .build();
+            return GroupMember.createActive(
+                    member,
+                    group,
+                    GroupMemberRole.MEMBER,
+                    joinedAt
+            );
         }
         existingMembership.rejoin(joinedAt);
         return existingMembership;

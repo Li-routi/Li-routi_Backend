@@ -38,11 +38,7 @@ public final class GroupConverter {
 
     /** 신규 그룹의 인증 회원 참여 관계를 ACTIVE OWNER로 생성한다. */
     public static GroupMember toOwnerMembership(Member member, Group group) {
-        return GroupMember.builder()
-                .member(member)
-                .group(group)
-                .role(GroupMemberRole.OWNER)
-                .build();
+        return GroupMember.createActive(member, group, GroupMemberRole.OWNER, null);
     }
 
     /** 요청의 사용자 카테고리를 그룹 소유의 활성 카테고리로 변환한다. */
@@ -135,6 +131,14 @@ public final class GroupConverter {
                 .totalLikeCount(member.totalLikeCount())
                 .dailyProgress(new GroupResDTO.DailyProgress(completedCount, totalCount))
                 .build();
+    }
+
+    /** 수정된 로그인 회원의 그룹별 상태 메시지를 응답으로 변환한다. */
+    public static GroupResDTO.StatusMessageUpdate toStatusMessageUpdate(GroupMember groupMember) {
+        return new GroupResDTO.StatusMessageUpdate(
+                groupMember.getGroup().getId(),
+                groupMember.getStatusMessage()
+        );
     }
 
     /** 그룹의 현재 신규 참여 잠금 상태를 응답으로 변환한다. */
