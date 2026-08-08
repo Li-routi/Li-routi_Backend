@@ -83,6 +83,7 @@ public class MediaService {
     private final S3Properties s3Properties;
 
     public MediaResDTO.PresignedUrl issuePresignedUrl(MediaReqDTO.PresignedUrl request) {
+        validateClientUploadPurpose(request.purpose());
         MediaContentType contentType = resolveContentType(request.contentType());
         validatePurposeAllows(request.purpose(), contentType);
         validateFileSize(contentType.getCategory(), request.contentLength());
@@ -582,6 +583,16 @@ public class MediaService {
                     log.warn("허용하지 않는 미디어 형식으로 업로드를 시도했습니다. contentType={}", contentType);
                     return new MediaException(MediaErrorCode.UNSUPPORTED_CONTENT_TYPE);
                 });
+    }
+
+    /**
+     * 서비스 전용 자산이 일반 사용자 업로드 경로로 노출되지 않게 차단한다.
+     */
+    private void validateClientUploadPurpose(MediaPurpose purpose) {
+        if (!purpose.isClientUploadAllowed()) {
+            log.warn("일반 사용자 업로드를 허용하지 않는 용도입니다. purpose={}", purpose);
+            throw new MediaException(MediaErrorCode.CONTENT_TYPE_NOT_ALLOWED_FOR_PURPOSE);
+        }
     }
 
     /**

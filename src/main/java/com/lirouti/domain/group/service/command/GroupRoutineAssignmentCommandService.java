@@ -10,6 +10,7 @@ import com.lirouti.domain.group.exception.GroupException;
 import com.lirouti.domain.group.exception.code.error.GroupErrorCode;
 import com.lirouti.domain.group.repository.GroupMemberRepository;
 import com.lirouti.domain.group.repository.GroupRoutineAssignmentRepository;
+import com.lirouti.domain.group.repository.GroupRoutineRepository;
 import com.lirouti.domain.group.repository.GroupRoutineScheduleRepository;
 import com.lirouti.domain.group.service.GroupValidationService;
 import lombok.RequiredArgsConstructor;
@@ -38,10 +39,24 @@ public class GroupRoutineAssignmentCommandService {
     );
 
     private final GroupRoutineAssignmentRepository groupRoutineAssignmentRepository;
+    private final GroupRoutineRepository groupRoutineRepository;
     private final GroupRoutineScheduleRepository groupRoutineScheduleRepository;
     private final GroupMemberRepository groupMemberRepository;
     private final GroupValidationService groupValidationService;
     private final Clock clock;
+
+    /** 루틴 삭제 시 완료되지 않은 모든 회원의 할당을 한 번에 물리 삭제한다. */
+    @Transactional
+    public int deleteMutableAssignments(Long groupRoutineId) {
+        if (groupRoutineId == null) {
+            throw new IllegalArgumentException("그룹 루틴 ID는 필수입니다.");
+        }
+        int deletedCount = groupRoutineAssignmentRepository
+                .deleteAllByGroupRoutineIdAndStatusIn(groupRoutineId, MUTABLE_STATUSES);
+        log.debug("그룹 루틴의 미확정 할당을 삭제했습니다. routineId={}, deletedCount={}",
+                groupRoutineId, deletedCount);
+        return deletedCount;
+    }
 
     /**
      * 루틴 생성일이 반복 요일이면 현재 ACTIVE 그룹원 전원에게 즉시 할당한다.
@@ -137,6 +152,19 @@ public class GroupRoutineAssignmentCommandService {
         return activeMembersByMemberId.size();
     }
 
+    /** 그룹 탈퇴 회원의 미완료 할당을 제거하고 확정된 수행 이력은 보존한다. */
+    @Transactional
+    public int deleteUnfinishedAssignmentsForLeaver(Long groupId, Long memberId) {
+        int deletedCount = groupRoutineAssignmentRepository.deleteUnfinishedAssignmentsForLeaver(
+                groupId,
+                memberId,
+                MUTABLE_STATUSES
+        );
+        log.debug("그룹 탈퇴 회원의 미완료 할당을 제거했습니다. groupId={}, memberId={}, deletedCount={}",
+                groupId, memberId, deletedCount);
+        return deletedCount;
+    }
+
     /**
      * 지정한 날짜의 반복 요일에 해당하는 그룹 루틴을 ACTIVE 그룹원에게 멱등하게 할당한다.
      *
@@ -151,6 +179,9 @@ public class GroupRoutineAssignmentCommandService {
 
         int assignmentCount = 0;
         for (GroupRoutineSchedule schedule : schedules) {
+            if (!lockActiveRoutine(schedule)) {
+                continue;
+            }
             Long groupId = schedule.getGroupRoutine().getGroup().getId();
             List<GroupMember> activeMembers = activeMembersByGroup.computeIfAbsent(
                     groupId,
@@ -187,27 +218,13 @@ public class GroupRoutineAssignmentCommandService {
                 .findAllWithRoutineByGroupIdAndRepeatDay(groupId, today.getDayOfWeek());
 
         int assignmentCount = schedules.stream()
+                .filter(this::lockActiveRoutine)
                 .mapToInt(schedule -> insertAssignment(schedule, groupMember, today))
                 .sum();
         log.debug("그룹 가입 회원의 당일 루틴 할당 처리를 완료했습니다. "
                         + "groupId={}, memberId={}, assignedDate={}, assignmentCount={}",
                 groupId, memberId, today, assignmentCount);
         return assignmentCount;
-    }
-
-    /**
-     * 그룹 탈퇴 회원의 PENDING, IN_PROGRESS 할당만 삭제한다.
-     * COMPLETED, MISSED 할당과 인증 이력은 상태 조건으로 보존한다.
-     *
-     * @return 삭제된 미완료 할당 수
-     */
-    @Transactional
-    public int deleteUnfinishedAssignmentsForLeaver(Long groupId, Long memberId) {
-        return groupRoutineAssignmentRepository.deleteUnfinishedByGroupIdAndMemberId(
-                groupId,
-                memberId,
-                MUTABLE_STATUSES
-        );
     }
 
     /**
@@ -349,6 +366,15 @@ public class GroupRoutineAssignmentCommandService {
                 assignedDate,
                 LocalDateTime.now(clock)
         );
+    }
+
+    /**
+     * 삭제와 할당 생성을 같은 루틴 행 잠금으로 직렬화한다.
+     * 삭제가 먼저 끝난 경우 비활성 루틴은 할당 대상에서 제외한다.
+     */
+    private boolean lockActiveRoutine(GroupRoutineSchedule schedule) {
+        Long routineId = schedule.getGroupRoutine().getId();
+        return groupRoutineRepository.findActiveByIdForUpdate(routineId).isPresent();
     }
 
     private int insertAssignment(

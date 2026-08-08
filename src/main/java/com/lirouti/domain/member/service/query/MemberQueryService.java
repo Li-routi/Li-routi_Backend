@@ -1,5 +1,7 @@
 package com.lirouti.domain.member.service.query;
 
+import com.lirouti.domain.media.enums.MediaPurpose;
+import com.lirouti.domain.media.service.MediaService;
 import com.lirouti.domain.member.converter.MemberConverter;
 import com.lirouti.domain.member.dto.response.MemberResDTO;
 import com.lirouti.domain.member.entity.Member;
@@ -16,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class MemberQueryService {
     private final MemberRepository memberRepository;
+    private final MediaService mediaService;
 
     /**
      * 회원이 존재하며 현재 활성 상태인지 검증한다.
@@ -43,6 +46,13 @@ public class MemberQueryService {
     @Transactional(readOnly = true)
     public MemberResDTO.MemberInfo getMemberInfo(Long memberId) {
         Member member = getActiveMember(memberId);
-        return MemberConverter.toMemberInfo(member);
+        String profileImageUrl = resolveProfileImageUrl(member);
+        return MemberConverter.toMemberInfo(member, profileImageUrl);
+    }
+
+    private String resolveProfileImageUrl(Member member) {
+        return member.getProfileImageKey() != null
+                ? mediaService.resolveViewUrl(member.getProfileImageKey(), MediaPurpose.PROFILE)
+                : null;
     }
 }

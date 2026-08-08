@@ -1,6 +1,8 @@
 package com.lirouti.domain.member.service.command;
 
 import com.lirouti.domain.auth.service.TokenService;
+import com.lirouti.domain.media.enums.MediaPurpose;
+import com.lirouti.domain.media.service.MediaService;
 import com.lirouti.domain.member.converter.MemberConverter;
 import com.lirouti.domain.member.dto.request.MemberReqDTO;
 import com.lirouti.domain.member.dto.response.MemberResDTO;
@@ -33,6 +35,7 @@ public class MemberCommandService {
 
     // 닉네임 제공받지 못한 경우 defalut 값
     private static final String DEFAULT_NICKNAME_PREFIX = "user_";
+    private final MediaService mediaService;
 
     // 소셜 회원 조회 또는 생성
     @Transactional
@@ -149,9 +152,13 @@ public class MemberCommandService {
             throw new MemberException(MemberErrorCode.WITHDRAWN_MEMBER);
         }
 
-        member.updateProfile(request.nickname());
+        member.updateProfile(request.nickname(), request.profileImageKey());
         Member savedMember = memberRepository.save(member);
         log.info("회원 프로필 수정을 완료했습니다.");
-        return MemberConverter.toMemberInfo(savedMember);
+
+        String profileImageUrl = savedMember.getProfileImageKey() != null
+                ? mediaService.resolveViewUrl(savedMember.getProfileImageKey(), MediaPurpose.PROFILE)
+                : null;
+        return MemberConverter.toMemberInfo(savedMember, profileImageUrl);
     }
 }

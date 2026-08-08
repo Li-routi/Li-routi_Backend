@@ -112,4 +112,16 @@ public interface MemberRoutineRepository extends JpaRepository<MemberRoutine, Lo
             @Param("repeatDay")DayOfWeek repeatDay
     );
 
+    /**
+     * 회원의 활성 개인 루틴을 반복 요일과 함께 조회한다.
+     * 리포트의 "그날 예정된 개인 루틴 수" 계산(요일별 집계)에 쓴다.
+     */
+    @Query("""
+        select distinct routine
+        from MemberRoutine routine
+        left join fetch routine.schedules
+        where routine.member.id = :memberId
+          and routine.active = true
+        """)
+    List<MemberRoutine> findActiveWithSchedulesByMemberId(@Param("memberId") Long memberId);
 }

@@ -13,9 +13,11 @@ import com.lirouti.domain.group.repository.GroupRepository;
 import com.lirouti.domain.group.repository.GroupRoutineRepository;
 import com.lirouti.domain.group.repository.GroupRoutineCategoryRepository;
 import com.lirouti.domain.group.service.GroupValidationService;
+import com.lirouti.global.websocket.WebSocketSessionRegistry;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -36,6 +38,8 @@ class GroupCommandServiceTest {
     private static final Long GROUP_ID = 10L;
     private static final Long ROUTINE_ID = 20L;
     private static final Long OWNER_ID = 1L;
+    private static final Long MEMBER_ID = 2L;
+    private static final Long TARGET_MEMBER_ID = 3L;
 
     @Mock
     private GroupValidationService groupValidationService;
@@ -53,6 +57,10 @@ class GroupCommandServiceTest {
     private GroupRoutineCategory category;
     @Mock
     private GroupMember ownerMembership;
+    @Mock
+    private GroupMember targetMembership;
+    @Mock
+    private WebSocketSessionRegistry webSocketSessionRegistry;
 
     @InjectMocks
     private GroupCommandService groupCommandService;
@@ -205,7 +213,8 @@ class GroupCommandServiceTest {
     }
 
     private void givenNoDuplicateTitle() {
-        when(groupRoutineRepository.existsByGroupIdAndTitle(GROUP_ID, "저녁 루틴")).thenReturn(false);
+        when(groupRoutineRepository.existsByGroupIdAndTitleAndActiveTrue(GROUP_ID, "저녁 루틴"))
+                .thenReturn(false);
     }
 
     private void givenResponseReferences() {
@@ -275,7 +284,7 @@ class GroupCommandServiceTest {
         // given
         givenValidatedOwner();
         givenActiveCategory();
-        when(groupRoutineRepository.existsByGroupIdAndTitle(GROUP_ID, "저녁 루틴"))
+        when(groupRoutineRepository.existsByGroupIdAndTitleAndActiveTrue(GROUP_ID, "저녁 루틴"))
                 .thenReturn(true);
 
         // when & then
@@ -292,7 +301,7 @@ class GroupCommandServiceTest {
     void createRoutine_AtLimit_ThrowsLimitExceeded() {
         // given
         givenValidatedOwner();
-        when(groupRoutineRepository.countByGroupId(GROUP_ID))
+        when(groupRoutineRepository.countByGroupIdAndActiveTrue(GROUP_ID))
                 .thenReturn((long) GroupRoutine.MAX_GROUP_ROUTINE_COUNT);
 
         // when & then
@@ -364,7 +373,7 @@ class GroupCommandServiceTest {
         when(groupRoutineRepository.findByIdAndGroupIdForUpdate(ROUTINE_ID, GROUP_ID))
                 .thenReturn(Optional.of(routine));
         givenActiveCategory();
-        when(groupRoutineRepository.existsByGroupIdAndTitleAndIdNot(
+        when(groupRoutineRepository.existsByGroupIdAndTitleAndActiveTrueAndIdNot(
                 GROUP_ID, "수정 루틴", ROUTINE_ID
         )).thenReturn(false);
         givenResponseReferences();
@@ -421,7 +430,7 @@ class GroupCommandServiceTest {
         when(groupRoutineRepository.findByIdAndGroupIdForUpdate(ROUTINE_ID, GROUP_ID))
                 .thenReturn(Optional.of(routine));
         givenActiveCategory();
-        when(groupRoutineRepository.existsByGroupIdAndTitleAndIdNot(
+        when(groupRoutineRepository.existsByGroupIdAndTitleAndActiveTrueAndIdNot(
                 GROUP_ID, "수정 루틴", ROUTINE_ID
         )).thenReturn(true);
 
@@ -458,6 +467,145 @@ class GroupCommandServiceTest {
         verify(groupRoutineRepository, never()).saveAndFlush(any(GroupRoutine.class));
         verify(assignmentCommandService, never())
                 .synchronizeRoutineAssignmentsToday(any(GroupRoutine.class));
+    }
+
+    @Test
+    @DisplayName("활성 구성원이 그룹을 탈퇴하면 멤버십 상태를 변경하고 세션을 회수한다")
+    void leaveGroup_ActiveMember_ChangesMembershipAndClosesSessions() {
+        // given
+        when(groupValidationService.validateActiveGroupMember(GROUP_ID, MEMBER_ID))
+                .thenReturn(ownerMembership);
+
+        // when
+        groupCommandService.leaveGroup(GROUP_ID, MEMBER_ID);
+
+        // then
+        verify(ownerMembership).leave();
+        verify(assignmentCommandService)
+                .deleteUnfinishedAssignmentsForLeaver(GROUP_ID, MEMBER_ID);
+        verify(webSocketSessionRegistry).closeMemberSessions(MEMBER_ID);
+        InOrder inOrder = inOrder(groupValidationService);
+        inOrder.verify(groupValidationService).lockActiveGroupForUpdate(GROUP_ID);
+        inOrder.verify(groupValidationService)
+                .validateActiveGroupMember(GROUP_ID, MEMBER_ID);
+    }
+
+    @Test
+    @DisplayName("OWNER가 활성 구성원을 강제 퇴장시키면 멤버십 상태를 변경하고 대상 세션을 회수한다")
+    void kickMember_Owner_KicksTargetAndClosesTargetSessions() {
+        // given
+        when(groupValidationService.validateGroupOwner(GROUP_ID, OWNER_ID))
+                .thenReturn(ownerMembership);
+        when(groupValidationService.validateActiveGroupMember(GROUP_ID, TARGET_MEMBER_ID))
+                .thenReturn(targetMembership);
+
+        // when
+        groupCommandService.kickMember(GROUP_ID, OWNER_ID, TARGET_MEMBER_ID);
+
+        // then
+        verify(targetMembership).kick();
+        verify(webSocketSessionRegistry).closeMemberSessions(TARGET_MEMBER_ID);
+        InOrder inOrder = inOrder(groupValidationService);
+        inOrder.verify(groupValidationService).lockActiveGroupForUpdate(GROUP_ID);
+        inOrder.verify(groupValidationService).validateGroupOwner(GROUP_ID, OWNER_ID);
+        inOrder.verify(groupValidationService)
+                .validateActiveGroupMember(GROUP_ID, TARGET_MEMBER_ID);
+    }
+
+    @Test
+    @DisplayName("OWNER 권한 검증이 실패하면 대상 구성원을 조회하거나 세션을 회수하지 않는다")
+    void kickMember_NonOwner_DoesNotTouchTarget() {
+        // given
+        when(groupValidationService.validateGroupOwner(GROUP_ID, OWNER_ID))
+                .thenThrow(new GroupException(GroupErrorCode.GROUP_OWNER_ACCESS_DENIED));
+
+        // when & then
+        assertThatThrownBy(() -> groupCommandService.kickMember(
+                GROUP_ID, OWNER_ID, TARGET_MEMBER_ID
+        )).isInstanceOf(GroupException.class)
+                .extracting("code")
+                .isEqualTo(GroupErrorCode.GROUP_OWNER_ACCESS_DENIED);
+        verify(groupValidationService, never())
+                .validateActiveGroupMember(GROUP_ID, TARGET_MEMBER_ID);
+        verify(groupValidationService).lockActiveGroupForUpdate(GROUP_ID);
+        verify(webSocketSessionRegistry, never()).closeMemberSessions(any());
+    }
+
+    @Test
+    @DisplayName("OWNER가 루틴을 삭제하면 미확정 할당 삭제 후 루틴을 비활성화한다")
+    void deleteRoutine_Owner_DeletesAssignmentsAndDeactivatesRoutine() {
+        // given
+        GroupRoutine routine = existingRoutine();
+        when(groupValidationService.validateGroupOwner(GROUP_ID, OWNER_ID))
+                .thenReturn(ownerMembership);
+        when(groupRoutineRepository.findByIdAndGroupIdForUpdate(ROUTINE_ID, GROUP_ID))
+                .thenReturn(Optional.of(routine));
+        when(assignmentCommandService.deleteMutableAssignments(ROUTINE_ID)).thenReturn(3);
+
+        // when
+        groupCommandService.deleteRoutine(GROUP_ID, ROUTINE_ID, OWNER_ID);
+
+        // then
+        assertThat(routine.getActive()).isFalse();
+        InOrder inOrder = inOrder(groupValidationService, groupRoutineRepository,
+                assignmentCommandService);
+        inOrder.verify(groupValidationService).validateGroupOwner(GROUP_ID, OWNER_ID);
+        inOrder.verify(groupRoutineRepository).findByIdAndGroupIdForUpdate(ROUTINE_ID, GROUP_ID);
+        inOrder.verify(assignmentCommandService).deleteMutableAssignments(ROUTINE_ID);
+    }
+
+    @Test
+    @DisplayName("미확정 할당 삭제가 실패하면 루틴을 비활성화하지 않는다")
+    void deleteRoutine_AssignmentDeletionFails_DoesNotDeactivateRoutine() {
+        // given
+        GroupRoutine routine = mock(GroupRoutine.class);
+        when(groupValidationService.validateGroupOwner(GROUP_ID, OWNER_ID))
+                .thenReturn(ownerMembership);
+        when(groupRoutineRepository.findByIdAndGroupIdForUpdate(ROUTINE_ID, GROUP_ID))
+                .thenReturn(Optional.of(routine));
+        when(assignmentCommandService.deleteMutableAssignments(ROUTINE_ID))
+                .thenThrow(new IllegalStateException("assignment deletion failure"));
+
+        // when & then
+        assertThatThrownBy(() -> groupCommandService
+                .deleteRoutine(GROUP_ID, ROUTINE_ID, OWNER_ID))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("assignment deletion failure");
+        verify(routine, never()).delete();
+    }
+
+    @Test
+    @DisplayName("요청 그룹의 활성 루틴이 아니면 찾을 수 없는 루틴으로 처리한다")
+    void deleteRoutine_RoutineNotFound_ThrowsGroupException() {
+        // given
+        when(groupValidationService.validateGroupOwner(GROUP_ID, OWNER_ID))
+                .thenReturn(ownerMembership);
+        when(groupRoutineRepository.findByIdAndGroupIdForUpdate(ROUTINE_ID, GROUP_ID))
+                .thenReturn(Optional.empty());
+
+        // when & then
+        assertThatThrownBy(() -> groupCommandService
+                .deleteRoutine(GROUP_ID, ROUTINE_ID, OWNER_ID))
+                .isInstanceOf(GroupException.class)
+                .extracting("code")
+                .isEqualTo(GroupErrorCode.GROUP_ROUTINE_NOT_FOUND);
+        verifyNoInteractions(assignmentCommandService);
+    }
+
+    @Test
+    @DisplayName("OWNER 검증이 실패하면 삭제 대상 루틴을 조회하지 않는다")
+    void deleteRoutine_OwnerValidationFails_DoesNotContinue() {
+        // given
+        when(groupValidationService.validateGroupOwner(GROUP_ID, OWNER_ID))
+                .thenThrow(new GroupException(GroupErrorCode.GROUP_OWNER_ACCESS_DENIED));
+
+        // when & then
+        assertThatThrownBy(() -> groupCommandService
+                .deleteRoutine(GROUP_ID, ROUTINE_ID, OWNER_ID))
+                .isInstanceOf(GroupException.class)
+                .extracting("code")
+                .isEqualTo(GroupErrorCode.GROUP_OWNER_ACCESS_DENIED);
+        verifyNoInteractions(groupRoutineRepository, assignmentCommandService);
     }
 
     private GroupReqDTO.GroupRoutineCreateRequest request() {

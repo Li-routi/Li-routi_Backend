@@ -1,5 +1,6 @@
 package com.lirouti.domain.group.repository;
 
+import com.lirouti.domain.group.dto.projection.DailyScheduleAndCompletion;
 import com.lirouti.domain.group.entity.GroupRoutineAssignment;
 import com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus;
 import jakarta.persistence.LockModeType;
@@ -42,7 +43,8 @@ public interface GroupRoutineAssignmentRepository
                 version,
                 created_at,
                 updated_at
-            ) values (
+            )
+            select
                 :groupRoutineId,
                 :memberId,
                 :assignedDate,
@@ -52,8 +54,10 @@ public interface GroupRoutineAssignmentRepository
                 0,
                 current_timestamp(6),
                 current_timestamp(6)
-            )
-            on duplicate key update id = id
+            from group_routine routine
+            where routine.id = :groupRoutineId
+              and routine.active = true
+            on duplicate key update id = group_routine_assignment.id
             """, nativeQuery = true)
     int insertIfAbsent(
             @Param("groupRoutineId") Long groupRoutineId,
@@ -72,6 +76,35 @@ public interface GroupRoutineAssignmentRepository
      * @return 해당 날짜의 할당 목록
      */
     List<GroupRoutineAssignment> findAllByMemberIdAndAssignedDate(Long memberId, LocalDate assignedDate);
+
+    /** 한 루틴의 미확정 할당만 일괄 물리 삭제한다. */
+    @Modifying(flushAutomatically = true)
+    @Query("""
+            delete from GroupRoutineAssignment assignment
+            where assignment.groupRoutine.id = :groupRoutineId
+              and assignment.status in :statuses
+            """)
+    int deleteAllByGroupRoutineIdAndStatusIn(
+            @Param("groupRoutineId") Long groupRoutineId,
+            @Param("statuses") List<GroupRoutineAssignmentStatus> statuses
+    );
+
+    /**
+     * 그룹 탈퇴 회원의 미완료 할당만 제거하고 완료·미이행 이력은 보존한다.
+     * 인증 경로가 같은 할당 행을 잠그므로 탈퇴와 인증은 먼저 잠근 트랜잭션 순서로 처리된다.
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+            delete from GroupRoutineAssignment assignment
+            where assignment.groupRoutine.group.id = :groupId
+              and assignment.member.id = :memberId
+              and assignment.status in :unfinishedStatuses
+            """)
+    int deleteUnfinishedAssignmentsForLeaver(
+            @Param("groupId") Long groupId,
+            @Param("memberId") Long memberId,
+            @Param("unfinishedStatuses") List<GroupRoutineAssignmentStatus> unfinishedStatuses
+    );
 
     /**
      * 그 회원의 오늘자 할당 한 건. 인증 요청이 실제로 그 사람 몫인지 확인하는 데 쓴다.
@@ -98,28 +131,6 @@ public interface GroupRoutineAssignmentRepository
             @Param("groupId") Long groupId,
             @Param("memberId") Long memberId,
             @Param("assignedDate") LocalDate assignedDate
-    );
-
-    /**
-     * 그룹 탈퇴 회원의 아직 확정되지 않은 할당만 물리 삭제한다.
-     * COMPLETED, MISSED 할당과 그에 연결된 인증 이력은 상태 조건으로 보존한다.
-     *
-     * <p>인증 경로의 {@link #findForVerification(Long, Long, Long, LocalDate)}가 같은 할당 행을
-     * 비관적으로 잠그므로, 탈퇴와 인증은 먼저 확정된 트랜잭션의 결과를 기준으로 직렬화된다.
-     *
-     * @return 삭제된 미완료 할당 수
-     */
-    @Modifying(flushAutomatically = true)
-    @Query("""
-            delete from GroupRoutineAssignment assignment
-            where assignment.member.id = :memberId
-              and assignment.groupRoutine.group.id = :groupId
-              and assignment.status in :statuses
-            """)
-    int deleteUnfinishedByGroupIdAndMemberId(
-            @Param("groupId") Long groupId,
-            @Param("memberId") Long memberId,
-            @Param("statuses") List<GroupRoutineAssignmentStatus> statuses
     );
 
     /**
@@ -255,5 +266,29 @@ public interface GroupRoutineAssignmentRepository
             @Param("currentTime") LocalTime currentTime,
             @Param("pendingStatus") GroupRoutineAssignmentStatus pendingStatus,
             @Param("inProgressStatus") GroupRoutineAssignmentStatus inProgressStatus
+    );
+
+    /**
+     * 리포트 집계용. 기간 내 회원의 그룹 루틴 할당을 날짜별로 묶어 예정 건수(총 할당 수)와
+     * 완료 건수를 함께 가져온다. 그룹 루틴은 할당이 날짜마다 실제로 남아 있어, 개인 루틴처럼
+     * "현재 활성 상태로 근사"할 필요 없이 그 날짜의 실제 값을 그대로 쓸 수 있다.
+     * 날짜가 없는 날은 결과에 아예 나오지 않는다.
+     */
+    @Query("""
+            select new com.lirouti.domain.group.dto.projection.DailyScheduleAndCompletion(
+                a.assignedDate,
+                count(a),
+                sum(case when a.status = com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus.COMPLETED
+                         then 1L else 0L end)
+            )
+            from GroupRoutineAssignment a
+            where a.member.id = :memberId
+              and a.assignedDate between :start and :end
+            group by a.assignedDate
+            """)
+    List<DailyScheduleAndCompletion> findDailyScheduleAndCompletion(
+            @Param("memberId") Long memberId,
+            @Param("start") LocalDate start,
+            @Param("end") LocalDate end
     );
 }

@@ -8,6 +8,8 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 public interface MemberRepository extends JpaRepository<Member, Long> {
@@ -22,4 +24,7 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT member FROM Member member WHERE member.id = :memberId")
     Optional<Member> findByIdForUpdate(@Param("memberId") Long memberId);
+
+    @Query("select m.profileImageKey from Member m where m.profileImageKey in :keys")
+    List<String> findProfileImageKeysIn(@Param("keys") Collection<String> keys);
 }

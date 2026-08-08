@@ -332,6 +332,76 @@ class GroupRoutineAssignmentRepositoryTest {
                 });
     }
 
+    @Test
+    @DisplayName("한 루틴의 여러 회원 할당 중 PENDING과 IN_PROGRESS만 일괄 삭제한다")
+    void deleteAllByGroupRoutineIdAndStatusIn_MixedStatuses_DeletesOnlyMutable() {
+        // given
+        AssignmentFixture fixture = assignmentFixture("삭제 상태", "delete-status");
+        LocalDate assignedDate = LocalDate.of(2026, 7, 23);
+        GroupRoutineAssignment pending = groupRoutineAssignmentRepository.save(
+                assignment(fixture.routine(), fixture.member(), assignedDate,
+                        GroupRoutineAssignmentStatus.PENDING)
+        );
+        GroupRoutineAssignment inProgress = groupRoutineAssignmentRepository.save(
+                assignment(fixture.routine(), member("delete-progress"), assignedDate,
+                        GroupRoutineAssignmentStatus.IN_PROGRESS)
+        );
+        GroupRoutineAssignment completed = groupRoutineAssignmentRepository.save(
+                assignment(fixture.routine(), member("delete-completed"), assignedDate,
+                        GroupRoutineAssignmentStatus.COMPLETED)
+        );
+        GroupRoutineAssignment missed = groupRoutineAssignmentRepository.saveAndFlush(
+                assignment(fixture.routine(), member("delete-missed"), assignedDate,
+                        GroupRoutineAssignmentStatus.MISSED)
+        );
+
+        // when
+        int deleted = groupRoutineAssignmentRepository.deleteAllByGroupRoutineIdAndStatusIn(
+                fixture.routine().getId(),
+                java.util.List.of(
+                        GroupRoutineAssignmentStatus.PENDING,
+                        GroupRoutineAssignmentStatus.IN_PROGRESS
+                )
+        );
+        em.flush();
+        em.clear();
+
+        // then
+        assertThat(deleted).isEqualTo(2);
+        assertThat(groupRoutineAssignmentRepository.findById(pending.getId())).isEmpty();
+        assertThat(groupRoutineAssignmentRepository.findById(inProgress.getId())).isEmpty();
+        assertThat(groupRoutineAssignmentRepository.findById(completed.getId())).isPresent();
+        assertThat(groupRoutineAssignmentRepository.findById(missed.getId())).isPresent();
+    }
+
+    @Test
+    @DisplayName("비활성 루틴에는 native 멱등 삽입으로도 신규 할당을 만들지 않는다")
+    void insertIfAbsent_InactiveRoutine_DoesNotInsert() {
+        // given
+        AssignmentFixture fixture = assignmentFixture("비활성 삽입", "inactive-insert");
+        em.flush();
+        fixture.routine().delete();
+        em.flush();
+        LocalDate assignedDate = LocalDate.of(2026, 7, 23);
+
+        // when
+        int inserted = groupRoutineAssignmentRepository.insertIfAbsent(
+                fixture.routine().getId(),
+                fixture.member().getId(),
+                assignedDate,
+                LocalTime.of(9, 0),
+                LocalTime.of(10, 0),
+                GroupRoutineAssignmentStatus.PENDING.name()
+        );
+        em.clear();
+
+        // then
+        assertThat(inserted).isZero();
+        assertThat(groupRoutineAssignmentRepository.findAllByMemberIdAndAssignedDate(
+                fixture.member().getId(), assignedDate
+        )).isEmpty();
+    }
+
     private GroupRoutineAssignment assignment(
             GroupRoutine routine,
             Member member,
@@ -383,6 +453,18 @@ class GroupRoutineAssignmentRepositoryTest {
                 .build();
         em.persist(routine);
         return new AssignmentFixture(routine, member);
+    }
+
+    private Member member(String identifier) {
+        Member member = Member.builder()
+                .email(identifier + "@example.com")
+                .nickname(identifier)
+                .socialProvider(SocialProvider.GOOGLE)
+                .role(Role.ROLE_USER)
+                .socialId(identifier + "-social")
+                .build();
+        em.persist(member);
+        return member;
     }
 
     private record AssignmentFixture(GroupRoutine routine, Member member) {

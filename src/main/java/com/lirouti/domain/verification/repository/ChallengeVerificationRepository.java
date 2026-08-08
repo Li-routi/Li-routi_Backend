@@ -134,4 +134,41 @@ public interface ChallengeVerificationRepository
      */
     @Query("select v.imageUrl from ChallengeVerification v where v.imageUrl in :keys")
     List<String> findImageUrlsIn(@Param("keys") Collection<String> keys);
+
+    /**
+     * 마이 > 내인증 화면용. 그 회원이 특정 날짜에 남긴 챌린지 인증 전부를 가져온다.
+     *
+     * 화면에 챌린지 이름을 함께 써야 해 challenge까지 fetch join한다. 가려진(hiddenAt)
+     * 인증도 포함한다 — 이 화면은 신고 여부와 무관하게 본인이 남긴 기록을 보여주는 것이라,
+     * 남에게는 숨겨졌어도 작성자 본인에게는 보여야 한다(신고 피드 필터와 다른 기준).
+     */
+    @Query("""
+            select v from ChallengeVerification v
+            join fetch v.memberChallenge mc
+            join fetch mc.challenge
+            where mc.member.id = :memberId
+              and v.verifiedDate = :date
+            order by v.verifiedAt desc
+            """)
+    List<ChallengeVerification> findByMemberAndDate(
+            @Param("memberId") Long memberId,
+            @Param("date") LocalDate date
+    );
+
+    /**
+     * 리포트 집계용. 기간 내 회원의 챌린지 인증 건수. 완료한 챌린지가 아니라 "인증한 횟수"다
+     * (한 회원이 여러 챌린지에 참여하면 하루에도 여러 건일 수 있다) — 개인/그룹 루틴과 달리
+     * 달성률 계산에는 넣지 않고 별도 지표로만 보여주기로 했다.
+     */
+    @Query("""
+            select count(v)
+            from ChallengeVerification v
+            where v.memberChallenge.member.id = :memberId
+              and v.verifiedDate between :start and :end
+            """)
+    long countByMemberAndDateBetween(
+            @Param("memberId") Long memberId,
+            @Param("start") LocalDate start,
+            @Param("end") LocalDate end
+    );
 }

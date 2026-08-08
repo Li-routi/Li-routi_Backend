@@ -1,9 +1,11 @@
 package com.lirouti.domain.group.exception.code.success;
 
+import org.springframework.http.HttpStatus;
+
 import com.lirouti.global.apiPayload.code.BaseSuccessCode;
+
 import lombok.AllArgsConstructor;
 import lombok.Getter;
-import org.springframework.http.HttpStatus;
 
 @Getter
 @AllArgsConstructor
@@ -22,6 +24,11 @@ public enum GroupSuccessCode implements BaseSuccessCode {
             HttpStatus.OK,
             "그룹 루틴 카테고리 조회에 성공했습니다.",
             "GROUP200_4"
+    ),
+    GROUP_ROUTINE_DELETE_SUCCESS(
+            HttpStatus.OK,
+            "그룹 루틴 삭제에 성공했습니다.",
+            "GROUP200_5"
     ),
     GROUP_ROUTINE_CREATE_SUCCESS(
             HttpStatus.CREATED,
@@ -62,6 +69,11 @@ public enum GroupSuccessCode implements BaseSuccessCode {
             HttpStatus.OK,
             "그룹 잠금을 해제했습니다.",
             "GROUP200_8"
+    ),
+    GROUP_MEMBER_KICK_SUCCESS(
+            HttpStatus.OK,
+            "그룹 구성원 강제 퇴장에 성공했습니다.",
+            "GROUP200_9"
     );
 
     private final HttpStatus httpStatus;
