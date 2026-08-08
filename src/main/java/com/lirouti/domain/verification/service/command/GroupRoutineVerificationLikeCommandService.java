@@ -6,6 +6,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.lirouti.domain.group.service.GroupValidationService;
+import com.lirouti.domain.group.entity.GroupMember;
+import com.lirouti.domain.group.repository.GroupMemberRepository;
+import com.lirouti.domain.group.service.command.GroupMemberActivityCommandService;
+import com.lirouti.domain.verification.entity.GroupRoutineVerification;
+import com.lirouti.domain.verification.entity.GroupRoutineVerificationLike;
 import com.lirouti.domain.verification.converter.VerificationConverter;
 import com.lirouti.domain.verification.dto.response.VerificationResDTO;
 import com.lirouti.domain.verification.exception.VerificationException;
@@ -20,6 +25,8 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class GroupRoutineVerificationLikeCommandService {
     private final GroupValidationService groupValidationService;
+    private final GroupMemberActivityCommandService groupMemberActivityCommandService;
+    private final GroupMemberRepository groupMemberRepository;
     private final GroupRoutineVerificationRepository groupRoutineVerificationRepository;
     private final GroupRoutineVerificationLikeRepository groupRoutineVerificationLikeRepository;
 
@@ -29,8 +36,14 @@ public class GroupRoutineVerificationLikeCommandService {
             Long groupId,
             Long verificationId
     ) {
-        validateLikeTarget(memberId, groupId, verificationId);
-        groupRoutineVerificationLikeRepository.insertIfAbsent(verificationId, memberId);
+        GroupRoutineVerification verification = validateLikeTarget(memberId, groupId, verificationId);
+        int inserted = groupRoutineVerificationLikeRepository.insertIfAbsent(verificationId, memberId);
+        if (inserted == 1) {
+            AuthorVerificationContext author = authorContext(verification);
+            GroupMember authorMembership = lockAuthorMembership(groupId, author.memberId());
+            groupMemberRepository.incrementTotalLikeCountForCurrentActiveMembership(
+                    authorMembership.getId(), author.assignmentId());
+        }
         return buildResult(verificationId, true);
     }
 
@@ -38,10 +51,21 @@ public class GroupRoutineVerificationLikeCommandService {
     public VerificationResDTO.GroupRoutineLike unlike(
             Long memberId,
             Long groupId,
-            Long verificationId
+        Long verificationId
     ) {
-        validateLikeTarget(memberId, groupId, verificationId);
-        groupRoutineVerificationLikeRepository.deleteLike(verificationId, memberId);
+        GroupRoutineVerification verification = validateLikeTarget(memberId, groupId, verificationId);
+        GroupRoutineVerificationLike existingLike = groupRoutineVerificationLikeRepository
+                .findByVerificationIdAndMemberIdForUpdate(verificationId, memberId)
+                .orElse(null);
+        if (existingLike != null) {
+            AuthorVerificationContext author = authorContext(verification);
+            if (groupRoutineVerificationLikeRepository.deleteLike(verificationId, memberId) != 1) {
+                return buildResult(verificationId, false);
+            }
+            GroupMember authorMembership = lockAuthorMembership(groupId, author.memberId());
+            groupMemberRepository.decrementTotalLikeCountForCurrentActiveMembershipIfPositive(
+                    authorMembership.getId(), author.assignmentId());
+        }
         return buildResult(verificationId, false);
     }
 
@@ -50,12 +74,30 @@ public class GroupRoutineVerificationLikeCommandService {
      * 그룹 명령도 같은 순서(그룹 잠금 → 구성원 검증)를 쓰므로, 검증 뒤 새 Like 행이 생기는
      * 시간 창이 없다. 인증 소속 조회는 그 뒤에 하며 추가 잠금을 잡지 않는다.
      */
-    private void validateLikeTarget(Long memberId, Long groupId, Long verificationId) {
+    private GroupRoutineVerification validateLikeTarget(
+            Long memberId,
+            Long groupId,
+            Long verificationId
+    ) {
         groupValidationService.lockActiveGroupForUpdate(groupId);
         groupValidationService.validateActiveGroupMember(groupId, memberId);
-        groupRoutineVerificationRepository.findByIdAndGroupId(verificationId, groupId)
+        return groupRoutineVerificationRepository.findByIdAndGroupId(verificationId, groupId)
                 .orElseThrow(() -> new VerificationException(
                         VerificationErrorCode.GROUP_ROUTINE_VERIFICATION_NOT_FOUND));
+    }
+
+    private AuthorVerificationContext authorContext(GroupRoutineVerification verification) {
+        return new AuthorVerificationContext(
+                verification.getAssignment().getMember().getId(),
+                verification.getAssignment().getId()
+        );
+    }
+
+    private GroupMember lockAuthorMembership(Long groupId, Long authorMemberId) {
+        return groupMemberActivityCommandService.lockMembership(groupId, authorMemberId);
+    }
+
+    private record AuthorVerificationContext(Long memberId, Long assignmentId) {
     }
 
     private VerificationResDTO.GroupRoutineLike buildResult(Long verificationId, boolean liked) {

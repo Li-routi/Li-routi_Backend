@@ -44,6 +44,10 @@ class GroupRoutineAssignmentCommandServiceTest {
     @Mock
     private GroupMemberRepository groupMemberRepository;
     @Mock
+    private GroupMemberActivityCommandService groupMemberActivityCommandService;
+    @Mock
+    private GroupRoutineAssignmentStatusRefreshBatchService statusRefreshBatchService;
+    @Mock
     private Clock clock;
     @Mock
     private GroupRoutine groupRoutine;
@@ -379,26 +383,37 @@ class GroupRoutineAssignmentCommandServiceTest {
         // given
         LocalDateTime currentDateTime = LocalDateTime.of(2026, 7, 23, 10, 0);
 
+        when(statusRefreshBatchService.markExpiredAssignmentsMissed(currentDateTime, 100))
+                .thenReturn(0);
+
         // when
         assignmentCommandService.refreshAssignmentStatuses(currentDateTime);
 
         // then
-        InOrder inOrder = inOrder(assignmentRepository);
-        inOrder.verify(assignmentRepository).markExpiredAssignmentsMissed(
-                currentDateTime.toLocalDate(),
-                currentDateTime.toLocalTime(),
-                List.of(
-                        GroupRoutineAssignmentStatus.PENDING,
-                        GroupRoutineAssignmentStatus.IN_PROGRESS
-                ),
-                GroupRoutineAssignmentStatus.MISSED
-        );
-        inOrder.verify(assignmentRepository).markStartedAssignmentsInProgress(
-                currentDateTime.toLocalDate(),
-                currentDateTime.toLocalTime(),
-                GroupRoutineAssignmentStatus.PENDING,
-                GroupRoutineAssignmentStatus.IN_PROGRESS
-        );
+        InOrder inOrder = inOrder(statusRefreshBatchService);
+        inOrder.verify(statusRefreshBatchService)
+                .markExpiredAssignmentsMissed(currentDateTime, 100);
+        inOrder.verify(statusRefreshBatchService)
+                .markStartedAssignmentsInProgress(currentDateTime);
+    }
+
+    @Test
+    @DisplayName("마감 처리는 남은 대상이 없을 때까지 batch 단위로 반복한다")
+    void refreshAssignmentStatuses_RepeatsUntilNoMissedAssignmentsRemain() {
+        // given
+        LocalDateTime currentDateTime = LocalDateTime.of(2026, 7, 23, 10, 0);
+        when(statusRefreshBatchService.markExpiredAssignmentsMissed(currentDateTime, 100))
+                .thenReturn(100, 40, 0);
+
+        // when
+        assignmentCommandService.refreshAssignmentStatuses(currentDateTime);
+
+        // then
+        InOrder inOrder = inOrder(statusRefreshBatchService);
+        inOrder.verify(statusRefreshBatchService, times(3))
+                .markExpiredAssignmentsMissed(currentDateTime, 100);
+        inOrder.verify(statusRefreshBatchService)
+                .markStartedAssignmentsInProgress(currentDateTime);
     }
 
     @Test

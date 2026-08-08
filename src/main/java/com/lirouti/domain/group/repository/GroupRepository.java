@@ -2,11 +2,16 @@ package com.lirouti.domain.group.repository;
 
 import com.lirouti.domain.group.entity.Group;
 import jakarta.persistence.LockModeType;
+import com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus;
+import com.lirouti.domain.group.enums.GroupStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.util.List;
 import java.util.Optional;
 
 public interface GroupRepository extends JpaRepository<Group, Long> {
@@ -25,6 +30,35 @@ public interface GroupRepository extends JpaRepository<Group, Long> {
     Optional<Group> findByInviteCodeForUpdate(@Param("inviteCode") String inviteCode);
 
     Optional<Group> findByInviteCode(String inviteCode);
+
+    /** 마감 후보가 있는 그룹만 ID 순서로 잠가 batch의 최상위 잠금 순서를 고정한다. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select groupEntity
+            from Group groupEntity
+            where groupEntity.status = :groupStatus
+              and exists (
+                select assignment
+                from GroupRoutineAssignment assignment
+                where assignment.groupRoutine.group = groupEntity
+                  and assignment.status in :unfinishedStatuses
+                  and (
+                        assignment.assignedDate < :today
+                        or (
+                            assignment.assignedDate = :today
+                            and assignment.scheduledEndTime <= :currentTime
+                        )
+                  )
+              )
+            order by groupEntity.id
+            """)
+    List<Group> findExpiredAssignmentGroupsForUpdate(
+            @Param("groupStatus") GroupStatus groupStatus,
+            @Param("today") LocalDate today,
+            @Param("currentTime") LocalTime currentTime,
+            @Param("unfinishedStatuses") List<GroupRoutineAssignmentStatus> unfinishedStatuses,
+            org.springframework.data.domain.Pageable pageable
+    );
 
     // 새 초대코드가 기존 그룹에서 사용 중인지 확인
     boolean existsByInviteCode(String inviteCode);

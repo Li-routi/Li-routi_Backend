@@ -29,6 +29,7 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class GroupRoutineAssignmentCommandService {
+    private static final int EXPIRED_ASSIGNMENT_GROUP_BATCH_SIZE = 100;
     private static final Set<GroupRoutineAssignmentStatus> TERMINAL_STATUSES = EnumSet.of(
             GroupRoutineAssignmentStatus.COMPLETED,
             GroupRoutineAssignmentStatus.MISSED
@@ -42,6 +43,8 @@ public class GroupRoutineAssignmentCommandService {
     private final GroupRoutineRepository groupRoutineRepository;
     private final GroupRoutineScheduleRepository groupRoutineScheduleRepository;
     private final GroupMemberRepository groupMemberRepository;
+    private final GroupMemberActivityCommandService groupMemberActivityCommandService;
+    private final GroupRoutineAssignmentStatusRefreshBatchService statusRefreshBatchService;
     private final Clock clock;
 
     /** 루틴 삭제 시 완료되지 않은 모든 회원의 할당을 한 번에 물리 삭제한다. */
@@ -283,29 +286,43 @@ public class GroupRoutineAssignmentCommandService {
         throw new GroupException(GroupErrorCode.GROUP_ROUTINE_ASSIGNMENT_NOT_IN_PROGRESS);
     }
 
+    /** 실제 완료 전이와 현재 가입 회차 스트릭 갱신을 같은 트랜잭션으로 묶는다. */
+    @Transactional
+    public void completeAssignmentAndRecordActivity(
+            GroupRoutineAssignment assignment,
+            LocalDateTime verifiedAt
+    ) {
+        if (assignment == null) {
+            throw new IllegalArgumentException("그룹 루틴 할당은 필수입니다.");
+        }
+        completeAssignment(assignment.getId(), verifiedAt);
+        groupMemberActivityCommandService.recordStreakIfAllAssignmentsCompleted(
+                assignment.getGroupRoutine().getGroup().getId(),
+                assignment.getMember().getId(),
+                assignment.getAssignedDate()
+        );
+    }
+
     /**
      * 기준 시각에 마감된 할당을 먼저 미이행 처리한 뒤 시작된 할당을 진행 중으로 전이한다.
      *
      * @param currentDateTime 상태 전이 기준 시각
      */
-    @Transactional
     public void refreshAssignmentStatuses(LocalDateTime currentDateTime) {
-        LocalDate today = currentDateTime.toLocalDate();
-        int missedCount = groupRoutineAssignmentRepository.markExpiredAssignmentsMissed(
-                today,
-                currentDateTime.toLocalTime(),
-                List.of(
-                        GroupRoutineAssignmentStatus.PENDING,
-                        GroupRoutineAssignmentStatus.IN_PROGRESS
-                ),
-                GroupRoutineAssignmentStatus.MISSED
-        );
-        int inProgressCount = groupRoutineAssignmentRepository.markStartedAssignmentsInProgress(
-                today,
-                currentDateTime.toLocalTime(),
-                GroupRoutineAssignmentStatus.PENDING,
-                GroupRoutineAssignmentStatus.IN_PROGRESS
-        );
+        int missedCount = 0;
+        while (true) {
+            int batchMissedCount = statusRefreshBatchService
+                    .markExpiredAssignmentsMissed(
+                            currentDateTime,
+                            EXPIRED_ASSIGNMENT_GROUP_BATCH_SIZE
+                    );
+            if (batchMissedCount == 0) {
+                break;
+            }
+            missedCount += batchMissedCount;
+        }
+        int inProgressCount = statusRefreshBatchService
+                .markStartedAssignmentsInProgress(currentDateTime);
         if (missedCount > 0 || inProgressCount > 0) {
             log.info("그룹 루틴 할당 상태 갱신을 완료했습니다. "
                             + "currentDateTime={}, missedCount={}, inProgressCount={}",

@@ -133,6 +133,8 @@ class GroupRoutineVerificationLikeConcurrencyTest {
         assertThat(result.success()).isEqualTo(2);
         assertThat(likeRepository.countByVerificationIds(List.of(verificationId))
                 .getOrDefault(verificationId, 0L)).isEqualTo(1);
+        assertThat(groupMemberRepository.findByGroupIdAndMemberId(groupId, memberId).orElseThrow()
+                .getTotalLikeCount()).isEqualTo(1);
     }
 
     @Test
@@ -146,6 +148,8 @@ class GroupRoutineVerificationLikeConcurrencyTest {
         assertThat(result.success()).isEqualTo(2);
         assertThat(likeRepository.countByVerificationIds(List.of(verificationId))
                 .getOrDefault(verificationId, 0L)).isZero();
+        assertThat(groupMemberRepository.findByGroupIdAndMemberId(groupId, memberId).orElseThrow()
+                .getTotalLikeCount()).isZero();
     }
 
     @Test
@@ -188,6 +192,8 @@ class GroupRoutineVerificationLikeConcurrencyTest {
                 .contains(verificationId);
         assertThat(likeCount).isIn(0L, 1L);
         assertThat(likeCount == 1).isEqualTo(liked);
+        assertThat(groupMemberRepository.findByGroupIdAndMemberId(groupId, memberId).orElseThrow()
+                .getTotalLikeCount()).isEqualTo(likeCount);
     }
 
     @Test

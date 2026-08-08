@@ -2,8 +2,12 @@ package com.lirouti.domain.group.repository;
 
 import com.lirouti.domain.group.entity.Group;
 import com.lirouti.domain.group.entity.GroupMember;
+import com.lirouti.domain.group.entity.GroupRoutine;
+import com.lirouti.domain.group.entity.GroupRoutineAssignment;
+import com.lirouti.domain.group.entity.GroupRoutineCategory;
 import com.lirouti.domain.group.enums.GroupMemberRole;
 import com.lirouti.domain.group.enums.GroupMemberStatus;
+import com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus;
 import com.lirouti.domain.group.enums.GroupStatus;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.enums.Role;
@@ -17,6 +21,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -165,6 +171,39 @@ class GroupMemberRepositoryTest {
         assertThat(result).doesNotContain(withdrawnMembership.getId());
     }
 
+    @Test
+    @DisplayName("MISSED 활동 초기화 조회는 ACTIVE인 현재 가입 회차만 반환한다")
+    void findAllActiveCurrentMembershipsByAssignmentIdsForUpdate_ExcludesLeftAndKicked() {
+        Group group = group("S000001");
+        Member activeMember = member();
+        Member leftMember = member();
+        Member kickedMember = member();
+        GroupMember active = membership(activeMember, group, GroupMemberRole.MEMBER);
+        GroupMember left = membership(leftMember, group, GroupMemberRole.MEMBER);
+        GroupMember kicked = membership(kickedMember, group, GroupMemberRole.MEMBER);
+        left.leave();
+        kicked.kick();
+
+        GroupRoutineCategory category = GroupRoutineCategory.builder()
+                .group(group).name("상태 조회 카테고리").active(true).build();
+        em.persist(category);
+        GroupRoutine routine = GroupRoutine.builder()
+                .group(group).category(category).title("상태 조회 루틴").description("설명").build();
+        em.persist(routine);
+        GroupRoutineAssignment activeAssignment = assignment(routine, activeMember);
+        GroupRoutineAssignment leftAssignment = assignment(routine, leftMember);
+        GroupRoutineAssignment kickedAssignment = assignment(routine, kickedMember);
+        em.flush();
+        em.clear();
+
+        List<GroupMember> result = groupMemberRepository
+                .findAllActiveCurrentMembershipsByAssignmentIdsForUpdate(List.of(
+                        activeAssignment.getId(), leftAssignment.getId(), kickedAssignment.getId()
+                ));
+
+        assertThat(result).extracting(GroupMember::getId).containsExactly(active.getId());
+    }
+
     private Group group(String inviteCode) {
         Group group = Group.builder().name("테스트 그룹").inviteCode(inviteCode).build();
         em.persist(group);
@@ -202,5 +241,18 @@ class GroupMemberRepositoryTest {
                 .build();
         em.persist(membership);
         return membership;
+    }
+
+    private GroupRoutineAssignment assignment(GroupRoutine routine, Member member) {
+        GroupRoutineAssignment assignment = GroupRoutineAssignment.builder()
+                .groupRoutine(routine)
+                .member(member)
+                .assignedDate(LocalDate.of(2026, 8, 7))
+                .scheduledStartTime(LocalTime.of(9, 0))
+                .scheduledEndTime(LocalTime.of(10, 0))
+                .status(GroupRoutineAssignmentStatus.MISSED)
+                .build();
+        em.persist(assignment);
+        return assignment;
     }
 }

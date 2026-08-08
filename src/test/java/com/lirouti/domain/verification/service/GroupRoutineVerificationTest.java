@@ -18,10 +18,12 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.lirouti.domain.group.entity.Group;
+import com.lirouti.domain.group.entity.GroupMember;
 import com.lirouti.domain.group.entity.GroupRoutine;
 import com.lirouti.domain.group.entity.GroupRoutineCategory;
 import com.lirouti.domain.group.entity.GroupRoutineAssignment;
 import com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus;
+import com.lirouti.domain.group.enums.GroupMemberRole;
 import com.lirouti.domain.media.service.MediaService;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.enums.Role;
@@ -31,6 +33,7 @@ import com.lirouti.domain.verification.dto.response.VerificationResDTO;
 import com.lirouti.domain.verification.exception.VerificationException;
 import com.lirouti.domain.verification.exception.code.error.VerificationErrorCode;
 import com.lirouti.domain.verification.repository.GroupRoutineVerificationRepository;
+import com.lirouti.domain.group.repository.GroupMemberRepository;
 import com.lirouti.global.util.TimeUtil;
 
 import jakarta.persistence.EntityManager;
@@ -54,6 +57,8 @@ class GroupRoutineVerificationTest {
     private RoutineVerificationService verificationService;
     @Autowired
     private GroupRoutineVerificationRepository verificationRepository;
+    @Autowired
+    private GroupMemberRepository groupMemberRepository;
 
     @MockitoBean
     private MediaService mediaService;
@@ -91,6 +96,9 @@ class GroupRoutineVerificationTest {
         GroupRoutine routine = GroupRoutine.builder()
                 .group(group).category(category).title("아침 청소").description("설명").build();
         em.persist(routine);
+        em.persist(GroupMember.builder()
+                .group(group).member(member).role(GroupMemberRole.MEMBER).build());
+        em.flush();
 
         GroupRoutineAssignment assignment = GroupRoutineAssignment.builder()
                 .groupRoutine(routine).member(member)
@@ -116,6 +124,9 @@ class GroupRoutineVerificationTest {
         GroupRoutine routine = GroupRoutine.builder()
                 .group(group).category(category).title("아침 청소").description("설명").build();
         em.persist(routine);
+        em.persist(GroupMember.builder()
+                .group(group).member(member).role(GroupMemberRole.MEMBER).build());
+        em.flush();
 
         GroupRoutineAssignment assignment = GroupRoutineAssignment.builder()
                 .groupRoutine(routine).member(member)
@@ -160,6 +171,9 @@ class GroupRoutineVerificationTest {
         em.clear();
         assertThat(em.find(GroupRoutineAssignment.class, assignment.getId()).getStatus())
                 .isEqualTo(GroupRoutineAssignmentStatus.COMPLETED);
+        assertThat(groupMemberRepository.findByGroupIdAndMemberId(
+                groupIdOf(assignment), member.getId()).orElseThrow().getCurrentStreak())
+                .isEqualTo(1);
     }
 
     @Test
@@ -187,6 +201,12 @@ class GroupRoutineVerificationTest {
         GroupRoutineAssignment assignment =
                 assignment(member(), GroupRoutineAssignmentStatus.IN_PROGRESS);
         Member outsider = member();
+        em.persist(GroupMember.builder()
+                .group(assignment.getGroupRoutine().getGroup())
+                .member(outsider)
+                .role(GroupMemberRole.MEMBER)
+                .build());
+        em.flush();
 
         // when & then
         assertThatThrownBy(() -> verificationService.verifyGroupRoutine(
@@ -202,7 +222,7 @@ class GroupRoutineVerificationTest {
         Member member = member();
         GroupRoutineAssignment assignment =
                 assignment(member, GroupRoutineAssignmentStatus.IN_PROGRESS);
-        Long otherGroupId = groupIdOf(assignment(member(), GroupRoutineAssignmentStatus.IN_PROGRESS));
+        Long otherGroupId = groupIdOf(assignment(member, GroupRoutineAssignmentStatus.IN_PROGRESS));
 
         // when & then
         assertThatThrownBy(() -> verificationService.verifyGroupRoutine(
