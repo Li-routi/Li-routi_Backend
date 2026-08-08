@@ -407,12 +407,41 @@ class MediaServiceTest {
                 Arguments.of(
                         "image/webp",
                         "image/webp",
-                        new byte[]{0x52, 0x49, 0x46, 0x46, 0x24, 0x00, 0x00, 0x00,
-                                0x57, 0x45, 0x42, 0x50},
+                        webpWithFeatureFlags(0),
                         "image/webp",
                         ".webp"
                 )
         );
+    }
+
+    @Test
+    @DisplayName("채팅 이모티콘용 animated WEBP는 업로드 전에 거부한다")
+    void uploadServiceOwnedImage_AnimatedWebpEmoticon_RejectsBeforeUpload() {
+        byte[] animatedWebp = webpWithFeatureFlags(0x02);
+
+        assertThatThrownBy(() -> mediaService.uploadServiceOwnedImage(
+                MediaPurpose.CHAT_EMOTICON,
+                "image/webp",
+                "image/webp",
+                animatedWebp.length,
+                () -> new ByteArrayInputStream(animatedWebp)
+        )).isInstanceOf(MediaException.class)
+                .hasFieldOrPropertyWithValue(
+                        "code",
+                        MediaErrorCode.CONTENT_TYPE_NOT_ALLOWED_FOR_PURPOSE
+                );
+        verifyNoInteractions(s3Client, s3Presigner);
+    }
+
+    private static byte[] webpWithFeatureFlags(int featureFlags) {
+        return new byte[]{
+                0x52, 0x49, 0x46, 0x46, 0x16, 0x00, 0x00, 0x00,
+                0x57, 0x45, 0x42, 0x50,
+                0x56, 0x50, 0x38, 0x58, 0x0A, 0x00, 0x00, 0x00,
+                (byte) featureFlags, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00
+        };
     }
 
     @Test

@@ -714,6 +714,7 @@ echo "③ OK"
 
 ```bash
 set -euo pipefail
+export AWS_DEFAULT_REGION=ap-northeast-2
 
 PROBE_FILE=/tmp/chat-emoticon-iam-probe.txt
 PROBE_DATE="$(TZ=Asia/Seoul date +%Y/%m/%d)"

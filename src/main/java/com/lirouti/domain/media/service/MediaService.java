@@ -63,6 +63,10 @@ import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignReques
 @Service
 @RequiredArgsConstructor
 public class MediaService {
+    private static final int WEBP_ANIMATION_INSPECTION_LENGTH = 21;
+    private static final int WEBP_ANIMATION_FLAG_OFFSET = 20;
+    private static final int WEBP_ANIMATION_FLAG = 0x02;
+
     private final S3Presigner s3Presigner;
     // 업로드된 바이트를 실제로 읽어 검증하기 위한 클라이언트(#22). presigner와 달리 S3를 호출한다.
     private final S3Client s3Client;
@@ -136,7 +140,7 @@ public class MediaService {
         validatePurposeAllows(purpose, contentType);
         validateFileSize(contentType.getCategory(), contentLength);
         validateFileContentType(fileContentType, contentType);
-        validateInputSignature(contentSource, contentType);
+        validateInputSignature(contentSource, contentType, purpose);
 
         String mediaKey = generateMediaKey(purpose, contentType);
         PutObjectRequest request = PutObjectRequest.builder()
@@ -584,12 +588,21 @@ public class MediaService {
 
     private void validateInputSignature(
             InputStreamSource contentSource,
-            MediaContentType contentType
+            MediaContentType contentType,
+            MediaPurpose purpose
     ) {
         try (InputStream inputStream = contentSource.getInputStream()) {
-            byte[] head = inputStream.readNBytes(MediaContentType.SIGNATURE_LENGTH);
+            int inspectionLength = contentType == MediaContentType.WEBP
+                    ? WEBP_ANIMATION_INSPECTION_LENGTH
+                    : MediaContentType.SIGNATURE_LENGTH;
+            byte[] head = inputStream.readNBytes(inspectionLength);
             if (!contentType.matchesSignature(head)) {
                 throw new MediaException(MediaErrorCode.MEDIA_CONTENT_MISMATCH);
+            }
+            if (purpose == MediaPurpose.CHAT_EMOTICON
+                    && contentType == MediaContentType.WEBP
+                    && isAnimatedWebp(head)) {
+                throw new MediaException(MediaErrorCode.CONTENT_TYPE_NOT_ALLOWED_FOR_PURPOSE);
             }
         } catch (MediaException e) {
             throw e;
@@ -598,6 +611,15 @@ public class MediaService {
                     contentType.getMimeType(), e);
             throw new MediaException(MediaErrorCode.MEDIA_UPLOAD_FAILED);
         }
+    }
+
+    private boolean isAnimatedWebp(byte[] head) {
+        return head.length >= WEBP_ANIMATION_INSPECTION_LENGTH
+                && head[12] == 'V'
+                && head[13] == 'P'
+                && head[14] == '8'
+                && head[15] == 'X'
+                && (head[WEBP_ANIMATION_FLAG_OFFSET] & WEBP_ANIMATION_FLAG) != 0;
     }
 
     private InputStream openInputStream(InputStreamSource contentSource) {
