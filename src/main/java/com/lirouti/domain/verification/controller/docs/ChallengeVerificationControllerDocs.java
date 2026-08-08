@@ -308,4 +308,39 @@ public interface ChallengeVerificationControllerDocs {
             @Parameter(description = "인증 ID") Long verificationId,
             ChallengeVerificationReqDTO.UpdateMemo request
     );
+
+    @Operation(
+            summary = "인증 게시글 삭제",
+            description = """
+                    내가 올린 인증 게시글을 내립니다. 본인 글만 지울 수 있고, 남의 글은 없는 글과
+                    같은 404 로 답합니다.
+
+                    **인증을 취소하는 것이 아니라 글을 내리는 것입니다.** "그날 인증했다" 는 사실은
+                    남아서, 지운 뒤에도 그날 버튼은 완료 상태 그대로입니다. 다시 올리면 그 자리가
+                    되살아납니다.
+
+                    사진은 S3 에서도 지웁니다. 공개 주소라 조회에서 빼는 것만으로는 URL 을 아는
+                    사람이 계속 볼 수 있기 때문입니다.
+
+                    **오늘 올린 것을 지우면 스트릭에서 빠집니다.** 응답의 currentStreak 이 그 결과라
+                    재조회 없이 화면을 갱신할 수 있습니다. 지난 글을 지우는 것은 스트릭에 영향이
+                    없습니다.
+
+                    신고가 쌓여 가려진 글은 지울 수 없습니다(404). 본인에게도 안 보이는 글이고,
+                    지워서 신고 누적을 회피하는 길도 막습니다.
+
+                    이미 지운 글을 다시 지우면 성공으로 답합니다.
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "삭제 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증 필요(미로그인)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "없는 인증이거나 내 글이 아니거나 가려진 글(CHALLENGE404_2)")
+    })
+    ApiResponse<ChallengeVerificationResDTO.Deletion> deleteVerification(
+            CustomUserDetails userDetails,
+            @Parameter(description = "챌린지 ID") Long challengeId,
+            @Parameter(description = "삭제할 인증 ID") Long verificationId
+    );
 }

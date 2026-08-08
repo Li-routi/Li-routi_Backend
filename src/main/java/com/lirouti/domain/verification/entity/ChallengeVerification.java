@@ -95,6 +95,20 @@ public class ChallengeVerification extends BaseEntity {
     @Column(name = "pending_since")
     private LocalDateTime pendingSince;
 
+    /**
+     * 작성자가 글을 내린 시각. NULL 이면 살아 있다.
+     *
+     * <p><b>인증을 취소하는 것이 아니다.</b> 글과 사진만 안 보이게 하고 "그날 인증했다" 는
+     * 사실은 남긴다 — 지운 뒤 다시 인증할 수 있으면 하루 1회가 뚫린다. 그래서 스트릭도
+     * 건드리지 않는다.
+     *
+     * <p>신고 숨김({@code hiddenAt}) 과는 다르다. 그쪽은 남이 가린 것이고 이쪽은 본인이 내린
+     * 것이라, 본인에게 보이는지가 갈린다 — 숨김은 본인에게도 안 보이고, 삭제는 본인이 지운 것을
+     * 안다.
+     */
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
+
     @Builder
     private ChallengeVerification(
             MemberChallenge memberChallenge,
@@ -151,6 +165,10 @@ public class ChallengeVerification extends BaseEntity {
         this.content = content;
         this.verifiedAt = verifiedAt;
 
+        // 내렸던 글에 다시 올리면 되살아난다. 그날의 인증은 한 건이라는 성질이 유지되고,
+        // 이 경로가 INSERT 가 아니라 UPDATE 라서 유니크 제약과도 부딪히지 않는다.
+        this.deletedAt = null;
+
         // 심사 결과도 함께 갈아끼운다. 사진이 바뀌었으니 지난 심사 결과는 이 사진의 것이 아니다.
         // 보류였다가 통과로 올라오거나 그 반대도 되며, 어느 쪽이든 시도 횟수는 0 부터 다시 센다.
         this.reviewStatus = reviewStatus;
@@ -181,6 +199,26 @@ public class ChallengeVerification extends BaseEntity {
 
     public boolean isPending() {
         return reviewStatus == ReviewStatus.PENDING;
+    }
+
+    /**
+     * 작성자가 글을 내린다. <b>이미 내려간 글이면 시각을 덮어쓰지 않는다.</b>
+     *
+     * <p>삭제는 멱등한 편이 클라이언트가 다루기 쉽고, 처음 내린 시각이 남아야 나중에 되짚을 수
+     * 있다. 신고 숨김이 시각을 덮어쓰지 않는 것과 같은 이유다.
+     *
+     * @return 이번 호출로 실제 내려갔으면 true. 이미 내려가 있었으면 false
+     */
+    public boolean softDelete(LocalDateTime deletedAt) {
+        if (this.deletedAt != null) {
+            return false;
+        }
+        this.deletedAt = deletedAt;
+        return true;
+    }
+
+    public boolean isDeleted() {
+        return deletedAt != null;
     }
 
     /**

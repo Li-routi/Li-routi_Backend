@@ -24,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZonedDateTime;
+import java.util.List;
 import java.util.Optional;
 import com.lirouti.domain.verification.exception.VerificationException;
 import com.lirouti.domain.verification.exception.code.error.ChallengeVerificationErrorCode;
@@ -186,5 +187,57 @@ public class ChallengeVerificationCommandService {
      */
     private LocalDateTime pendingSinceFor(ReviewStatus reviewStatus, LocalDateTime verifiedAt) {
         return reviewStatus == ReviewStatus.PENDING ? verifiedAt : null;
+    }
+
+    /**
+     * 글을 내리고, 오늘 것이면 스트릭을 다시 센다.
+     *
+     * <p><b>잠금 순서는 저장 경로와 같다</b> — 참여 행을 먼저 잠근다. 뒤집으면 삭제와 당일
+     * 재인증이 서로의 잠금을 기다린다.
+     *
+     * <p>이미 내려간 글이면 아무것도 하지 않고 성공으로 답한다. 삭제는 멱등한 편이 클라이언트가
+     * 다루기 쉽다.
+     */
+    @Transactional
+    public DeleteResult softDelete(Long memberId, Long challengeId, Long verificationId) {
+        ChallengeVerification verification = challengeVerificationRepository
+                .findMineInChallenge(verificationId, challengeId, memberId)
+                .orElseThrow(() -> {
+                    // 남의 글도, 없는 글도, 신고로 가려진 글도 같은 404 다. 가려진 글을 지워
+                    // 신고 누적을 회피하는 길도 함께 막힌다.
+                    log.warn("삭제할 수 없는 인증입니다. memberId={}, challengeId={}, verificationId={}",
+                            memberId, challengeId, verificationId);
+                    return new VerificationException(ChallengeVerificationErrorCode.VERIFICATION_NOT_FOUND);
+                });
+
+        MemberChallenge locked = memberChallengeRepository
+                .findByMemberIdAndChallengeIdForUpdate(memberId, challengeId)
+                .orElseThrow(() -> new ChallengeException(ChallengeErrorCode.NOT_PARTICIPATING));
+
+        LocalDate today = LocalDate.now(TimeUtil.KST);
+        String imageKey = verification.getImageUrl();
+        boolean deletedNow = verification.softDelete(LocalDateTime.now(TimeUtil.KST));
+
+        // 오늘 것을 내렸을 때만 스트릭에서 뺀다. 과거로 소급하지 않는 것이 요점이다.
+        // 이미 내려가 있던 글이면 스트릭은 그때 이미 정리됐으므로 다시 세지 않는다.
+        if (deletedNow && today.equals(verification.getVerifiedDate())
+                && verification.getParticipationRound().equals(locked.getParticipationRound())) {
+            challengeVerificationRepository.flush();
+            List<LocalDate> remaining = challengeVerificationRepository.findApprovedDatesInRoundExcept(
+                    locked.getId(), locked.getParticipationRound(), verificationId);
+            locked.recalculateStreak(remaining);
+        }
+
+        return new DeleteResult(deletedNow, imageKey, locked.currentStreakAsOf(today));
+    }
+
+    /**
+     * 삭제 결과. 사진을 지울지와 응답에 실을 스트릭을 호출부에 넘긴다.
+     *
+     * @param deletedNow    이번 호출로 실제 내려갔는가. 이미 내려가 있었으면 false
+     * @param imageKey      내린 글이 들고 있던 사진 key
+     * @param currentStreak 내린 뒤의 스트릭
+     */
+    public record DeleteResult(boolean deletedNow, String imageKey, int currentStreak) {
     }
 }

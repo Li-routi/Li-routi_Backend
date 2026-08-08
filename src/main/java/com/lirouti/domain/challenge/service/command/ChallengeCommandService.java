@@ -456,6 +456,45 @@ public class ChallengeCommandService {
     }
 
     /** 경로의 challengeId와 인증의 챌린지가 맞는지까지 확인한다. 어긋나면 404다(신고와 같은 기준). */
+    /**
+     * 인증 게시글을 내린다. <b>인증을 취소하는 것이 아니다.</b>
+     *
+     * <p>글과 사진만 안 보이게 하고 "그날 인증했다" 는 사실은 남긴다 — 지운 뒤 다시 인증할 수
+     * 있으면 하루 1회가 뚫린다. 그래서 버튼은 완료 상태 그대로다.
+     *
+     * <h3>오늘 것을 내리면 스트릭에서 뺀다</h3>
+     * 그러지 않으면 <b>올리고 스트릭만 챙긴 뒤 바로 지우는</b> 것이 가능하다 — 피드에 아무것도
+     * 안 내놓고 기록만 가져간다. 다만 <b>과거로 소급하지는 않는다.</b> 오래된 글을 내렸다고
+     * 그 지점에서 연속을 끊으면, 남용과 무관한 사용자가 며칠치를 한꺼번에 잃는다.
+     *
+     * <h3>사진은 지운다</h3>
+     * 공개 prefix 라 조회에서 빼도 <b>URL 을 아는 사람은 계속 볼 수 있다.</b> 지우고 싶어 지운
+     * 사람에게 그 상태는 삭제가 아니다. 남는 죽은 {@code image_url} 은 그대로 둔다 —
+     * {@code NOT NULL} 이라 비울 수 없고, 다시 인증하면 새 key 로 덮인다.
+     *
+     * <p>이 메서드에 {@code @Transactional} 이 없는 것은 의도다. S3 삭제가 트랜잭션 밖이어야
+     * 한다(service_convention). DB 변경은 {@link ChallengeVerificationCommandService#softDelete}
+     * 가 맡는다.
+     */
+    public ChallengeVerificationResDTO.Deletion deleteVerification(
+            Long memberId,
+            Long challengeId,
+            Long verificationId
+    ) {
+        ChallengeVerificationCommandService.DeleteResult result =
+                challengeVerificationCommandService.softDelete(memberId, challengeId, verificationId);
+
+        // 커밋된 뒤에 지운다. 순서를 뒤집으면 그 사이에 죽었을 때 사진 없는 글이 남는다 —
+        // 남는 방향의 실패는 미참조 정리가 치우고, 사라지는 방향의 실패는 낫지 않는다.
+        //
+        // 이미 내려간 글을 다시 지우는 요청이면 사진은 이미 없다. 그때는 부르지 않는다.
+        if (result.deletedNow()) {
+            mediaService.deleteQuietly(result.imageKey());
+        }
+
+        return ChallengeVerificationConverter.toDeletion(verificationId, result.currentStreak());
+    }
+
     private ChallengeVerification findVerificationInChallenge(Long challengeId, Long verificationId) {
         return challengeVerificationRepository
                 .findByIdAndMemberChallengeChallengeId(verificationId, challengeId)

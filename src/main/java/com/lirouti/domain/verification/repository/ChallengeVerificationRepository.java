@@ -148,6 +148,9 @@ public interface ChallengeVerificationRepository
      * 챌린지별 내 인증 목록과 같은 기준이다 — 한쪽만 다르면 같은 사진이 한 화면에서는
      * "심사 중", 다른 화면에서는 그냥 인증으로 보인다.
      *
+     * <p><b>작성자가 내린 글은 뺀다.</b> 본인이 지운 것이라 본인에게도 보이면 안 된다 —
+     * 신고 숨김({@code hiddenAt})을 본인에게는 보여 주는 것과 반대다.
+     *
      * <p>{@code status} 를 주면 그 상태만 남긴다. 주지 않으면 전부다 — 기본값이 바뀌면
      * 파라미터를 안 보내는 기존 클라이언트의 화면이 조용히 달라진다.
      */
@@ -157,6 +160,7 @@ public interface ChallengeVerificationRepository
             join fetch mc.challenge
             where mc.member.id = :memberId
               and v.verifiedDate = :date
+              and v.deletedAt is null
               and (:status is null or v.reviewStatus = :status)
             order by v.verifiedAt desc
             """)
@@ -219,5 +223,27 @@ public interface ChallengeVerificationRepository
     List<LocalDate> findApprovedDatesInRound(
             @Param("memberChallengeId") Long memberChallengeId,
             @Param("participationRound") Integer participationRound
+    );
+
+    /**
+     * 그 회차의 유효한 인증 날짜를 오름차순으로, <b>지정한 한 건만 빼고</b>.
+     *
+     * <p>글을 내렸을 때 스트릭을 다시 셀 때 쓴다. {@link #findApprovedDatesInRound} 와 달리
+     * <b>이미 내려간 다른 행들은 그대로 센다</b> — 삭제는 그날 것만 스트릭에서 빼고 과거로
+     * 소급하지 않기 때문이다. 과거 삭제까지 빼면 오래된 글 하나를 내렸을 때 그 지점에서 연속이
+     * 끊겨, 남용과 무관한 사용자가 며칠치를 한꺼번에 잃는다.
+     */
+    @Query("""
+            select v.verifiedDate from ChallengeVerification v
+            where v.memberChallenge.id = :memberChallengeId
+              and v.participationRound = :participationRound
+              and v.reviewStatus = com.lirouti.domain.verification.enums.ReviewStatus.APPROVED
+              and v.id <> :excludedId
+            order by v.verifiedDate asc
+            """)
+    List<LocalDate> findApprovedDatesInRoundExcept(
+            @Param("memberChallengeId") Long memberChallengeId,
+            @Param("participationRound") Integer participationRound,
+            @Param("excludedId") Long excludedId
     );
 }

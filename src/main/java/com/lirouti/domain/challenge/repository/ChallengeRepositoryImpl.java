@@ -2,6 +2,7 @@ package com.lirouti.domain.challenge.repository;
 
 import static com.lirouti.domain.member.repository.MemberQuerySupport.activeMember;
 import static com.lirouti.domain.verification.repository.VerificationQuerySupport.notHidden;
+import static com.lirouti.domain.verification.repository.VerificationQuerySupport.notDeleted;
 import static com.lirouti.domain.verification.repository.VerificationQuerySupport.notPending;
 import static com.querydsl.core.group.GroupBy.groupBy;
 
@@ -86,7 +87,8 @@ public class ChallengeRepositoryImpl implements ChallengeRepositoryCustom {
                         activeMember(member),
                         notHidden(verification),
                         // 피드와 같은 수를 보여야 한다. 세는 것과 보이는 것이 다르면 화면이 어긋난다.
-                        notPending(verification)
+                        notPending(verification),
+                        notDeleted(verification)
                 )
                 .groupBy(memberChallenge.challenge.id)
                 .transform(groupBy(memberChallenge.challenge.id).as(verification.id.count()));
@@ -121,7 +123,8 @@ public class ChallengeRepositoryImpl implements ChallengeRepositoryCustom {
                         activeMember(member),
                         notHidden(verification),
                         // 피드와 같은 수를 보여야 한다. 세는 것과 보이는 것이 다르면 화면이 어긋난다.
-                        notPending(verification)
+                        notPending(verification),
+                        notDeleted(verification)
                 )
                 .fetchOne();
         return (count != null) ? count : 0L;

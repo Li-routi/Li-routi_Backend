@@ -120,4 +120,16 @@ public class ChallengeVerificationController implements ChallengeVerificationCon
                 .updateMemo(userDetails.getMemberId(), challengeId, verificationId, request);
         return ApiResponse.onSuccess(ChallengeVerificationSuccessCode.VERIFICATION_MEMO_UPDATE_SUCCESS, result);
     }
+
+    @Override
+    @DeleteMapping("/{verificationId}")
+    public ApiResponse<ChallengeVerificationResDTO.Deletion> deleteVerification(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long challengeId,
+            @PathVariable Long verificationId
+    ) {
+        ChallengeVerificationResDTO.Deletion result = challengeCommandService
+                .deleteVerification(userDetails.getMemberId(), challengeId, verificationId);
+        return ApiResponse.onSuccess(ChallengeVerificationSuccessCode.VERIFICATION_DELETE_SUCCESS, result);
+    }
 }

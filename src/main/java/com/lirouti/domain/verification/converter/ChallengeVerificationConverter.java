@@ -176,4 +176,11 @@ public final class ChallengeVerificationConverter {
                 .hasNext(hasNext)
                 .build();
     }
+
+    public static ChallengeVerificationResDTO.Deletion toDeletion(Long verificationId, int currentStreak) {
+        return ChallengeVerificationResDTO.Deletion.builder()
+                .verificationId(verificationId)
+                .currentStreak(currentStreak)
+                .build();
+    }
 }

@@ -70,6 +70,20 @@ public final class ChallengeVerificationResDTO {
     }
 
     /**
+     * 인증 게시글 삭제 결과.
+     *
+     * <p><b>인증을 취소한 것이 아니라 글을 내린 것이다.</b> "그날 인증했다" 는 사실은 남아
+     * 버튼은 완료 상태 그대로다 — 그래서 응답에 {@code currentStreak} 을 실어, 오늘 것을
+     * 내려 스트릭이 줄었는지 클라이언트가 재조회 없이 알 수 있게 한다.
+     */
+    @Builder
+    public record Deletion(
+            Long verificationId,
+            int currentStreak
+    ) {
+    }
+
+    /**
      * 인증 신고 결과.
      * 신고해도 인증은 삭제되지 않는다 — 신고자 본인의 이후 조회에서 빠지고,
      * 신고가 임계값만큼 쌓이면 전체 회원에게 가려진다.
