@@ -89,10 +89,9 @@ public class ChatEmoticonAdminService {
             boolean active
     ) {
         validateActiveAdmin(adminId);
-        ChatEmoticon emoticon = chatEmoticonRepository.findById(emoticonId)
-                .orElseThrow(() -> new ChatException(ChatErrorCode.EMOTICON_NOT_FOUND));
-
         if (active) {
+            ChatEmoticon emoticon = chatEmoticonRepository.findById(emoticonId)
+                    .orElseThrow(() -> new ChatException(ChatErrorCode.EMOTICON_NOT_FOUND));
             mediaService.validateMediaKey(emoticon.getAssetKey(), EMOTICON_PURPOSE);
             mediaService.validateUploadedBytes(emoticon.getAssetKey(), EMOTICON_PURPOSE);
         }

@@ -321,22 +321,13 @@ class ChatEmoticonAdminServiceTest {
     }
 
     @Test
-    @DisplayName("비활성화는 S3를 조회하지 않고 DB 상태만 변경한다")
-    void updateEmoticonStatus_Deactivate_SkipsS3Validation() {
+    @DisplayName("비활성화 조회와 상태 변경은 CommandService에 위임한다")
+    void updateEmoticonStatus_Deactivate_DelegatesWithoutLookup() {
         givenActiveAdmin();
-        when(chatEmoticonRepository.findById(EMOTICON_ID))
-                .thenReturn(Optional.of(emoticon(true)));
 
         adminService.updateEmoticonStatus(ADMIN_ID, EMOTICON_ID, false);
 
-        verify(mediaService, never()).validateMediaKey(
-                MEDIA_KEY,
-                MediaPurpose.CHAT_EMOTICON
-        );
-        verify(mediaService, never()).validateUploadedBytes(
-                MEDIA_KEY,
-                MediaPurpose.CHAT_EMOTICON
-        );
+        verifyNoInteractions(chatEmoticonRepository, mediaService);
         verify(chatCommandService).updateEmoticonStatus(EMOTICON_ID, false);
     }
 
