@@ -20,7 +20,7 @@ import lombok.extern.slf4j.Slf4j;
  * 인증 사진이 챌린지 의도에 맞는지 Claude 에게 묻는다.
  *
  * <h2>답을 못 받으면 통과시킨다</h2>
- * 장애·타임아웃·응답 형식 이상은 전부 {@link VerificationReview#undecided()} 로 돌려주고,
+ * 장애·타임아웃·응답 형식 이상은 전부 {@link VerificationReview#transientFailure} 로 돌려주고,
  * 호출부가 그것을 통과로 다룬다(fail-open). 외부 API 하나가 인증 기능 전체를 멈추게 두지
  * 않는다는 결정이다. 부적절한 사진은 신고 누적 숨김이라는 다른 방어선이 있다.
  *
@@ -75,9 +75,10 @@ public class AnthropicVerificationReviewClient {
                     });
             return parse(response, challengeName);
         } catch (RuntimeException e) {
-            // 여기서 던지면 fail-closed 가 된다. 어떤 실패든 "심사 못 함"으로 흘린다.
-            log.warn("AI 심사를 받지 못해 통과시킵니다. challenge={}", challengeName, e);
-            return VerificationReview.undecided();
+            // 여기서 던지면 fail-closed 가 된다. 어떤 실패든 "답을 못 받았다"로 흘린다.
+            // 호출·타임아웃 실패는 다시 하면 될 수 있으므로 보류 대상이다.
+            log.warn("AI 심사를 받지 못했습니다. challenge={}", challengeName, e);
+            return VerificationReview.transientFailure(e.getClass().getSimpleName());
         }
     }
 
@@ -161,7 +162,7 @@ public class AnthropicVerificationReviewClient {
     @SuppressWarnings("unchecked")
     private VerificationReview parse(Map<String, Object> response, String challengeName) {
         if (response == null) {
-            return undecidedWithLog("응답이 비어 있습니다", challengeName);
+            return unparsable("응답이 비어 있습니다", challengeName);
         }
         // 모델이 안전상 응답을 거부한 경우다. 이것을 "심사 못 함"으로 흘리면 통과가 되는데,
         // 그러면 가장 걸러야 할 사진이 가장 확실하게 통과한다. 거부는 장애가 아니라 판단이다.
@@ -172,7 +173,7 @@ public class AnthropicVerificationReviewClient {
         }
         Object content = response.get("content");
         if (!(content instanceof List<?> blocks)) {
-            return undecidedWithLog("content 가 없습니다", challengeName);
+            return unparsable("content 가 없습니다", challengeName);
         }
         for (Object block : blocks) {
             if (!(block instanceof Map<?, ?> map) || !"tool_use".equals(map.get("type"))) {
@@ -201,7 +202,7 @@ public class AnthropicVerificationReviewClient {
                     trimReason(values.get("reason")));
         }
         // 도구를 강제했는데도 안 왔다면 모델이나 API 쪽이 바뀐 것이다. 막지 않고 드러낸다.
-        return undecidedWithLog("도구 호출 결과가 없습니다", challengeName);
+        return unparsable("도구 호출 결과가 없습니다", challengeName);
     }
 
     private String trimReason(Object reason) {
@@ -211,8 +212,12 @@ public class AnthropicVerificationReviewClient {
         return text.length() <= MAX_REASON_LENGTH ? text : text.substring(0, MAX_REASON_LENGTH);
     }
 
-    private VerificationReview undecidedWithLog(String why, String challengeName) {
-        log.warn("AI 심사 응답을 해석하지 못해 통과시킵니다. 이유={}, challenge={}", why, challengeName);
-        return VerificationReview.undecided();
+    /**
+     * 응답을 해석하지 못했다. <b>보류 대상으로 다룬다</b> — 모델 응답은 같은 입력에도 달라질 수
+     * 있어 다시 부르면 제대로 올 수 있다. 계약이 아예 바뀐 것이라면 상한까지 시도한 뒤 통과한다.
+     */
+    private VerificationReview unparsable(String why, String challengeName) {
+        log.warn("AI 심사 응답을 해석하지 못했습니다. 이유={}, challenge={}", why, challengeName);
+        return VerificationReview.transientFailure(why);
     }
 }

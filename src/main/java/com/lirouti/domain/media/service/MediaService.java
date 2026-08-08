@@ -263,9 +263,10 @@ public class MediaService {
      *       메모리가 목표 크기 근처로 묶인다.</li>
      * </ol>
      *
-     * @return 읽지 못했거나 상한을 넘으면 빈 값. 호출부는 이것을 "심사 못 함"으로 다루고 막지 않는다.
+     * @return 실패하면 <b>원인을 담아</b> 돌려준다. S3 를 못 읽은 것과 상한을 넘은 것은
+     *         호출부에서 다르게 다뤄야 한다 — 앞은 보류, 뒤는 통과다({@link MediaImageLoad}).
      */
-    public Optional<MediaImage> loadForReview(String mediaKey, int maxDimension) {
+    public MediaImageLoad loadForReview(String mediaKey, int maxDimension) {
         byte[] original;
         String mimeType;
         String etag;
@@ -280,7 +281,8 @@ public class MediaService {
                     log.warn("심사용 이미지가 업로드 상한을 넘어 심사를 건너뜁니다."
                                     + " mediaKey={}, contentLength={}, max={}",
                             mediaKey, contentLength, s3Properties.getMaxImageSize());
-                    return Optional.empty();
+                    // 다시 읽어도 같은 크기다. 보류해 봐야 시도만 반복한다.
+                    return MediaImageLoad.tooLarge();
                 }
                 original = response.readAllBytes();
                 mimeType = resolveTypeByExtension(mediaKey).getMimeType();
@@ -288,11 +290,12 @@ public class MediaService {
                 etag = response.response().eTag();
             }
         } catch (SdkException | IOException e) {
+            // 일시 오류일 수 있다. 원인을 남겨 호출부가 보류로 다룰 수 있게 한다.
             log.warn("심사용 이미지를 읽지 못했습니다. mediaKey={}", mediaKey, e);
-            return Optional.empty();
+            return MediaImageLoad.readFailed();
         }
 
-        return Optional.of(downscale(original, mimeType, maxDimension, mediaKey, etag));
+        return MediaImageLoad.loaded(downscale(original, mimeType, maxDimension, mediaKey, etag));
     }
 
     /**
