@@ -70,6 +70,18 @@ public final class ChallengeVerificationResDTO {
     }
 
     /**
+     * 인증 게시글 삭제 결과.
+     *
+     * <p><b>인증을 취소한 것이 아니라 글을 내린 것이다.</b> "그날 인증했다" 는 사실도 스트릭도
+     * 그대로라, 클라이언트가 다시 그릴 값이 없다 — 그래서 id 만 돌려준다.
+     */
+    @Builder
+    public record Deletion(
+            Long verificationId
+    ) {
+    }
+
+    /**
      * 인증 신고 결과.
      * 신고해도 인증은 삭제되지 않는다 — 신고자 본인의 이후 조회에서 빠지고,
      * 신고가 임계값만큼 쌓이면 전체 회원에게 가려진다.

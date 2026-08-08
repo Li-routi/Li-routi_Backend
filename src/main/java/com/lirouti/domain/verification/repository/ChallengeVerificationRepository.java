@@ -134,7 +134,21 @@ public interface ChallengeVerificationRepository
      * 탈퇴 회원의 인증도, 신고로 숨겨진 인증도 행이 남아 있는 한 그 파일은 살아 있다.
      * (탈퇴 회원 사진 삭제는 별도 정책이다)
      */
-    @Query("select v.imageUrl from ChallengeVerification v where v.imageUrl in :keys")
+    /**
+     * 미참조 정리가 "살아 있는 사진" 을 가리는 데 쓴다.
+     *
+     * <p><b>내려간 글의 key 는 참조로 세지 않는다.</b> 그 사진은 삭제 시점에 지웠어야 하는
+     * 것이고, 그때 S3 호출이 실패하면 조용히 넘어간다({@code deleteQuietly}). 참조로 세면
+     * 미참조 정리가 그것을 가져가지 못해 <b>지운 사진이 공개 prefix 에 영영 남는다</b> —
+     * 두 번째 방어선이 첫 번째 실패를 못 받는 셈이다.
+     *
+     * <p>내려간 글을 다시 올리면 승격이 새 key 를 만들므로, 옛 key 가 되살아나 쓰이는 일은 없다.
+     */
+    @Query("""
+            select v.imageUrl from ChallengeVerification v
+            where v.imageUrl in :keys
+              and v.deletedAt is null
+            """)
     List<String> findImageUrlsIn(@Param("keys") Collection<String> keys);
 
     /**
@@ -148,6 +162,9 @@ public interface ChallengeVerificationRepository
      * 챌린지별 내 인증 목록과 같은 기준이다 — 한쪽만 다르면 같은 사진이 한 화면에서는
      * "심사 중", 다른 화면에서는 그냥 인증으로 보인다.
      *
+     * <p><b>작성자가 내린 글은 뺀다.</b> 본인이 지운 것이라 본인에게도 보이면 안 된다 —
+     * 신고 숨김({@code hiddenAt})을 본인에게는 보여 주는 것과 반대다.
+     *
      * <p>{@code status} 를 주면 그 상태만 남긴다. 주지 않으면 전부다 — 기본값이 바뀌면
      * 파라미터를 안 보내는 기존 클라이언트의 화면이 조용히 달라진다.
      */
@@ -157,6 +174,7 @@ public interface ChallengeVerificationRepository
             join fetch mc.challenge
             where mc.member.id = :memberId
               and v.verifiedDate = :date
+              and v.deletedAt is null
               and (:status is null or v.reviewStatus = :status)
             order by v.verifiedAt desc
             """)
@@ -220,4 +238,5 @@ public interface ChallengeVerificationRepository
             @Param("memberChallengeId") Long memberChallengeId,
             @Param("participationRound") Integer participationRound
     );
+
 }

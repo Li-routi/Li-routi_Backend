@@ -445,6 +445,10 @@ public class ChallengeCommandService {
     ) {
         ChallengeVerification verification = challengeVerificationRepository
                 .findMineInChallenge(verificationId, challengeId, memberId)
+                // 내려간 글은 고칠 대상이 아니다. 조회에서 빼지 않고 여기서 거르는 이유는,
+                // 같은 조회를 삭제도 쓰는데 그쪽은 내려간 글을 찾아야 하기 때문이다
+                // (두 번 지워도 성공으로 답한다).
+                .filter(v -> !v.isDeleted())
                 .orElseThrow(() -> {
                     log.warn("수정할 수 없는 인증입니다. memberId={}, challengeId={}, verificationId={}",
                             memberId, challengeId, verificationId);
@@ -456,15 +460,58 @@ public class ChallengeCommandService {
     }
 
     /** 경로의 challengeId와 인증의 챌린지가 맞는지까지 확인한다. 어긋나면 404다(신고와 같은 기준). */
+    /**
+     * 인증 게시글을 내린다. <b>인증을 취소하는 것이 아니다.</b>
+     *
+     * <p>글과 사진만 안 보이게 하고 "그날 인증했다" 는 사실은 남긴다 — 지운 뒤 다시 인증할 수
+     * 있으면 하루 1회가 뚫린다. 그래서 버튼은 완료 상태 그대로다.
+     *
+     * <h3>스트릭은 건드리지 않는다</h3>
+     * "올리고 기록만 챙긴 뒤 지우기" 는 <b>재화 회수가 막는다</b>(재화 이슈). 스트릭을 시간
+     * 기준으로 깎는 방식은 그만큼 기다리면 우회되고, 정작 정당하게 지우는 사람만 다친다.
+     *
+     * <h3>사진은 지운다</h3>
+     * 공개 prefix 라 조회에서 빼도 <b>URL 을 아는 사람은 계속 볼 수 있다.</b> 지우고 싶어 지운
+     * 사람에게 그 상태는 삭제가 아니다. 남는 죽은 {@code image_url} 은 그대로 둔다 —
+     * {@code NOT NULL} 이라 비울 수 없고, 다시 인증하면 새 key 로 덮인다.
+     *
+     * <p>이 메서드에 {@code @Transactional} 이 없는 것은 의도다. S3 삭제가 트랜잭션 밖이어야
+     * 한다(service_convention). DB 변경은 {@link ChallengeVerificationCommandService#softDelete}
+     * 가 맡는다.
+     */
+    public ChallengeVerificationResDTO.Deletion deleteVerification(
+            Long memberId,
+            Long challengeId,
+            Long verificationId
+    ) {
+        ChallengeVerificationCommandService.DeleteResult result =
+                challengeVerificationCommandService.softDelete(memberId, challengeId, verificationId);
+
+        // 커밋된 뒤에 지운다. 순서를 뒤집으면 그 사이에 죽었을 때 사진 없는 글이 남는다 —
+        // 남는 방향의 실패는 미참조 정리가 치우고, 사라지는 방향의 실패는 낫지 않는다.
+        //
+        // 이미 내려간 글을 다시 지우는 요청이면 사진은 이미 없다. 그때는 부르지 않는다.
+        if (result.deletedNow()) {
+            mediaService.deleteQuietly(result.imageKey());
+        }
+
+        return ChallengeVerificationConverter.toDeletion(verificationId);
+    }
+
     private ChallengeVerification findVerificationInChallenge(Long challengeId, Long verificationId) {
         return challengeVerificationRepository
                 .findByIdAndMemberChallengeChallengeId(verificationId, challengeId)
-                // 보류 건은 남에게 보이지 않으므로 좋아요·신고 대상이 아니다. 없는 것처럼 다룬다.
+                // 보류 건과 내려간 글은 남에게 보이지 않으므로 좋아요·신고 대상이 아니다.
+                // 없는 것처럼 다룬다.
                 //
-                // 거르지 않으면 두 가지가 깨진다. 신고가 임계값에 닿으면 공개된 적도 없는 사진이
-                // 숨겨지고, 좋아요·신고 행이 붙으면 반려 확정 때 인증 삭제가 외래 키에 걸려
-                // 실패한다 — 그 행은 영원히 보류로 남는다.
-                .filter(v -> !v.isPending())
+                // 보류를 거르지 않으면 두 가지가 깨진다. 신고가 임계값에 닿으면 공개된 적도 없는
+                // 사진이 숨겨지고, 좋아요·신고 행이 붙으면 반려 확정 때 인증 삭제가 외래 키에
+                // 걸려 실패한다 — 그 행은 영원히 보류로 남는다.
+                //
+                // 내려간 글도 같다. 피드에 없는 글에 좋아요가 쌓이고, 다시 올려 되살아나면
+                // 엉뚱한 수를 달고 나타난다. 이미 내려간 글을 신고해 숨김 임계값을 채우는 것도
+                // 막는다.
+                .filter(v -> !v.isPending() && !v.isDeleted())
                 .orElseThrow(() -> new VerificationException(ChallengeVerificationErrorCode.VERIFICATION_NOT_FOUND));
     }
 

@@ -51,6 +51,11 @@ public enum ChallengeVerificationSuccessCode implements BaseSuccessCode {
             HttpStatus.OK,
             "인증 메모를 수정했습니다.",
             "CHALLENGE200_12"
+    ),
+    VERIFICATION_DELETE_SUCCESS(
+            HttpStatus.OK,
+            "인증 게시글을 삭제했습니다.",
+            "CHALLENGE200_13"
     );
 
     private final HttpStatus httpStatus;

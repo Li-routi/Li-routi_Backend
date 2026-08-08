@@ -24,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZonedDateTime;
+import java.util.List;
 import java.util.Optional;
 import com.lirouti.domain.verification.exception.VerificationException;
 import com.lirouti.domain.verification.exception.code.error.ChallengeVerificationErrorCode;
@@ -186,5 +187,57 @@ public class ChallengeVerificationCommandService {
      */
     private LocalDateTime pendingSinceFor(ReviewStatus reviewStatus, LocalDateTime verifiedAt) {
         return reviewStatus == ReviewStatus.PENDING ? verifiedAt : null;
+    }
+
+    /**
+     * 글을 내린다.
+     *
+     * <p><b>스트릭은 건드리지 않는다.</b> 삭제는 "글을 내리는 것" 이지 "인증을 취소하는 것" 이
+     * 아니다 — 사진을 올려 심사를 통과했다면 그 사람은 루틴을 실제로 했고, 공개를 원치 않아
+     * 내렸다고 "며칠째 이어왔다" 는 사실까지 부정할 이유는 약하다.
+     *
+     * <p>"올리고 기록만 챙긴 뒤 지우기" 는 <b>재화 회수가 막는다</b>(재화 이슈). 회수는 시간과
+     * 무관해 한 달 전 글을 지워도 적용되는 반면, 스트릭을 시간 기준으로 깎는 방식은 그만큼
+     * 기다리면 우회된다 — 어느 값을 잡아도 마찬가지다.
+     *
+     * <p>이미 내려간 글이면 아무것도 하지 않고 성공으로 답한다. 삭제는 멱등한 편이 클라이언트가
+     * 다루기 쉽다.
+     */
+    @Transactional
+    public DeleteResult softDelete(Long memberId, Long challengeId, Long verificationId) {
+        ChallengeVerification verification = challengeVerificationRepository
+                .findMineInChallenge(verificationId, challengeId, memberId)
+                .orElseThrow(() -> {
+                    // 남의 글도, 없는 글도, 신고로 가려진 글도 같은 404 다. 가려진 글을 지워
+                    // 신고 누적을 회피하는 길도 함께 막힌다.
+                    log.warn("삭제할 수 없는 인증입니다. memberId={}, challengeId={}, verificationId={}",
+                            memberId, challengeId, verificationId);
+                    return new VerificationException(ChallengeVerificationErrorCode.VERIFICATION_NOT_FOUND);
+                });
+
+        // 참여 행은 잠그지 않는다. member_challenge 를 바꾸지 않으므로 잠글 이유가 없고,
+        // 참여 중인지도 보지 않는다 — 이탈해도 인증은 피드에 남으므로 지난 참여의 글도 내릴 수
+        // 있어야 한다. 못 지우게 하면 나간 사람의 사진이 계속 공개된 채로 남는다.
+
+        // 인증 행은 잠그고 다시 읽는다. 위 조회는 소유자·챌린지를 확인하는 용도라 잠금이 없어,
+        // 그 사이 당일 재인증이 사진을 갈아끼우면 여기서 옛 key 를 들고 나간다. 그러면 S3 에서
+        // 지워지는 것은 옛 사진이고, 내려간 글의 현재 사진은 공개 prefix 에 그대로 남는다.
+        // 신고가 같은 방식으로 잠그고 다시 읽는다.
+        ChallengeVerification locked = challengeVerificationRepository
+                .findByIdForUpdate(verificationId)
+                .orElseThrow(() -> new VerificationException(
+                        ChallengeVerificationErrorCode.VERIFICATION_NOT_FOUND));
+
+        String imageKey = locked.getImageUrl();
+        return new DeleteResult(locked.softDelete(LocalDateTime.now(TimeUtil.KST)), imageKey);
+    }
+
+    /**
+     * 삭제 결과.
+     *
+     * @param deletedNow 이번 호출로 실제 내려갔는가. 이미 내려가 있었으면 false
+     * @param imageKey   내린 글이 들고 있던 사진 key
+     */
+    public record DeleteResult(boolean deletedNow, String imageKey) {
     }
 }
