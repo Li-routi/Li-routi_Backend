@@ -2,6 +2,7 @@ package com.lirouti.domain.verification.converter;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.verification.dto.response.VerificationResDTO;
@@ -22,13 +23,18 @@ public final class VerificationConverter {
     public static VerificationResDTO.GroupRoutineFeed toGroupRoutineFeed(
             List<GroupRoutineVerification> verifications,
             Map<Long, String> imageUrls,
+            Map<Long, Long> likeCounts,
+            Set<Long> likedVerificationIds,
             Long nextCursor,
             boolean hasNext
     ) {
         return VerificationResDTO.GroupRoutineFeed.builder()
                 .verifications(verifications.stream()
                         .map(verification -> toGroupRoutineItem(
-                                verification, imageUrls.get(verification.getId())))
+                                verification,
+                                imageUrls.get(verification.getId()),
+                                likeCounts.getOrDefault(verification.getId(), 0L),
+                                likedVerificationIds.contains(verification.getId())))
                         .toList())
                 .nextCursor(nextCursor)
                 .hasNext(hasNext)
@@ -41,7 +47,9 @@ public final class VerificationConverter {
      */
     public static VerificationResDTO.GroupRoutineItem toGroupRoutineItem(
             GroupRoutineVerification verification,
-            String imageUrl
+            String imageUrl,
+            long likeCount,
+            boolean liked
     ) {
         Member author = verification.getAssignment().getMember();
         return VerificationResDTO.GroupRoutineItem.builder()
@@ -52,6 +60,16 @@ public final class VerificationConverter {
                 .imageUrl(imageUrl)
                 .content(verification.getContent())
                 .verifiedAt(verification.getVerifiedAt())
+                .likeCount(likeCount)
+                .liked(liked)
                 .build();
+    }
+
+    public static VerificationResDTO.GroupRoutineLike toGroupRoutineLike(
+            Long verificationId,
+            long likeCount,
+            boolean liked
+    ) {
+        return new VerificationResDTO.GroupRoutineLike(verificationId, likeCount, liked);
     }
 }

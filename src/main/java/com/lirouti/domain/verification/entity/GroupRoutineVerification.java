@@ -1,11 +1,14 @@
 package com.lirouti.domain.verification.entity;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 import com.lirouti.domain.group.entity.GroupRoutineAssignment;
 import com.lirouti.global.entity.BaseEntity;
 
 import jakarta.persistence.Column;
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
@@ -13,6 +16,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OneToOne;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import lombok.AccessLevel;
@@ -57,6 +61,10 @@ public class GroupRoutineVerification extends BaseEntity {
 
     @Column(length = 255)
     private String content;
+
+    /** 인증이 그룹 삭제 등으로 제거될 때 좋아요 FK도 함께 정리한다. */
+    @OneToMany(mappedBy = "groupRoutineVerification", cascade = CascadeType.REMOVE)
+    private List<GroupRoutineVerificationLike> likes = new ArrayList<>();
 
     @Builder
     private GroupRoutineVerification(

@@ -37,6 +37,7 @@ import com.lirouti.domain.member.enums.SocialProvider;
 import com.lirouti.domain.verification.dto.request.VerificationReqDTO;
 import com.lirouti.domain.verification.dto.response.VerificationResDTO;
 import com.lirouti.domain.verification.service.RoutineVerificationService;
+import com.lirouti.domain.verification.service.command.GroupRoutineVerificationLikeCommandService;
 import com.lirouti.global.util.TimeUtil;
 
 import jakarta.persistence.EntityManager;
@@ -65,6 +66,8 @@ class RoutineVerificationQueryTest {
     private RoutineVerificationQueryService queryService;
     @Autowired
     private RoutineVerificationService verificationService;
+    @Autowired
+    private GroupRoutineVerificationLikeCommandService likeCommandService;
 
     @MockitoBean
     private MediaService mediaService;
@@ -162,6 +165,32 @@ class RoutineVerificationQueryTest {
                 () -> assertThat(feed.verifications().get(0).nickname())
                         .isEqualTo(author.getNickname()),
                 () -> assertThat(feed.verifications().get(0).imageUrl()).isEqualTo(SIGNED_URL)
+        );
+    }
+
+    @Test
+    @DisplayName("피드에 좋아요 수와 현재 조회자의 좋아요 여부를 함께 싣는다")
+    void getGroupRoutineVerifications_CarriesLikeCountAndLiked() {
+        Member author = member();
+        Group group = group(author, owner);
+        GroupRoutineAssignment assignment = assignment(group, author);
+        verifyGroup(author, assignment);
+        em.flush();
+        Long verificationId = em.createQuery(
+                        "select v.id from GroupRoutineVerification v where v.assignment.id = :assignmentId", Long.class)
+                .setParameter("assignmentId", assignment.getId())
+                .getSingleResult();
+        likeCommandService.like(owner.getId(), group.getId(), verificationId);
+        em.flush();
+        em.clear();
+
+        VerificationResDTO.GroupRoutineItem item = queryService.getGroupRoutineVerifications(
+                owner.getId(), group.getId(), assignment.getGroupRoutine().getId(), null, null)
+                .verifications().get(0);
+
+        assertAll(
+                () -> assertThat(item.likeCount()).isEqualTo(1),
+                () -> assertThat(item.liked()).isTrue()
         );
     }
 

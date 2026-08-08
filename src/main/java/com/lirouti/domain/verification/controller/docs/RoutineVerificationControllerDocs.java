@@ -114,4 +114,43 @@ public interface RoutineVerificationControllerDocs {
             Integer size
     );
 
+    @Operation(
+            summary = "그룹 루틴 인증 게시물 좋아요",
+            description = """
+                    그룹 루틴 인증 게시물에 좋아요를 남깁니다. 해당 그룹의 활성 멤버만 호출할 수 있습니다.
+
+                    이미 좋아요한 게시물에 다시 호출해도 성공합니다. 좋아요는 인증 한 건에 붙고,
+                    응답의 likeCount·liked로 화면을 재조회 없이 갱신할 수 있습니다.
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "좋아요 성공(이미 좋아요한 상태 포함)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "그룹의 활성 멤버가 아님 / 인증 필요"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "그룹에 없는 인증 게시물")
+    })
+    ApiResponse<VerificationResDTO.GroupRoutineLike> likeGroupRoutineVerification(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            Long groupId,
+            Long verificationId
+    );
+
+    @Operation(
+            summary = "그룹 루틴 인증 게시물 좋아요 취소",
+            description = """
+                    그룹 루틴 인증 게시물의 좋아요를 취소합니다. 해당 그룹의 활성 멤버만 호출할 수 있습니다.
+
+                    좋아요가 없는 상태에서 호출해도 성공합니다. 실제 Like 행만 물리 삭제합니다.
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "좋아요 취소 성공(좋아요가 없는 상태 포함)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "그룹의 활성 멤버가 아님 / 인증 필요"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "그룹에 없는 인증 게시물")
+    })
+    ApiResponse<VerificationResDTO.GroupRoutineLike> unlikeGroupRoutineVerification(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            Long groupId,
+            Long verificationId
+    );
+
 }

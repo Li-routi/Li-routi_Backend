@@ -21,6 +21,14 @@ public class VerificationResDTO {
     ) {
     }
 
+    @Schema(description = "그룹 루틴 인증 좋아요 결과")
+    public record GroupRoutineLike(
+            Long verificationId,
+            long likeCount,
+            boolean liked
+    ) {
+    }
+
     @Schema(description = "개인 루틴 인증 결과")
     public record MemberRoutine(
             Long verificationId,
@@ -64,7 +72,9 @@ public class VerificationResDTO {
             @Schema(description = "서명된 사진 주소. 유효 시간이 지나면 만료된다")
             String imageUrl,
             String content,
-            LocalDateTime verifiedAt
+            LocalDateTime verifiedAt,
+            long likeCount,
+            boolean liked
     ) {
     }
 }
