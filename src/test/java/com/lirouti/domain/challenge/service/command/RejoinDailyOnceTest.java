@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.when;
 
@@ -21,6 +22,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.lirouti.domain.media.service.MediaImageLoad;
 import com.lirouti.domain.challenge.client.AnthropicVerificationReviewClient;
 import com.lirouti.domain.challenge.client.VerificationReview;
 import com.lirouti.domain.challenge.dto.response.ChallengeResDTO;
@@ -89,6 +91,9 @@ class RejoinDailyOnceTest {
     void setUp() {
         doNothing().when(mediaService).validateMediaKey(any(), any());
         doNothing().when(mediaService).validateUploadedBytes(any(), any());
+        // 심사용 사진을 읽는 단계. 이 테스트들의 관심사가 아니라 "못 읽음"으로 둔다 —
+        // 그러면 심사를 건너뛰고 통과한다. 스텁이 없으면 record 기본값이 null 이라 NPE 다.
+        when(mediaService.loadForReview(any(), anyInt())).thenReturn(MediaImageLoad.readFailed());
         // 승격은 S3 복사라 목으로 둔다. 이 테스트가 보는 것은 심사 결과이지 승격이 아니다.
         // promote 는 대기 key 를 받아 UUID 가 새로 뽑힌 공개 key 를 돌려준다.
         // 받은 값을 그대로 돌려주면 승격이 아무 일도 안 해도 테스트가 통과한다.

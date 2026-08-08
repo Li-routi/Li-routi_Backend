@@ -1,6 +1,7 @@
 package com.lirouti.domain.verification.entity;
 
 import com.lirouti.domain.challenge.entity.MemberChallenge;
+import com.lirouti.domain.verification.enums.ReviewStatus;
 import com.lirouti.global.entity.BaseEntity;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -70,6 +71,30 @@ public class ChallengeVerification extends BaseEntity {
     @Column(name = "hidden_at")
     private LocalDateTime hiddenAt;
 
+    /**
+     * 심사 상태. 기본은 {@link ReviewStatus#APPROVED} — 심사를 지났거나 심사가 없던 경우다.
+     *
+     * <p>{@code PENDING} 은 <b>승격되지 않은 보류</b>다. 사진이 아직 대기 prefix 에 있어
+     * 공개 주소가 없다. 어느 조회에 이 행을 넣을지는 database-schema.md 가 표로 정해 뒀다 —
+     * 기본은 제외이고, 내 인증 목록과 완료자 수만 포함한다.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "review_status", nullable = false, length = 20)
+    private ReviewStatus reviewStatus;
+
+    /**
+     * 보류로 들어온 뒤의 재심사 시도 횟수. <b>최초 심사는 세지 않는다.</b>
+     *
+     * <p>시도 직후에 올린다 — 성공·실패와 무관하게. 실패할 때만 올리면 계속 죽는 호출이
+     * 상한에 영영 닿지 않는다.
+     */
+    @Column(name = "review_attempts", nullable = false)
+    private Integer reviewAttempts;
+
+    /** 보류가 시작된 시각. 상한(24시간) 판정의 기준이다. 보류가 아니면 NULL. */
+    @Column(name = "pending_since")
+    private LocalDateTime pendingSince;
+
     @Builder
     private ChallengeVerification(
             MemberChallenge memberChallenge,
@@ -77,7 +102,9 @@ public class ChallengeVerification extends BaseEntity {
             LocalDate verifiedDate,
             LocalDateTime verifiedAt,
             String imageUrl,
-            String content
+            String content,
+            ReviewStatus reviewStatus,
+            LocalDateTime pendingSince
     ) {
         this.memberChallenge = memberChallenge;
         this.participationRound = participationRound;
@@ -85,6 +112,11 @@ public class ChallengeVerification extends BaseEntity {
         this.verifiedAt = verifiedAt;
         this.imageUrl = imageUrl;
         this.content = content;
+        // 빌더가 값을 안 주면 정상 인증이다. 보류는 명시적으로 지정해야만 만들어진다 —
+        // 기본이 PENDING 이면 어디선가 빠뜨렸을 때 사진이 조용히 안 보이게 된다.
+        this.reviewStatus = reviewStatus != null ? reviewStatus : ReviewStatus.APPROVED;
+        this.reviewAttempts = 0;
+        this.pendingSince = pendingSince;
     }
 
     /**

@@ -1,5 +1,6 @@
 package com.lirouti.domain.challenge.service.command;
 
+import com.lirouti.domain.media.service.MediaImageLoad;
 import com.lirouti.domain.challenge.entity.Challenge;
 import com.lirouti.domain.challenge.entity.MemberChallenge;
 import com.lirouti.domain.challenge.enums.ChallengeCategory;
@@ -30,6 +31,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.when;
 import com.lirouti.domain.verification.exception.code.error.ChallengeVerificationErrorCode;
@@ -74,6 +76,9 @@ class ChallengeVerificationConcurrencyTest {
     void setUp() {
         doNothing().when(mediaService).validateMediaKey(any(), any());
         doNothing().when(mediaService).validateUploadedBytes(any(), any());
+        // 심사용 사진을 읽는 단계. 이 테스트들의 관심사가 아니라 "못 읽음"으로 둔다 —
+        // 그러면 심사를 건너뛰고 통과한다. 스텁이 없으면 record 기본값이 null 이라 NPE 다.
+        when(mediaService.loadForReview(any(), anyInt())).thenReturn(MediaImageLoad.readFailed());
         // promote 는 대기 key 를 받아 UUID 가 새로 뽑힌 공개 key 를 돌려준다.
         // 받은 값을 그대로 돌려주면 승격이 아무 일도 안 해도 테스트가 통과한다.
         when(mediaService.promote(any(), any(), any())).thenReturn(PUBLIC_KEY);

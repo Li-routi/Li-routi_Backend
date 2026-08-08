@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.lirouti.domain.challenge.client.AnthropicVerificationReviewClient;
+import com.lirouti.domain.challenge.client.ReviewOutcome;
 import com.lirouti.domain.challenge.client.ReviewRejection;
 import com.lirouti.domain.challenge.client.VerificationReview;
 import com.lirouti.domain.challenge.converter.ChallengeConverter;
@@ -21,6 +22,7 @@ import com.lirouti.domain.challenge.exception.code.error.ChallengeErrorCode;
 import com.lirouti.domain.challenge.repository.*;
 import com.lirouti.domain.media.enums.MediaPurpose;
 import com.lirouti.domain.media.service.MediaImage;
+import com.lirouti.domain.media.service.MediaImageLoad;
 import com.lirouti.domain.media.service.MediaService;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.repository.MemberRepository;
@@ -193,24 +195,24 @@ public class ChallengeCommandService {
     private String reviewPhoto(Long challengeId, String mediaKey) {
         if (!aiReviewProperties.isEnabled()) {
             log.debug("AI 심사가 꺼져 있어 건너뜁니다. mediaKey={}", mediaKey);
-            return null;
+            return skipReview(VerificationReview.disabled(), challengeId, mediaKey, null);
         }
         Challenge challenge = challengeRepository.findByIdAndActiveTrue(challengeId).orElse(null);
         if (challenge == null) {
             log.warn("심사할 챌린지를 찾지 못해 건너뜁니다. challengeId={}", challengeId);
-            return null;
+            return skipReview(VerificationReview.notApplicable("챌린지 없음"), challengeId, mediaKey, null);
         }
 
-        MediaImage image = mediaService
-                .loadForReview(mediaKey, aiReviewProperties.getMaxImageDimension())
-                .orElse(null);
+        // 못 읽은 이유를 그대로 결과에 옮긴다. S3 일시 오류는 다시 하면 될 수 있고(보류 대상),
+        // 상한 초과는 몇 번을 해도 같다(통과). 예전에는 둘이 같은 빈 값이라 가를 수가 없었다.
+        MediaImageLoad load = mediaService.loadForReview(mediaKey, aiReviewProperties.getMaxImageDimension());
+        MediaImage image = load.image();
         VerificationReview review = image == null
-                ? VerificationReview.undecided()
+                ? fromLoadFailure(load.failure())
                 : reviewClient.review(challenge.getName(), challenge.getDescription(), image);
 
-        if (!review.decided()) {
-            log.warn("AI 심사 없이 인증을 통과시켰습니다. challengeId={}, mediaKey={}", challengeId, mediaKey);
-            return image == null ? null : image.etag();
+        if (!review.outcome().decided()) {
+            return skipReview(review, challengeId, mediaKey, image);
         }
         if (!review.approved()) {
             // 사유 문장은 로그에만 남는다. 응답 message 는 에러 코드의 고정 문장이다 —
@@ -235,6 +237,33 @@ public class ChallengeCommandService {
 
         // 심사한 바로 그 바이트를 특정해 돌려준다. 승격은 이 값과 같을 때만 복사한다.
         return image.etag();
+    }
+
+    /**
+     * 심사가 판정을 못 낸 경우의 처리. <b>지금은 전부 통과시킨다.</b>
+     *
+     * <p>{@link ReviewOutcome#TRANSIENT_FAILURE} 를 보류로 돌리는 것은 다음 단계다. 여기서는
+     * 원인을 구분해 로그에만 남긴다 — 계약을 먼저 가르고, 동작은 그 뒤에 바꾼다.
+     *
+     * <p>어느 경우든 <b>심사 없이 통과한 사실은 남긴다.</b> 나중에 "이 기간 인증은 심사를
+     * 안 거쳤다"를 되짚을 수 있어야 한다.
+     */
+    private String skipReview(
+            VerificationReview review,
+            Long challengeId,
+            String mediaKey,
+            MediaImage image
+    ) {
+        log.warn("AI 심사 없이 인증을 통과시켰습니다. challengeId={}, mediaKey={}, 사유={}, 이유={}",
+                challengeId, mediaKey, review.outcome(), review.reason());
+        return image == null ? null : image.etag();
+    }
+
+    /** 사진을 못 읽은 이유를 심사 결과로 옮긴다. */
+    private VerificationReview fromLoadFailure(MediaImageLoad.Failure failure) {
+        return failure == MediaImageLoad.Failure.TOO_LARGE
+                ? VerificationReview.notApplicable("사진이 심사 상한을 넘음")
+                : VerificationReview.transientFailure("심사용 사진을 읽지 못함");
     }
 
     /**

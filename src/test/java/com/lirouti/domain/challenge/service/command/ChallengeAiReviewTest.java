@@ -11,7 +11,6 @@ import static org.mockito.Mockito.when;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -34,6 +33,7 @@ import com.lirouti.domain.verification.exception.VerificationException;
 import com.lirouti.domain.verification.dto.request.ChallengeVerificationReqDTO;
 import com.lirouti.domain.verification.repository.ChallengeVerificationRepository;
 import com.lirouti.domain.media.service.MediaImage;
+import com.lirouti.domain.media.service.MediaImageLoad;
 import com.lirouti.domain.media.service.MediaService;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.enums.Role;
@@ -106,7 +106,7 @@ class ChallengeAiReviewTest {
 
         // 심사 앞단(형식·바이트 검증)은 이 테스트의 관심사가 아니라 통과시킨다.
         when(mediaService.loadForReview(eq(STAGING_KEY), org.mockito.ArgumentMatchers.anyInt()))
-                .thenReturn(Optional.of(new MediaImage(new byte[] {1, 2, 3}, "image/jpeg", "etag-test")));
+                .thenReturn(MediaImageLoad.loaded(new MediaImage(new byte[] {1, 2, 3}, "image/jpeg", "etag-test")));
     }
 
     private ChallengeVerificationReqDTO.Verify request() {
@@ -143,7 +143,7 @@ class ChallengeAiReviewTest {
         challengeCommandService.verify(memberId, challengeId, request());
         assertThat(savedCount()).as("통과는 저장된다").isEqualTo(before + 1);
 
-        when(reviewClient.review(any(), any(), any())).thenReturn(VerificationReview.undecided());
+        when(reviewClient.review(any(), any(), any())).thenReturn(VerificationReview.transientFailure("장애"));
         challengeCommandService.verify(memberId, challengeId, request());
         assertThat(savedCount()).as("장애도 통과시킨다(덮어쓰기)").isEqualTo(before + 1);
 
@@ -173,7 +173,7 @@ class ChallengeAiReviewTest {
     @DisplayName("심사기가 답을 못 주면 통과시킨다 — 외부 API 장애로 인증이 막히면 안 된다")
     void verify_Undecided_PassesThrough() {
         // given: 장애·타임아웃·응답 이상은 전부 undecided 로 돌아온다
-        when(reviewClient.review(any(), any(), any())).thenReturn(VerificationReview.undecided());
+        when(reviewClient.review(any(), any(), any())).thenReturn(VerificationReview.transientFailure("장애"));
         long before = savedCount();
 
         // when
@@ -188,7 +188,7 @@ class ChallengeAiReviewTest {
     void verify_ImageUnavailable_PassesThrough() {
         // given
         when(mediaService.loadForReview(eq(STAGING_KEY), org.mockito.ArgumentMatchers.anyInt()))
-                .thenReturn(Optional.empty());
+                .thenReturn(MediaImageLoad.readFailed());
         long before = savedCount();
 
         // when
@@ -245,7 +245,7 @@ class ChallengeAiReviewTest {
     @DisplayName("심사기가 답을 못 줘 통과한 경우에도 공개본은 남는다 — 장애는 반려가 아니다")
     void verify_Undecided_KeepsObject() {
         // given
-        when(reviewClient.review(any(), any(), any())).thenReturn(VerificationReview.undecided());
+        when(reviewClient.review(any(), any(), any())).thenReturn(VerificationReview.transientFailure("장애"));
 
         // when
         challengeCommandService.verify(memberId, challengeId, request());
@@ -253,6 +253,38 @@ class ChallengeAiReviewTest {
         // then — 통과 경로와 같다. 대기본은 지우고 공개본은 남긴다.
         verify(mediaService).deleteQuietly(STAGING_KEY);
         verify(mediaService, never()).deleteQuietly(PUBLIC_KEY);
+    }
+
+    @Test
+    @DisplayName("심사가 꺼져 있는 것과 장애는 다른 결과다 — 킬 스위치가 보류로 빠지면 안 된다")
+    void reviewOutcome_DisabledAndFailure_AreDistinguished() {
+        // given & then — 킬 스위치는 보류 대상이 아니다. 보류로 다루면 스위치를 켠 순간
+        // 아무도 인증을 못 하게 되어, 스위치를 만든 목적과 정반대가 된다.
+        assertThat(VerificationReview.disabled().shouldHold()).isFalse();
+        assertThat(VerificationReview.notApplicable("사진 상한 초과").shouldHold()).isFalse();
+        assertThat(VerificationReview.transientFailure("타임아웃").shouldHold()).isTrue();
+
+        // 통과·반려는 판정이 난 것이라 보류가 아니다.
+        assertThat(VerificationReview.pass().shouldHold()).isFalse();
+        assertThat(VerificationReview.reject(ReviewRejection.UNSAFE, "x").shouldHold()).isFalse();
+    }
+
+    @Test
+    @DisplayName("사진을 못 읽은 이유가 결과에 그대로 옮겨진다 — S3 오류는 보류, 상한 초과는 아니다")
+    void loadFailure_MapsToOutcome() {
+        // given: S3 를 못 읽었다
+        when(mediaService.loadForReview(eq(STAGING_KEY), org.mockito.ArgumentMatchers.anyInt()))
+                .thenReturn(MediaImageLoad.readFailed());
+
+        // when & then — 지금은 둘 다 통과시킨다. 갈리는 것은 결과 값이지 동작이 아니다.
+        long before = savedCount();
+        challengeCommandService.verify(memberId, challengeId, request());
+        assertThat(savedCount()).as("보류 처리는 다음 단계다. 지금은 통과시킨다").isEqualTo(before + 1);
+
+        assertThat(MediaImageLoad.readFailed().failure())
+                .isEqualTo(MediaImageLoad.Failure.READ_FAILED);
+        assertThat(MediaImageLoad.tooLarge().failure())
+                .isEqualTo(MediaImageLoad.Failure.TOO_LARGE);
     }
 
     @Test
