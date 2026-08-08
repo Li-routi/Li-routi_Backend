@@ -10,6 +10,7 @@ import com.lirouti.domain.group.enums.GroupStatus;
 import com.lirouti.domain.group.exception.GroupException;
 import com.lirouti.domain.group.exception.code.error.GroupErrorCode;
 import com.lirouti.domain.group.repository.GroupRepository;
+import com.lirouti.domain.group.repository.GroupMemberRepository;
 import com.lirouti.domain.group.repository.GroupRoutineRepository;
 import com.lirouti.domain.group.repository.GroupRoutineCategoryRepository;
 import com.lirouti.domain.group.service.GroupValidationService;
@@ -47,6 +48,8 @@ class GroupCommandServiceTest {
     @Mock
     private GroupRepository groupRepository;
     @Mock
+    private GroupMemberRepository groupMemberRepository;
+    @Mock
     private GroupRoutineCategoryRepository groupRoutineCategoryRepository;
     @Mock
     private GroupRoutineRepository groupRoutineRepository;
@@ -83,6 +86,7 @@ class GroupCommandServiceTest {
         // then
         verify(groupRepository).findByIdForUpdate(GROUP_ID);
         verify(groupValidationService).validateGroupOwner(group, OWNER_ID);
+        verify(groupMemberRepository).findAllByGroupIdForUpdate(GROUP_ID);
         verify(groupRoutineVerificationReadRepository).deleteAllByGroupId(GROUP_ID);
         verify(groupRepository).delete(group);
     }
@@ -477,7 +481,8 @@ class GroupCommandServiceTest {
     @DisplayName("활성 구성원이 그룹을 탈퇴하면 멤버십 상태를 변경하고 세션을 회수한다")
     void leaveGroup_ActiveMember_ChangesMembershipAndClosesSessions() {
         // given
-        when(groupValidationService.validateActiveGroupMember(GROUP_ID, MEMBER_ID))
+        when(groupValidationService.lockActiveGroupForUpdate(GROUP_ID)).thenReturn(group);
+        when(groupValidationService.validateActiveGroupMemberForUpdate(group, MEMBER_ID))
                 .thenReturn(ownerMembership);
 
         // when
@@ -491,7 +496,7 @@ class GroupCommandServiceTest {
         InOrder inOrder = inOrder(groupValidationService);
         inOrder.verify(groupValidationService).lockActiveGroupForUpdate(GROUP_ID);
         inOrder.verify(groupValidationService)
-                .validateActiveGroupMember(GROUP_ID, MEMBER_ID);
+                .validateActiveGroupMemberForUpdate(group, MEMBER_ID);
     }
 
     @Test
@@ -500,7 +505,8 @@ class GroupCommandServiceTest {
         // given
         when(groupValidationService.validateGroupOwner(GROUP_ID, OWNER_ID))
                 .thenReturn(ownerMembership);
-        when(groupValidationService.validateActiveGroupMember(GROUP_ID, TARGET_MEMBER_ID))
+        when(groupValidationService.lockActiveGroupForUpdate(GROUP_ID)).thenReturn(group);
+        when(groupValidationService.validateActiveGroupMemberForUpdate(group, TARGET_MEMBER_ID))
                 .thenReturn(targetMembership);
 
         // when
@@ -513,7 +519,7 @@ class GroupCommandServiceTest {
         inOrder.verify(groupValidationService).lockActiveGroupForUpdate(GROUP_ID);
         inOrder.verify(groupValidationService).validateGroupOwner(GROUP_ID, OWNER_ID);
         inOrder.verify(groupValidationService)
-                .validateActiveGroupMember(GROUP_ID, TARGET_MEMBER_ID);
+                .validateActiveGroupMemberForUpdate(group, TARGET_MEMBER_ID);
     }
 
     @Test
@@ -530,7 +536,7 @@ class GroupCommandServiceTest {
                 .extracting("code")
                 .isEqualTo(GroupErrorCode.GROUP_OWNER_ACCESS_DENIED);
         verify(groupValidationService, never())
-                .validateActiveGroupMember(GROUP_ID, TARGET_MEMBER_ID);
+                .validateActiveGroupMemberForUpdate(any(), eq(TARGET_MEMBER_ID));
         verify(groupValidationService).lockActiveGroupForUpdate(GROUP_ID);
         verify(webSocketSessionRegistry, never()).closeMemberSessions(any());
     }

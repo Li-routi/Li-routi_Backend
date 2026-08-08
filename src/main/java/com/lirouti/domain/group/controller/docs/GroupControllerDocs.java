@@ -13,6 +13,39 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 public interface GroupControllerDocs {
 
     @Operation(
+            summary = "그룹 구성원 찌르기",
+            description = """
+                    ACTIVE 그룹 구성원이 같은 그룹의 다른 ACTIVE 구성원을 찌릅니다.
+                    성공할 때마다 대상의 누적 찔림 수가 1 증가하며, 횟수 제한과 찌르기 이력은 없습니다.
+
+                    ### 에러 코드
+
+                    | code | HTTP | 설명 |
+                    | --- | --- | --- |
+                    | `GROUP400_2` | 400 | 자기 자신을 대상으로 요청함 |
+                    | `GROUP403_1` | 403 | 비활성 그룹 |
+                    | `GROUP403_2` | 403 | 요청자가 ACTIVE 그룹 구성원이 아님 |
+                    | `GROUP404_1` | 404 | 그룹을 찾을 수 없음 |
+                    | `GROUP404_5` | 404 | 대상이 ACTIVE 그룹 구성원이 아님 |
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200", description = "그룹 구성원 찌르기 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "400", description = "자기 자신을 대상으로 요청함"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "403", description = "비활성 그룹 또는 ACTIVE 그룹 구성원이 아님"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404", description = "그룹 또는 ACTIVE 대상 구성원을 찾을 수 없음")
+    })
+    ApiResponse<GroupResDTO.PokeResult> pokeMember(
+            @Parameter(hidden = true) CustomUserDetails userDetails,
+            @Parameter(description = "그룹 ID", example = "1") Long groupId,
+            @Parameter(description = "찌를 대상 회원 ID", example = "2") Long targetMemberId
+    );
+
+    @Operation(
             summary = "그룹방 상세 조회",
             description = """
                     ACTIVE 그룹 구성원만 그룹명, 초대코드와 ACTIVE 구성원별 활동 현황을 조회할 수 있습니다.

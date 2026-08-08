@@ -89,6 +89,7 @@ class GroupJoinCommandServiceTest {
         assertThat(membershipCaptor.getValue().getMember()).isSameAs(lockedMember);
         assertThat(membershipCaptor.getValue().getRole()).isEqualTo(GroupMemberRole.MEMBER);
         assertThat(membershipCaptor.getValue().getJoinedAt()).isEqualTo(JOINED_AT);
+        assertThat(membershipCaptor.getValue().getTotalPokeCount()).isZero();
         verify(groupValidationService).validateJoinLimits(GROUP_ID, MEMBER_ID);
         verify(assignmentCommandService).assignTodayRoutinesToMember(GROUP_ID, MEMBER_ID, JOINED_AT);
         assertThat(result).isEqualTo(new GroupResDTO.JoinResult(
@@ -111,6 +112,7 @@ class GroupJoinCommandServiceTest {
         assertThat(leftMembership.getStatus()).isEqualTo(GroupMemberStatus.ACTIVE);
         assertThat(leftMembership.getJoinedAt()).isEqualTo(JOINED_AT);
         assertThat(leftMembership.getLeftAt()).isNull();
+        assertThat(leftMembership.getTotalPokeCount()).isZero();
         verify(groupMemberRepository).saveAndFlush(leftMembership);
         verify(lockedGroup, never()).addMember(any(GroupMember.class));
         verify(assignmentCommandService).assignTodayRoutinesToMember(GROUP_ID, MEMBER_ID, JOINED_AT);

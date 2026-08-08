@@ -58,7 +58,17 @@ public final class GroupResDTO {
             String statusMessage,
             int currentStreak,
             long totalLikeCount,
+            long totalPokeCount,
             DailyProgress dailyProgress
+    ) {
+    }
+
+    /** 그룹 구성원 한 명을 찌른 뒤의 누적값이다. */
+    @Builder
+    @Schema(name = "GroupMemberPokeResult", description = "그룹 구성원 찌르기 결과")
+    public record PokeResult(
+            Long memberId,
+            long totalPokeCount
     ) {
     }
 

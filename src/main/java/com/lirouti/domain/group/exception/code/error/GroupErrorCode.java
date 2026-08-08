@@ -13,6 +13,11 @@ public enum GroupErrorCode implements BaseErrorCode {
             "카테고리 이름은 앞뒤 공백 제거 후 1~10자의 한 줄이어야 합니다.",
             "GROUP400_1"
     ),
+    CANNOT_POKE_SELF(
+            HttpStatus.BAD_REQUEST,
+            "자기 자신을 찌를 수 없습니다.",
+            "GROUP400_2"
+    ),
     GROUP_NOT_FOUND(
             HttpStatus.NOT_FOUND,
             "그룹을 찾을 수 없습니다.",
@@ -32,6 +37,11 @@ public enum GroupErrorCode implements BaseErrorCode {
             HttpStatus.NOT_FOUND,
             "그룹 루틴을 찾을 수 없습니다.",
             "GROUP404_4"
+    ),
+    ACTIVE_GROUP_MEMBER_NOT_FOUND(
+            HttpStatus.NOT_FOUND,
+            "활성 그룹 구성원을 찾을 수 없습니다.",
+            "GROUP404_5"
     ),
     GROUP_INACTIVE(
             HttpStatus.FORBIDDEN,

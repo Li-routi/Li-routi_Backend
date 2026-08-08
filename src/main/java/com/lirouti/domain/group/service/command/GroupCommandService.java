@@ -20,6 +20,7 @@ import com.lirouti.domain.group.enums.GroupStatus;
 import com.lirouti.domain.group.exception.GroupException;
 import com.lirouti.domain.group.exception.code.error.GroupErrorCode;
 import com.lirouti.domain.group.repository.GroupRepository;
+import com.lirouti.domain.group.repository.GroupMemberRepository;
 import com.lirouti.domain.group.repository.GroupRoutineCategoryRepository;
 import com.lirouti.domain.group.repository.GroupRoutineRepository;
 import com.lirouti.domain.group.service.GroupValidationService;
@@ -37,6 +38,7 @@ public class GroupCommandService {
 
     private final GroupValidationService groupValidationService;
     private final GroupRepository groupRepository;
+    private final GroupMemberRepository groupMemberRepository;
     private final GroupRoutineCategoryRepository groupRoutineCategoryRepository;
     private final GroupRoutineRepository groupRoutineRepository;
     private final GroupRoutineVerificationReadRepository groupRoutineVerificationReadRepository;
@@ -50,6 +52,7 @@ public class GroupCommandService {
     public GroupCommandService(
             GroupValidationService groupValidationService,
             GroupRepository groupRepository,
+            GroupMemberRepository groupMemberRepository,
             GroupRoutineCategoryRepository groupRoutineCategoryRepository,
             GroupRoutineRepository groupRoutineRepository,
             GroupRoutineVerificationReadRepository groupRoutineVerificationReadRepository,
@@ -61,6 +64,7 @@ public class GroupCommandService {
     ) {
         this.groupValidationService = groupValidationService;
         this.groupRepository = groupRepository;
+        this.groupMemberRepository = groupMemberRepository;
         this.groupRoutineCategoryRepository = groupRoutineCategoryRepository;
         this.groupRoutineRepository = groupRoutineRepository;
         this.groupRoutineVerificationReadRepository = groupRoutineVerificationReadRepository;
@@ -82,6 +86,8 @@ public class GroupCommandService {
         }
 
         groupValidationService.validateGroupOwner(group, memberId);
+        // Poke는 GroupMember ID 오름차순으로 잠근다. cascade delete도 같은 순서로 먼저 잠근다.
+        groupMemberRepository.findAllByGroupIdForUpdate(groupId);
         // 읽음 행은 Group 애그리거트의 JPA cascade 대상이 아니다. 먼저 지워 FK 삭제를 열어 둔다.
         groupRoutineVerificationReadRepository.deleteAllByGroupId(groupId);
         groupRepository.delete(group);
@@ -181,9 +187,9 @@ public class GroupCommandService {
     @Transactional
     public void leaveGroup(Long groupId, Long memberId) {
         // 채팅 전송도 같은 그룹 행을 잠그므로 권한 회수와 진행 중인 전송의 순서가 확정된다.
-        groupValidationService.lockActiveGroupForUpdate(groupId);
+        Group group = groupValidationService.lockActiveGroupForUpdate(groupId);
         GroupMember groupMember = groupValidationService
-                .validateActiveGroupMember(groupId, memberId);
+                .validateActiveGroupMemberForUpdate(group, memberId);
         groupMember.leave();
         int deletedAssignmentCount = assignmentCommandService
                 .deleteUnfinishedAssignmentsForLeaver(groupId, memberId);
@@ -196,14 +202,14 @@ public class GroupCommandService {
     /** ACTIVE OWNER가 대상 구성원을 강제 퇴장시키고 대상 회원의 모든 채팅 세션을 회수한다. */
     @Transactional
     public void kickMember(Long groupId, Long ownerId, Long targetMemberId) {
-        groupValidationService.lockActiveGroupForUpdate(groupId);
+        Group group = groupValidationService.lockActiveGroupForUpdate(groupId);
         groupValidationService.validateGroupOwner(groupId, ownerId);
         if (targetMemberId == null) {
             throw new GroupException(GroupErrorCode.GROUP_MEMBER_ACCESS_DENIED);
         }
 
         GroupMember target = groupValidationService
-                .validateActiveGroupMember(groupId, targetMemberId);
+                .validateActiveGroupMemberForUpdate(group, targetMemberId);
 
         target.kick();
         closeMemberSessionsAfterCommit(targetMemberId);

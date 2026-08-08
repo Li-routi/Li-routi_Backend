@@ -19,6 +19,15 @@ import static org.mockito.Mockito.mock;
 class GroupMemberTest {
 
     @Test
+    @DisplayName("신규 참여 관계의 누적 찔림 수는 0으로 시작한다")
+    void newMembership_TotalPokeCount_StartsAtZero() {
+        GroupMember groupMember = GroupMember.builder()
+                .member(mock(Member.class)).group(mock(Group.class)).role(GroupMemberRole.MEMBER).build();
+
+        assertThat(groupMember.getTotalPokeCount()).isZero();
+    }
+
+    @Test
     @DisplayName("방장은 권한 위임 또는 그룹 삭제 전까지 일반 탈퇴할 수 없다")
     void leave_Owner_ThrowsOwnerCannotLeave() {
         // given
@@ -186,6 +195,7 @@ class GroupMemberTest {
                 .member(mock(Member.class)).group(mock(Group.class)).role(GroupMemberRole.MEMBER).build();
         groupMember.recordStreakCompletion(LocalDate.of(2026, 8, 6));
         groupMember.increaseTotalLikeCount();
+        groupMember.increaseTotalPokeCount();
 
         groupMember.resetActivityForNewMembership();
 
@@ -193,6 +203,7 @@ class GroupMemberTest {
         assertThat(groupMember.getLongestStreak()).isZero();
         assertThat(groupMember.getLastStreakCompletedDate()).isNull();
         assertThat(groupMember.getTotalLikeCount()).isZero();
+        assertThat(groupMember.getTotalPokeCount()).isZero();
     }
 
 }

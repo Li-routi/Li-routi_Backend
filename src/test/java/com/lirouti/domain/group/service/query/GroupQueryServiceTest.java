@@ -72,10 +72,10 @@ class GroupQueryServiceTest {
         when(groupDetailQueryRepository.findActiveMemberDetails(groupId)).thenReturn(List.of(
                 new GroupDetailQueryRepository.GroupMemberDetailProjection(
                         groupId, "우리 집", "DETAIL1", MEMBER_ID, "리루티",
-                        "profiles/member-1.png", "오늘도 완료", 4, 12L),
+                        "profiles/member-1.png", "오늘도 완료", 4, 12L, 7L),
                 new GroupDetailQueryRepository.GroupMemberDetailProjection(
                         groupId, "우리 집", "DETAIL1", 2L, "동료",
-                        null, null, 1, 3L)
+                        null, null, 1, 3L, 0L)
         ));
         when(groupDetailQueryRepository.findTodayMemberProgress(groupId, TODAY)).thenReturn(List.of(
                 new GroupDetailQueryRepository.TodayMemberProgressProjection(MEMBER_ID, 3L, 2L)
@@ -94,10 +94,10 @@ class GroupQueryServiceTest {
         assertThat(result.members()).containsExactly(
                 new GroupResDTO.MemberActivity(
                         MEMBER_ID, "리루티", "profiles/member-1.png", "오늘도 완료",
-                        4, 12L, new GroupResDTO.DailyProgress(2L, 3L)),
+                        4, 12L, 7L, new GroupResDTO.DailyProgress(2L, 3L)),
                 new GroupResDTO.MemberActivity(
                         2L, "동료", null, null,
-                        1, 3L, new GroupResDTO.DailyProgress(0L, 0L))
+                        1, 3L, 0L, new GroupResDTO.DailyProgress(0L, 0L))
         );
     }
 

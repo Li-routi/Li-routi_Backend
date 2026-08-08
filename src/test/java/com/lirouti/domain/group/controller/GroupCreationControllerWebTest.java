@@ -6,6 +6,7 @@ import com.lirouti.domain.group.exception.GroupException;
 import com.lirouti.domain.group.exception.code.error.GroupErrorCode;
 import com.lirouti.domain.group.service.command.GroupCommandService;
 import com.lirouti.domain.group.service.command.GroupJoinCommandService;
+import com.lirouti.domain.group.service.command.GroupPokeCommandService;
 import com.lirouti.domain.group.service.query.GroupInviteCodeQueryService;
 import com.lirouti.domain.group.service.query.GroupJoinQueryService;
 import com.lirouti.domain.group.service.query.GroupQueryService;
@@ -61,6 +62,8 @@ class GroupCreationControllerWebTest {
     private GroupJoinQueryService groupJoinQueryService;
     @MockitoBean
     private GroupJoinCommandService groupJoinCommandService;
+    @MockitoBean
+    private GroupPokeCommandService groupPokeCommandService;
     @MockitoBean
     private JwtUtil jwtUtil;
     @MockitoBean

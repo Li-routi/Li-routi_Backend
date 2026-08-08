@@ -6,6 +6,7 @@ import com.lirouti.domain.group.dto.response.GroupResDTO;
 import com.lirouti.domain.group.exception.code.success.GroupSuccessCode;
 import com.lirouti.domain.group.service.command.GroupCommandService;
 import com.lirouti.domain.group.service.command.GroupJoinCommandService;
+import com.lirouti.domain.group.service.command.GroupPokeCommandService;
 import com.lirouti.domain.group.service.query.GroupInviteCodeQueryService;
 import com.lirouti.domain.group.service.query.GroupJoinQueryService;
 import com.lirouti.domain.group.service.query.GroupQueryService;
@@ -26,6 +27,7 @@ public class GroupController implements GroupControllerDocs {
     private final GroupInviteCodeQueryService groupInviteCodeQueryService;
     private final GroupJoinQueryService groupJoinQueryService;
     private final GroupJoinCommandService groupJoinCommandService;
+    private final GroupPokeCommandService groupPokeCommandService;
 
     /** 모임방과 초기 카테고리·루틴·일정을 한 요청으로 생성한다. */
     @Override
@@ -117,6 +119,22 @@ public class GroupController implements GroupControllerDocs {
                 userDetails.getMemberId()
         );
         return ApiResponse.onSuccess(GroupSuccessCode.GROUP_DETAIL_FETCH_SUCCESS, result);
+    }
+
+    /** ACTIVE 그룹 구성원이 같은 그룹의 다른 ACTIVE 구성원을 찌른다. */
+    @Override
+    @PostMapping("/{groupId}/members/{targetMemberId}/pokes")
+    public ApiResponse<GroupResDTO.PokeResult> pokeMember(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long groupId,
+            @PathVariable Long targetMemberId
+    ) {
+        GroupResDTO.PokeResult result = groupPokeCommandService.poke(
+                groupId,
+                userDetails.getMemberId(),
+                targetMemberId
+        );
+        return ApiResponse.onSuccess(GroupSuccessCode.GROUP_MEMBER_POKE_SUCCESS, result);
     }
 
     /** ACTIVE OWNER가 그룹 전용 사용자 카테고리를 추가한다. */
