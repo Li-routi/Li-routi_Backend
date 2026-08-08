@@ -1,6 +1,7 @@
 package com.lirouti.domain.verification.repository;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -29,6 +30,24 @@ public interface GroupRoutineVerificationRepository
     Optional<GroupRoutineVerification> findByIdAndGroupId(
             @Param("verificationId") Long verificationId,
             @Param("groupId") Long groupId
+    );
+
+    /** 읽음 커서 대상이 현재 가입 회차에서 볼 수 있는 타인 인증인지 확인한다. */
+    @Query("""
+            select count(verification) > 0
+            from GroupRoutineVerification verification
+            join verification.assignment assignment
+            join assignment.groupRoutine routine
+            where verification.id = :verificationId
+              and routine.group.id = :groupId
+              and assignment.member.id <> :memberId
+              and verification.createdAt >= :membershipStartOfDay
+            """)
+    boolean existsReadableByIdAndGroupIdAndViewerIdAndMembershipStartOfDay(
+            @Param("verificationId") Long verificationId,
+            @Param("groupId") Long groupId,
+            @Param("memberId") Long memberId,
+            @Param("membershipStartOfDay") LocalDateTime membershipStartOfDay
     );
 
     /**

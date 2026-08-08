@@ -7,6 +7,7 @@ import com.lirouti.domain.group.repository.GroupRoutineCategoryRepository;
 import com.lirouti.domain.group.service.GroupValidationService;
 import com.lirouti.domain.group.repository.GroupRoutineAssignmentRepository;
 import com.lirouti.domain.group.repository.GroupRoutineAssignmentRepositoryCustom.TodayAssignmentProjection;
+import com.lirouti.domain.group.repository.GroupDetailQueryRepository;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.service.query.MemberQueryService;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +24,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class GroupQueryService {
     private final GroupRoutineAssignmentRepository groupRoutineAssignmentRepository;
+    private final GroupDetailQueryRepository groupDetailQueryRepository;
     private final GroupRoutineCategoryRepository groupRoutineCategoryRepository;
     private final GroupValidationService groupValidationService;
     private final MemberQueryService memberQueryService;
@@ -46,6 +48,22 @@ public class GroupQueryService {
                         + "categoryCount={}, addableCount={}",
                 groupId, memberId, categories.size(), addableCount);
         return GroupConverter.toCategoryList(categories, addableCount);
+    }
+
+    /** ACTIVE 구성원이 그룹방 진입에 필요한 기본 정보와 구성원별 활동 현황을 조회한다. */
+    @Transactional(readOnly = true)
+    public GroupResDTO.Detail getGroupDetail(Long groupId, Long memberId) {
+        groupValidationService.validateActiveGroupMember(groupId, memberId);
+
+        LocalDate today = LocalDate.now(clock);
+        List<GroupDetailQueryRepository.GroupMemberDetailProjection> memberDetails =
+                groupDetailQueryRepository.findActiveMemberDetails(groupId);
+        List<GroupDetailQueryRepository.TodayMemberProgressProjection> progresses =
+                groupDetailQueryRepository.findTodayMemberProgress(groupId, today);
+
+        log.debug("그룹 상세 정보를 조회했습니다. groupId={}, memberId={}, memberCount={}",
+                groupId, memberId, memberDetails.size());
+        return GroupConverter.toGroupDetail(memberDetails, progresses);
     }
 
     /**

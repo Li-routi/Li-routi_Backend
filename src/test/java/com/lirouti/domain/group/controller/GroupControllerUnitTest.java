@@ -97,6 +97,28 @@ class GroupControllerUnitTest {
     }
 
     @Test
+    @DisplayName("인증 회원 ID와 그룹 ID를 그룹 상세 조회 서비스에 전달한다")
+    void getGroupDetail_AuthenticatedMember_ReturnsDetail() {
+        // given
+        CustomUserDetails principal = new CustomUserDetails(MEMBER_ID, Role.ROLE_USER);
+        GroupResDTO.Detail result = GroupResDTO.Detail.builder()
+                .groupId(GROUP_ID)
+                .groupName("아침 모임")
+                .inviteCode("DETAIL1")
+                .members(List.of())
+                .build();
+        when(groupQueryService.getGroupDetail(GROUP_ID, MEMBER_ID)).thenReturn(result);
+
+        // when
+        ApiResponse<GroupResDTO.Detail> response = groupController.getGroupDetail(principal, GROUP_ID);
+
+        // then
+        assertThat(response.getCode()).isEqualTo(GroupSuccessCode.GROUP_DETAIL_FETCH_SUCCESS.getCode());
+        assertThat(response.getResult()).isSameAs(result);
+        verify(groupQueryService).getGroupDetail(GROUP_ID, MEMBER_ID);
+    }
+
+    @Test
     @DisplayName("그룹 카테고리 생성에 인증 회원 ID와 그룹 ID 및 요청을 전달한다")
     void createCategory_AuthenticatedOwner_ReturnsCategory() {
         // given

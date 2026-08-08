@@ -105,6 +105,20 @@ public class GroupController implements GroupControllerDocs {
         );
     }
 
+    /** ACTIVE 그룹 구성원의 그룹방 진입 화면 정보를 조회한다. */
+    @Override
+    @GetMapping("/{groupId}")
+    public ApiResponse<GroupResDTO.Detail> getGroupDetail(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long groupId
+    ) {
+        GroupResDTO.Detail result = groupQueryService.getGroupDetail(
+                groupId,
+                userDetails.getMemberId()
+        );
+        return ApiResponse.onSuccess(GroupSuccessCode.GROUP_DETAIL_FETCH_SUCCESS, result);
+    }
+
     /** ACTIVE OWNER가 그룹 전용 사용자 카테고리를 추가한다. */
     @Override
     @PostMapping("/{groupId}/categories")

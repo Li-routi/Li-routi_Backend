@@ -23,7 +23,9 @@ import com.lirouti.domain.routine.entity.RoutineCategory;
 import com.lirouti.domain.routine.repository.MemberRoutineRepository;
 import com.lirouti.domain.routine.repository.RoutineCategoryRepository;
 import com.lirouti.domain.verification.entity.GroupRoutineVerification;
+import com.lirouti.domain.verification.entity.GroupRoutineVerificationRead;
 import com.lirouti.domain.verification.repository.GroupRoutineVerificationRepository;
+import com.lirouti.domain.verification.repository.GroupRoutineVerificationReadRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.DisplayName;
@@ -75,6 +77,8 @@ class GroupHardDeleteIntegrationTest {
     private GroupRoutineAssignmentRepository groupRoutineAssignmentRepository;
     @Autowired
     private GroupRoutineVerificationRepository groupRoutineVerificationRepository;
+    @Autowired
+    private GroupRoutineVerificationReadRepository groupRoutineVerificationReadRepository;
     @Autowired
     private RoutineCategoryRepository routineCategoryRepository;
     @Autowired
@@ -134,6 +138,17 @@ class GroupHardDeleteIntegrationTest {
         completedAssignment.attachVerification(targetVerification);
         otherAssignment.attachVerification(otherVerification);
 
+        GroupRoutineVerificationRead targetRead = GroupRoutineVerificationRead.builder()
+                .group(targetGroup)
+                .member(member)
+                .build();
+        GroupRoutineVerificationRead otherRead = GroupRoutineVerificationRead.builder()
+                .group(otherGroup)
+                .member(member)
+                .build();
+        entityManager.persist(targetRead);
+        entityManager.persist(otherRead);
+
         RoutineCategory personalCategory = personalCategory(owner);
         MemberRoutine personalRoutine = MemberRoutine.builder()
                 .member(owner)
@@ -185,6 +200,8 @@ class GroupHardDeleteIntegrationTest {
         assertThat(groupRoutineAssignmentRepository.existsById(ids.pendingAssignmentId())).isFalse();
         assertThat(groupRoutineAssignmentRepository.existsById(ids.completedAssignmentId())).isFalse();
         assertThat(groupRoutineVerificationRepository.existsById(ids.targetVerificationId())).isFalse();
+        assertThat(groupRoutineVerificationReadRepository
+                .existsByGroupIdAndMemberId(ids.targetGroupId(), ids.memberId())).isFalse();
 
         // then: 다른 그룹과 그 하위 데이터
         assertThat(groupRepository.existsById(ids.otherGroupId())).isTrue();
@@ -196,6 +213,8 @@ class GroupHardDeleteIntegrationTest {
                 assertThat(groupRoutineScheduleRepository.existsById(id)).isTrue());
         assertThat(groupRoutineAssignmentRepository.existsById(ids.otherAssignmentId())).isTrue();
         assertThat(groupRoutineVerificationRepository.existsById(ids.otherVerificationId())).isTrue();
+        assertThat(groupRoutineVerificationReadRepository
+                .existsByGroupIdAndMemberId(ids.otherGroupId(), ids.memberId())).isTrue();
 
         // then: Member 계정, 공용 기본 그룹 카테고리, 개인 루틴과 개인 카테고리
         assertThat(entityManager.find(Member.class, ids.ownerId())).isNotNull();

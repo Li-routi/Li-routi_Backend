@@ -37,6 +37,39 @@ public final class GroupResDTO {
     ) {
     }
 
+    /** 그룹방 진입 화면의 기본 정보와 ACTIVE 구성원 활동 현황이다. */
+    @Builder
+    @Schema(name = "GroupDetail", description = "그룹방 상세 정보")
+    public record Detail(
+            Long groupId,
+            String groupName,
+            String inviteCode,
+            List<MemberActivity> members
+    ) {
+    }
+
+    /** ACTIVE 그룹 구성원 한 명의 프로필·활동 현황이다. */
+    @Builder
+    @Schema(name = "GroupMemberActivity", description = "그룹 구성원 활동 현황")
+    public record MemberActivity(
+            Long memberId,
+            String name,
+            String profileImageKey,
+            String statusMessage,
+            int currentStreak,
+            long totalLikeCount,
+            DailyProgress dailyProgress
+    ) {
+    }
+
+    /** 금일 그룹 루틴 할당의 완료 수와 전체 수다. */
+    @Builder
+    public record DailyProgress(
+            long completedCount,
+            long totalCount
+    ) {
+    }
+
     /** 초대코드를 제외한 모임방 통합 생성 결과다. */
     @Builder
     @Schema(name = "GroupCreateResult", description = "모임방과 초기 그룹 루틴 통합 생성 결과")

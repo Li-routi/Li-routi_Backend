@@ -15,6 +15,7 @@ import com.lirouti.domain.verification.dto.response.VerificationResDTO;
 import com.lirouti.domain.verification.exception.code.success.VerificationSuccessCode;
 import com.lirouti.domain.verification.service.RoutineVerificationService;
 import com.lirouti.domain.verification.service.command.GroupRoutineVerificationLikeCommandService;
+import com.lirouti.domain.verification.service.command.GroupRoutineVerificationReadCommandService;
 import com.lirouti.domain.verification.service.query.RoutineVerificationQueryService;
 import com.lirouti.global.apiPayload.ApiResponse;
 import com.lirouti.global.auth.CustomUserDetails;
@@ -37,6 +38,7 @@ public class RoutineVerificationController implements RoutineVerificationControl
     private final RoutineVerificationService routineVerificationService;
     private final RoutineVerificationQueryService routineVerificationQueryService;
     private final GroupRoutineVerificationLikeCommandService groupRoutineVerificationLikeCommandService;
+    private final GroupRoutineVerificationReadCommandService groupRoutineVerificationReadCommandService;
 
     @Override
     @PostMapping("/api/groups/{groupId}/routines/{routineId}/verifications")
@@ -77,6 +79,36 @@ public class RoutineVerificationController implements RoutineVerificationControl
                         userDetails.getMemberId(), groupId, routineId, cursor, size);
         return ApiResponse.onSuccess(
                 VerificationSuccessCode.GROUP_ROUTINE_VERIFICATION_LIST_SUCCESS, result);
+    }
+
+    @Override
+    @GetMapping("/api/groups/{groupId}/routine-verifications/unread")
+    public ApiResponse<VerificationResDTO.UnreadGroupRoutineVerificationList>
+            getUnreadGroupRoutineVerifications(
+                    @AuthenticationPrincipal CustomUserDetails userDetails,
+                    @PathVariable Long groupId,
+                    @RequestParam(required = false) Long cursor,
+                    @RequestParam(required = false) Integer size
+            ) {
+        VerificationResDTO.UnreadGroupRoutineVerificationList result =
+                routineVerificationQueryService.getUnreadGroupRoutineVerifications(
+                        userDetails.getMemberId(), groupId, cursor, size);
+        return ApiResponse.onSuccess(
+                VerificationSuccessCode.GROUP_ROUTINE_UNREAD_VERIFICATION_LIST_SUCCESS, result);
+    }
+
+    @Override
+    @PostMapping("/api/groups/{groupId}/routine-verifications/read")
+    public ApiResponse<VerificationResDTO.GroupRoutineVerificationRead> markGroupRoutineVerificationsRead(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long groupId,
+            @Valid @RequestBody VerificationReqDTO.MarkRead request
+    ) {
+        VerificationResDTO.GroupRoutineVerificationRead result =
+                groupRoutineVerificationReadCommandService.markRead(
+                        userDetails.getMemberId(), groupId, request.lastReadVerificationId());
+        return ApiResponse.onSuccess(
+                VerificationSuccessCode.GROUP_ROUTINE_VERIFICATION_READ_SUCCESS, result);
     }
 
     @Override

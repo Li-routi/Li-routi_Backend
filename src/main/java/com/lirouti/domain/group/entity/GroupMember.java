@@ -69,6 +69,10 @@ public class GroupMember extends BaseEntity {
     @Column(name = "left_at")
     private LocalDateTime leftAt;
 
+    /** 그룹 안에서만 보이는 한마디다. 회원 공통 프로필과 분리해 참여 관계에 둔다. */
+    @Column(name = "status_message", length = 255)
+    private String statusMessage;
+
     @Column(name = "current_streak", nullable = false)
     private int currentStreak;
 
@@ -168,6 +172,10 @@ public class GroupMember extends BaseEntity {
             throw new IllegalStateException("그룹 멤버 누적 좋아요 수는 음수가 될 수 없습니다.");
         }
         totalLikeCount--;
+    }
+
+    public void updateStatusMessage(String statusMessage) {
+        this.statusMessage = statusMessage;
     }
 
     /**

@@ -77,4 +77,33 @@ public class VerificationResDTO {
             boolean liked
     ) {
     }
+
+    @Builder
+    @Schema(description = "미조회 그룹 루틴 인증 목록")
+    public record UnreadGroupRoutineVerificationList(
+            List<UnreadGroupRoutineVerification> verifications,
+            Long nextCursor,
+            boolean hasNext
+    ) {
+    }
+
+    @Builder
+    @Schema(description = "미조회 그룹 루틴 인증 한 건")
+    public record UnreadGroupRoutineVerification(
+            Long verificationId,
+            Long authorMemberId,
+            String authorName,
+            String routineName,
+            String imageUrl,
+            String content,
+            LocalDateTime verifiedAt
+    ) {
+    }
+
+    @Builder
+    @Schema(description = "그룹 루틴 인증 읽음 위치")
+    public record GroupRoutineVerificationRead(
+            Long lastReadVerificationId
+    ) {
+    }
 }
