@@ -105,6 +105,40 @@ public class GroupCommandService {
         return GroupConverter.toLockState(group);
     }
 
+    /** ACTIVE OWNER가 그룹 행 잠금 안에서 그룹 이름을 변경한다. */
+    @Transactional
+    public void updateGroupName(
+            Long groupId,
+            Long memberId,
+            GroupReqDTO.UpdateName request
+    ) {
+        Group group = groupValidationService.lockActiveGroupForUpdate(groupId);
+        groupValidationService.validateGroupOwner(group, memberId);
+        group.updateName(request.name());
+    }
+
+    /**
+     * 동일 그룹의 동시 위임을 그룹 행 비관적 잠금으로 직렬화하고 OWNER 권한을 원자적으로 교체한다.
+     */
+    @Transactional
+    public void transferGroupOwner(
+            Long groupId,
+            Long ownerId,
+            GroupReqDTO.TransferOwner request
+    ) {
+        Group group = groupValidationService.lockActiveGroupForUpdate(groupId);
+        GroupMember owner = groupValidationService.validateGroupOwner(group, ownerId);
+        Long targetMemberId = request.targetMemberId();
+        if (ownerId.equals(targetMemberId)) {
+            throw new GroupException(GroupErrorCode.OWNER_CANNOT_TRANSFER_TO_SELF);
+        }
+
+        GroupMember target = groupValidationService
+                .validateActiveGroupMember(groupId, targetMemberId);
+        owner.demoteToMember();
+        target.promoteToOwner();
+    }
+
     /** 그룹 행 잠금 안에서 OWNER 권한, 상한, 이름 중복을 검증하고 사용자 카테고리를 생성한다. */
     @Transactional
     public GroupResDTO.Category createCategory(
