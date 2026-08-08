@@ -6,6 +6,7 @@ import com.lirouti.domain.challenge.entity.Challenge;
 import com.lirouti.domain.verification.converter.ChallengeVerificationConverter;
 import com.lirouti.domain.verification.dto.response.ChallengeVerificationResDTO;
 import com.lirouti.domain.verification.entity.ChallengeVerification;
+import com.lirouti.domain.verification.enums.ReviewStatus;
 import com.lirouti.domain.challenge.entity.MemberChallenge;
 import com.lirouti.domain.challenge.enums.ChallengeCategory;
 import com.lirouti.domain.challenge.enums.RoutineCycle;
@@ -94,10 +95,14 @@ public class ChallengeQueryService {
                 sliceByCursor(rows, appliedSize, ChallengeVerification::getId);
 
         // DB에는 오브젝트 key만 있으므로 공개 URL은 여기서 조립해 Converter에 넘긴다.
+        // 보류 건은 아직 대기 prefix 에 있어 공개 주소가 없다 — 그 주소로 열면 403 이다.
+        // 이 조회는 memberId 로 좁혀 본인 것만 담으므로, 여기서만 서명을 붙인다.
         Map<Long, String> imageUrls = page.rows().stream()
                 .collect(Collectors.toMap(
                         ChallengeVerification::getId,
-                        v -> mediaService.resolvePublicUrl(v.getImageUrl())));
+                        v -> v.isPending()
+                                ? mediaService.presignedViewUrl(v.getImageUrl())
+                                : mediaService.resolvePublicUrl(v.getImageUrl())));
 
         // 좋아요 수와 "내가 눌렀는지"는 이 페이지의 인증 id 목록으로 각각 한 번에 가져온다(#63).
         // 건별로 세거나 exists를 부르면 페이지 크기만큼 쿼리가 늘어난다.
@@ -142,7 +147,8 @@ public class ChallengeQueryService {
             Long memberId,
             Long challengeId,
             Long cursor,
-            Integer size
+            Integer size,
+            ReviewStatus statusFilter
     ) {
         MemberChallenge memberChallenge = memberChallengeRepository
                 .findByMemberIdAndChallengeId(memberId, challengeId)
@@ -152,15 +158,20 @@ public class ChallengeQueryService {
         List<ChallengeVerification> rows = challengeVerificationRepository.findMineByCursor(
                 memberChallenge.getId(),
                 cursor,
-                appliedSize + 1
+                appliedSize + 1,
+                statusFilter
         );
         CursorPage<ChallengeVerification> page =
                 sliceByCursor(rows, appliedSize, ChallengeVerification::getId);
 
+        // 보류 건은 아직 대기 prefix 에 있어 공개 주소가 없다 — 그 주소로 열면 403 이다.
+        // 이 조회는 memberId 로 좁혀 본인 것만 담으므로, 여기서만 서명을 붙인다.
         Map<Long, String> imageUrls = page.rows().stream()
                 .collect(Collectors.toMap(
                         ChallengeVerification::getId,
-                        v -> mediaService.resolvePublicUrl(v.getImageUrl())));
+                        v -> v.isPending()
+                                ? mediaService.presignedViewUrl(v.getImageUrl())
+                                : mediaService.resolvePublicUrl(v.getImageUrl())));
 
         // 좋아요 수는 피드와 같은 배치 쿼리를 쓴다(#63). 같은 인증이 피드에도 여기에도 나오므로
         // 수가 달라 보이면 안 된다. liked는 싣지 않는다 — 자기 게시물이라 쓸 데가 없다.

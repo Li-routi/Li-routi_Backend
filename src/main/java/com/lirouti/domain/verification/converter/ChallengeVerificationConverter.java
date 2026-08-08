@@ -45,6 +45,7 @@ public final class ChallengeVerificationConverter {
                 .content(verification.getContent())
                 .currentStreak(currentStreak)
                 .reverified(reverified)
+                .reviewStatus(verification.getReviewStatus())
                 .build();
     }
 
@@ -146,6 +147,7 @@ public final class ChallengeVerificationConverter {
                 .likeCount(likeCount)
                 // 인증 행이 스냅샷으로 들고 있는 값이라 추가 조회가 없다.
                 .participationRound(verification.getParticipationRound())
+                .reviewStatus(verification.getReviewStatus())
                 .build();
     }
 

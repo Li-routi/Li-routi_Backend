@@ -1,6 +1,7 @@
 package com.lirouti.domain.verification.repository;
 
 import com.lirouti.domain.verification.entity.QChallengeVerification;
+import com.lirouti.domain.verification.enums.ReviewStatus;
 import com.querydsl.core.types.dsl.BooleanExpression;
 
 /**
@@ -25,5 +26,22 @@ public final class VerificationQuerySupport {
      */
     public static BooleanExpression notHidden(QChallengeVerification verification) {
         return verification.hiddenAt.isNull();
+    }
+
+    /**
+     * 심사 보류 중인 인증을 제외한다.
+     *
+     * <p><b>노출 경로에만 붙인다.</b> 보류 건은 승격되지 않아 공개 주소가 없다 — 피드에 담으면
+     * 열리지 않는 사진이 나가고, 게시글 수에 세면 보이는 것과 세는 것이 어긋난다.
+     *
+     * <p><b>수행 기록에는 붙이지 않는다.</b> 오늘 완료 여부·완료자 수는 "실제로 했는가"를 세는
+     * 것이라 보류도 포함한다. 스트릭을 보류 시점에 올리기로 한 것과 같은 기준이다.
+     * 신고 숨김({@link #notHidden})이 노출 경로에만 붙는 것과 같은 갈림이다.
+     *
+     * <p><b>내 인증 목록에는 붙이지 않는다.</b> 방금 올린 사진이 화면에서 사라지면 안 된다 —
+     * 대신 상태를 함께 내려 "심사 중" 을 그리게 하고, 사진은 서명 주소로 준다.
+     */
+    public static BooleanExpression notPending(QChallengeVerification verification) {
+        return verification.reviewStatus.eq(ReviewStatus.APPROVED);
     }
 }

@@ -156,7 +156,7 @@ class ChallengeReportHideTest {
         reportBy(reportProperties.getHideThreshold(), c, v);
 
         // then
-        assertThat(challengeQueryService.getMyVerifications(author.getId(), c.getId(), null, BIG)
+        assertThat(challengeQueryService.getMyVerifications(author.getId(), c.getId(), null, BIG, null)
                 .verifications())
                 .isEmpty();
     }

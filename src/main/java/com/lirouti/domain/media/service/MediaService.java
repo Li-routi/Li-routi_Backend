@@ -152,6 +152,22 @@ public class MediaService {
      * <p>실패하면 예외를 던져 조회 자체를 실패시킨다. 여기서 삼키고 null 을 내리면 화면에는
      * 원인 없는 깨진 이미지만 남아, 설정 문제가 사용자 문제처럼 보인다.
      */
+    /**
+     * <b>용도와 무관하게</b> 서명 URL 을 발급한다. 보류 중인 사진처럼 <b>공개 prefix 규칙을
+     * 따르면 안 되는 경우</b>에만 쓴다.
+     *
+     * <p>{@link #resolveViewUrl} 은 {@link MediaPurpose} 만 보고 갈리는데, 챌린지 인증은
+     * {@code publicRead = true} 라 공개 주소를 조립해 돌려준다. <b>보류 사진은 아직 대기
+     * prefix 에 있어 그 주소로 열면 403 이다.</b>
+     *
+     * <p><b>권한은 여기서 못 막는다.</b> key 만 알아서 소유자를 모르기 때문이다. 부르는 쪽이
+     * "본인 것" 을 보장한 뒤에만 불러야 한다 — 그러지 않으면 그 순간 대기 prefix 가 공개된 것과
+     * 같아진다.
+     */
+    public String presignedViewUrl(String mediaKey) {
+        return presignViewUrl(mediaKey);
+    }
+
     private String presignViewUrl(String mediaKey) {
         GetObjectRequest getObjectRequest = GetObjectRequest.builder()
                 .bucket(s3Properties.getBucket())
@@ -448,6 +464,24 @@ public class MediaService {
             if (e.statusCode() == PRECONDITION_FAILED) {
                 log.warn("심사한 사진과 다른 바이트여서 공개하지 않았습니다. uploadKey={}", uploadKey);
                 throw new MediaException(MediaErrorCode.MEDIA_CHANGED_AFTER_REVIEW);
+            }
+            // 원본이 없다. 다시 시도해도 같으므로 "일시 실패" 와 구분해 알려야 한다 —
+            // 구분하지 않으면 부르는 쪽이 영원히 재시도한다.
+            //
+            // 403 도 함께 본다. IAM 역할의 ListBucket 은 공개 prefix 에만 있어서, 대기
+            // prefix 의 없는 key 에는 S3 가 존재 여부를 숨기려고 NoSuchKey 대신 AccessDenied 를
+            // 준다(바이트 검증 쪽에 같은 분기가 있다). 403 을 일시 실패로 두면 이미 사라진
+            // 원본을 10분마다 영원히 승격하려 든다.
+            //
+            // 대신 진짜 권한 문제도 소실로 보이는 맹점이 생긴다. 다만 그 경우 개별 건이 아니라
+            // 모든 승격이 실패하므로, 아래 로그가 몰려 찍히면 권한 문제로 봐야 한다.
+            int status = e.statusCode();
+            if (status == HttpStatus.NOT_FOUND.value()
+                    || status == HttpStatus.FORBIDDEN.value()
+                    || e instanceof NoSuchKeyException) {
+                log.warn("옮길 원본이 없습니다(status={}). 이 로그가 몰려 찍히면 s3:GetObject"
+                        + " 권한을 확인하세요. uploadKey={}", status, uploadKey);
+                throw new MediaException(MediaErrorCode.MEDIA_SOURCE_GONE);
             }
             log.error("심사를 통과한 사진을 공개 prefix 로 옮기지 못했습니다. uploadKey={}", uploadKey, e);
             throw new MediaException(MediaErrorCode.MEDIA_PROMOTION_FAILED);
