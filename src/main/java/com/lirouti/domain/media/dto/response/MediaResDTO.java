@@ -21,7 +21,6 @@ public final class MediaResDTO {
     public record PresignedUrl(
             String uploadUrl,
             String mediaKey,
-            String mediaUrl,
             String contentType,
             long contentLength,
             Instant expiresAt

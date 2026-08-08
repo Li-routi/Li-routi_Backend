@@ -22,8 +22,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.regex.Pattern;
 
-import static org.hamcrest.Matchers.endsWith;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.matchesPattern;
+import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.startsWith;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -39,7 +42,23 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class ChallengeVerificationControllerTest {
 
     private static final String VALID_KEY =
-            "challenge-verifications/cccccccc-cccc-4ccc-8ccc-cccccccccccc.jpg";
+            "challenge-verifications-staging/cccccccc-cccc-4ccc-8ccc-cccccccccccc.jpg";
+
+    /**
+     * 이미 저장된 인증을 만드는 fixture 용 공개 key.
+     *
+     * <p>대기 key 를 넣어 두면 "대기 경로가 DB 에 남는 것"을 정상으로 굳혀, 그런 회귀가 생겨도
+     * 테스트가 잡지 못한다. 그래서 공개 prefix 로 둔다.
+     *
+     * <p><b>{@link #VALID_KEY} 에서 계산한 값이 아니다.</b> 승격은 UUID 를 새로 뽑으므로
+     * 대기 key 로부터 공개 key 를 미리 알 수 없다. 승격 결과는 아래 {@code PROMOTED_KEY} 로 본다.
+     */
+    private static final String PUBLIC_KEY =
+            "challenge-verifications/dddddddd-dddd-4ddd-8ddd-dddddddddddd.jpg";
+
+    /** 승격된 key 의 모양. UUID 는 매번 달라 값으로는 못 박지 못한다. */
+    private static final Pattern PROMOTED_KEY = Pattern.compile(
+            ".*/challenge-verifications/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.jpg$");
 
     @Autowired
     private MockMvc mockMvc;
@@ -71,7 +90,7 @@ class ChallengeVerificationControllerTest {
                 .memberChallenge(mc).participationRound(1)
                 .verifiedDate(LocalDate.now(ZoneId.of("Asia/Seoul")))
                 .verifiedAt(LocalDateTime.now())
-                .imageUrl(VALID_KEY).content("신고 대상")
+                .imageUrl(PUBLIC_KEY).content("신고 대상")
                 .build();
         em.persist(v);
         return v;
@@ -135,8 +154,12 @@ class ChallengeVerificationControllerTest {
                 .andExpect(jsonPath("$.result.reverified").value(false))
                 .andExpect(jsonPath("$.result.content").value("오늘도 완료"))
                 // 응답에는 저장된 key가 아니라 조립된 공개 URL이 나간다.
-                .andExpect(jsonPath("$.result.imageUrl").value(endsWith(VALID_KEY)))
-                .andExpect(jsonPath("$.result.imageUrl").value(startsWith("http")));
+                .andExpect(jsonPath("$.result.imageUrl").value(startsWith("http")))
+                // 승격된 공개 key 여야 한다. 대기 경로가 그대로 나가면 심사 전 사진이 공개된 것이다.
+                .andExpect(jsonPath("$.result.imageUrl").value(matchesPattern(PROMOTED_KEY)))
+                // 승격은 UUID 를 새로 뽑는다. 올린 key 의 UUID 가 그대로 나오면 덮어쓰기가 열린다.
+                .andExpect(jsonPath("$.result.imageUrl")
+                        .value(not(containsString("cccccccc-cccc-4ccc-8ccc-cccccccccccc"))));
     }
 
     @Test

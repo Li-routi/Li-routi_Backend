@@ -20,6 +20,7 @@ import com.lirouti.domain.challenge.exception.ChallengeException;
 import com.lirouti.domain.challenge.exception.code.error.ChallengeErrorCode;
 import com.lirouti.domain.challenge.repository.*;
 import com.lirouti.domain.media.enums.MediaPurpose;
+import com.lirouti.domain.media.service.MediaImage;
 import com.lirouti.domain.media.service.MediaService;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.repository.MemberRepository;
@@ -140,10 +141,34 @@ public class ChallengeCommandService {
 
         // ④ 사진이 챌린지 의도에 맞는지 심사한다. ②와 같은 트랜잭션 밖 구간이다.
         //    통과하지 못하면 저장도 스트릭도 없다. 심사기가 답을 못 주면 통과시킨다(아래 참고).
-        reviewPhoto(challengeId, request.mediaKey());
+        String reviewedETag = reviewPhoto(challengeId, request.mediaKey());
 
-        // ⑤ 저장·스트릭 갱신. 여기서부터가 트랜잭션이다.
-        return challengeVerificationCommandService.save(memberId, challengeId, request);
+        // ⑤ 승격. 여기까지 온 사진만 공개 prefix 로 옮긴다 — 업로드는 비공개 대기 prefix 로 받았다.
+        //    이 단계가 있어야 AI 심사가 "공개 전에 거르는" 장치가 된다. 예전에는 업로드 순간부터
+        //    공개 주소가 살아 있어서, 반려해도 그 사이 열람하거나 공유한 것은 회수되지 않았다.
+        //
+        //    S3 호출이라 ②와 같은 트랜잭션 밖 구간이다. 실패하면 대기본이 남고 사용자는 저장
+        //    실패를 받는다 — 사진이 사라진 채 인증만 저장되는 방향으로는 실패하지 않는다.
+        //    심사한 바이트와 같을 때만 옮긴다. presigned URL 은 만료 전까지 여러 번 쓸 수 있어서,
+        //    이 조건이 없으면 심사 뒤에 같은 key 로 올린 다른 사진이 공개될 수 있다.
+        String publicKey = mediaService.promote(
+                request.mediaKey(), MediaPurpose.CHALLENGE_VERIFICATION, reviewedETag);
+
+        // ⑥ 저장·스트릭 갱신. 여기서부터가 트랜잭션이고, 여기가 커밋 지점이다.
+        //    저장하는 것은 요청의 key 가 아니라 승격된 공개 key 다.
+        //
+        //    저장이 실패해도 방금 만든 공개본을 지우지 않는다. 아무도 참조하지 않으므로 미참조
+        //    정리가 가져간다 — database-schema.md 가 정한 실패 처리다. 그 자리에서 지우면
+        //    같은 공개본을 다른 인증이 참조하고 있을 때 멀쩡한 사진을 지우게 된다.
+        ChallengeVerificationResDTO.Verification saved =
+                challengeVerificationCommandService.save(memberId, challengeId, request, publicKey);
+
+        // ⑦ 대기본 삭제. 커밋된 뒤라 여기서 실패해도 인증은 이미 저장돼 있다.
+        //    대기본 하나를 못 지운 것 때문에 저장을 되돌리는 편이 더 나쁘다 — 남은 것은
+        //    나이 기반 수명 주기가 치운다. 그래서 성공 조건에 넣지 않는다.
+        mediaService.deleteQuietly(request.mediaKey());
+
+        return saved;
     }
 
     /**
@@ -165,25 +190,27 @@ public class ChallengeCommandService {
      * 판정 기준이 챌린지의 이름·설명이라 그것을 못 읽으면 물어볼 말이 없다. 참여·저장 단계에서
      * 어차피 걸리므로 여기서 막지 않는다.
      */
-    private void reviewPhoto(Long challengeId, String mediaKey) {
+    private String reviewPhoto(Long challengeId, String mediaKey) {
         if (!aiReviewProperties.isEnabled()) {
             log.debug("AI 심사가 꺼져 있어 건너뜁니다. mediaKey={}", mediaKey);
-            return;
+            return null;
         }
         Challenge challenge = challengeRepository.findByIdAndActiveTrue(challengeId).orElse(null);
         if (challenge == null) {
             log.warn("심사할 챌린지를 찾지 못해 건너뜁니다. challengeId={}", challengeId);
-            return;
+            return null;
         }
 
-        VerificationReview review = mediaService
+        MediaImage image = mediaService
                 .loadForReview(mediaKey, aiReviewProperties.getMaxImageDimension())
-                .map(image -> reviewClient.review(challenge.getName(), challenge.getDescription(), image))
-                .orElseGet(VerificationReview::undecided);
+                .orElse(null);
+        VerificationReview review = image == null
+                ? VerificationReview.undecided()
+                : reviewClient.review(challenge.getName(), challenge.getDescription(), image);
 
         if (!review.decided()) {
             log.warn("AI 심사 없이 인증을 통과시켰습니다. challengeId={}, mediaKey={}", challengeId, mediaKey);
-            return;
+            return image == null ? null : image.etag();
         }
         if (!review.approved()) {
             // 사유 문장은 로그에만 남는다. 응답 message 는 에러 코드의 고정 문장이다 —
@@ -191,9 +218,9 @@ public class ChallengeCommandService {
             log.info("AI 심사에서 반려했습니다. challengeId={}, mediaKey={}, 종류={}, 사유={}",
                     challengeId, mediaKey, review.rejection(), review.reason());
 
-            // 반려된 사진은 저장하지 않으므로 DB 가 이 key 를 참조하지 않는다. 그대로 두면
-            // 미참조 정리가 며칠 뒤에 가져가는데, 그동안 공개 prefix 라 key 를 아는 사람은
-            // 계속 볼 수 있다. 유해로 반려된 것일 수 있으므로 그 자리에서 치운다.
+            // 반려된 사진은 승격 전이라 대기 prefix 에 있다. 공개된 적이 없으므로 급히 지울
+            // 이유는 사라졌지만(수명 주기가 어차피 가져간다), 유해로 반려된 것을 며칠 두는 것보다
+            // 그 자리에서 치우는 편이 낫다. 실패해도 넘어간다.
             mediaService.deleteQuietly(mediaKey);
 
             throw new VerificationException(review.rejection() == ReviewRejection.UNSAFE
@@ -205,6 +232,9 @@ public class ChallengeCommandService {
         // 반려·장애에만 찍히면 로그가 비어 있는 것이 "요청이 없었다"인지 "전부 통과했다"인지
         // 구분되지 않는다. 실제로 그 구분이 안 돼 심사가 꺼진 채 도는 것을 한동안 몰랐다.
         log.info("AI 심사를 통과했습니다. challengeId={}, mediaKey={}", challengeId, mediaKey);
+
+        // 심사한 바로 그 바이트를 특정해 돌려준다. 승격은 이 값과 같을 때만 복사한다.
+        return image.etag();
     }
 
     /**

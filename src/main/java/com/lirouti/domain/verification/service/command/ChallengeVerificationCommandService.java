@@ -61,12 +61,17 @@ public class ChallengeVerificationCommandService {
      *
      * 비활성 챌린지라도 참여 중이면 인증할 수 있다. 운영이 챌린지를 내려도 진행 중인 스트릭이
      * 끊기지 않게 하기 위해서이며, 이탈(leave)이 챌린지 active를 보지 않는 것과 같은 기준이다.
+     * <p><b>{@code storedMediaKey} 는 요청의 key 가 아니다.</b> 챌린지 인증 사진은 비공개 대기
+     * prefix 로 업로드받아 심사를 통과한 뒤 공개 prefix 로 승격되므로, DB 에 남기고 응답에 실을
+     * 것은 승격된 공개 key 다. 승격은 S3 호출이라 이 트랜잭션 밖(호출부)에서 끝내고 결과만 받는다.
+     *
      */
     @Transactional
     public ChallengeVerificationResDTO.Verification save(
             Long memberId,
             Long challengeId,
-            ChallengeVerificationReqDTO.Verify request
+            ChallengeVerificationReqDTO.Verify request,
+            String storedMediaKey
     ) {
         // 이탈·재참여와 같은 행을 바꾸므로 잠그고 읽는다. 락 없이 읽으면 이 트랜잭션이 커밋할 때
         // 그 사이 커밋된 이탈·재참여 결과를 오래된 스냅샷으로 되돌린다.
@@ -108,10 +113,11 @@ public class ChallengeVerificationCommandService {
 
         ChallengeVerification verification = todayVerification
                 .map(existing -> {
-                    existing.reverify(request.mediaKey(), request.content(), verifiedAt);
+                    existing.reverify(storedMediaKey, request.content(), verifiedAt);
                     return existing;
                 })
-                .orElseGet(() -> createVerification(memberChallenge, request, today, verifiedAt));
+                .orElseGet(() ->
+                        createVerification(memberChallenge, request, storedMediaKey, today, verifiedAt));
 
         // 재인증이면 applyVerification이 오늘 날짜를 보고 스트릭을 그대로 둔다.
         memberChallenge.applyVerification(today);
@@ -127,6 +133,7 @@ public class ChallengeVerificationCommandService {
     private ChallengeVerification createVerification(
             MemberChallenge memberChallenge,
             ChallengeVerificationReqDTO.Verify request,
+            String storedMediaKey,
             LocalDate verifiedDate,
             LocalDateTime verifiedAt
     ) {
@@ -135,7 +142,7 @@ public class ChallengeVerificationCommandService {
                 .participationRound(memberChallenge.getParticipationRound())
                 .verifiedDate(verifiedDate)
                 .verifiedAt(verifiedAt)
-                .imageUrl(request.mediaKey())
+                .imageUrl(storedMediaKey)
                 .content(request.content())
                 .build();
         try {

@@ -28,8 +28,13 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import com.lirouti.domain.media.service.MediaService;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.when;
 
 /**
  * 서로 다른 명령이 같은 참여 행을 두고 경합하는 상황을 검증한다(#53).
@@ -45,7 +50,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ChallengeCommandMixedConcurrencyTest {
 
     private static final String MEDIA_KEY =
-            "challenge-verifications/cccccccc-cccc-4ccc-8ccc-cccccccccccc.jpg";
+            "challenge-verifications-staging/cccccccc-cccc-4ccc-8ccc-cccccccccccc.jpg";
+    private static final String PUBLIC_KEY =
+            "challenge-verifications/11111111-1111-4111-8111-111111111111.jpg";
+
+    // 미디어는 이 테스트의 관심사가 아니다. 승격이 S3 를 호출하므로 목으로 끊는다.
+    @MockitoBean
+    private MediaService mediaService;
 
     @Autowired
     private ChallengeCommandService challengeCommandService;
@@ -63,6 +74,12 @@ class ChallengeCommandMixedConcurrencyTest {
 
     @BeforeEach
     void setUp() {
+        doNothing().when(mediaService).validateMediaKey(any(), any());
+        doNothing().when(mediaService).validateUploadedBytes(any(), any());
+        // promote 는 대기 key 를 받아 UUID 가 새로 뽑힌 공개 key 를 돌려준다.
+        // 받은 값을 그대로 돌려주면 승격이 아무 일도 안 해도 테스트가 통과한다.
+        when(mediaService.promote(any(), any(), any())).thenReturn(PUBLIC_KEY);
+        when(mediaService.resolvePublicUrl(any())).thenReturn("https://cdn.example.com/x.jpg");
         // email·social_id에 유니크 제약이 있다. @Transactional 없이 실제 커밋하므로,
         // 앞선 실행이 비정상 종료해 정리가 안 됐으면 고정값은 setUp 자체를 깨뜨린다.
         // 실행마다 유일한 값을 써서 남은 행과 부딪히지 않게 한다.
