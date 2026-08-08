@@ -12,6 +12,7 @@ import com.lirouti.domain.member.enums.Role;
 import com.lirouti.domain.member.enums.SocialProvider;
 import com.lirouti.domain.verification.dto.request.ChallengeVerificationReqDTO;
 import com.lirouti.domain.verification.entity.ChallengeVerification;
+import com.lirouti.domain.verification.repository.ChallengeVerificationRepository;
 import com.lirouti.global.util.TimeUtil;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -25,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -62,6 +64,9 @@ class VerificationDeleteTest {
 
     @MockitoBean
     private MediaService mediaService;
+
+    @Autowired
+    private ChallengeVerificationRepository challengeVerificationRepository;
 
     @PersistenceContext
     private EntityManager em;
@@ -224,6 +229,43 @@ class VerificationDeleteTest {
                 .deleteVerification(other.getId(), challenge.getId(), v.getId()))
                 .isInstanceOf(RuntimeException.class);
         verify(mediaService, never()).deleteQuietly(any());
+    }
+
+    @Test
+    @DisplayName("내려간 글에는 좋아요·신고·메모 수정이 안 된다 — 피드에 없는 글이다")
+    void deletedVerification_RejectsOtherActions() {
+        // given
+        ChallengeVerification v = verificationOn(today());
+        challengeCommandService.deleteVerification(me.getId(), challenge.getId(), v.getId());
+        em.flush();
+
+        // when & then
+        assertThatThrownBy(() -> challengeCommandService.like(me.getId(), challenge.getId(), v.getId()))
+                .as("되살아났을 때 엉뚱한 좋아요 수를 달고 나타나면 안 된다")
+                .isInstanceOf(RuntimeException.class);
+        assertThatThrownBy(() -> challengeCommandService.report(me.getId(), challenge.getId(), v.getId(),
+                new ChallengeVerificationReqDTO.Report(null)))
+                .as("이미 내려간 글로 숨김 임계값을 채우면 안 된다")
+                .isInstanceOf(RuntimeException.class);
+        assertThatThrownBy(() -> challengeCommandService.updateMemo(me.getId(), challenge.getId(), v.getId(),
+                new ChallengeVerificationReqDTO.UpdateMemo("고침")))
+                .isInstanceOf(RuntimeException.class);
+    }
+
+    @Test
+    @DisplayName("내려간 글의 사진은 미참조 정리가 가져간다 — S3 삭제가 실패해도 남지 않게")
+    void deletedVerification_IsNotCountedAsReference() {
+        // given
+        ChallengeVerification v = verificationOn(today());
+        challengeCommandService.deleteVerification(me.getId(), challenge.getId(), v.getId());
+        em.flush();
+        em.clear();
+
+        // when — 미참조 정리가 "살아 있는 사진" 을 가릴 때 쓰는 조회
+        List<String> referenced = challengeVerificationRepository.findImageUrlsIn(List.of(PUBLIC_KEY));
+
+        // then — 참조로 세면 정리 배치가 못 가져가 지운 사진이 영영 남는다
+        assertThat(referenced).isEmpty();
     }
 
     @Test

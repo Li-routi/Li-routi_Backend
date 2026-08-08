@@ -445,6 +445,10 @@ public class ChallengeCommandService {
     ) {
         ChallengeVerification verification = challengeVerificationRepository
                 .findMineInChallenge(verificationId, challengeId, memberId)
+                // 내려간 글은 고칠 대상이 아니다. 조회에서 빼지 않고 여기서 거르는 이유는,
+                // 같은 조회를 삭제도 쓰는데 그쪽은 내려간 글을 찾아야 하기 때문이다
+                // (두 번 지워도 성공으로 답한다).
+                .filter(v -> !v.isDeleted())
                 .orElseThrow(() -> {
                     log.warn("수정할 수 없는 인증입니다. memberId={}, challengeId={}, verificationId={}",
                             memberId, challengeId, verificationId);
@@ -497,12 +501,17 @@ public class ChallengeCommandService {
     private ChallengeVerification findVerificationInChallenge(Long challengeId, Long verificationId) {
         return challengeVerificationRepository
                 .findByIdAndMemberChallengeChallengeId(verificationId, challengeId)
-                // 보류 건은 남에게 보이지 않으므로 좋아요·신고 대상이 아니다. 없는 것처럼 다룬다.
+                // 보류 건과 내려간 글은 남에게 보이지 않으므로 좋아요·신고 대상이 아니다.
+                // 없는 것처럼 다룬다.
                 //
-                // 거르지 않으면 두 가지가 깨진다. 신고가 임계값에 닿으면 공개된 적도 없는 사진이
-                // 숨겨지고, 좋아요·신고 행이 붙으면 반려 확정 때 인증 삭제가 외래 키에 걸려
-                // 실패한다 — 그 행은 영원히 보류로 남는다.
-                .filter(v -> !v.isPending())
+                // 보류를 거르지 않으면 두 가지가 깨진다. 신고가 임계값에 닿으면 공개된 적도 없는
+                // 사진이 숨겨지고, 좋아요·신고 행이 붙으면 반려 확정 때 인증 삭제가 외래 키에
+                // 걸려 실패한다 — 그 행은 영원히 보류로 남는다.
+                //
+                // 내려간 글도 같다. 피드에 없는 글에 좋아요가 쌓이고, 다시 올려 되살아나면
+                // 엉뚱한 수를 달고 나타난다. 이미 내려간 글을 신고해 숨김 임계값을 채우는 것도
+                // 막는다.
+                .filter(v -> !v.isPending() && !v.isDeleted())
                 .orElseThrow(() -> new VerificationException(ChallengeVerificationErrorCode.VERIFICATION_NOT_FOUND));
     }
 

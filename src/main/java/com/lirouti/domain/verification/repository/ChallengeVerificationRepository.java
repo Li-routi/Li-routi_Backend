@@ -134,7 +134,21 @@ public interface ChallengeVerificationRepository
      * 탈퇴 회원의 인증도, 신고로 숨겨진 인증도 행이 남아 있는 한 그 파일은 살아 있다.
      * (탈퇴 회원 사진 삭제는 별도 정책이다)
      */
-    @Query("select v.imageUrl from ChallengeVerification v where v.imageUrl in :keys")
+    /**
+     * 미참조 정리가 "살아 있는 사진" 을 가리는 데 쓴다.
+     *
+     * <p><b>내려간 글의 key 는 참조로 세지 않는다.</b> 그 사진은 삭제 시점에 지웠어야 하는
+     * 것이고, 그때 S3 호출이 실패하면 조용히 넘어간다({@code deleteQuietly}). 참조로 세면
+     * 미참조 정리가 그것을 가져가지 못해 <b>지운 사진이 공개 prefix 에 영영 남는다</b> —
+     * 두 번째 방어선이 첫 번째 실패를 못 받는 셈이다.
+     *
+     * <p>내려간 글을 다시 올리면 승격이 새 key 를 만들므로, 옛 key 가 되살아나 쓰이는 일은 없다.
+     */
+    @Query("""
+            select v.imageUrl from ChallengeVerification v
+            where v.imageUrl in :keys
+              and v.deletedAt is null
+            """)
     List<String> findImageUrlsIn(@Param("keys") Collection<String> keys);
 
     /**
