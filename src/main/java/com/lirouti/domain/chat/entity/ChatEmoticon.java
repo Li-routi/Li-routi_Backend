@@ -71,6 +71,10 @@ public class ChatEmoticon extends BaseEntity {
         this.active = false;
     }
 
+    public void activate() {
+        this.active = true;
+    }
+
     public boolean isActive() {
         return Boolean.TRUE.equals(active);
     }

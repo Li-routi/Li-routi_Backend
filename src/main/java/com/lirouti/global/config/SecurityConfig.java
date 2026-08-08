@@ -1,10 +1,5 @@
 package com.lirouti.global.config;
 
-import com.lirouti.global.auth.AccessDeniedHandlerImpl;
-import com.lirouti.global.auth.AuthenticationEntryPointImpl;
-import com.lirouti.global.auth.filter.JwtAuthFilter;
-import com.lirouti.global.auth.filter.JwtExceptionFilter;
-import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -13,6 +8,14 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+
+import com.lirouti.domain.member.enums.Role;
+import com.lirouti.global.auth.AccessDeniedHandlerImpl;
+import com.lirouti.global.auth.AuthenticationEntryPointImpl;
+import com.lirouti.global.auth.filter.JwtAuthFilter;
+import com.lirouti.global.auth.filter.JwtExceptionFilter;
+
+import lombok.RequiredArgsConstructor;
 
 @Configuration
 @EnableWebSecurity
@@ -29,6 +32,7 @@ public class SecurityConfig {
             "/v3/api-docs/**",
             "/health"
     };
+    private static final String ADMIN_CHAT_EMOTICON_URI = "/api/admin/chat/emoticons/**";
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -44,6 +48,7 @@ public class SecurityConfig {
                         // 로그인 구현이 끝나기 전의 한시 조치였다. 이 서비스에는 게스트 개념이 없다 —
                         // 로그인하지 않으면 내부 기능에 닿지 못하는 것이 정상이다.
                         auth.requestMatchers(PUBLIC_URIS).permitAll()
+                                .requestMatchers(ADMIN_CHAT_EMOTICON_URI).hasAuthority(Role.ROLE_ADMIN.name())
                                 .anyRequest().authenticated()
                 )
                 // 인증·인가 실패를 ApiResponse 형태로 내보낸다. 등록하지 않으면 스프링 기본

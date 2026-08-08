@@ -17,6 +17,10 @@ public interface ChatEmoticonRepository extends JpaRepository<ChatEmoticon, Long
      */
     List<ChatEmoticon> findAllByActiveTrueOrderByDisplayOrderAscIdAsc();
 
+    List<ChatEmoticon> findAllByOrderByDisplayOrderAscIdAsc();
+
+    boolean existsByCode(String code);
+
     /**
      * 메시지 전송 시 활성 상태인 이모티콘 코드만 선택할 수 있도록 조회한다.
      */

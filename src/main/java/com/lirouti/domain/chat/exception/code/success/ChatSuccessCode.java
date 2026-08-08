@@ -27,6 +27,21 @@ public enum ChatSuccessCode implements BaseSuccessCode {
             HttpStatus.OK,
             "채팅 읽음 위치 갱신에 성공했습니다.",
             "CHAT200_4"
+    ),
+    ADMIN_EMOTICON_LIST_FETCH_SUCCESS(
+            HttpStatus.OK,
+            "관리자용 채팅 이모티콘 목록 조회에 성공했습니다.",
+            "CHAT200_5"
+    ),
+    EMOTICON_STATUS_UPDATE_SUCCESS(
+            HttpStatus.OK,
+            "채팅 이모티콘 상태 변경에 성공했습니다.",
+            "CHAT200_6"
+    ),
+    EMOTICON_CREATE_SUCCESS(
+            HttpStatus.CREATED,
+            "채팅 이모티콘 등록에 성공했습니다.",
+            "CHAT201_1"
     );
 
     private final HttpStatus httpStatus;

@@ -1,5 +1,6 @@
 package com.lirouti.global.apiPayload.handler;
 
+import com.lirouti.domain.media.exception.code.error.MediaErrorCode;
 import com.lirouti.global.apiPayload.ApiResponse;
 import com.lirouti.global.apiPayload.code.GeneralErrorCode;
 import org.junit.jupiter.api.DisplayName;
@@ -8,8 +9,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -17,6 +20,31 @@ import static org.mockito.Mockito.when;
 class GeneralExceptionAdviceTest {
 
     private final GeneralExceptionAdvice advice = new GeneralExceptionAdvice();
+
+    @Test
+    @DisplayName("multipart 용량 초과는 413 미디어 오류 응답으로 변환한다")
+    void handleMaxUploadSizeExceeded_Returns413() {
+        // given
+        MaxUploadSizeExceededException exception =
+                new MaxUploadSizeExceededException(10_485_760L);
+
+        // when
+        ResponseEntity<ApiResponse<Void>> response =
+                advice.handleMaxUploadSizeExceeded(exception);
+
+        // then
+        assertThat(response.getBody()).isNotNull();
+        assertAll(
+                () -> assertThat(response.getStatusCode())
+                        .isEqualTo(HttpStatus.CONTENT_TOO_LARGE),
+                () -> assertThat(response.getBody().getIsSuccess()).isFalse(),
+                () -> assertThat(response.getBody().getCode())
+                        .isEqualTo(MediaErrorCode.FILE_TOO_LARGE.getCode()),
+                () -> assertThat(response.getBody().getMessage())
+                        .isEqualTo(MediaErrorCode.FILE_TOO_LARGE.getMessage()),
+                () -> assertThat(response.getBody().getResult()).isNull()
+        );
+    }
 
     @Test
     @DisplayName("요청 본문 파싱 실패(HttpMessageNotReadableException)는 500이 아닌 400으로 변환한다")

@@ -45,6 +45,24 @@ public final class ChatConverter {
     }
 
     /**
+     * 검증과 S3 업로드가 끝난 등록 요청을 활성 상태의 정적 이모티콘 Entity로 변환한다.
+     */
+    public static ChatEmoticon toEntity(
+            ChatReqDTO.RegisterEmoticon request,
+            String assetKey,
+            String contentType
+    ) {
+        return ChatEmoticon.builder()
+                .code(request.code())
+                .assetKey(assetKey)
+                .contentType(contentType)
+                .animated(false)
+                .active(true)
+                .displayOrder(request.displayOrder())
+                .build();
+    }
+
+    /**
      * 메시지 Entity와 Service가 조립한 이모티콘 정보를 API 응답으로 변환한다.
      */
     public static ChatResDTO.Message toMessage(
@@ -113,6 +131,41 @@ public final class ChatConverter {
                 .map(emoticon -> toEmoticon(emoticon, assetUrls.get(emoticon.getId())))
                 .toList();
         return ChatResDTO.EmoticonList.builder()
+                .emoticons(results)
+                .build();
+    }
+
+    /**
+     * private object key 대신 조회 시점에 발급한 URL을 사용하는 관리자 응답으로 변환한다.
+     */
+    public static ChatResDTO.AdminEmoticon toAdminEmoticon(
+            ChatEmoticon emoticon,
+            String assetUrl
+    ) {
+        return ChatResDTO.AdminEmoticon.builder()
+                .id(emoticon.getId())
+                .code(emoticon.getCode())
+                .assetUrl(assetUrl)
+                .contentType(emoticon.getContentType())
+                .animated(emoticon.getAnimated())
+                .active(emoticon.getActive())
+                .displayOrder(emoticon.getDisplayOrder())
+                .build();
+    }
+
+    /**
+     * Repository가 정렬한 활성·비활성 이모티콘 순서를 유지해 관리자 목록을 조립한다.
+     */
+    public static ChatResDTO.AdminEmoticonList toAdminEmoticonList(
+            List<ChatEmoticon> emoticons,
+            Map<Long, String> assetUrls
+    ) {
+        List<ChatResDTO.AdminEmoticon> results = emoticons.stream()
+                .map(emoticon -> toAdminEmoticon(
+                        emoticon,
+                        assetUrls.get(emoticon.getId())))
+                .toList();
+        return ChatResDTO.AdminEmoticonList.builder()
                 .emoticons(results)
                 .build();
     }
