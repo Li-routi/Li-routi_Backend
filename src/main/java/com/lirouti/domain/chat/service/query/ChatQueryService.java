@@ -20,7 +20,11 @@ import com.lirouti.domain.chat.repository.ChatMessageRepository;
 import com.lirouti.domain.group.service.GroupValidationService;
 import com.lirouti.domain.media.enums.MediaPurpose;
 import com.lirouti.domain.media.service.MediaService;
+import com.lirouti.domain.member.entity.Member;
+import com.lirouti.domain.member.enums.Role;
 import com.lirouti.domain.member.service.query.MemberQueryService;
+import com.lirouti.global.apiPayload.code.GeneralErrorCode;
+import com.lirouti.global.apiPayload.exception.GeneralException;
 
 import lombok.RequiredArgsConstructor;
 
@@ -79,14 +83,25 @@ public class ChatQueryService {
         List<ChatEmoticon> emoticons =
                 chatEmoticonRepository.findAllByActiveTrueOrderByDisplayOrderAscIdAsc();
 
-        Map<Long, String> assetUrls = emoticons.stream()
-                .collect(Collectors.toMap(
-                        ChatEmoticon::getId,
-                        emoticon -> mediaService.resolveViewUrl(
-                                emoticon.getAssetKey(),
-                                MediaPurpose.CHAT_EMOTICON)
-                ));
+        Map<Long, String> assetUrls = resolveEmoticonAssetUrls(emoticons);
         return ChatConverter.toEmoticonList(emoticons, assetUrls);
+    }
+
+    /**
+     * JWT role이 변경 전 값일 수 있으므로 DB의 현재 활성 상태와 관리자 role을 다시 검증한다.
+     * 운영 화면에는 비활성 자산도 필요하므로 일반 회원 목록과 달리 전체를 조회한다.
+     */
+    @Transactional(readOnly = true)
+    public ChatResDTO.AdminEmoticonList getAdminEmoticons(Long memberId) {
+        Member member = memberQueryService.getActiveMember(memberId);
+        if (member.getRole() != Role.ROLE_ADMIN) {
+            throw new GeneralException(GeneralErrorCode.FORBIDDEN);
+        }
+
+        List<ChatEmoticon> emoticons =
+                chatEmoticonRepository.findAllByOrderByDisplayOrderAscIdAsc();
+        Map<Long, String> assetUrls = resolveEmoticonAssetUrls(emoticons);
+        return ChatConverter.toAdminEmoticonList(emoticons, assetUrls);
     }
 
     /**
@@ -111,6 +126,16 @@ public class ChatQueryService {
                                         emoticon.getAssetKey(),
                                         MediaPurpose.CHAT_EMOTICON)
                 )));
+    }
+
+    private Map<Long, String> resolveEmoticonAssetUrls(List<ChatEmoticon> emoticons) {
+        return emoticons.stream()
+                .collect(Collectors.toMap(
+                        ChatEmoticon::getId,
+                        emoticon -> mediaService.resolveViewUrl(
+                                emoticon.getAssetKey(),
+                                MediaPurpose.CHAT_EMOTICON)
+                ));
     }
 
     /**

@@ -1,12 +1,11 @@
 package com.lirouti.domain.verification.service;
 
-import com.lirouti.domain.challenge.client.AnthropicVerificationReviewClient;
-import com.lirouti.domain.challenge.client.ReviewRejection;
-import com.lirouti.domain.challenge.client.VerificationReview;
+import com.lirouti.domain.verification.client.AnthropicVerificationReviewClient;
+import com.lirouti.domain.verification.client.ReviewRejection;
+import com.lirouti.domain.verification.client.VerificationReview;
 import com.lirouti.domain.challenge.entity.Challenge;
 import com.lirouti.domain.challenge.entity.MemberChallenge;
 import com.lirouti.domain.challenge.enums.ChallengeCategory;
-import com.lirouti.domain.challenge.service.command.ChallengeCommandService;
 import com.lirouti.domain.media.enums.MediaPurpose;
 import com.lirouti.domain.media.service.MediaImage;
 import com.lirouti.domain.media.service.MediaImageLoad;
@@ -58,7 +57,7 @@ class PendingReviewTest {
             "challenge-verifications/2026/08/08/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.jpg";
 
     @Autowired
-    private ChallengeCommandService challengeCommandService;
+    private ChallengeVerificationService challengeVerificationService;
 
     @MockitoBean
     private MediaService mediaService;
@@ -130,7 +129,7 @@ class PendingReviewTest {
 
         // when
         ChallengeVerificationResDTO.Verification result =
-                challengeCommandService.verify(memberId, challengeId, request());
+                challengeVerificationService.verify(memberId, challengeId, request());
 
         // then
         ChallengeVerification row = saved();
@@ -154,7 +153,7 @@ class PendingReviewTest {
 
         // when
         ChallengeVerificationResDTO.Verification result =
-                challengeCommandService.verify(memberId, challengeId, request());
+                challengeVerificationService.verify(memberId, challengeId, request());
 
         // then
         assertThat(result.currentStreak()).isEqualTo(1);
@@ -168,7 +167,7 @@ class PendingReviewTest {
         when(reviewClient.review(any(), any(), any())).thenReturn(VerificationReview.disabled());
 
         // when
-        challengeCommandService.verify(memberId, challengeId, request());
+        challengeVerificationService.verify(memberId, challengeId, request());
 
         // then
         ChallengeVerification row = saved();
@@ -183,7 +182,7 @@ class PendingReviewTest {
         when(mediaService.loadForReview(any(), anyInt())).thenReturn(MediaImageLoad.tooLarge());
 
         // when
-        challengeCommandService.verify(memberId, challengeId, request());
+        challengeVerificationService.verify(memberId, challengeId, request());
 
         // then
         assertThat(saved().getReviewStatus()).isEqualTo(ReviewStatus.APPROVED);
@@ -197,7 +196,7 @@ class PendingReviewTest {
                 .thenReturn(VerificationReview.reject(ReviewRejection.MISMATCH, "관계 없는 사진"));
 
         // when & then
-        assertThatThrownBy(() -> challengeCommandService.verify(memberId, challengeId, request()))
+        assertThatThrownBy(() -> challengeVerificationService.verify(memberId, challengeId, request()))
                 .isInstanceOf(RuntimeException.class);
     }
 
@@ -207,12 +206,12 @@ class PendingReviewTest {
         // given
         when(reviewClient.review(any(), any(), any()))
                 .thenReturn(VerificationReview.transientFailure("타임아웃"));
-        Long verificationId = challengeCommandService
+        Long verificationId = challengeVerificationService
                 .verify(memberId, challengeId, request()).verificationId();
 
         // when & then — 좋아요 행이 붙으면 반려 확정 때 인증 삭제가 외래 키에 걸려 실패하고,
         // 그 행은 영원히 보류로 남는다.
-        assertThatThrownBy(() -> challengeCommandService.like(memberId, challengeId, verificationId))
+        assertThatThrownBy(() -> challengeVerificationService.like(memberId, challengeId, verificationId))
                 .isInstanceOf(RuntimeException.class);
     }
 
@@ -222,11 +221,11 @@ class PendingReviewTest {
         // given
         when(reviewClient.review(any(), any(), any()))
                 .thenReturn(VerificationReview.transientFailure("타임아웃"));
-        Long verificationId = challengeCommandService
+        Long verificationId = challengeVerificationService
                 .verify(memberId, challengeId, request()).verificationId();
 
         // when & then
-        assertThatThrownBy(() -> challengeCommandService.report(
+        assertThatThrownBy(() -> challengeVerificationService.report(
                 memberId, challengeId, verificationId,
                 new ChallengeVerificationReqDTO.Report(null)))
                 .isInstanceOf(RuntimeException.class);
@@ -238,7 +237,7 @@ class PendingReviewTest {
         // given
         when(reviewClient.review(any(), any(), any()))
                 .thenReturn(VerificationReview.transientFailure("타임아웃"));
-        challengeCommandService.verify(memberId, challengeId, request());
+        challengeVerificationService.verify(memberId, challengeId, request());
         em.flush();
         em.clear();
 

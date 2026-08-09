@@ -3,7 +3,6 @@ package com.lirouti.domain.challenge.repository;
 import com.lirouti.domain.challenge.entity.Challenge;
 import com.lirouti.domain.challenge.enums.ChallengeCategory;
 
-import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
@@ -43,9 +42,4 @@ public interface ChallengeRepositoryCustom {
      * 탈퇴 회원의 인증은 제외한다. (상세 조회용)
      */
     long countVerificationPosts(Long challengeId);
-
-    /**
-     * 한 챌린지의 오늘 완료자 수. 회원 단위로 중복 제거하고(현재 회차 기준), 탈퇴 회원은 제외한다. (상세 조회용)
-     */
-    long countTodayCompletions(Long challengeId, LocalDate today);
 }

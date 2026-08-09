@@ -2,6 +2,7 @@ package com.lirouti.domain.group.dto.request;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.lirouti.domain.group.entity.GroupMember;
 import com.lirouti.domain.group.entity.GroupRoutine;
 import com.lirouti.domain.group.entity.GroupRoutineCategory;
 import com.lirouti.domain.routine.enums.RoutineCategoryColor;
@@ -33,6 +34,45 @@ public final class GroupReqDTO {
         public JoinGroup {
             inviteCode = inviteCode == null ? null : inviteCode.trim().toUpperCase(Locale.ROOT);
         }
+    }
+
+    /** 로그인 회원이 대상 그룹 안에서만 보이는 상태 메시지를 수정한다. */
+    @Schema(name = "UpdateGroupMemberStatusMessage", description = "내 그룹별 상태 메시지 수정 요청")
+    public record UpdateMyStatusMessage(
+            @Schema(description = "앞뒤 공백을 제거한 1~255자 상태 메시지", example = "오늘도 루틴 완료!")
+            @NotBlank(message = "상태 메시지는 필수입니다.")
+            @Size(
+                    max = GroupMember.MAX_STATUS_MESSAGE_LENGTH,
+                    message = "상태 메시지는 255자 이하여야 합니다."
+            )
+            String statusMessage
+    ) {
+        public UpdateMyStatusMessage {
+            statusMessage = statusMessage == null ? null : statusMessage.strip();
+        }
+    }
+
+    /** 그룹 설정에서 모임 이름을 변경하는 요청이다. */
+    @Schema(name = "UpdateGroupName", description = "그룹 방 이름 변경 요청")
+    public record UpdateName(
+            @Schema(description = "모임 이름. 앞뒤 공백을 제거한 뒤 1~20자", example = "저녁 루틴 모임")
+            @NotBlank(message = "모임 이름은 필수입니다.")
+            @Size(max = 20, message = "모임 이름은 20자 이하여야 합니다.")
+            String name
+    ) {
+        public UpdateName {
+            name = name == null ? null : name.trim();
+        }
+    }
+
+    /** 그룹 설정에서 ACTIVE 구성원에게 방장 권한을 위임하는 요청이다. */
+    @Schema(name = "TransferGroupOwner", description = "그룹 방장 위임 요청")
+    public record TransferOwner(
+            @Schema(description = "방장 권한을 받을 ACTIVE 그룹 구성원의 회원 ID", example = "2")
+            @NotNull(message = "위임 대상 회원 ID는 필수입니다.")
+            @Positive(message = "위임 대상 회원 ID는 양수여야 합니다.")
+            Long targetMemberId
+    ) {
     }
 
     /** 그룹 설정에서 사용자 카테고리를 추가하는 요청이다. */

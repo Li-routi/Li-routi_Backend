@@ -4,12 +4,14 @@ import com.lirouti.domain.auth.controller.AuthController;
 import com.lirouti.domain.auth.dto.response.AuthResDTO;
 import com.lirouti.domain.auth.service.AuthService;
 import com.lirouti.domain.member.controller.MemberController;
+import com.lirouti.domain.member.enums.Role;
 import com.lirouti.domain.member.service.MemberProfileService;
 import com.lirouti.domain.member.service.command.MemberCommandService;
 import com.lirouti.domain.member.service.query.MemberQueryService;
 import com.lirouti.global.apiPayload.ApiErrorResponseWriter;
 import com.lirouti.global.auth.AccessDeniedHandlerImpl;
 import com.lirouti.global.auth.AuthenticationEntryPointImpl;
+import com.lirouti.global.auth.CustomUserDetails;
 import com.lirouti.global.auth.filter.JwtAuthFilter;
 import com.lirouti.global.auth.filter.JwtExceptionFilter;
 import com.lirouti.global.util.JwtUtil;
@@ -25,9 +27,12 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 import static org.mockito.Mockito.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -35,7 +40,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest({AuthController.class, MemberController.class})
 @Import({SecurityConfig.class, JwtAuthFilter.class, JwtExceptionFilter.class,
         AuthenticationEntryPointImpl.class, AccessDeniedHandlerImpl.class,
-        ApiErrorResponseWriter.class})
+        ApiErrorResponseWriter.class, SecurityConfigTest.AdminSecurityProbeController.class})
 @DisplayName("SecurityConfig HTTP 접근 제어 테스트")
 class SecurityConfigTest {
     private static final String ACCESS_TOKEN = "access-token";
@@ -130,5 +135,46 @@ class SecurityConfigTest {
         // then
         result.andExpect(status().isOk());
         verify(memberCommandService).logout(ACCESS_TOKEN);
+    }
+
+    @Test
+    @DisplayName("인증 없이 관리자 이모티콘 API에 접근하면 401이다")
+    void adminChatEmoticonApi_Anonymous_Returns401() throws Exception {
+        // when
+        ResultActions result = mockMvc.perform(get("/api/admin/chat/emoticons/security-probe"));
+
+        // then
+        result.andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("COMMON401_1"));
+    }
+
+    @Test
+    @DisplayName("일반 회원이 관리자 이모티콘 API에 접근하면 403이다")
+    void adminChatEmoticonApi_User_Returns403() throws Exception {
+        // when
+        ResultActions result = mockMvc.perform(get("/api/admin/chat/emoticons/security-probe")
+                .with(user(new CustomUserDetails(1L, Role.ROLE_USER))));
+
+        // then
+        result.andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("AUTH403_1"));
+    }
+
+    @Test
+    @DisplayName("관리자는 관리자 이모티콘 API에 접근할 수 있다")
+    void adminChatEmoticonApi_Admin_AllowsAccess() throws Exception {
+        // when
+        ResultActions result = mockMvc.perform(get("/api/admin/chat/emoticons/security-probe")
+                .with(user(new CustomUserDetails(2L, Role.ROLE_ADMIN))));
+
+        // then
+        result.andExpect(status().isOk());
+    }
+
+    @RestController
+    static class AdminSecurityProbeController {
+        @GetMapping("/api/admin/chat/emoticons/security-probe")
+        void probe() {
+        }
     }
 }

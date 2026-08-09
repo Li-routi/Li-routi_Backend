@@ -92,6 +92,13 @@ class GroupCreationControllerIntegrationTest {
                         "select count(gm) from GroupMember gm where gm.member.id = :value",
                         memberId
                 )).isEqualTo(1);
+                GroupMember ownerMembership = entityManager.createQuery(
+                                "select gm from GroupMember gm where gm.member.id = :memberId",
+                                GroupMember.class
+                        ).setParameter("memberId", memberId)
+                        .getSingleResult();
+                assertThat(ownerMembership.getStatusMessage())
+                        .isEqualTo(GroupMember.DEFAULT_STATUS_MESSAGE);
                 assertThat(count(
                         "select count(c) from GroupRoutineCategory c where c.name = :value",
                         categoryName

@@ -2,6 +2,7 @@ package com.lirouti.domain.verification.repository;
 
 import static com.lirouti.domain.member.repository.MemberQuerySupport.activeMember;
 import static com.lirouti.domain.verification.repository.VerificationQuerySupport.notHidden;
+import static com.lirouti.domain.verification.repository.VerificationQuerySupport.notDeleted;
 import static com.lirouti.domain.verification.repository.VerificationQuerySupport.notPending;
 
 import java.util.List;
@@ -48,6 +49,7 @@ public class ChallengeVerificationRepositoryImpl implements ChallengeVerificatio
                         notHidden(verification),
                         // 승격되지 않아 공개 주소가 없다. 담으면 열리지 않는 사진이 나간다.
                         notPending(verification),
+                        notDeleted(verification),
                         notReportedBy(viewerId),
                         cursorLt(cursor)
                 )
@@ -96,6 +98,8 @@ public class ChallengeVerificationRepositoryImpl implements ChallengeVerificatio
                 .where(
                         verification.memberChallenge.id.eq(memberChallengeId),
                         notHidden(verification),
+                        // 본인이 내린 글이다. 지운 사람에게도 보이면 삭제가 아니다.
+                        notDeleted(verification),
                         // 보류를 빼지 않는다. 방금 올린 사진이 화면에서 사라지면 안 된다 —
                         // 대신 상태를 함께 내려 "심사 중" 을 그리게 한다.
                         statusEq(statusFilter),

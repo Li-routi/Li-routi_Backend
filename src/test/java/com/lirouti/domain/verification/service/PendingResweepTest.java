@@ -1,8 +1,8 @@
 package com.lirouti.domain.verification.service;
 
-import com.lirouti.domain.challenge.client.AnthropicVerificationReviewClient;
-import com.lirouti.domain.challenge.client.ReviewRejection;
-import com.lirouti.domain.challenge.client.VerificationReview;
+import com.lirouti.domain.verification.client.AnthropicVerificationReviewClient;
+import com.lirouti.domain.verification.client.ReviewRejection;
+import com.lirouti.domain.verification.client.VerificationReview;
 import com.lirouti.domain.challenge.entity.Challenge;
 import com.lirouti.domain.challenge.entity.MemberChallenge;
 import com.lirouti.domain.challenge.enums.ChallengeCategory;
@@ -142,7 +142,8 @@ class PendingResweepTest {
 
         ChallengeVerification v = ChallengeVerification.builder()
                 .memberChallenge(mc).participationRound(1)
-                .verifiedDate(LocalDate.now()).verifiedAt(LocalDateTime.now())
+                .verifiedDate(LocalDate.now())
+                .periodStartDate(LocalDate.now()).verifiedAt(LocalDateTime.now())
                 .imageUrl(STAGING_KEY).content("보류 건")
                 .reviewStatus(ReviewStatus.PENDING).pendingSince(pendingSince)
                 .build();

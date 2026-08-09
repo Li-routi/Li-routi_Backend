@@ -82,7 +82,8 @@ class ChallengeRepositoryTest {
     private void verify(MemberChallenge mc, int round, LocalDate date) {
         em.persist(ChallengeVerification.builder()
                 .memberChallenge(mc).participationRound(round)
-                .verifiedDate(date).verifiedAt(LocalDateTime.now())
+                .verifiedDate(date)
+                .periodStartDate(date).verifiedAt(LocalDateTime.now())
                 .imageUrl("https://img/x.jpg").build());
     }
 
@@ -178,46 +179,8 @@ class ChallengeRepositoryTest {
         assertThat(challengeRepository.countActiveParticipants(c.getId())).isEqualTo(1);
     }
 
-    @Test
-    @DisplayName("오늘 완료자 수: 같은 회원의 회차 다른 오늘 인증 2건을 1명으로 센다")
-    void countTodayCompletions_DedupByMemberChallengeAndCurrentRound() {
-        Challenge c = challenge("cq스쿼트", ChallengeCategory.EXERCISE, true);
-        Member m = member(true);
-        MemberChallenge mc = join(m, c, true, 2);
-        verify(mc, 1, LocalDate.now());
-        verify(mc, 2, LocalDate.now());
 
-        MemberChallenge mc2 = join(member(true), c, true, 1);
-        verify(mc2, 1, LocalDate.now());
-        em.flush();
-        em.clear();
 
-        assertThat(challengeRepository.countTodayCompletions(c.getId(), LocalDate.now())).isEqualTo(2);
-    }
-
-    @Test
-    @DisplayName("오늘 완료자 수: 어제 인증은 세지 않는다")
-    void countTodayCompletions_ExcludesYesterday() {
-        Challenge c = challenge("cq독서2", ChallengeCategory.STUDY, true);
-        MemberChallenge mc = join(member(true), c, true, 1);
-        verify(mc, 1, LocalDate.now().minusDays(1));
-        em.flush();
-        em.clear();
-
-        assertThat(challengeRepository.countTodayCompletions(c.getId(), LocalDate.now())).isZero();
-    }
-
-    @Test
-    @DisplayName("오늘 완료자 수: 오늘 인증한 뒤 그만둔(active=false) 회원도 센다 (스키마 규칙)")
-    void countTodayCompletions_IncludesQuitterWhoVerifiedToday() {
-        Challenge c = challenge("cq플랭크", ChallengeCategory.EXERCISE, true);
-        MemberChallenge mc = join(member(true), c, false, 1);
-        verify(mc, 1, LocalDate.now());
-        em.flush();
-        em.clear();
-
-        assertThat(challengeRepository.countTodayCompletions(c.getId(), LocalDate.now())).isEqualTo(1);
-    }
 
     @Test
     @DisplayName("배치 참여자 수: 챌린지별로 활성 참여자를 세고 이탈·탈퇴 회원은 제외한다")

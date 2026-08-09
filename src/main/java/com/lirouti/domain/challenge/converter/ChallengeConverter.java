@@ -2,9 +2,6 @@ package com.lirouti.domain.challenge.converter;
 
 import com.lirouti.domain.challenge.dto.response.ChallengeResDTO;
 import com.lirouti.domain.challenge.entity.Challenge;
-import com.lirouti.domain.verification.dto.response.ChallengeVerificationResDTO;
-import com.lirouti.domain.verification.entity.ChallengeVerification;
-import com.lirouti.domain.verification.entity.ChallengeVerificationReport;
 import com.lirouti.domain.challenge.entity.MemberChallenge;
 
 import java.util.List;
@@ -90,8 +87,7 @@ public final class ChallengeConverter {
             boolean participating,
             boolean verifiedInCurrentPeriod,
             long participantCount,
-            long verificationPostCount,
-            long todayCompletionCount
+            long verificationPostCount
     ) {
         return ChallengeResDTO.Detail.builder()
                 .challengeId(challenge.getId())
@@ -105,7 +101,6 @@ public final class ChallengeConverter {
                 .verifiedInCurrentPeriod(verifiedInCurrentPeriod)
                 .participantCount(participantCount)
                 .verificationPostCount(verificationPostCount)
-                .todayCompletionCount(todayCompletionCount)
                 .build();
     }
 }

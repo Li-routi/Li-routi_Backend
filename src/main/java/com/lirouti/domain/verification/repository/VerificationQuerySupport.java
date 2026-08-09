@@ -44,4 +44,19 @@ public final class VerificationQuerySupport {
     public static BooleanExpression notPending(QChallengeVerification verification) {
         return verification.reviewStatus.eq(ReviewStatus.APPROVED);
     }
+
+    /**
+     * 작성자가 내린 글을 제외한다.
+     *
+     * <p><b>노출 경로에만 붙인다.</b> 삭제는 "글을 내리는 것" 이지 "인증을 취소하는 것" 이 아니다 —
+     * 그래서 현재 주기 인증 여부·오늘 완료자 수 같은 <b>수행 기록에는 붙이지 않는다.</b>
+     * 신고 숨김({@link #notHidden})·심사 보류({@link #notPending})와 같은 갈림이다.
+     *
+     * <p>⚠️ <b>저장 경로의 "이번 구간 인증 찾기" 에는 절대 붙이면 안 된다.</b> 붙이면 내린 뒤 다시
+     * 인증할 때 그 행을 못 찾아 새로 INSERT 하고 유니크 제약에 걸린다. 덮어쓰기 경로가 내린
+     * 행까지 찾아야만 소프트 삭제가 성립한다(database-schema.md).
+     */
+    public static BooleanExpression notDeleted(QChallengeVerification verification) {
+        return verification.deletedAt.isNull();
+    }
 }

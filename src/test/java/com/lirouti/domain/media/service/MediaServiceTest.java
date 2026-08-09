@@ -11,12 +11,16 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.core.io.InputStreamSource;
 import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.exception.SdkClientException;
+import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.http.AbortableInputStream;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
@@ -30,6 +34,8 @@ import java.io.ByteArrayInputStream;
 import java.net.URI;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.junit.jupiter.api.Assertions.assertAll;
@@ -325,6 +331,272 @@ class MediaServiceTest {
         assertThatThrownBy(() -> mediaService.issuePresignedUrl(request))
                 .isInstanceOf(MediaException.class)
                 .hasFieldOrPropertyWithValue("code", MediaErrorCode.PRESIGNED_URL_ISSUE_FAILED);
+    }
+
+    @ParameterizedTest
+    @MethodSource("serviceOwnedImageCases")
+    @DisplayName("서비스 소유 PNG/JPEG/WEBP를 검증해 private key로 직접 업로드한다")
+    void uploadServiceOwnedImage_ValidImage_UploadsWithNormalizedMetadata(
+            String declaredContentType,
+            String fileContentType,
+            byte[] bytes,
+            String expectedContentType,
+            String expectedExtension
+    ) throws Exception {
+        // given
+        AtomicInteger streamOpenCount = new AtomicInteger();
+        InputStreamSource source = () -> {
+            streamOpenCount.incrementAndGet();
+            return new ByteArrayInputStream(bytes);
+        };
+
+        // when
+        MediaService.UploadedMedia result = mediaService.uploadServiceOwnedImage(
+                MediaPurpose.CHAT_EMOTICON,
+                declaredContentType,
+                fileContentType,
+                bytes.length,
+                source
+        );
+
+        // then
+        ArgumentCaptor<PutObjectRequest> requestCaptor =
+                ArgumentCaptor.forClass(PutObjectRequest.class);
+        ArgumentCaptor<RequestBody> bodyCaptor = ArgumentCaptor.forClass(RequestBody.class);
+        verify(s3Client).putObject(requestCaptor.capture(), bodyCaptor.capture());
+        PutObjectRequest request = requestCaptor.getValue();
+        RequestBody requestBody = bodyCaptor.getValue();
+        byte[] uploadedBytes;
+        try (var inputStream = requestBody.contentStreamProvider().newStream()) {
+            uploadedBytes = inputStream.readAllBytes();
+        }
+
+        assertAll(
+                () -> assertThat(result.mediaKey())
+                        .startsWith("chat-emoticons/")
+                        .endsWith(expectedExtension),
+                () -> assertThat(result.contentType()).isEqualTo(expectedContentType),
+                () -> assertThat(request.bucket()).isEqualTo(BUCKET),
+                () -> assertThat(request.key()).isEqualTo(result.mediaKey()),
+                () -> assertThat(request.contentType()).isEqualTo(expectedContentType),
+                () -> assertThat(request.contentLength()).isEqualTo((long) bytes.length),
+                () -> assertThat(requestBody.optionalContentLength())
+                        .contains((long) bytes.length),
+                () -> assertThat(uploadedBytes).isEqualTo(bytes),
+                // signature 검사와 PUT이 같은 stream을 재사용하면 앞 12바이트가 빠진 채 올라간다.
+                () -> assertThat(streamOpenCount.get()).isEqualTo(2)
+        );
+        verifyNoInteractions(s3Presigner);
+    }
+
+    private static Stream<Arguments> serviceOwnedImageCases() {
+        return Stream.of(
+                Arguments.of(
+                        " IMAGE/PNG ",
+                        "image/png",
+                        new byte[]{(byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+                                0x00, 0x00, 0x00, 0x00},
+                        "image/png",
+                        ".png"
+                ),
+                Arguments.of(
+                        "image/jpeg",
+                        " IMAGE/JPEG ",
+                        new byte[]{(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE0,
+                                0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01},
+                        "image/jpeg",
+                        ".jpg"
+                ),
+                Arguments.of(
+                        "image/webp",
+                        "image/webp",
+                        webpWithFeatureFlags(0),
+                        "image/webp",
+                        ".webp"
+                )
+        );
+    }
+
+    @Test
+    @DisplayName("채팅 이모티콘용 animated WEBP는 업로드 전에 거부한다")
+    void uploadServiceOwnedImage_AnimatedWebpEmoticon_RejectsBeforeUpload() {
+        byte[] animatedWebp = webpWithFeatureFlags(0x02);
+
+        assertThatThrownBy(() -> mediaService.uploadServiceOwnedImage(
+                MediaPurpose.CHAT_EMOTICON,
+                "image/webp",
+                "image/webp",
+                animatedWebp.length,
+                () -> new ByteArrayInputStream(animatedWebp)
+        )).isInstanceOf(MediaException.class)
+                .hasFieldOrPropertyWithValue(
+                        "code",
+                        MediaErrorCode.CONTENT_TYPE_NOT_ALLOWED_FOR_PURPOSE
+                );
+        verifyNoInteractions(s3Client, s3Presigner);
+    }
+
+    private static byte[] webpWithFeatureFlags(int featureFlags) {
+        return new byte[]{
+                0x52, 0x49, 0x46, 0x46, 0x16, 0x00, 0x00, 0x00,
+                0x57, 0x45, 0x42, 0x50,
+                0x56, 0x50, 0x38, 0x58, 0x0A, 0x00, 0x00, 0x00,
+                (byte) featureFlags, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00
+        };
+    }
+
+    @Test
+    @DisplayName("파일 Content-Type이 없으면 metadata와 실제 bytes로 검증한다")
+    void uploadServiceOwnedImage_MissingFileContentType_AllowsUpload() {
+        // given
+        byte[] png = {(byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A};
+
+        // when & then
+        assertThatCode(() -> mediaService.uploadServiceOwnedImage(
+                MediaPurpose.CHAT_EMOTICON,
+                "image/png",
+                null,
+                png.length,
+                () -> new ByteArrayInputStream(png)
+        )).doesNotThrowAnyException();
+        verify(s3Client).putObject(any(PutObjectRequest.class), any(RequestBody.class));
+    }
+
+    @Test
+    @DisplayName("빈 파일은 S3 호출 전에 400으로 거부한다")
+    void uploadServiceOwnedImage_EmptyFile_Throws400() {
+        assertThatThrownBy(() -> mediaService.uploadServiceOwnedImage(
+                MediaPurpose.CHAT_EMOTICON,
+                "image/png",
+                "image/png",
+                0,
+                () -> new ByteArrayInputStream(new byte[0])
+        )).isInstanceOf(MediaException.class)
+                .hasFieldOrPropertyWithValue("code", MediaErrorCode.EMPTY_FILE);
+
+        verifyNoInteractions(s3Client);
+    }
+
+    @Test
+    @DisplayName("metadata와 파일 Content-Type이 다르면 S3 호출 전에 400으로 거부한다")
+    void uploadServiceOwnedImage_ContentTypeMismatch_Throws400() {
+        byte[] png = {(byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A};
+
+        assertThatThrownBy(() -> mediaService.uploadServiceOwnedImage(
+                MediaPurpose.CHAT_EMOTICON,
+                "image/png",
+                "image/jpeg",
+                png.length,
+                () -> new ByteArrayInputStream(png)
+        )).isInstanceOf(MediaException.class)
+                .hasFieldOrPropertyWithValue("code", MediaErrorCode.CONTENT_TYPE_MISMATCH);
+
+        verifyNoInteractions(s3Client);
+    }
+
+    @Test
+    @DisplayName("선언 MIME과 실제 signature가 다르면 S3 호출 전에 422로 거부한다")
+    void uploadServiceOwnedImage_SignatureMismatch_Throws422() {
+        byte[] jpeg = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF};
+
+        assertThatThrownBy(() -> mediaService.uploadServiceOwnedImage(
+                MediaPurpose.CHAT_EMOTICON,
+                "image/png",
+                "image/png",
+                jpeg.length,
+                () -> new ByteArrayInputStream(jpeg)
+        )).isInstanceOf(MediaException.class)
+                .hasFieldOrPropertyWithValue("code", MediaErrorCode.MEDIA_CONTENT_MISMATCH);
+
+        verifyNoInteractions(s3Client);
+    }
+
+    @Test
+    @DisplayName("이미지 크기 상한을 넘으면 stream을 열거나 S3를 호출하지 않는다")
+    void uploadServiceOwnedImage_TooLarge_Throws413BeforeReading() {
+        AtomicInteger streamOpenCount = new AtomicInteger();
+        InputStreamSource source = () -> {
+            streamOpenCount.incrementAndGet();
+            return new ByteArrayInputStream(new byte[]{(byte) 0xFF, (byte) 0xD8, (byte) 0xFF});
+        };
+
+        assertThatThrownBy(() -> mediaService.uploadServiceOwnedImage(
+                MediaPurpose.CHAT_EMOTICON,
+                "image/jpeg",
+                "image/jpeg",
+                MAX_IMAGE_SIZE + 1,
+                source
+        )).isInstanceOf(MediaException.class)
+                .hasFieldOrPropertyWithValue("code", MediaErrorCode.FILE_TOO_LARGE);
+
+        assertThat(streamOpenCount.get()).isZero();
+        verifyNoInteractions(s3Client);
+    }
+
+    @Test
+    @DisplayName("S3 PUT 실패를 미디어 업로드 500 예외로 변환한다")
+    void uploadServiceOwnedImage_S3Failure_Throws500() {
+        byte[] jpeg = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF};
+        when(s3Client.putObject(any(PutObjectRequest.class), any(RequestBody.class)))
+                .thenThrow(SdkClientException.create("put failed"));
+
+        assertThatThrownBy(() -> mediaService.uploadServiceOwnedImage(
+                MediaPurpose.CHAT_EMOTICON,
+                "image/jpeg",
+                "image/jpeg",
+                jpeg.length,
+                () -> new ByteArrayInputStream(jpeg)
+        )).isInstanceOf(MediaException.class)
+                .hasFieldOrPropertyWithValue("code", MediaErrorCode.MEDIA_UPLOAD_FAILED);
+    }
+
+    @Test
+    @DisplayName("서비스 소유 미디어는 검증된 정확한 key만 삭제한다")
+    void deleteServiceOwnedMedia_ValidKey_DeletesExactObject() {
+        // given
+        String mediaKey =
+                "chat-emoticons/2026/08/08/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.png";
+
+        // when
+        mediaService.deleteServiceOwnedMedia(mediaKey, MediaPurpose.CHAT_EMOTICON);
+
+        // then
+        ArgumentCaptor<DeleteObjectRequest> captor =
+                ArgumentCaptor.forClass(DeleteObjectRequest.class);
+        verify(s3Client).deleteObject(captor.capture());
+        assertAll(
+                () -> assertThat(captor.getValue().bucket()).isEqualTo(BUCKET),
+                () -> assertThat(captor.getValue().key()).isEqualTo(mediaKey)
+        );
+    }
+
+    @Test
+    @DisplayName("발급 규칙에 맞지 않는 key는 삭제하지 않는다")
+    void deleteServiceOwnedMedia_InvalidKey_DoesNotCallS3() {
+        assertThatThrownBy(() -> mediaService.deleteServiceOwnedMedia(
+                "chat-emoticons/../../other-object.png",
+                MediaPurpose.CHAT_EMOTICON
+        )).isInstanceOf(MediaException.class)
+                .hasFieldOrPropertyWithValue("code", MediaErrorCode.INVALID_MEDIA_KEY);
+
+        verifyNoInteractions(s3Client);
+    }
+
+    @Test
+    @DisplayName("S3 DELETE 실패를 보상 삭제 500 예외로 변환한다")
+    void deleteServiceOwnedMedia_S3Failure_Throws500() {
+        String mediaKey =
+                "chat-emoticons/2026/08/08/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.png";
+        when(s3Client.deleteObject(any(DeleteObjectRequest.class)))
+                .thenThrow(SdkClientException.create("delete failed"));
+
+        assertThatThrownBy(() -> mediaService.deleteServiceOwnedMedia(
+                mediaKey,
+                MediaPurpose.CHAT_EMOTICON
+        )).isInstanceOf(MediaException.class)
+                .hasFieldOrPropertyWithValue("code", MediaErrorCode.MEDIA_DELETE_FAILED);
     }
 
     // ── 업로드 바이트 검증 (#22) ──

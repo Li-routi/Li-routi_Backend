@@ -94,6 +94,7 @@ class ChallengeDetailVerifiedFlagTest {
             em.persist(ChallengeVerification.builder()
                     .memberChallenge(mc).participationRound(1)
                     .verifiedDate(lastVerifiedDate)
+                    .periodStartDate(lastVerifiedDate)
                     .verifiedAt(lastVerifiedDate.atTime(9, 0))
                     .imageUrl("challenge-verifications/ffffffff-ffff-4fff-8fff-ffffffffffff.jpg")
                     .content("인증").build());

@@ -43,6 +43,12 @@ public class GroupMember extends BaseEntity {
     /** 한 그룹에 역할과 관계없이 동시에 참여할 수 있는 활성 회원 수. */
     public static final int MAX_ACTIVE_MEMBER_COUNT_PER_GROUP = 6;
 
+    /** 그룹별 상태 메시지의 최대 길이. */
+    public static final int MAX_STATUS_MESSAGE_LENGTH = 255;
+
+    /** 신규 ACTIVE 참여 관계에 저장하는 기본 그룹별 상태 메시지. */
+    public static final String DEFAULT_STATUS_MESSAGE = "반가워요!";
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -70,7 +76,7 @@ public class GroupMember extends BaseEntity {
     private LocalDateTime leftAt;
 
     /** 그룹 안에서만 보이는 한마디다. 회원 공통 프로필과 분리해 참여 관계에 둔다. */
-    @Column(name = "status_message", length = 255)
+    @Column(name = "status_message", length = MAX_STATUS_MESSAGE_LENGTH)
     private String statusMessage;
 
     @Column(name = "current_streak", nullable = false)
@@ -106,6 +112,21 @@ public class GroupMember extends BaseEntity {
         this.status = GroupMemberStatus.ACTIVE;
         this.joinedAt = joinedAt == null ? LocalDateTime.now() : joinedAt;
         this.leftAt = null;
+    }
+
+    /**
+     * 신규 그룹 참여 관계를 ACTIVE 상태와 기본 상태 메시지로 생성한다.
+     * LEFT 관계 재활성화는 기존 그룹별 상태 메시지를 보존해야 하므로 이 팩터리를 사용하지 않는다.
+     */
+    public static GroupMember createActive(
+            Member member,
+            Group group,
+            GroupMemberRole role,
+            LocalDateTime joinedAt
+    ) {
+        GroupMember groupMember = new GroupMember(member, group, role, joinedAt);
+        groupMember.statusMessage = DEFAULT_STATUS_MESSAGE;
+        return groupMember;
     }
 
     /**
@@ -184,6 +205,16 @@ public class GroupMember extends BaseEntity {
 
     public void updateStatusMessage(String statusMessage) {
         this.statusMessage = statusMessage;
+    }
+
+    /** 방장 위임 시 기존 방장을 일반 구성원으로 전환한다. */
+    public void demoteToMember() {
+        this.role = GroupMemberRole.MEMBER;
+    }
+
+    /** 방장 위임 시 대상 ACTIVE 구성원을 방장으로 전환한다. */
+    public void promoteToOwner() {
+        this.role = GroupMemberRole.OWNER;
     }
 
     /**

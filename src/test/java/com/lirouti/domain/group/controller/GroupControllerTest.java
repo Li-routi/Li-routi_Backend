@@ -971,6 +971,219 @@ class GroupControllerTest {
                 """.formatted(categoryId, title, today().getDayOfWeek().name());
     }
 
+    @Test
+    @DisplayName("ACTIVE OWNER와 MEMBER는 자신의 그룹별 상태 메시지를 수정하고 최종 strip 값을 반환한다")
+    void updateMyStatusMessage_ActiveOwnerAndMember_UpdatesOnlyOwnMembership() throws Exception {
+        Group group = group("GSM001");
+        Group otherGroup = group("GSM003");
+        Member owner = member();
+        Member regularMember = member();
+        GroupMember ownerMembership = membership(owner, group, GroupMemberRole.OWNER);
+        GroupMember memberMembership = membership(regularMember, group, GroupMemberRole.MEMBER);
+        GroupMember otherMembership = membership(
+                regularMember,
+                otherGroup,
+                GroupMemberRole.MEMBER
+        );
+        otherMembership.updateStatusMessage("다른 그룹 메시지");
+        em.flush();
+
+        mockMvc.perform(patch("/api/groups/{groupId}/members/me/status-message", group.getId())
+                        .with(user(principal(owner)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"statusMessage\":\"  방장 메시지  \"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.isSuccess").value(true))
+                .andExpect(jsonPath("$.code").value("GROUP200_14"))
+                .andExpect(jsonPath("$.result.groupId").value(group.getId()))
+                .andExpect(jsonPath("$.result.statusMessage").value("방장 메시지"));
+
+        mockMvc.perform(patch("/api/groups/{groupId}/members/me/status-message", group.getId())
+                        .with(user(principal(regularMember)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"statusMessage\":\"구성원 메시지\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.statusMessage").value("구성원 메시지"));
+
+        em.flush();
+        em.clear();
+        assertThat(em.find(GroupMember.class, ownerMembership.getId()).getStatusMessage())
+                .isEqualTo("방장 메시지");
+        assertThat(em.find(GroupMember.class, memberMembership.getId()).getStatusMessage())
+                .isEqualTo("구성원 메시지");
+        assertThat(em.find(GroupMember.class, otherMembership.getId()).getStatusMessage())
+                .isEqualTo("다른 그룹 메시지");
+    }
+
+    @Test
+    @DisplayName("상태 메시지 수정은 공백만 있는 요청을 거부하고 인증 없이는 접근할 수 없다")
+    void updateMyStatusMessage_BlankOrUnauthenticated_Rejects() throws Exception {
+        Group group = group("GSM002");
+        Member activeMember = member();
+        membership(activeMember, group, GroupMemberRole.MEMBER);
+        em.flush();
+
+        mockMvc.perform(patch("/api/groups/{groupId}/members/me/status-message", group.getId())
+                        .with(user(principal(activeMember)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"statusMessage\":\"   \"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("COMMON400_1"));
+
+        mockMvc.perform(patch("/api/groups/{groupId}/members/me/status-message", group.getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"statusMessage\":\"메시지\"}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("비구성원, LEFT, KICKED 구성원은 그룹별 상태 메시지를 수정할 수 없다")
+    void updateMyStatusMessage_NonMemberOrInactiveMembership_ReturnsMemberAccessDenied()
+            throws Exception {
+        Group group = group("GSM004");
+        Member nonMember = member();
+        Member leftMember = member();
+        Member kickedMember = member();
+        GroupMember leftMembership = membership(leftMember, group, GroupMemberRole.MEMBER);
+        GroupMember kickedMembership = membership(kickedMember, group, GroupMemberRole.MEMBER);
+        leftMembership.leave();
+        kickedMembership.kick();
+        em.flush();
+
+        for (Member requester : new Member[]{nonMember, leftMember, kickedMember}) {
+            mockMvc.perform(patch("/api/groups/{groupId}/members/me/status-message", group.getId())
+                            .with(user(principal(requester)))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"statusMessage\":\"수정 시도\"}"))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.code").value("GROUP403_2"));
+        }
+    }
+
+    @Test
+    @DisplayName("비활성 또는 존재하지 않는 그룹에서는 그룹별 상태 메시지를 수정할 수 없다")
+    void updateMyStatusMessage_InactiveOrMissingGroup_ReturnsExpectedError() throws Exception {
+        Group deletedGroup = group("GSM005");
+        Member activeMember = member();
+        membership(activeMember, deletedGroup, GroupMemberRole.MEMBER);
+        deletedGroup.delete();
+        em.flush();
+
+        mockMvc.perform(patch("/api/groups/{groupId}/members/me/status-message", deletedGroup.getId())
+                        .with(user(principal(activeMember)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"statusMessage\":\"수정 시도\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("GROUP403_1"));
+
+        mockMvc.perform(patch("/api/groups/{groupId}/members/me/status-message", Long.MAX_VALUE)
+                        .with(user(principal(activeMember)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"statusMessage\":\"수정 시도\"}"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("GROUP404_1"));
+
+    }
+
+    @Test
+    @DisplayName("ACTIVE OWNER가 그룹 방 이름을 변경하면 변경된 이름이 저장된다")
+    void updateGroupName_Owner_UpdatesPersistedName() throws Exception {
+        Group group = group("GN00001");
+        Member owner = member();
+        membership(owner, group, GroupMemberRole.OWNER);
+        em.flush();
+
+        mockMvc.perform(patch("/api/groups/{groupId}/name", group.getId())
+                        .with(user(principal(owner)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"  변경된 모임  \"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.isSuccess").value(true))
+                .andExpect(jsonPath("$.code").value("GROUP200_12"))
+                .andExpect(jsonPath("$.result").doesNotExist());
+
+        em.flush();
+        em.clear();
+        assertThat(em.find(Group.class, group.getId()).getName()).isEqualTo("변경된 모임");
+    }
+
+    @Test
+    @DisplayName("방 이름 변경은 생성 이름 정책과 같이 DTO 검증 실패 시 COMMON400_1을 반환한다")
+    void updateGroupName_BlankName_ReturnsCommonValidationError() throws Exception {
+        Member owner = member();
+        em.flush();
+
+        mockMvc.perform(patch("/api/groups/{groupId}/name", Long.MAX_VALUE)
+                        .with(user(principal(owner)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"   \"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("COMMON400_1"));
+    }
+
+    @Test
+    @DisplayName("ACTIVE OWNER가 ACTIVE 구성원에게 방장을 위임하면 역할이 교체된다")
+    void transferGroupOwner_Owner_ExchangesPersistedRoles() throws Exception {
+        Group group = group("GO00001");
+        Member owner = member();
+        Member target = member();
+        GroupMember ownerMembership = membership(owner, group, GroupMemberRole.OWNER);
+        GroupMember targetMembership = membership(target, group, GroupMemberRole.MEMBER);
+        em.flush();
+        Long ownerMembershipId = ownerMembership.getId();
+        Long targetMembershipId = targetMembership.getId();
+
+        mockMvc.perform(patch("/api/groups/{groupId}/owner", group.getId())
+                        .with(user(principal(owner)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"targetMemberId\":%d}".formatted(target.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.isSuccess").value(true))
+                .andExpect(jsonPath("$.code").value("GROUP200_13"));
+
+        em.flush();
+        em.clear();
+        assertThat(em.find(GroupMember.class, ownerMembershipId).getRole())
+                .isEqualTo(GroupMemberRole.MEMBER);
+        assertThat(em.find(GroupMember.class, targetMembershipId).getRole())
+                .isEqualTo(GroupMemberRole.OWNER);
+    }
+
+    @Test
+    @DisplayName("방장은 본인에게 방장 권한을 위임할 수 없다")
+    void transferGroupOwner_SelfTarget_ReturnsConflictWithoutRoleChange() throws Exception {
+        Group group = group("GO00002");
+        Member owner = member();
+        GroupMember ownerMembership = membership(owner, group, GroupMemberRole.OWNER);
+        em.flush();
+        Long ownerMembershipId = ownerMembership.getId();
+
+        mockMvc.perform(patch("/api/groups/{groupId}/owner", group.getId())
+                        .with(user(principal(owner)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"targetMemberId\":%d}".formatted(owner.getId())))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("GROUP409_13"));
+
+        em.clear();
+        assertThat(em.find(GroupMember.class, ownerMembershipId).getRole())
+                .isEqualTo(GroupMemberRole.OWNER);
+    }
+
+    @Test
+    @DisplayName("방장 위임 대상 ID는 null 또는 양수가 아니면 COMMON400_1을 반환한다")
+    void transferGroupOwner_InvalidTargetId_ReturnsCommonValidationError() throws Exception {
+        Member owner = member();
+        em.flush();
+
+        mockMvc.perform(patch("/api/groups/{groupId}/owner", Long.MAX_VALUE)
+                        .with(user(principal(owner)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"targetMemberId\":0}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("COMMON400_1"));
+    }
+
     private String updateRequest(
             Long categoryId,
             String title,

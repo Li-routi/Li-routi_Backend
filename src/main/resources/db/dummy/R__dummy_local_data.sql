@@ -79,13 +79,20 @@ ON DUPLICATE KEY UPDATE
 -- 4) 인증 (피드 조회용)
 -- image_url에는 전체 URL이 아니라 S3 오브젝트 key를 넣는다. 발급 규칙은 "prefix/UUID.확장자"다.
 -- 로컬에는 실제 S3 객체가 없으므로 사진은 안 보인다. 피드 목록·커서 페이징 동작 확인용이다.
-INSERT INTO challenge_verification (id, member_challenge_id, participation_round, verified_date, verified_at, image_url, content, created_at, updated_at)
+--
+-- period_start_date 는 그 인증이 속한 주기 구간의 첫날이다. NOT NULL 이고 기본값이 없으므로
+-- 빠뜨리면 STRICT 모드에서 INSERT 가 1364 로 실패하고, R__ 실패는 곧 Flyway 실패라
+-- 앱이 아예 뜨지 않는다. 더미 챌린지(9001·9003)는 전부 DAILY 라 verified_date 와 같은 값이다.
+-- 주간·월간 더미를 넣게 되면 그 주 일요일 / 그 달 1일로 계산해 넣어야 한다.
+INSERT INTO challenge_verification (id, member_challenge_id, participation_round, verified_date, period_start_date, verified_at, image_url, content, created_at, updated_at)
 VALUES
-  (9001, 9001, 1, DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY), NOW(), 'challenge-verifications/00000000-0000-4000-8000-000000009001.jpg', '어제 인증', NOW(), NOW()),
-  (9002, 9001, 1, CURRENT_DATE(),                            NOW(), 'challenge-verifications/00000000-0000-4000-8000-000000009002.jpg', '오늘 인증', NOW(), NOW()),
-  (9003, 9003, 1, DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY), NOW(), 'challenge-verifications/00000000-0000-4000-8000-000000009003.jpg', NULL,        NOW(), NOW())
+  (9001, 9001, 1, DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY), DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY), NOW(), 'challenge-verifications/00000000-0000-4000-8000-000000009001.jpg', '어제 인증', NOW(), NOW()),
+  (9002, 9001, 1, CURRENT_DATE(),                            CURRENT_DATE(),                            NOW(), 'challenge-verifications/00000000-0000-4000-8000-000000009002.jpg', '오늘 인증', NOW(), NOW()),
+  (9003, 9003, 1, DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY), DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY), NOW(), 'challenge-verifications/00000000-0000-4000-8000-000000009003.jpg', NULL,        NOW(), NOW())
 AS new_row
 ON DUPLICATE KEY UPDATE
+  verified_date     = IF(challenge_verification.id >= 9000, new_row.verified_date, challenge_verification.verified_date),
+  period_start_date = IF(challenge_verification.id >= 9000, new_row.period_start_date, challenge_verification.period_start_date),
   verified_at = IF(challenge_verification.id >= 9000, new_row.verified_at, challenge_verification.verified_at),
   image_url   = IF(challenge_verification.id >= 9000, new_row.image_url, challenge_verification.image_url),
   content     = IF(challenge_verification.id >= 9000, new_row.content, challenge_verification.content),

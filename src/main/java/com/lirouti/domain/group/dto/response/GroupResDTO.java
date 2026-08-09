@@ -72,6 +72,15 @@ public final class GroupResDTO {
     ) {
     }
 
+    /** 로그인 회원이 수정한 해당 그룹 내 상태 메시지다. */
+    @Builder
+    @Schema(name = "GroupMemberStatusMessageUpdate", description = "그룹별 상태 메시지 수정 결과")
+    public record StatusMessageUpdate(
+            Long groupId,
+            String statusMessage
+    ) {
+    }
+
     /** 금일 그룹 루틴 할당의 완료 수와 전체 수다. */
     @Builder
     public record DailyProgress(

@@ -50,7 +50,7 @@ class GroupPokeControllerIntegrationTest {
                             group.getId(), target.getId())
                             .with(user(principal(requester))))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.code").value("GROUP200_12"))
+                    .andExpect(jsonPath("$.code").value("GROUP200_15"))
                     .andExpect(jsonPath("$.result.memberId").value(target.getId()))
                     .andExpect(jsonPath("$.result.totalPokeCount").value(expectedCount));
         }

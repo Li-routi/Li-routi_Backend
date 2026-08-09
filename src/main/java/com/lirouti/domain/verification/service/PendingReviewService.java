@@ -1,7 +1,7 @@
 package com.lirouti.domain.verification.service;
 
-import com.lirouti.domain.challenge.client.AnthropicVerificationReviewClient;
-import com.lirouti.domain.challenge.client.VerificationReview;
+import com.lirouti.domain.verification.client.AnthropicVerificationReviewClient;
+import com.lirouti.domain.verification.client.VerificationReview;
 import com.lirouti.domain.challenge.entity.Challenge;
 import com.lirouti.domain.media.enums.MediaPurpose;
 import com.lirouti.domain.media.exception.MediaException;

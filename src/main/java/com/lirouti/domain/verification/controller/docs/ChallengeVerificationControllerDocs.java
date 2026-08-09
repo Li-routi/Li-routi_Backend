@@ -24,13 +24,34 @@ public interface ChallengeVerificationControllerDocs {
                     먼저 POST /api/media/presigned-url 로 발급받은 URL에 사진을 업로드한 뒤,
                     그 응답의 mediaKey를 그대로 보냅니다(전체 URL이 아니라 key입니다).
 
-                    하루에 한 번만 인증할 수 있습니다. 오늘 이미 인증했다면 새 인증이 만들어지는 대신
-                    사진·코멘트가 덮어써지고(reverified=true), 이때 스트릭은 오르지 않습니다.
+                    **인증 횟수는 챌린지의 주기(`routineCycle`)를 따릅니다.**
 
-                    **하루 1회는 참여 회차를 넘어 적용됩니다.** 오늘 인증한 뒤 챌린지를 나갔다
-                    다시 들어와도 그날은 더 인증할 수 없습니다(`CHALLENGE409_5`).
+                    | 주기 | 몇 번 | 사진 교체 |
+                    | --- | --- | --- |
+                    | `DAILY` | 하루 1회 | **가능** — 그날 다시 올리면 덮어써집니다(reverified=true) |
+                    | `WEEKLY` | 그 주(일~토) 1회 | **불가** — `CHALLENGE409_6` |
+                    | `MONTHLY` | 그 달 1회 | **불가** — `CHALLENGE409_6` |
+
+                    주간·월간에서 교체를 막는 이유는, 허용하면 사진은 수요일 것인데 인증일은
+                    월요일로 남아 날짜와 내용이 어긋나기 때문입니다. 덮어쓰기에서는 스트릭이
+                    오르지 않습니다.
+
+                    **주기 1회는 참여 회차를 넘어 적용됩니다.** 인증한 뒤 챌린지를 나갔다
+                    다시 들어와도 그 구간에는 더 인증할 수 없습니다.
                     나가기로 인증 횟수를 늘릴 수 없습니다.
-                    어제 인증했으면 스트릭이 1 오르고, 그보다 오래됐거나 첫 인증이면 1부터 시작합니다.
+
+                    | 코드 | 언제 |
+                    | --- | --- |
+                    | `CHALLENGE409_5` | `DAILY` 인데 지난 회차에 오늘 인증이 있음 |
+                    | `CHALLENGE409_6` | 주간·월간인데 이번 구간에 이미 인증함 |
+
+                    두 코드를 나눈 것은 **문구가 달라야 하기 때문**입니다. 주간 챌린지에
+                    "오늘은 이미 인증했습니다"가 나가면 사용자가 내일 다시 눌러 보게 됩니다.
+
+                    **스트릭도 주기 단위입니다.** 직전 구간에 인증했으면 1 오르고, 그보다
+                    오래됐거나 첫 인증이면 1부터 시작합니다 — `DAILY` 는 연속 며칠,
+                    `WEEKLY` 는 연속 몇 주, `MONTHLY` 는 연속 몇 달입니다.
+                    표시 문구("N일 연속"/"N주 연속")는 `routineCycle` 을 보고 정하시면 됩니다.
 
                     **AI가 두 가지를 심사합니다.** 어느 쪽이든 반려되면 422이고,
                     사진은 저장되지 않으며 스트릭도 오르지 않습니다.
@@ -70,7 +91,7 @@ public interface ChallengeVerificationControllerDocs {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "인증 성공(덮어쓰기 포함)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "발급 규칙에 맞지 않는 미디어 key"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "인증 필요(미인증)"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "참여 중이 아님 / 동시 중복 요청 / 나갔다 들어왔지만 오늘 이미 인증함"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "참여 중이 아님 / 동시 중복 요청 / 나갔다 들어왔지만 이번 구간에 이미 인증함(CHALLENGE409_5) / 주간·월간인데 이번 구간에 이미 인증함(CHALLENGE409_6)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "422", description = "AI 심사 반려 — 챌린지 불일치(CHALLENGE422_1) 또는 공개 불가(CHALLENGE422_2)")
     })
     ApiResponse<ChallengeVerificationResDTO.Verification> verify(
@@ -307,5 +328,42 @@ public interface ChallengeVerificationControllerDocs {
             @Parameter(description = "챌린지 ID") Long challengeId,
             @Parameter(description = "인증 ID") Long verificationId,
             ChallengeVerificationReqDTO.UpdateMemo request
+    );
+
+    @Operation(
+            summary = "인증 게시글 삭제",
+            description = """
+                    내가 올린 인증 게시글을 내립니다. 본인 글만 지울 수 있습니다.
+
+                    남의 글, 없는 글, 경로의 챌린지와 다른 인증, 신고로 가려진 글은 **전부 같은
+                    404** 입니다 — 존재 여부를 알려 주지 않습니다.
+
+                    **인증을 취소하는 것이 아니라 글을 내리는 것입니다.** "그날 인증했다" 는 사실은
+                    남아서, 지운 뒤에도 그날 버튼은 완료 상태 그대로입니다. 다시 올리면 그 자리가
+                    되살아납니다.
+
+                    사진은 S3 에서도 지웁니다. 공개 주소라 조회에서 빼는 것만으로는 URL 을 아는
+                    사람이 계속 볼 수 있기 때문입니다.
+
+                    **스트릭은 그대로입니다.** 사진을 올려 심사를 통과했다면 루틴은 실제로 한 것이라,
+                    공개를 원치 않아 내렸다고 "며칠째 이어왔다"까지 되돌리지는 않습니다.
+
+                    신고가 쌓여 가려진 글은 지울 수 없습니다(404). 본인에게도 안 보이는 글이고,
+                    지워서 신고 누적을 회피하는 길도 막습니다.
+
+                    이미 지운 글을 다시 지우면 성공으로 답합니다.
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "삭제 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증 필요(미로그인)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "없는 인증 · 내 글이 아님 · 경로의 챌린지와 다른 인증 · "
+                            + "신고로 가려진 글 — 전부 같은 404 다(CHALLENGE404_2)")
+    })
+    ApiResponse<ChallengeVerificationResDTO.Deletion> deleteVerification(
+            CustomUserDetails userDetails,
+            @Parameter(description = "챌린지 ID") Long challengeId,
+            @Parameter(description = "삭제할 인증 ID") Long verificationId
     );
 }

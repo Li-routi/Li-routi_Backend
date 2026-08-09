@@ -56,7 +56,7 @@ class ChallengeQueryServiceTest {
         lenient().when(challengeRepository.countVerificationPostsByChallengeIds(anyList())).thenReturn(Map.of());
         // 대부분의 테스트는 인증 여부를 보지 않는다. 기본은 "인증 없음"으로 둔다.
         lenient().when(challengeVerificationRepository
-                        .findByMemberChallengeIdAndVerifiedDate(any(), any(LocalDate.class)))
+                        .findByMemberChallengeIdAndPeriodStart(any(), any(LocalDate.class)))
                 .thenReturn(Optional.empty());
     }
 
@@ -201,12 +201,11 @@ class ChallengeQueryServiceTest {
     }
 
     @Test
-    @DisplayName("상세 조회 시 참여자 수·인증 게시글 수·오늘 완료자 수를 함께 담는다")
+    @DisplayName("상세 조회 시 참여자 수·인증 게시글 수를 함께 담는다")
     void getChallenge_ReturnsDetailWithCounts() {
         when(challengeRepository.findByIdAndActiveTrue(1L)).thenReturn(Optional.of(challenge("물 1L 마시기")));
         when(challengeRepository.countActiveParticipants(1L)).thenReturn(1234L);
         when(challengeRepository.countVerificationPosts(1L)).thenReturn(80L);
-        when(challengeRepository.countTodayCompletions(eq(1L), any(LocalDate.class))).thenReturn(456L);
 
         // memberId == null 이면 participating 은 false. 컨트롤러는 인증이 필수라 null 을 넘기지
         // 않지만(#77), 서비스가 null 을 견디는 것은 의도이므로 그 계약을 여기서 검증한다.
@@ -214,7 +213,6 @@ class ChallengeQueryServiceTest {
 
         assertThat(result.participantCount()).isEqualTo(1234L);
         assertThat(result.verificationPostCount()).isEqualTo(80L);
-        assertThat(result.todayCompletionCount()).isEqualTo(456L);
         assertThat(result.participating()).isFalse();
         assertThat(result.imageUrl()).isEqualTo("https://img/x.jpg");
         assertThat(result.reward()).isEqualTo(25);
@@ -226,7 +224,6 @@ class ChallengeQueryServiceTest {
         when(challengeRepository.findByIdAndActiveTrue(1L)).thenReturn(Optional.of(challenge("물 1L 마시기")));
         when(challengeRepository.countActiveParticipants(1L)).thenReturn(0L);
         when(challengeRepository.countVerificationPosts(1L)).thenReturn(0L);
-        when(challengeRepository.countTodayCompletions(eq(1L), any(LocalDate.class))).thenReturn(0L);
         MemberChallenge participating = MemberChallenge.builder()
                 .participationRound(1).currentStreak(0)
                 .joinedAt(LocalDateTime.now()).active(true).build();
@@ -244,7 +241,6 @@ class ChallengeQueryServiceTest {
         when(challengeRepository.findByIdAndActiveTrue(1L)).thenReturn(Optional.of(challenge("물 1L 마시기")));
         when(challengeRepository.countActiveParticipants(1L)).thenReturn(0L);
         when(challengeRepository.countVerificationPosts(1L)).thenReturn(0L);
-        when(challengeRepository.countTodayCompletions(eq(1L), any(LocalDate.class))).thenReturn(0L);
         MemberChallenge left = MemberChallenge.builder()
                 .participationRound(1).currentStreak(0)
                 .joinedAt(LocalDateTime.now()).active(false).build();

@@ -135,6 +135,25 @@ class GroupControllerUnitTest {
         verify(groupPokeCommandService).poke(GROUP_ID, MEMBER_ID, 2L);
     }
 
+    @DisplayName("인증 회원 ID와 상태 메시지 요청을 수정 서비스에 전달한다")
+    void updateMyStatusMessage_AuthenticatedMember_ReturnsUpdatedMessage() {
+        CustomUserDetails principal = new CustomUserDetails(MEMBER_ID, Role.ROLE_USER);
+        GroupReqDTO.UpdateMyStatusMessage request =
+                new GroupReqDTO.UpdateMyStatusMessage("오늘도 루틴 완료!");
+        GroupResDTO.StatusMessageUpdate result =
+                new GroupResDTO.StatusMessageUpdate(GROUP_ID, "오늘도 루틴 완료!");
+        when(groupCommandService.updateMyStatusMessage(GROUP_ID, MEMBER_ID, request))
+                .thenReturn(result);
+
+        ApiResponse<GroupResDTO.StatusMessageUpdate> response =
+                groupController.updateMyStatusMessage(principal, GROUP_ID, request);
+
+        assertThat(response.getCode()).isEqualTo(
+                GroupSuccessCode.GROUP_MEMBER_STATUS_MESSAGE_UPDATE_SUCCESS.getCode());
+        assertThat(response.getResult()).isSameAs(result);
+        verify(groupCommandService).updateMyStatusMessage(GROUP_ID, MEMBER_ID, request);
+    }
+
     @Test
     @DisplayName("그룹 카테고리 생성에 인증 회원 ID와 그룹 ID 및 요청을 전달한다")
     void createCategory_AuthenticatedOwner_ReturnsCategory() {
@@ -233,6 +252,33 @@ class GroupControllerUnitTest {
         assertThat(response.getCode()).isEqualTo(GroupSuccessCode.GROUP_UNLOCK_SUCCESS.getCode());
         assertThat(response.getResult()).isSameAs(result);
         verify(groupCommandService).unlockGroup(GROUP_ID, MEMBER_ID);
+    }
+
+    @Test
+    @DisplayName("인증 OWNER의 방 이름 변경 요청을 전용 서비스와 성공 코드로 처리한다")
+    void updateGroupName_AuthenticatedOwner_DelegatesAndReturnsSuccess() {
+        CustomUserDetails principal = new CustomUserDetails(MEMBER_ID, Role.ROLE_USER);
+        GroupReqDTO.UpdateName request = new GroupReqDTO.UpdateName("변경된 모임");
+
+        ApiResponse<Void> response = groupController.updateGroupName(principal, GROUP_ID, request);
+
+        assertThat(response.getCode()).isEqualTo(GroupSuccessCode.GROUP_NAME_UPDATE_SUCCESS.getCode());
+        assertThat(response.getResult()).isNull();
+        verify(groupCommandService).updateGroupName(GROUP_ID, MEMBER_ID, request);
+    }
+
+    @Test
+    @DisplayName("인증 OWNER의 방장 위임 요청을 전용 서비스와 성공 코드로 처리한다")
+    void transferGroupOwner_AuthenticatedOwner_DelegatesAndReturnsSuccess() {
+        CustomUserDetails principal = new CustomUserDetails(MEMBER_ID, Role.ROLE_USER);
+        GroupReqDTO.TransferOwner request = new GroupReqDTO.TransferOwner(2L);
+
+        ApiResponse<Void> response = groupController.transferGroupOwner(principal, GROUP_ID, request);
+
+        assertThat(response.getCode()).isEqualTo(
+                GroupSuccessCode.GROUP_OWNER_TRANSFER_SUCCESS.getCode());
+        assertThat(response.getResult()).isNull();
+        verify(groupCommandService).transferGroupOwner(GROUP_ID, MEMBER_ID, request);
     }
 
     @Test

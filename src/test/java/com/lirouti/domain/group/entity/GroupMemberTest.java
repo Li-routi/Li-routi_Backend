@@ -27,6 +27,19 @@ class GroupMemberTest {
         assertThat(groupMember.getTotalPokeCount()).isZero();
     }
 
+    @DisplayName("신규 ACTIVE 참여 관계는 기본 그룹별 상태 메시지로 생성한다")
+    void createActive_InitializesDefaultStatusMessage() {
+        GroupMember groupMember = GroupMember.createActive(
+                mock(Member.class),
+                mock(Group.class),
+                GroupMemberRole.MEMBER,
+                LocalDateTime.of(2026, 8, 9, 9, 0)
+        );
+
+        assertThat(groupMember.getStatus()).isEqualTo(GroupMemberStatus.ACTIVE);
+        assertThat(groupMember.getStatusMessage()).isEqualTo(GroupMember.DEFAULT_STATUS_MESSAGE);
+    }
+
     @Test
     @DisplayName("방장은 권한 위임 또는 그룹 삭제 전까지 일반 탈퇴할 수 없다")
     void leave_Owner_ThrowsOwnerCannotLeave() {
@@ -102,12 +115,28 @@ class GroupMemberTest {
     }
 
     @Test
+    @DisplayName("방장 위임 시 기존 방장은 MEMBER가 되고 대상 구성원은 OWNER가 된다")
+    void transferOwnership_ChangesBothRoles() {
+        GroupMember owner = GroupMember.builder()
+                .member(mock(Member.class)).group(mock(Group.class)).role(GroupMemberRole.OWNER).build();
+        GroupMember member = GroupMember.builder()
+                .member(mock(Member.class)).group(mock(Group.class)).role(GroupMemberRole.MEMBER).build();
+
+        owner.demoteToMember();
+        member.promoteToOwner();
+
+        assertThat(owner.getRole()).isEqualTo(GroupMemberRole.MEMBER);
+        assertThat(member.getRole()).isEqualTo(GroupMemberRole.OWNER);
+    }
+
+    @Test
     @DisplayName("LEFT 구성원은 전달받은 기준 시각으로 일반 ACTIVE 구성원으로 재가입한다")
     void rejoin_LeftMember_RestoresActiveStateAtReferenceTime() {
         GroupMember groupMember = GroupMember.builder()
                 .member(mock(Member.class)).group(mock(Group.class))
                 .role(GroupMemberRole.MEMBER).joinedAt(LocalDateTime.of(2026, 8, 7, 9, 0)).build();
         groupMember.leave();
+        groupMember.updateStatusMessage("기존 그룹 메시지");
         LocalDateTime rejoinedAt = LocalDateTime.of(2026, 8, 7, 10, 30);
 
         groupMember.rejoin(rejoinedAt);
@@ -116,6 +145,7 @@ class GroupMemberTest {
         assertThat(groupMember.getStatus()).isEqualTo(GroupMemberStatus.ACTIVE);
         assertThat(groupMember.getJoinedAt()).isEqualTo(rejoinedAt);
         assertThat(groupMember.getLeftAt()).isNull();
+        assertThat(groupMember.getStatusMessage()).isEqualTo("기존 그룹 메시지");
     }
 
     @Test

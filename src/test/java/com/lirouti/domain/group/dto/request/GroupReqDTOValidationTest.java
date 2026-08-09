@@ -22,6 +22,28 @@ class GroupReqDTOValidationTest {
     private final Validator validator = Validation.buildDefaultValidatorFactory().getValidator();
 
     @Test
+    @DisplayName("그룹별 상태 메시지는 strip한 최종 값이 1~255자일 때만 허용한다")
+    void validate_UpdateMyStatusMessage_StripsAndValidatesFinalValue() {
+        GroupReqDTO.UpdateMyStatusMessage valid =
+                new GroupReqDTO.UpdateMyStatusMessage("  오늘도 루틴 완료!  ");
+        GroupReqDTO.UpdateMyStatusMessage blank = new GroupReqDTO.UpdateMyStatusMessage("   ");
+        GroupReqDTO.UpdateMyStatusMessage maxLengthAfterStrip =
+                new GroupReqDTO.UpdateMyStatusMessage(" " + "a".repeat(255) + " ");
+        GroupReqDTO.UpdateMyStatusMessage tooLongAfterStrip = new GroupReqDTO.UpdateMyStatusMessage(
+                " " + "a".repeat(256) + " "
+        );
+
+        assertThat(valid.statusMessage()).isEqualTo("오늘도 루틴 완료!");
+        assertThat(validator.validate(valid)).isEmpty();
+        assertThat(maxLengthAfterStrip.statusMessage()).hasSize(255);
+        assertThat(validator.validate(maxLengthAfterStrip)).isEmpty();
+        assertThat(messages(blank)).contains("상태 메시지는 필수입니다.");
+        assertThat(messages(tooLongAfterStrip)).contains("상태 메시지는 255자 이하여야 합니다.");
+        assertThat(messages(new GroupReqDTO.UpdateMyStatusMessage(null)))
+                .contains("상태 메시지는 필수입니다.");
+    }
+
+    @Test
     @DisplayName("기본 카테고리와 요청 내 사용자 카테고리를 참조하는 요청을 허용한다")
     void validate_ValidFixedAndCustomCategoryReferences_HasNoViolation() {
         // given
@@ -64,6 +86,29 @@ class GroupReqDTOValidationTest {
         assertThat(routine.categoryKey()).isEqualTo("morning");
         assertThat(routine.title()).isEqualTo("침구 정리");
         assertThat(validator.validate(request)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("방 이름 변경 요청은 생성 요청과 같이 이름 앞뒤 공백을 제거하고 줄바꿈을 허용한다")
+    void updateName_TrimmedAndLineBreakAllowed() {
+        GroupReqDTO.UpdateName request = new GroupReqDTO.UpdateName("  아침\n모임  ");
+
+        assertThat(request.name()).isEqualTo("아침\n모임");
+        assertThat(validator.validate(request)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("방 이름 변경은 빈 값 또는 20자 초과를 거부하고 방장 위임 대상은 양수여야 한다")
+    void updateSettings_InvalidValues_HaveViolations() {
+        GroupReqDTO.UpdateName blankName = new GroupReqDTO.UpdateName("   ");
+        GroupReqDTO.UpdateName longName = new GroupReqDTO.UpdateName("가".repeat(21));
+        GroupReqDTO.TransferOwner nullTarget = new GroupReqDTO.TransferOwner(null);
+        GroupReqDTO.TransferOwner zeroTarget = new GroupReqDTO.TransferOwner(0L);
+
+        assertThat(validator.validate(blankName)).isNotEmpty();
+        assertThat(validator.validate(longName)).isNotEmpty();
+        assertThat(validator.validate(nullTarget)).isNotEmpty();
+        assertThat(validator.validate(zeroTarget)).isNotEmpty();
     }
 
     @Test
@@ -425,7 +470,7 @@ class GroupReqDTOValidationTest {
         );
     }
 
-    private Set<String> messages(GroupReqDTO.CreateGroup request) {
+    private Set<String> messages(Object request) {
         return validator.validate(request).stream()
                 .map(ConstraintViolation::getMessage)
                 .collect(Collectors.toSet());

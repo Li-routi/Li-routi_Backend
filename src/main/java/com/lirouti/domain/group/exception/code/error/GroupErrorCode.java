@@ -128,6 +128,11 @@ public enum GroupErrorCode implements BaseErrorCode {
             "강제 퇴장된 그룹에는 다시 참여할 수 없습니다.",
             "GROUP409_12"
     ),
+    OWNER_CANNOT_TRANSFER_TO_SELF(
+            HttpStatus.CONFLICT,
+            "방장 권한은 본인에게 위임할 수 없습니다.",
+            "GROUP409_13"
+    ),
     INVITE_CODE_ISSUE_FAILED(
             HttpStatus.INTERNAL_SERVER_ERROR,
             "초대코드 생성에 실패했습니다.",

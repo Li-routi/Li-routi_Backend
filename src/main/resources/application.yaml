@@ -8,6 +8,14 @@ spring:
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:local}
 
+  servlet:
+    multipart:
+      # Servlet가 Controller보다 먼저 파일을 파싱하므로 기본 1MB를 두면 10MiB 도메인 상한의 정상 요청이 막힌다.
+      # 기본값은 aws.s3.max-image-size와 같은 바이트 값을 재사용한다.
+      max-file-size: ${SPRING_SERVLET_MULTIPART_MAX_FILE_SIZE:${AWS_S3_MAX_IMAGE_SIZE:10485760}}
+      # JSON metadata와 multipart boundary 여유를 포함한다. 이미지 상한을 올릴 때 이 값도 함께 올려야 한다.
+      max-request-size: ${SPRING_SERVLET_MULTIPART_MAX_REQUEST_SIZE:11MB}
+
   # 모든 값은 ${환경변수:기본값} 으로 주입됩니다.
   # - 기본값은 "로컬 docker 개발용 임시값" 이며, 운영 환경에서는 반드시 환경변수로 override 합니다.
   # - 운영 DB 비밀번호·JWT 시크릿 등 실제 비밀값은 절대 커밋하지 말고 환경변수(또는 시크릿 매니저)로만 주입하세요.
@@ -89,6 +97,13 @@ oauth:
   google:
     web-client-id: ${GOOGLE_WEB_CLIENT_ID}
     allowed-issuers: ${GOOGLE_ALLOWED_ISSUERS}
+
+# FCM 푸시 알림 설정.
+# 비공개 키 경로는 설정 파일에 저장하지 않고 GOOGLE_APPLICATION_CREDENTIALS로 주입한다.
+# 키가 없는 로컬·테스트·CI 환경이 부팅할 수 있도록 기본은 비활성화한다.
+fcm:
+  enabled: ${FCM_ENABLED:false}
+  project-id: ${FCM_PROJECT_ID:}
 
 # 미디어 업로드(S3 presigned URL) 설정
 # 자격증명은 여기에 두지 않는다. 운영은 EC2 인스턴스 프로필(IAM Role),
