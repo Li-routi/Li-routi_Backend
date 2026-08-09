@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
@@ -20,6 +21,7 @@ import com.lirouti.domain.verification.converter.ChallengeVerificationConverter;
 import com.lirouti.domain.verification.dto.response.ChallengeVerificationResDTO;
 import com.lirouti.domain.verification.entity.ChallengeVerification;
 import com.lirouti.domain.verification.enums.ReviewStatus;
+import com.lirouti.domain.verification.enums.VerificationSort;
 import com.lirouti.domain.verification.repository.ChallengeVerificationLikeRepository;
 import com.lirouti.domain.verification.repository.ChallengeVerificationRepository;
 import com.lirouti.global.util.TimeUtil;
@@ -62,17 +64,19 @@ public class ChallengeVerificationQueryService {
             Long challengeId,
             Long viewerId,
             Long cursor,
-            Integer size
+            Integer size,
+            VerificationSort sort
     ) {
         // 없는/내려간 챌린지에 빈 배열 대신 404를 준다. 상세 조회와 같은 기준.
         challengeRepository.findByIdAndActiveTrue(challengeId)
                 .orElseThrow(() -> new ChallengeException(ChallengeErrorCode.CHALLENGE_NOT_FOUND));
 
         int appliedSize = clampSize(size);
-        List<ChallengeVerification> rows = challengeVerificationRepository
-                .findFeedByCursor(challengeId, viewerId, cursor, appliedSize + 1);
-        CursorPage<ChallengeVerification> page =
-                sliceByCursor(rows, appliedSize, ChallengeVerification::getId);
+        CursorPage<ChallengeVerification> page = fetchPage(sort, appliedSize,
+                () -> challengeVerificationRepository
+                        .findFeedByCursor(challengeId, viewerId, cursor, appliedSize + 1),
+                () -> challengeVerificationRepository
+                        .findFeedByLikes(challengeId, viewerId, appliedSize));
 
         // DB에는 오브젝트 key만 있으므로 공개 URL은 여기서 조립해 Converter에 넘긴다.
         // 보류 건은 아직 대기 prefix 에 있어 공개 주소가 없다 — 그 주소로 열면 403 이다.
@@ -128,21 +132,19 @@ public class ChallengeVerificationQueryService {
             Long challengeId,
             Long cursor,
             Integer size,
-            ReviewStatus statusFilter
+            ReviewStatus statusFilter,
+            VerificationSort sort
     ) {
         MemberChallenge memberChallenge = memberChallengeRepository
                 .findByMemberIdAndChallengeId(memberId, challengeId)
                 .orElseThrow(() -> new ChallengeException(ChallengeErrorCode.NOT_PARTICIPATING));
 
         int appliedSize = clampSize(size);
-        List<ChallengeVerification> rows = challengeVerificationRepository.findMineByCursor(
-                memberChallenge.getId(),
-                cursor,
-                appliedSize + 1,
-                statusFilter
-        );
-        CursorPage<ChallengeVerification> page =
-                sliceByCursor(rows, appliedSize, ChallengeVerification::getId);
+        CursorPage<ChallengeVerification> page = fetchPage(sort, appliedSize,
+                () -> challengeVerificationRepository.findMineByCursor(
+                        memberChallenge.getId(), cursor, appliedSize + 1, statusFilter),
+                () -> challengeVerificationRepository.findMineByLikes(
+                        memberChallenge.getId(), appliedSize, statusFilter));
 
         // 보류 건은 아직 대기 prefix 에 있어 공개 주소가 없다 — 그 주소로 열면 403 이다.
         // 이 조회는 memberId 로 좁혀 본인 것만 담으므로, 여기서만 서명을 붙인다.
@@ -166,6 +168,28 @@ public class ChallengeVerificationQueryService {
         return ChallengeVerificationConverter.toMyVerifications(
                 page.rows(), imageUrls, likeCounts, currentStreak,
                 memberChallenge.getParticipationRound(), page.nextCursor(), page.hasNext());
+    }
+
+    /**
+     * 정렬에 맞는 한 페이지를 만든다.
+     *
+     * <p><b>둘의 페이징 방식이 다르다.</b> 최신순은 {@code size + 1} 로 받아 다음 페이지가
+     * 있는지 보고 커서를 내려 주지만, 좋아요순은 <b>상위 N개로 끝</b>이라 커서가 없다.
+     *
+     * <p>그래도 <b>응답 형태는 같게</b> 둔다 — 좋아요순도 {@code nextCursor} 가 {@code null},
+     * {@code hasNext} 가 {@code false} 로 나가므로 클라이언트는 하던 대로 커서 규약을 따르면
+     * 자연히 한 페이지에서 멈춘다. 나중에 페이징을 붙여도 계약이 깨지지 않는다.
+     */
+    private CursorPage<ChallengeVerification> fetchPage(
+            VerificationSort sort,
+            int size,
+            Supplier<List<ChallengeVerification>> byLatest,
+            Supplier<List<ChallengeVerification>> byLikes
+    ) {
+        if (sort == VerificationSort.LIKES) {
+            return new CursorPage<>(byLikes.get(), null, false);
+        }
+        return sliceByCursor(byLatest.get(), size, ChallengeVerification::getId);
     }
 
     /** size + 1로 받아온 행에서 현재 페이지·다음 커서·다음 페이지 여부를 뽑아낸 결과. */

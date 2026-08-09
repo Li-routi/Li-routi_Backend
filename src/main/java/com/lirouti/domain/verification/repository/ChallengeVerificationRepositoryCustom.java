@@ -61,4 +61,19 @@ public interface ChallengeVerificationRepositoryCustom {
             int limit,
             ReviewStatus statusFilter
     );
+
+    /**
+     * 챌린지 피드의 <b>좋아요순 상위 N개.</b> 커서를 받지 않는다 — 정렬 키가 스크롤 도중
+     * 바뀌어 페이지를 이어 붙일 수 없다.
+     *
+     * <p>세는 규칙은 표시용 집계와 같다(탈퇴 회원 제외). 갈리면 정렬과 화면이 어긋난다.
+     */
+    List<ChallengeVerification> findFeedByLikes(Long challengeId, Long viewerId, int limit);
+
+    /** 내 인증 목록의 좋아요순 상위 N개. 피드와 같은 셈법이고 보이는 범위만 다르다. */
+    List<ChallengeVerification> findMineByLikes(
+            Long memberChallengeId,
+            int limit,
+            ReviewStatus statusFilter
+    );
 }

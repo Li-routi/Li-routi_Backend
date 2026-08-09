@@ -10,6 +10,7 @@ import java.util.List;
 import com.lirouti.domain.verification.entity.ChallengeVerification;
 import com.lirouti.domain.verification.entity.QChallengeVerification;
 import com.lirouti.domain.verification.enums.ReviewStatus;
+import com.lirouti.domain.verification.entity.QChallengeVerificationLike;
 import com.lirouti.domain.verification.entity.QChallengeVerificationReport;
 import com.lirouti.domain.challenge.entity.QMemberChallenge;
 import com.lirouti.domain.member.entity.QMember;
@@ -28,6 +29,10 @@ public class ChallengeVerificationRepositoryImpl implements ChallengeVerificatio
     private static final QMember member = QMember.member;
     private static final QChallengeVerificationReport report =
             QChallengeVerificationReport.challengeVerificationReport;
+    private static final QChallengeVerificationLike like =
+            QChallengeVerificationLike.challengeVerificationLike;
+    // 좋아요를 누른 회원. 위 member 는 인증 작성자라 별칭을 나눠야 한다.
+    private static final QMember liker = new QMember("liker");
 
     @Override
     public List<ChallengeVerification> findFeedByCursor(
@@ -113,6 +118,77 @@ public class ChallengeVerificationRepositoryImpl implements ChallengeVerificatio
     /** 상태 필터. 주지 않으면 전부 담는다 — 기본값이 바뀌면 기존 클라이언트 화면이 조용히 달라진다. */
     private BooleanExpression statusEq(ReviewStatus statusFilter) {
         return (statusFilter != null) ? verification.reviewStatus.eq(statusFilter) : null;
+    }
+
+    /**
+     * 좋아요순 상위 N개. <b>커서를 받지 않는다</b> — 정렬 키가 스크롤 도중 바뀌어
+     * 페이지를 이어 붙일 수 없다({@link com.lirouti.domain.verification.enums.VerificationSort}).
+     *
+     * <p><b>표시용 집계와 같은 규칙으로 센다.</b> 탈퇴 회원의 좋아요를 빼는 조건이
+     * {@code activeMember} 한 곳에 있고 여기서도 그것을 쓴다 — 규칙이 갈리면 정렬은 5개
+     * 기준인데 화면에는 3개로 보이는 상태가 된다.
+     *
+     * <p>좋아요가 없는 인증도 나와야 하므로 {@code left join} 이다. 탈퇴 회원의 좋아요는
+     * {@code on} 절에서 뗀다 — {@code where} 로 옮기면 그 좋아요만 달린 인증이 통째로 빠진다.
+     */
+    @Override
+    public List<ChallengeVerification> findFeedByLikes(Long challengeId, Long viewerId, int limit) {
+        return queryFactory
+                .selectFrom(verification)
+                .join(verification.memberChallenge, memberChallenge).fetchJoin()
+                .join(memberChallenge.member, member).fetchJoin()
+                .leftJoin(like).on(like.challengeVerification.eq(verification))
+                .leftJoin(like.member, liker)
+                .where(
+                        memberChallenge.challenge.id.eq(challengeId),
+                        activeMember(member),
+                        notHidden(verification),
+                        notPending(verification),
+                        notDeleted(verification),
+                        notReportedBy(viewerId)
+                )
+                .groupBy(verification.id, memberChallenge.id, member.id)
+                // 같은 수면 최신순으로 가른다. 안 그러면 같은 요청에도 순서가 흔들린다.
+                .orderBy(likeCountOf().desc(), verification.id.desc())
+                .limit(limit)
+                .fetch();
+    }
+
+    /** 내 인증 목록의 좋아요순. 피드와 같은 셈법이고 보이는 범위만 다르다. */
+    @Override
+    public List<ChallengeVerification> findMineByLikes(
+            Long memberChallengeId,
+            int limit,
+            ReviewStatus statusFilter
+    ) {
+        return queryFactory
+                .selectFrom(verification)
+                .leftJoin(like).on(like.challengeVerification.eq(verification))
+                .leftJoin(like.member, liker)
+                .where(
+                        verification.memberChallenge.id.eq(memberChallengeId),
+                        notHidden(verification),
+                        notDeleted(verification),
+                        statusEq(statusFilter)
+                )
+                .groupBy(verification.id)
+                .orderBy(likeCountOf().desc(), verification.id.desc())
+                .limit(limit)
+                .fetch();
+    }
+
+    /**
+     * 정렬에 쓰는 좋아요 수. <b>탈퇴 회원은 빼고 센다</b>(표시용 집계와 같은 규칙).
+     *
+     * <p>{@code count(liker.id)} 라 살아 있는 회원의 좋아요만 세어진다 —
+     * {@code left join} 이므로 탈퇴 회원의 좋아요는 {@code null} 이 되어 count 에서 빠지고,
+     * 좋아요가 하나도 없는 인증은 0 이 된다.
+     */
+    private com.querydsl.core.types.dsl.NumberExpression<Long> likeCountOf() {
+        return new com.querydsl.core.types.dsl.CaseBuilder()
+                .when(activeMember(liker)).then(liker.id)
+                .otherwise((Long) null)
+                .count();
     }
 
     private BooleanExpression cursorLt(Long cursor) {
