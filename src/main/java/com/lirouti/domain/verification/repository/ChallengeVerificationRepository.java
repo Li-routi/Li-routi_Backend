@@ -55,17 +55,21 @@ public interface ChallengeVerificationRepository
      * 대신 호출부가 참여 행을 비관 잠금으로 잡은 뒤 이 조회를 하므로, 같은 회원의 동시
      * 요청은 그 잠금에서 직렬화된다.
      *
-     * <p>여러 건이면 가장 최근 회차의 것을 준다. 정책 도입 전에 쌓인 중복이 있어
-     * 단건 조회로는 예외가 나기 때문이다(그 데이터는 지우지 않기로 했다).
+     * <p>여러 건이면 <b>살아 있는 것을 먼저</b> 준다. 정책 도입 전에 쌓인 중복이 있어
+     * 단건 조회로는 예외가 나는데(그 데이터는 지우지 않기로 했다), 그냥 최근 회차 순으로
+     * 주면 <b>지워진 최근 행이 살아 있는 옛 행을 가린다.</b> 그러면 이미 인증이 있는데도
+     * 호출부가 "비어 있다" 로 판단해 한 구간에 두 건이 생긴다. 운영에 그 중복이 실재한다.
      *
      * <p>⚠️ <b>{@code deleted_at IS NULL} 을 붙이면 안 된다.</b> 붙이면 내린 글을 못 찾아
      * INSERT 로 가고 유니크 제약에 걸린다 — 지운 뒤 같은 구간에 다시 인증하는 길이 막힌다.
+     * 거르는 대신 <b>순서로 푼다.</b>
      */
     @Query("""
             select v from ChallengeVerification v
             where v.memberChallenge.id = :memberChallengeId
               and v.periodStartDate = :periodStartDate
-            order by v.participationRound desc, v.id desc
+            order by case when v.deletedAt is null then 0 else 1 end,
+                     v.participationRound desc, v.id desc
             limit 1
             """)
     Optional<ChallengeVerification> findByMemberChallengeIdAndPeriodStart(
@@ -83,12 +87,16 @@ public interface ChallengeVerificationRepository
      * <p>회차를 조건에 넣지 않는다. 재참여로 회차가 올라가도 그 구간에 인증한 사실은 남는다 —
      * 회차를 넣으면 나갔다 들어온 뒤 버튼이 다시 열린다.
      *
-     * <p><b>내려간 글도 인증한 것으로 센다.</b> 삭제는 글을 내리는 것이지 인증을 취소하는 것이
-     * 아니다(database-schema.md). 그래서 {@code deleted_at} 을 조건에 넣지 않는다.
+     * <p><b>내려간 글은 세지 않는다.</b> 지우면 그 구간이 다시 열리므로(재화 회수가 그 자리를
+     * 막는다), 버튼도 다시 열려야 한다. 세면 <b>서버는 재인증을 받아 주는데 버튼이 잠긴 채라
+     * 사용자가 거기 닿을 수 없다.</b>
+     *
+     * <p>예전에는 일부러 셌다 — 그때는 "지우면 하루 1회가 뚫린다" 가 근거였다. 뚫리는 것을
+     * 막는 역할이 리워드 회수로 넘어가면서 그 근거가 사라졌다.
      *
      * <p>엔티티가 아니라 존재 여부만 돌려준다. 판정에 쓸 뿐이라 행을 읽을 필요가 없다.
      */
-    boolean existsByMemberChallengeIdAndPeriodStartDate(
+    boolean existsByMemberChallengeIdAndPeriodStartDateAndDeletedAtIsNull(
             Long memberChallengeId,
             LocalDate periodStartDate
     );
@@ -193,12 +201,19 @@ public interface ChallengeVerificationRepository
      * 리포트 집계용. 기간 내 회원의 챌린지 인증 건수. 완료한 챌린지가 아니라 "인증한 횟수"다
      * (한 회원이 여러 챌린지에 참여하면 하루에도 여러 건일 수 있다) — 개인/그룹 루틴과 달리
      * 달성률 계산에는 넣지 않고 별도 지표로만 보여주기로 했다.
+     *
+     * <p><b>내려간 글은 세지 않는다.</b> 짝이 되는 목록({@code findByMemberAndDate})이 빼는
+     * 것과 같은 기준이어야 한다 — 목록에 없는 것이 개수에는 잡히면 같은 화면이 서로 다른
+     * 말을 한다.
+     *
+     * <p>아직 이 지표를 쓰는 화면이 없다. 쓰는 쪽이 생기기 전에 기준을 맞춰 둔다.
      */
     @Query("""
             select count(v)
             from ChallengeVerification v
             where v.memberChallenge.member.id = :memberId
               and v.verifiedDate between :start and :end
+              and v.deletedAt is null
             """)
     long countByMemberAndDateBetween(
             @Param("memberId") Long memberId,
@@ -213,18 +228,28 @@ public interface ChallengeVerificationRepository
      * 선두 컬럼만으로도 후보가 크게 줄어든다.
      *
      * <p>챌린지 이름·설명이 심사 입력이라 함께 읽는다. 없으면 건마다 조회하는 N+1 이 된다.
+     *
+     * <p><b>내려간 글은 가져오지 않는다.</b> 아무도 볼 수 없는 행을 최대 24시간 동안 다시
+     * 심사하는 것은 낭비이고, 더 나쁜 경우도 있다 — 삭제할 때 대기 prefix 사진을 지우는데
+     * 그것이 실패했다면(deleteQuietly 는 실패를 삼킨다) 재심사가 통과시켜 <b>사용자가 지운
+     * 사진을 공개 prefix 로 승격</b>한다. 행은 내려가 있어 화면엔 안 나오지만 공개 주소는
+     * 살아난다.
+     *
+     * <p>지운 뒤 다시 인증하면 {@code reverify} 가 심사 상태와 시도 횟수를 초기화하므로,
+     * 되살아난 건은 자연히 다시 이 큐에 들어온다.
      */
     @Query("""
             select v from ChallengeVerification v
             join fetch v.memberChallenge mc
             join fetch mc.challenge
             where v.reviewStatus = com.lirouti.domain.verification.enums.ReviewStatus.PENDING
+              and v.deletedAt is null
             order by v.pendingSince asc
             """)
     List<ChallengeVerification> findPendingOldestFirst(Pageable pageable);
 
     /** 보류 건수. 쌓이는 것을 아무도 모르는 상태가 가장 나쁘다 — 주기적으로 로그에 남긴다. */
-    long countByReviewStatus(ReviewStatus reviewStatus);
+    long countByReviewStatusAndDeletedAtIsNull(ReviewStatus reviewStatus);
 
     /**
      * 그 회차의 <b>유효한</b> 인증 날짜를 오름차순으로. 스트릭을 다시 셀 때 쓴다.

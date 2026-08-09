@@ -207,7 +207,7 @@ public class PendingReviewService {
 
     /** 보류 건수. 0 이면 남기지 않는다 — 평소에 조용해야 이상할 때 눈에 띈다. */
     public void logPendingCount() {
-        long count = challengeVerificationRepository.countByReviewStatus(ReviewStatus.PENDING);
+        long count = challengeVerificationRepository.countByReviewStatusAndDeletedAtIsNull(ReviewStatus.PENDING);
         if (count > 0) {
             log.warn("심사 보류 인증이 쌓여 있습니다. 건수={}", count);
         }

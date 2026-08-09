@@ -138,14 +138,22 @@ class ChallengeAiReviewTest {
     void verify_AllOutcomes_AreObservable() {
         // 통과에도 로그가 없으면 "요청이 없었다"와 "전부 통과했다"가 구분되지 않는다.
         // 로그 문자열 자체를 단언하는 대신, 세 경로가 서로 다른 결과로 갈리는지를 본다.
-        when(reviewClient.review(any(), any(), any())).thenReturn(VerificationReview.pass());
+        //
+        // 한 구간에는 한 번만 낼 수 있으므로, 다음 경우를 보려면 앞의 것을 지워 구간을 연다.
         long before = savedCount();
-        challengeVerificationService.verify(memberId, challengeId, request());
+
+        when(reviewClient.review(any(), any(), any())).thenReturn(VerificationReview.pass());
+        Long passedId = challengeVerificationService
+                .verify(memberId, challengeId, request()).verificationId();
         assertThat(savedCount()).as("통과는 저장된다").isEqualTo(before + 1);
+        challengeVerificationService.deleteVerification(memberId, challengeId, passedId);
 
         when(reviewClient.review(any(), any(), any())).thenReturn(VerificationReview.transientFailure("장애"));
-        challengeVerificationService.verify(memberId, challengeId, request());
-        assertThat(savedCount()).as("장애도 통과시킨다(덮어쓰기)").isEqualTo(before + 1);
+        Long heldId = challengeVerificationService
+                .verify(memberId, challengeId, request()).verificationId();
+        assertThat(savedCount()).as("장애도 통과시킨다(지운 행을 되살린다)").isEqualTo(before + 1);
+        assertThat(heldId).as("같은 구간이므로 같은 행이다").isEqualTo(passedId);
+        challengeVerificationService.deleteVerification(memberId, challengeId, heldId);
 
         when(reviewClient.review(any(), any(), any()))
                 .thenReturn(VerificationReview.reject(ReviewRejection.MISMATCH, "무관한 사진"));

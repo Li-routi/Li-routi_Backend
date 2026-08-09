@@ -145,7 +145,7 @@ public class ChallengeQueryService {
             return false;
         }
         LocalDate today = LocalDate.now(TimeUtil.KST);
-        return challengeVerificationRepository.existsByMemberChallengeIdAndPeriodStartDate(
+        return challengeVerificationRepository.existsByMemberChallengeIdAndPeriodStartDateAndDeletedAtIsNull(
                 participation.getId(), cycle.currentPeriodStart(today));
     }
 
