@@ -254,4 +254,91 @@ class VerificationSortTest {
                         .as("최신순은 id 하나로 좌표가 잡힌다").isNull()
         );
     }
+
+    // ── 내가 인증한 글 목록도 같은 규약이다 ──
+
+    /** 한 회원이 그 챌린지에 여러 번 인증한 상태를 만든다. 내 목록은 회차를 넘어 전부 나온다. */
+    private MemberChallenge joinFor(Member m, Challenge c) {
+        MemberChallenge mc = MemberChallenge.builder()
+                .member(m).challenge(c)
+                .participationRound(1).currentStreak(1)
+                .joinedAt(LocalDateTime.now()).active(true).build();
+        em.persist(mc);
+        return mc;
+    }
+
+    private ChallengeVerification mineOn(MemberChallenge mc, LocalDate date, String content) {
+        ChallengeVerification v = ChallengeVerification.builder()
+                .memberChallenge(mc).participationRound(1)
+                .verifiedDate(date).periodStartDate(date)
+                .verifiedAt(date.atTime(9, 0))
+                .imageUrl(KEY).content(content).build();
+        em.persist(v);
+        return v;
+    }
+
+    @Test
+    @DisplayName("내 인증 목록도 좋아요순으로 커서 페이징된다 — 피드와 같은 규약이다")
+    void myList_LikesSort_PagesThroughWithCompositeCursor() {
+        Challenge c = challenge();
+        Member me = member(true);
+        MemberChallenge mc = joinFor(me, c);
+
+        LocalDate today = LocalDate.now(TimeUtil.KST);
+        ChallengeVerification two = mineOn(mc, today.minusDays(4), "2개");
+        ChallengeVerification oneA = mineOn(mc, today.minusDays(3), "1개A");
+        ChallengeVerification oneB = mineOn(mc, today.minusDays(2), "1개B");
+        mineOn(mc, today.minusDays(1), "0개A");
+        mineOn(mc, today, "0개B");
+        like(two, member(true));
+        like(two, member(true));
+        like(oneA, member(true));
+        like(oneB, member(true));
+        em.flush();
+        em.clear();
+
+        List<String> seen = new java.util.ArrayList<>();
+        Long cursor = null;
+        Long cursorLikes = null;
+        for (int page = 0; page < 5; page++) {
+            ChallengeVerificationResDTO.MyVerifications mine = queryService.getMyVerifications(
+                    me.getId(), c.getId(), cursor, cursorLikes, 2, null, VerificationSort.LIKES);
+            mine.verifications().stream()
+                    .map(ChallengeVerificationResDTO.MyVerificationItem::content)
+                    .forEach(seen::add);
+            if (!mine.hasNext()) {
+                break;
+            }
+            cursor = mine.nextCursor();
+            cursorLikes = mine.nextCursorLikeCount();
+            assertThat(cursorLikes).as("좋아요순이면 두 번째 커서 값이 있어야 한다").isNotNull();
+        }
+
+        assertThat(seen).containsExactly("2개", "1개B", "1개A", "0개B", "0개A");
+    }
+
+    @Test
+    @DisplayName("내 인증 목록의 기본도 최신순이다")
+    void myList_DefaultIsLatestOrdering() {
+        Challenge c = challenge();
+        Member me = member(true);
+        MemberChallenge mc = joinFor(me, c);
+
+        LocalDate today = LocalDate.now(TimeUtil.KST);
+        ChallengeVerification older = mineOn(mc, today.minusDays(1), "먼저");
+        mineOn(mc, today, "나중");
+        // 먼저 올린 것에 좋아요를 몰아준다. 최신순이면 순서가 그대로여야 한다.
+        like(older, member(true));
+        like(older, member(true));
+        em.flush();
+        em.clear();
+
+        ChallengeVerificationResDTO.MyVerifications mine = queryService.getMyVerifications(
+                me.getId(), c.getId(), null, null, null, null, VerificationSort.LATEST);
+
+        assertThat(mine.verifications().stream()
+                .map(ChallengeVerificationResDTO.MyVerificationItem::content).toList())
+                .containsExactly("나중", "먼저");
+    }
+
 }
