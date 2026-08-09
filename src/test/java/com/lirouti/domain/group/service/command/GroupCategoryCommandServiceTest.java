@@ -15,6 +15,7 @@ import com.lirouti.domain.verification.repository.GroupRoutineVerificationReadRe
 import com.lirouti.global.websocket.WebSocketSessionRegistry;
 import jakarta.validation.Validator;
 import org.junit.jupiter.api.BeforeEach;
+import org.springframework.context.ApplicationEventPublisher;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -43,6 +44,8 @@ class GroupCategoryCommandServiceTest {
     @Mock private Validator validator;
     @Mock private Group group;
     @Mock private WebSocketSessionRegistry webSocketSessionRegistry;
+    @Mock private com.lirouti.domain.group.repository.GroupMemberRepository groupMemberRepository;
+    @Mock private ApplicationEventPublisher eventPublisher;
 
     private GroupCommandService commandService;
 
@@ -52,7 +55,7 @@ class GroupCategoryCommandServiceTest {
                 validationService, groupRepository, categoryRepository, routineRepository,
                 groupRoutineVerificationReadRepository, assignmentService, creationAttemptService,
                 uniqueViolationDetector, validator,
-                webSocketSessionRegistry
+                webSocketSessionRegistry, groupMemberRepository, eventPublisher
         );
         when(validationService.lockActiveGroupForUpdate(GROUP_ID)).thenReturn(group);
     }

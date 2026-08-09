@@ -7,10 +7,14 @@ import com.lirouti.domain.verification.repository.ChallengeVerificationRepositor
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
+import com.lirouti.domain.notification.enums.NotificationCategory;
+import com.lirouti.domain.notification.enums.NotificationType;
+import com.lirouti.domain.notification.event.NotificationRequestedEvent;
 
 /**
  * 보류 건의 <b>DB 변경만</b> 담당한다. 트랜잭션 경계가 이 클래스에 있다.
@@ -26,6 +30,7 @@ import java.util.List;
 public class PendingReviewCommandService {
     private final ChallengeVerificationRepository challengeVerificationRepository;
     private final MemberChallengeRepository memberChallengeRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * 재심사를 한 번 시도했다고 기록한다. <b>심사를 부르기 전에</b> 올린다.
@@ -56,6 +61,7 @@ public class PendingReviewCommandService {
                 .filter(v -> reviewedKey.equals(v.getImageUrl()))
                 .map(v -> {
                     v.approveWith(publicKey);
+                    eventPublisher.publishEvent(reviewNotification(v, true));
                     return true;
                 })
                 .orElseGet(() -> {
@@ -95,6 +101,7 @@ public class PendingReviewCommandService {
         Long memberId = unlocked.getMember().getId();
         Long challengeId = unlocked.getChallenge().getId();
         Integer round = verification.getParticipationRound();
+        NotificationRequestedEvent rejectedNotification = reviewNotification(verification, false);
 
         // 참여 행을 먼저 잠근다. 저장 경로가 같은 순서로 잠그므로(참여 → 인증), 여기서
         // 뒤집으면 반려 확정과 당일 재인증이 서로의 잠금을 기다리다 데드락이 된다.
@@ -116,6 +123,28 @@ public class PendingReviewCommandService {
 
         log.info("보류가 반려로 확정돼 인증을 지웠습니다. verificationId={}, memberId={}, challengeId={}",
                 verificationId, memberId, challengeId);
+        eventPublisher.publishEvent(rejectedNotification);
         return true;
+    }
+
+    /** 대기 인증 처리 결과를 인증 작성자에게 전달할 이벤트로 만든다. */
+    private NotificationRequestedEvent reviewNotification(
+            ChallengeVerification verification,
+            boolean approved
+    ) {
+        Long memberId = verification.getMemberChallenge().getMember().getId();
+        Long challengeId = verification.getMemberChallenge().getChallenge().getId();
+        return new NotificationRequestedEvent(
+                memberId,
+                NotificationCategory.CHALLENGE,
+                approved ? NotificationType.CHALLENGE_REVIEW_APPROVED
+                        : NotificationType.CHALLENGE_REVIEW_REJECTED,
+                approved ? "대기 중이던 인증이 승인됐어요" : "대기 중이던 인증을 다시 확인해 주세요",
+                approved ? "챌린지 인증이 공개됐어요." : "챌린지 인증이 반려됐어요. 다시 인증할 수 있어요.",
+                null,
+                verification.getId(),
+                "CHALLENGE_VERIFICATION",
+                "challenge-review:" + verification.getId() + ":" + (approved ? "approved" : "rejected")
+        );
     }
 }

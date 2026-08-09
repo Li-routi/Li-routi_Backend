@@ -5,6 +5,7 @@ import java.util.Objects;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.context.ApplicationEventPublisher;
 
 import com.lirouti.domain.chat.converter.ChatConverter;
 import com.lirouti.domain.chat.dto.request.ChatReqDTO;
@@ -19,6 +20,11 @@ import com.lirouti.domain.chat.repository.ChatEmoticonRepository;
 import com.lirouti.domain.chat.repository.ChatMessageRepository;
 import com.lirouti.domain.chat.repository.ChatReadRepository;
 import com.lirouti.domain.group.service.GroupValidationService;
+import com.lirouti.domain.group.repository.GroupMemberRepository;
+import com.lirouti.domain.group.enums.GroupMemberStatus;
+import com.lirouti.domain.notification.enums.NotificationCategory;
+import com.lirouti.domain.notification.enums.NotificationType;
+import com.lirouti.domain.notification.event.NotificationRequestedEvent;
 import com.lirouti.domain.media.enums.MediaPurpose;
 import com.lirouti.domain.media.service.MediaService;
 
@@ -32,6 +38,8 @@ public class ChatCommandService {
     private final ChatReadRepository chatReadRepository;
     private final GroupValidationService groupValidationService;
     private final MediaService mediaService;
+    private final GroupMemberRepository groupMemberRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * 활성 그룹 멤버의 메시지를 저장하고 서버 기준 응답을 반환한다.
@@ -82,7 +90,33 @@ public class ChatCommandService {
         if (!hasSamePayload(message, request)) {
             throw new ChatException(ChatErrorCode.CLIENT_MESSAGE_ID_INVALID);
         }
+        if (insertedCount == 1 && groupMemberRepository != null && eventPublisher != null) {
+            String senderName = groupValidationService.validateActiveGroupMember(groupId, memberId)
+                    .getMember().getNickname();
+            String preview = truncateForNotificationBody(
+                    request.type() == ChatMessageType.TEXT ? request.content() : "이모티콘을 보냈어요.");
+            groupMemberRepository.findAllByGroupIdAndStatus(groupId, GroupMemberStatus.ACTIVE).stream()
+                    .map(groupMember -> groupMember.getMember().getId())
+                    .filter(recipientId -> !recipientId.equals(memberId))
+                    .forEach(recipientId -> eventPublisher.publishEvent(new NotificationRequestedEvent(
+                            recipientId, NotificationCategory.CHAT, NotificationType.GROUP_CHAT_MESSAGE,
+                            senderName + "님의 새 메시지", preview, groupId, message.getId(),
+                            "CHAT_MESSAGE", "chat-message:" + message.getId() + ":" + recipientId)));
+        }
         return new ChatSendResult(toMessageResponse(message), insertedCount == 1);
+    }
+
+    /**
+     * notification.body는 VARCHAR(255)다. 채팅 본문은 최대 2000자까지 허용되므로,
+     * 그대로 넣으면 알림 저장이 DataIntegrityViolationException으로 조용히 실패한다.
+     */
+    private static final int NOTIFICATION_BODY_MAX_LENGTH = 255;
+
+    private String truncateForNotificationBody(String text) {
+        if (text.length() <= NOTIFICATION_BODY_MAX_LENGTH) {
+            return text;
+        }
+        return text.substring(0, NOTIFICATION_BODY_MAX_LENGTH - 1) + "…";
     }
 
     /**
