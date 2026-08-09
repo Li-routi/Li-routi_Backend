@@ -31,8 +31,10 @@ import static org.junit.jupiter.api.Assertions.assertAll;
 /**
  * 인증 목록 정렬.
  *
- * <p><b>기본값이 예전 동작과 같은지</b>가 첫 번째다. 기본이 바뀌면 파라미터를 안 보내던
- * 클라이언트의 화면이 조용히 달라진다.
+ * <p>여기서는 <b>정렬 자체의 셈법</b>을 본다. "파라미터를 생략하면 최신순" 이라는 기본값은
+ * 컨트롤러의 {@code defaultValue} 가 정하므로 HTTP 계층에서 봐야 한다 —
+ * {@code ChallengeVerificationControllerTest} 에 있다. 여기서 서비스에 LATEST 를 직접
+ * 넘겨 놓고 "기본값을 검증했다" 고 하면 그 값이 바뀌어도 통과한다.
  *
  * <p>좋아요순은 <b>표시되는 수와 정렬 기준이 같은지</b>를 본다. 둘이 갈리면 "정렬은 5개
  * 기준인데 화면에는 3개로 보이는" 상태가 되는데, 그게 이 기능에서 가장 현실적인 사고다.
@@ -103,8 +105,8 @@ class VerificationSortTest {
     }
 
     @Test
-    @DisplayName("기본은 최신순이다 — 파라미터를 안 보내던 화면이 달라지면 안 된다")
-    void defaultIsLatest() {
+    @DisplayName("LATEST 는 id 내림차순이다 — 좋아요가 많아도 순서를 바꾸지 않는다")
+    void latestSort_OrdersByIdDesc() {
         Challenge c = challenge();
         ChallengeVerification first = verification(c, "먼저");
         ChallengeVerification second = verification(c, "나중");

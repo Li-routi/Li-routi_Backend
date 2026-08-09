@@ -2,6 +2,7 @@ package com.lirouti.domain.verification.controller;
 
 import com.lirouti.domain.challenge.entity.Challenge;
 import com.lirouti.domain.verification.entity.ChallengeVerification;
+import com.lirouti.domain.verification.entity.ChallengeVerificationLike;
 import com.lirouti.domain.challenge.entity.MemberChallenge;
 import com.lirouti.domain.challenge.enums.ChallengeCategory;
 import com.lirouti.domain.member.entity.Member;
@@ -518,4 +519,60 @@ class ChallengeVerificationControllerTest {
                         .content("{\"content\": \"%s\"}".formatted("가".repeat(256))))
                 .andExpect(status().isBadRequest());
     }
+
+    // ── 정렬 ──
+    @Test
+    @DisplayName("sort 를 생략하면 최신순이다 — 파라미터를 안 보내던 화면이 달라지면 안 된다")
+    void feed_SortOmitted_DefaultsToLatest() throws Exception {
+        // 작성자를 나눈다. 한 회원이 같은 챌린지에 참여 행을 둘 가질 수 없다.
+        Member viewer = persistMember("sortviewer");
+        Challenge c = persistChallenge();
+        ChallengeVerification older = persistVerification(persistMember("sortauthorA"), c);
+        ChallengeVerification newer = persistVerification(persistMember("sortauthorB"), c);
+        // 먼저 올린 것에 좋아요를 준다. 이게 없으면 두 정렬 결과가 같아져(둘 다 0개라
+        // 좋아요순도 id 로 갈린다) 기본값이 바뀌어도 이 테스트가 통과한다.
+        em.persist(ChallengeVerificationLike.builder()
+                .challengeVerification(older).member(viewer).build());
+        em.flush();
+
+        // 컨트롤러의 defaultValue 를 실제로 지나가야 이 값이 바뀌었을 때 잡힌다.
+        // 서비스에 LATEST 를 직접 넘기는 테스트로는 기본값이 검증되지 않는다.
+        mockMvc.perform(get("/api/challenges/{cid}/verifications", c.getId())
+                        .with(user(principal(viewer))))
+                .andExpect(status().isOk())
+                // 최신순이면 나중 것이 위다. 좋아요순이면 좋아요를 받은 older 가 위로 온다.
+                .andExpect(jsonPath("$.result.verifications[0].verificationId").value(newer.getId()))
+                .andExpect(jsonPath("$.result.verifications[1].verificationId").value(older.getId()));
+    }
+
+    @Test
+    @DisplayName("좋아요순은 커서를 내려주지 않는다 — 클라이언트가 이어서 요청하면 안 된다")
+    void feed_LikesSort_DoesNotPaginate() throws Exception {
+        Member viewer = persistMember("sortviewer2");
+        Challenge c = persistChallenge();
+        persistVerification(persistMember("sortauthorC"), c);
+        persistVerification(persistMember("sortauthorD"), c);
+        em.flush();
+
+        mockMvc.perform(get("/api/challenges/{cid}/verifications", c.getId())
+                        .param("sort", "LIKES").param("size", "1")
+                        .with(user(principal(viewer))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.hasNext").value(false))
+                .andExpect(jsonPath("$.result.nextCursor").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("모르는 sort 값은 400 이다")
+    void feed_UnknownSort_Returns400() throws Exception {
+        Member viewer = persistMember("sortviewer3");
+        Challenge c = persistChallenge();
+        em.flush();
+
+        mockMvc.perform(get("/api/challenges/{cid}/verifications", c.getId())
+                        .param("sort", "POPULAR")
+                        .with(user(principal(viewer))))
+                .andExpect(status().isBadRequest());
+    }
+
 }
