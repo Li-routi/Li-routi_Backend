@@ -55,17 +55,21 @@ public interface ChallengeVerificationRepository
      * 대신 호출부가 참여 행을 비관 잠금으로 잡은 뒤 이 조회를 하므로, 같은 회원의 동시
      * 요청은 그 잠금에서 직렬화된다.
      *
-     * <p>여러 건이면 가장 최근 회차의 것을 준다. 정책 도입 전에 쌓인 중복이 있어
-     * 단건 조회로는 예외가 나기 때문이다(그 데이터는 지우지 않기로 했다).
+     * <p>여러 건이면 <b>살아 있는 것을 먼저</b> 준다. 정책 도입 전에 쌓인 중복이 있어
+     * 단건 조회로는 예외가 나는데(그 데이터는 지우지 않기로 했다), 그냥 최근 회차 순으로
+     * 주면 <b>지워진 최근 행이 살아 있는 옛 행을 가린다.</b> 그러면 이미 인증이 있는데도
+     * 호출부가 "비어 있다" 로 판단해 한 구간에 두 건이 생긴다. 운영에 그 중복이 실재한다.
      *
      * <p>⚠️ <b>{@code deleted_at IS NULL} 을 붙이면 안 된다.</b> 붙이면 내린 글을 못 찾아
      * INSERT 로 가고 유니크 제약에 걸린다 — 지운 뒤 같은 구간에 다시 인증하는 길이 막힌다.
+     * 거르는 대신 <b>순서로 푼다.</b>
      */
     @Query("""
             select v from ChallengeVerification v
             where v.memberChallenge.id = :memberChallengeId
               and v.periodStartDate = :periodStartDate
-            order by v.participationRound desc, v.id desc
+            order by case when v.deletedAt is null then 0 else 1 end,
+                     v.participationRound desc, v.id desc
             limit 1
             """)
     Optional<ChallengeVerification> findByMemberChallengeIdAndPeriodStart(

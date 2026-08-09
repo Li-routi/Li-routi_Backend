@@ -325,4 +325,30 @@ class ChallengeVerificationRepositoryTest {
                 .existsByMemberChallengeIdAndPeriodStartDateAndDeletedAtIsNull(mc.getId(), day))
                 .isTrue();
     }
+
+    @Test
+    @DisplayName("지워진 최근 회차가 살아 있는 옛 회차를 가리지 않는다 — 정책 이전 중복 데이터가 실재한다")
+    void findByPeriod_PrefersAliveRowOverDeletedNewerRound() {
+        LocalDate day = LocalDate.parse("2026-08-05");
+
+        // 정책 이전에 쌓인 모양: 같은 구간에 회차가 다른 두 건.
+        MemberChallenge mc = join(member(true), challenge(), 2, true);
+        ChallengeVerification oldRoundAlive = verify(mc, day, 1);
+        ChallengeVerification newRoundDeleted = verify(mc, day, 2);
+        newRoundDeleted.softDelete(LocalDateTime.now());
+        em.flush();
+        em.clear();
+
+        ChallengeVerification found = challengeVerificationRepository
+                .findByMemberChallengeIdAndPeriodStart(mc.getId(), day)
+                .orElseThrow();
+
+        // 회차만 보고 고르면 지워진 회차 2가 나오고, 호출부는 "이 구간은 비어 있다" 로 읽는다.
+        // 그러면 살아 있는 회차 1 이 있는데도 한 건이 더 들어간다.
+        assertAll(
+                () -> assertThat(found.getId()).isEqualTo(oldRoundAlive.getId()),
+                () -> assertThat(found.isDeleted()).isFalse()
+        );
+    }
+
 }
