@@ -8,6 +8,11 @@ import com.lirouti.domain.group.repository.GroupRoutineAssignmentRepository;
 import com.lirouti.domain.group.repository.GroupRoutineAssignmentRepositoryCustom.TodayAssignmentProjection;
 import com.lirouti.domain.group.repository.GroupRoutineCategoryRepository;
 import com.lirouti.domain.group.repository.GroupDetailQueryRepository;
+import com.lirouti.domain.group.repository.GroupListQueryRepository;
+import com.lirouti.domain.group.repository.GroupListQueryRepository.AssignmentCountProjection;
+import com.lirouti.domain.group.repository.GroupListQueryRepository.GroupCountProjection;
+import com.lirouti.domain.group.repository.GroupListQueryRepository.GroupScheduleCountProjection;
+import com.lirouti.domain.group.repository.GroupListQueryRepository.MyGroupProjection;
 import com.lirouti.domain.group.service.GroupValidationService;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.exception.MemberException;
@@ -38,6 +43,8 @@ class GroupQueryServiceTest {
     @Mock
     private GroupDetailQueryRepository groupDetailQueryRepository;
     @Mock
+    private GroupListQueryRepository groupListQueryRepository;
+    @Mock
     private GroupRoutineCategoryRepository categoryRepository;
     @Mock
     private GroupValidationService groupValidationService;
@@ -57,6 +64,7 @@ class GroupQueryServiceTest {
         groupQueryService = new GroupQueryService(
                 assignmentRepository,
                 groupDetailQueryRepository,
+                groupListQueryRepository,
                 categoryRepository,
                 groupValidationService,
                 memberQueryService,
@@ -188,6 +196,141 @@ class GroupQueryServiceTest {
                 .isSameAs(exception)
                 .hasFieldOrPropertyWithValue("code", MemberErrorCode.WITHDRAWN_MEMBER);
         verifyNoInteractions(assignmentRepository);
+    }
+
+    @Test
+    @DisplayName("참여 그룹을 고정 횟수 배치 집계로 조립하고 미래 일정까지 월간 달성률에 반영한다")
+    void getMyGroups_ActiveGroups_ReturnsBatchedSummary() {
+        // given
+        Long firstGroupId = 301L;
+        Long secondGroupId = 302L;
+        List<Long> groupIds = List.of(firstGroupId, secondGroupId);
+        when(memberQueryService.getActiveMember(MEMBER_ID)).thenReturn(member);
+        when(member.getId()).thenReturn(MEMBER_ID);
+        when(groupListQueryRepository.findActiveGroupsByMemberId(MEMBER_ID)).thenReturn(List.of(
+                new MyGroupProjection(firstGroupId, "아침 모임", 4),
+                new MyGroupProjection(secondGroupId, "저녁 모임", 1)
+        ));
+        when(groupListQueryRepository.countActiveMembersByGroupIds(groupIds)).thenReturn(List.of(
+                new GroupCountProjection(firstGroupId, 4L),
+                new GroupCountProjection(secondGroupId, 2L)
+        ));
+        when(groupListQueryRepository.countActiveRoutinesByGroupIds(groupIds)).thenReturn(List.of(
+                new GroupCountProjection(firstGroupId, 6L)
+        ));
+        when(groupListQueryRepository.findTodayAssignmentCounts(MEMBER_ID, groupIds, TODAY)).thenReturn(List.of(
+                new AssignmentCountProjection(firstGroupId, 3L, 2L)
+        ));
+        when(groupListQueryRepository.countTodayVerificationsByGroupIds(groupIds, TODAY)).thenReturn(List.of(
+                new GroupCountProjection(firstGroupId, 8L)
+        ));
+        when(groupListQueryRepository.findMonthlyAssignmentCounts(
+                MEMBER_ID, groupIds, LocalDate.of(2026, 7, 1), TODAY)).thenReturn(List.of(
+                new AssignmentCountProjection(firstGroupId, 3L, 1L)
+        ));
+        when(groupListQueryRepository.countActiveSchedulesByGroupIds(groupIds)).thenReturn(List.of(
+                new GroupScheduleCountProjection(firstGroupId, DayOfWeek.SUNDAY, 1L),
+                new GroupScheduleCountProjection(firstGroupId, DayOfWeek.FRIDAY, 1L),
+                new GroupScheduleCountProjection(secondGroupId, DayOfWeek.MONDAY, 1L)
+        ));
+
+        // when
+        GroupResDTO.MyGroupList result = groupQueryService.getMyGroups(MEMBER_ID);
+
+        // then
+        assertThat(result.groups()).containsExactly(
+                new GroupResDTO.MyGroup(firstGroupId, "아침 모임", 4L, 6L, 3L, 2L, 4, 20, 8L),
+                new GroupResDTO.MyGroup(secondGroupId, "저녁 모임", 2L, 0L, 0L, 0L, 1, 0, 0L)
+        );
+        verify(groupListQueryRepository).findActiveGroupsByMemberId(MEMBER_ID);
+        verify(groupListQueryRepository).countActiveMembersByGroupIds(groupIds);
+        verify(groupListQueryRepository).countActiveRoutinesByGroupIds(groupIds);
+        verify(groupListQueryRepository).findTodayAssignmentCounts(MEMBER_ID, groupIds, TODAY);
+        verify(groupListQueryRepository).countTodayVerificationsByGroupIds(groupIds, TODAY);
+        verify(groupListQueryRepository).findMonthlyAssignmentCounts(
+                MEMBER_ID, groupIds, LocalDate.of(2026, 7, 1), TODAY);
+        verify(groupListQueryRepository).countActiveSchedulesByGroupIds(groupIds);
+    }
+
+    @Test
+    @DisplayName("참여 그룹이 없으면 추가 집계 없이 빈 목록을 반환한다")
+    void getMyGroups_NoActiveGroups_ReturnsEmptyList() {
+        when(memberQueryService.getActiveMember(MEMBER_ID)).thenReturn(member);
+        when(member.getId()).thenReturn(MEMBER_ID);
+        when(groupListQueryRepository.findActiveGroupsByMemberId(MEMBER_ID)).thenReturn(List.of());
+
+        GroupResDTO.MyGroupList result = groupQueryService.getMyGroups(MEMBER_ID);
+
+        assertThat(result.groups()).isEmpty();
+        verify(groupListQueryRepository).findActiveGroupsByMemberId(MEMBER_ID);
+        verifyNoMoreInteractions(groupListQueryRepository);
+    }
+
+    @Test
+    @DisplayName("월 마지막 날에는 미래 일정을 더하지 않고 실제 할당만으로 달성률을 계산한다")
+    void getMyGroups_LastDayOfMonth_UsesOnlyActualAssignments() {
+        Clock monthEndClock = Clock.fixed(
+                Instant.parse("2026-07-31T00:00:00Z"), ZoneId.of("Asia/Seoul"));
+        GroupQueryService monthEndService = new GroupQueryService(
+                assignmentRepository,
+                groupDetailQueryRepository,
+                groupListQueryRepository,
+                categoryRepository,
+                groupValidationService,
+                memberQueryService,
+                monthEndClock
+        );
+        LocalDate monthEnd = LocalDate.of(2026, 7, 31);
+        List<Long> groupIds = List.of(301L);
+        when(memberQueryService.getActiveMember(MEMBER_ID)).thenReturn(member);
+        when(member.getId()).thenReturn(MEMBER_ID);
+        when(groupListQueryRepository.findActiveGroupsByMemberId(MEMBER_ID)).thenReturn(List.of(
+                new MyGroupProjection(301L, "월말 그룹", 2)
+        ));
+        when(groupListQueryRepository.countActiveMembersByGroupIds(groupIds)).thenReturn(List.of());
+        when(groupListQueryRepository.countActiveRoutinesByGroupIds(groupIds)).thenReturn(List.of());
+        when(groupListQueryRepository.findTodayAssignmentCounts(MEMBER_ID, groupIds, monthEnd))
+                .thenReturn(List.of(new AssignmentCountProjection(301L, 1L, 1L)));
+        when(groupListQueryRepository.countTodayVerificationsByGroupIds(groupIds, monthEnd))
+                .thenReturn(List.of());
+        when(groupListQueryRepository.findMonthlyAssignmentCounts(
+                MEMBER_ID, groupIds, LocalDate.of(2026, 7, 1), monthEnd))
+                .thenReturn(List.of(new AssignmentCountProjection(301L, 1L, 1L)));
+        when(groupListQueryRepository.countActiveSchedulesByGroupIds(groupIds)).thenReturn(List.of(
+                new GroupScheduleCountProjection(301L, DayOfWeek.MONDAY, 10L)
+        ));
+
+        GroupResDTO.MyGroupList result = monthEndService.getMyGroups(MEMBER_ID);
+
+        assertThat(result.groups()).singleElement()
+                .extracting(GroupResDTO.MyGroup::monthlyAchievementRate)
+                .isEqualTo(100);
+    }
+
+    @Test
+    @DisplayName("이번 달 실제 할당과 미래 예정 일정이 모두 없으면 달성률은 0이다")
+    void getMyGroups_MonthlyDenominatorZero_ReturnsZero() {
+        List<Long> groupIds = List.of(301L);
+        when(memberQueryService.getActiveMember(MEMBER_ID)).thenReturn(member);
+        when(member.getId()).thenReturn(MEMBER_ID);
+        when(groupListQueryRepository.findActiveGroupsByMemberId(MEMBER_ID)).thenReturn(List.of(
+                new MyGroupProjection(301L, "분모 없는 그룹", 0)
+        ));
+        when(groupListQueryRepository.countActiveMembersByGroupIds(groupIds)).thenReturn(List.of());
+        when(groupListQueryRepository.countActiveRoutinesByGroupIds(groupIds)).thenReturn(List.of());
+        when(groupListQueryRepository.findTodayAssignmentCounts(MEMBER_ID, groupIds, TODAY))
+                .thenReturn(List.of());
+        when(groupListQueryRepository.countTodayVerificationsByGroupIds(groupIds, TODAY))
+                .thenReturn(List.of());
+        when(groupListQueryRepository.findMonthlyAssignmentCounts(
+                MEMBER_ID, groupIds, LocalDate.of(2026, 7, 1), TODAY)).thenReturn(List.of());
+        when(groupListQueryRepository.countActiveSchedulesByGroupIds(groupIds)).thenReturn(List.of());
+
+        GroupResDTO.MyGroupList result = groupQueryService.getMyGroups(MEMBER_ID);
+
+        assertThat(result.groups()).singleElement()
+                .extracting(GroupResDTO.MyGroup::monthlyAchievementRate)
+                .isEqualTo(0);
     }
 
     private TodayAssignmentProjection projection() {

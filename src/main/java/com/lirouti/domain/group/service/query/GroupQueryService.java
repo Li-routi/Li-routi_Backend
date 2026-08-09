@@ -8,6 +8,11 @@ import com.lirouti.domain.group.service.GroupValidationService;
 import com.lirouti.domain.group.repository.GroupRoutineAssignmentRepository;
 import com.lirouti.domain.group.repository.GroupRoutineAssignmentRepositoryCustom.TodayAssignmentProjection;
 import com.lirouti.domain.group.repository.GroupDetailQueryRepository;
+import com.lirouti.domain.group.repository.GroupListQueryRepository;
+import com.lirouti.domain.group.repository.GroupListQueryRepository.AssignmentCountProjection;
+import com.lirouti.domain.group.repository.GroupListQueryRepository.GroupCountProjection;
+import com.lirouti.domain.group.repository.GroupListQueryRepository.GroupScheduleCountProjection;
+import com.lirouti.domain.group.repository.GroupListQueryRepository.MyGroupProjection;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.service.query.MemberQueryService;
 import lombok.RequiredArgsConstructor;
@@ -16,8 +21,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.YearMonth;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -25,10 +36,60 @@ import java.util.List;
 public class GroupQueryService {
     private final GroupRoutineAssignmentRepository groupRoutineAssignmentRepository;
     private final GroupDetailQueryRepository groupDetailQueryRepository;
+    private final GroupListQueryRepository groupListQueryRepository;
     private final GroupRoutineCategoryRepository groupRoutineCategoryRepository;
     private final GroupValidationService groupValidationService;
     private final MemberQueryService memberQueryService;
     private final Clock clock;
+
+    /** 로그인 회원의 ACTIVE 참여 그룹과 오늘·월간 활동 요약을 배치 조회한다. */
+    @Transactional(readOnly = true)
+    public GroupResDTO.MyGroupList getMyGroups(Long memberId) {
+        Member member = memberQueryService.getActiveMember(memberId);
+        LocalDate today = LocalDate.now(clock);
+        List<MyGroupProjection> groups = groupListQueryRepository
+                .findActiveGroupsByMemberId(member.getId());
+
+        if (groups.isEmpty()) {
+            return GroupConverter.toMyGroupList(
+                    List.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of());
+        }
+
+        List<Long> groupIds = groups.stream().map(MyGroupProjection::groupId).toList();
+        Map<Long, Long> activeMemberCounts = toCountMap(
+                groupListQueryRepository.countActiveMembersByGroupIds(groupIds));
+        Map<Long, Long> activeRoutineCounts = toCountMap(
+                groupListQueryRepository.countActiveRoutinesByGroupIds(groupIds));
+        List<AssignmentCountProjection> todayAssignments = groupListQueryRepository
+                .findTodayAssignmentCounts(member.getId(), groupIds, today);
+        Map<Long, Long> todayAssignedCounts = toAssignedCountMap(todayAssignments);
+        Map<Long, Long> todayCompletedCounts = toCompletedCountMap(todayAssignments);
+        Map<Long, Long> todayVerificationCounts = toCountMap(
+                groupListQueryRepository.countTodayVerificationsByGroupIds(groupIds, today));
+
+        YearMonth currentMonth = YearMonth.from(today);
+        List<AssignmentCountProjection> monthlyAssignments = groupListQueryRepository
+                .findMonthlyAssignmentCounts(member.getId(), groupIds, currentMonth.atDay(1), today);
+        Map<Long, Integer> monthlyAchievementRates = calculateMonthlyAchievementRates(
+                groupIds,
+                monthlyAssignments,
+                groupListQueryRepository.countActiveSchedulesByGroupIds(groupIds),
+                today,
+                currentMonth.atEndOfMonth()
+        );
+
+        log.debug("참여 그룹 목록을 조회했습니다. memberId={}, groupCount={}, assignedDate={}",
+                member.getId(), groups.size(), today);
+        return GroupConverter.toMyGroupList(
+                groups,
+                activeMemberCounts,
+                activeRoutineCounts,
+                todayAssignedCounts,
+                todayCompletedCounts,
+                monthlyAchievementRates,
+                todayVerificationCounts
+        );
+    }
 
     /** ACTIVE 그룹 구성원에게 기본 카테고리와 해당 그룹의 활성 사용자 카테고리를 반환한다. */
     @Transactional(readOnly = true)
@@ -86,5 +147,78 @@ public class GroupQueryService {
                 member.getId(), today, assignments.size());
 
         return GroupConverter.toTodayRoutineList(assignments);
+    }
+
+    private Map<Long, Integer> calculateMonthlyAchievementRates(
+            List<Long> groupIds,
+            List<AssignmentCountProjection> monthlyAssignments,
+            List<GroupScheduleCountProjection> schedules,
+            LocalDate today,
+            LocalDate monthEnd
+    ) {
+        Map<Long, AssignmentCountProjection> monthlyByGroupId = monthlyAssignments.stream()
+                .collect(Collectors.toMap(AssignmentCountProjection::groupId, Function.identity()));
+        Map<Long, Long> futureScheduledCounts = calculateFutureScheduledCounts(schedules, today, monthEnd);
+
+        return groupIds.stream().collect(Collectors.toMap(
+                Function.identity(),
+                groupId -> {
+                    AssignmentCountProjection monthly = monthlyByGroupId.get(groupId);
+                    long completed = monthly == null ? 0L : monthly.completedCount();
+                    long actualAssigned = monthly == null ? 0L : monthly.assignedCount();
+                    long denominator = actualAssigned + futureScheduledCounts.getOrDefault(groupId, 0L);
+                    return denominator == 0L
+                            ? 0
+                            : (int) Math.round(completed * 100.0 / denominator);
+                }
+        ));
+    }
+
+    private Map<Long, Long> calculateFutureScheduledCounts(
+            List<GroupScheduleCountProjection> schedules,
+            LocalDate today,
+            LocalDate monthEnd
+    ) {
+        if (today.equals(monthEnd)) {
+            return Map.of();
+        }
+
+        Map<Long, Map<DayOfWeek, Long>> schedulesByGroupAndDay = schedules.stream()
+                .collect(Collectors.groupingBy(
+                        GroupScheduleCountProjection::groupId,
+                        Collectors.toMap(
+                                GroupScheduleCountProjection::repeatDay,
+                                GroupScheduleCountProjection::count
+                        )
+                ));
+        Map<Long, Long> futureCounts = new HashMap<>();
+        for (LocalDate date = today.plusDays(1); !date.isAfter(monthEnd); date = date.plusDays(1)) {
+            for (Map.Entry<Long, Map<DayOfWeek, Long>> entry : schedulesByGroupAndDay.entrySet()) {
+                long scheduledCount = entry.getValue().getOrDefault(date.getDayOfWeek(), 0L);
+                futureCounts.merge(entry.getKey(), scheduledCount, Long::sum);
+            }
+        }
+        return futureCounts;
+    }
+
+    private Map<Long, Long> toCountMap(List<GroupCountProjection> counts) {
+        return counts.stream().collect(Collectors.toMap(
+                GroupCountProjection::groupId,
+                GroupCountProjection::count
+        ));
+    }
+
+    private Map<Long, Long> toAssignedCountMap(List<AssignmentCountProjection> counts) {
+        return counts.stream().collect(Collectors.toMap(
+                AssignmentCountProjection::groupId,
+                AssignmentCountProjection::assignedCount
+        ));
+    }
+
+    private Map<Long, Long> toCompletedCountMap(List<AssignmentCountProjection> counts) {
+        return counts.stream().collect(Collectors.toMap(
+                AssignmentCountProjection::groupId,
+                AssignmentCountProjection::completedCount
+        ));
     }
 }

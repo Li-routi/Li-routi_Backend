@@ -13,6 +13,7 @@ import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.group.repository.GroupRoutineAssignmentRepositoryCustom.TodayAssignmentProjection;
 import com.lirouti.domain.group.repository.GroupDetailQueryRepository.GroupMemberDetailProjection;
 import com.lirouti.domain.group.repository.GroupDetailQueryRepository.TodayMemberProgressProjection;
+import com.lirouti.domain.group.repository.GroupListQueryRepository.MyGroupProjection;
 import com.lirouti.domain.routine.enums.RoutineCategoryColor;
 
 import java.util.Comparator;
@@ -23,6 +24,31 @@ import java.util.stream.Collectors;
 
 public final class GroupConverter {
     private GroupConverter() {
+    }
+
+    /** 목록 기본 projection과 그룹별 배치 집계 결과를 참여 그룹 응답으로 조립한다. */
+    public static GroupResDTO.MyGroupList toMyGroupList(
+            List<MyGroupProjection> groups,
+            Map<Long, Long> activeMemberCounts,
+            Map<Long, Long> activeRoutineCounts,
+            Map<Long, Long> todayAssignedCounts,
+            Map<Long, Long> todayCompletedCounts,
+            Map<Long, Integer> monthlyAchievementRates,
+            Map<Long, Long> todayVerificationCounts
+    ) {
+        return new GroupResDTO.MyGroupList(groups.stream()
+                .map(group -> new GroupResDTO.MyGroup(
+                        group.groupId(),
+                        group.groupName(),
+                        activeMemberCounts.getOrDefault(group.groupId(), 0L),
+                        activeRoutineCounts.getOrDefault(group.groupId(), 0L),
+                        todayAssignedCounts.getOrDefault(group.groupId(), 0L),
+                        todayCompletedCounts.getOrDefault(group.groupId(), 0L),
+                        group.currentStreak(),
+                        monthlyAchievementRates.getOrDefault(group.groupId(), 0),
+                        todayVerificationCounts.getOrDefault(group.groupId(), 0L)
+                ))
+                .toList());
     }
 
     /** 통합 생성 요청과 생성된 영구 초대코드로 신규 ACTIVE 그룹을 변환한다. */
