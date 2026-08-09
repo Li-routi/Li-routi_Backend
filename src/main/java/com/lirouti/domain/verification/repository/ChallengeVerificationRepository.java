@@ -45,10 +45,10 @@ public interface ChallengeVerificationRepository
     );
 
     /**
-     * 그 참여의 <b>그날 인증</b>을 회차와 무관하게 찾는다.
+     * 그 참여의 <b>이번 구간 인증</b>을 회차와 무관하게 찾는다.
      *
-     * <p>하루 1회는 회차를 넘어 적용된다. 회차를 조건에 넣으면 나갔다 다시 들어온 뒤
-     * 같은 날 또 인증할 수 있다 — 새 회차에서는 기존 인증이 안 보여 덮어쓰기가 아니라
+     * <p>주기 1회는 회차를 넘어 적용된다. 회차를 조건에 넣으면 나갔다 다시 들어온 뒤
+     * 같은 구간에 또 인증할 수 있다 — 새 회차에서는 기존 인증이 안 보여 덮어쓰기가 아니라
      * 새 행이 된다. 실제로 운영에서 그렇게 두 건이 생겼다.
      *
      * <p>{@code participation_round} 가 유니크 키에 들어 있어 DB 는 이것을 막지 않는다.
@@ -57,35 +57,40 @@ public interface ChallengeVerificationRepository
      *
      * <p>여러 건이면 가장 최근 회차의 것을 준다. 정책 도입 전에 쌓인 중복이 있어
      * 단건 조회로는 예외가 나기 때문이다(그 데이터는 지우지 않기로 했다).
+     *
+     * <p>⚠️ <b>{@code deleted_at IS NULL} 을 붙이면 안 된다.</b> 붙이면 내린 글을 못 찾아
+     * INSERT 로 가고 유니크 제약에 걸린다 — 지운 뒤 같은 구간에 다시 인증하는 길이 막힌다.
      */
     @Query("""
             select v from ChallengeVerification v
             where v.memberChallenge.id = :memberChallengeId
-              and v.verifiedDate = :verifiedDate
+              and v.periodStartDate = :periodStartDate
             order by v.participationRound desc, v.id desc
             limit 1
             """)
-    Optional<ChallengeVerification> findByMemberChallengeIdAndVerifiedDate(
+    Optional<ChallengeVerification> findByMemberChallengeIdAndPeriodStart(
             @Param("memberChallengeId") Long memberChallengeId,
-            @Param("verifiedDate") LocalDate verifiedDate
+            @Param("periodStartDate") LocalDate periodStartDate
     );
 
     /**
      * 그 참여가 <b>주어진 구간 안에</b> 인증한 적이 있는지. 상세의 "현재 주기에 인증했는지" 판정용이다.
      *
-     * <p>구간을 받는 이유는 주기가 하루가 아닐 수 있어서다. {@code WEEKLY} 챌린지를 이번 주
-     * 월요일에 인증했다면 화요일에도 "이번 주에 이미 했다"가 맞는데, 그날 하나만 보면 놓친다.
-     * 경계는 {@link com.lirouti.domain.challenge.enums.RoutineCycle} 이 계산한다.
+     * <p><b>저장 경로와 같은 컬럼을 본다.</b> 예전에는 {@code verified_date} 의 범위로 물었는데,
+     * 그러면 구간 경계 계산이 조회와 저장에 두 벌로 존재해 한쪽만 틀어질 수 있었다. 지금은
+     * 저장할 때 못 박아 둔 {@code period_start_date} 를 그대로 비교하므로 어긋날 여지가 없다.
      *
      * <p>회차를 조건에 넣지 않는다. 재참여로 회차가 올라가도 그 구간에 인증한 사실은 남는다 —
      * 회차를 넣으면 나갔다 들어온 뒤 버튼이 다시 열린다.
      *
+     * <p><b>내려간 글도 인증한 것으로 센다.</b> 삭제는 글을 내리는 것이지 인증을 취소하는 것이
+     * 아니다(database-schema.md). 그래서 {@code deleted_at} 을 조건에 넣지 않는다.
+     *
      * <p>엔티티가 아니라 존재 여부만 돌려준다. 판정에 쓸 뿐이라 행을 읽을 필요가 없다.
      */
-    boolean existsByMemberChallengeIdAndVerifiedDateBetween(
+    boolean existsByMemberChallengeIdAndPeriodStartDate(
             Long memberChallengeId,
-            LocalDate periodStart,
-            LocalDate periodEnd
+            LocalDate periodStartDate
     );
 
     /**

@@ -26,6 +26,11 @@ public enum RoutineCycle {
         public LocalDate currentPeriodStart(LocalDate date) {
             return date;
         }
+
+        @Override
+        public LocalDate previousPeriodStart(LocalDate date) {
+            return date.minusDays(1);
+        }
     },
     WEEKLY {
         @Override
@@ -33,11 +38,22 @@ public enum RoutineCycle {
             // 그날이 일요일이면 그날 자신이 시작일이다(previousOrSame).
             return date.with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY));
         }
+
+        @Override
+        public LocalDate previousPeriodStart(LocalDate date) {
+            return currentPeriodStart(date).minusWeeks(1);
+        }
     },
     MONTHLY {
         @Override
         public LocalDate currentPeriodStart(LocalDate date) {
             return date.withDayOfMonth(1);
+        }
+
+        @Override
+        public LocalDate previousPeriodStart(LocalDate date) {
+            // 달마다 길이가 달라 minusDays 로는 안 된다. 1일로 맞춘 뒤 한 달을 뺀다.
+            return currentPeriodStart(date).minusMonths(1);
         }
     };
 
@@ -52,8 +68,29 @@ public enum RoutineCycle {
      */
     public abstract LocalDate currentPeriodStart(LocalDate date);
 
+    /**
+     * 그 날짜가 속한 구간의 <b>바로 앞 구간</b>의 첫날. 스트릭이 이 값을 쓴다 —
+     * "직전 구간에 인증했는가"가 곧 "연속인가"다.
+     *
+     * <p><b>{@code minusDays} 로 일반화할 수 없다.</b> 주는 7일이지만 달은 28~31일로 들쭉날쭉해
+     * 주기마다 셈법이 다르다. 그래서 각 상수가 직접 구현한다.
+     *
+     * @param date 기준 날짜(KST)
+     * @return 직전 구간의 첫날
+     */
+    public abstract LocalDate previousPeriodStart(LocalDate date);
+
     /** 두 날짜가 같은 주기 구간에 속하는지. */
     public boolean isSamePeriod(LocalDate a, LocalDate b) {
         return currentPeriodStart(a).equals(currentPeriodStart(b));
+    }
+
+    /**
+     * {@code earlier} 가 {@code later} 의 <b>직전 구간</b>에 속하는지. 스트릭이 이어지는 조건이다.
+     *
+     * <p>같은 구간이면 {@code false} 다 — 이미 인증한 구간에 또 인증해도 연속이 늘지 않는다.
+     */
+    public boolean isPreviousPeriod(LocalDate earlier, LocalDate later) {
+        return currentPeriodStart(earlier).equals(previousPeriodStart(later));
     }
 }

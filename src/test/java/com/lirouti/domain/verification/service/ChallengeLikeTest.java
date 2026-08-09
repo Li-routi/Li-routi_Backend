@@ -72,7 +72,8 @@ class ChallengeLikeTest {
         em.persist(mc);
         ChallengeVerification v = ChallengeVerification.builder()
                 .memberChallenge(mc).participationRound(1)
-                .verifiedDate(LocalDate.now(KST)).verifiedAt(LocalDateTime.now())
+                .verifiedDate(LocalDate.now(KST))
+                .periodStartDate(LocalDate.now(KST)).verifiedAt(LocalDateTime.now())
                 .imageUrl(KEY).content("좋아요 대상").build();
         em.persist(v);
         em.flush();

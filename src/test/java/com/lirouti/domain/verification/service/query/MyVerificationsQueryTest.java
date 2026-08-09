@@ -72,6 +72,7 @@ class MyVerificationsQueryTest {
         ChallengeVerification v = ChallengeVerification.builder()
                 .memberChallenge(mc).participationRound(round)
                 .verifiedDate(date)
+                .periodStartDate(date)
                 .verifiedAt(date.atTime(9, 0))
                 .imageUrl(KEY_PREFIX + "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.jpg")
                 .content(tag)

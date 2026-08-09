@@ -148,8 +148,8 @@ public class ChallengeQueryService {
             return false;
         }
         LocalDate today = LocalDate.now(TimeUtil.KST);
-        return challengeVerificationRepository.existsByMemberChallengeIdAndVerifiedDateBetween(
-                participation.getId(), cycle.currentPeriodStart(today), today);
+        return challengeVerificationRepository.existsByMemberChallengeIdAndPeriodStartDate(
+                participation.getId(), cycle.currentPeriodStart(today));
     }
 
     private int clampSize(Integer size) {

@@ -52,6 +52,21 @@ public class ChallengeVerification extends BaseEntity {
     @Column(name = "verified_date", nullable = false)
     private LocalDate verifiedDate;
 
+    /**
+     * 이 인증이 속한 주기 구간의 첫날. <b>유니크 키에 들어가 "주기 1회"를 DB 가 보장한다.</b>
+     *
+     * <p>{@code DAILY} 면 {@code verifiedDate} 와 같은 값이고, {@code WEEKLY} 면 그 주 일요일,
+     * {@code MONTHLY} 면 그 달 1일이다. 애플리케이션에서 "이번 주에 인증이 있나"를 조회해 막는
+     * 것만으로는 동시 요청 두 건이 모두 통과하므로, 제약을 이 컬럼으로 옮겼다.
+     *
+     * <p><b>챌린지의 주기를 나중에 바꾸면 옛 행은 옛 기준으로 남는다.</b> 예를 들어 DAILY 로
+     * 쌓인 행들은 저마다 다른 {@code period_start_date} 를 들고 있어서, WEEKLY 로 바꾼 직후에는
+     * 같은 주에 한 건 더 들어갈 수 있다. 주기를 바꾸는 것은 운영 작업이므로 그때 백필을 함께
+     * 해야 한다 — 코드로 막지 않고 여기 적어 둔다.
+     */
+    @Column(name = "period_start_date", nullable = false)
+    private LocalDate periodStartDate;
+
     @Column(name = "verified_at", nullable = false)
     private LocalDateTime verifiedAt;
 
@@ -114,6 +129,7 @@ public class ChallengeVerification extends BaseEntity {
             MemberChallenge memberChallenge,
             Integer participationRound,
             LocalDate verifiedDate,
+            LocalDate periodStartDate,
             LocalDateTime verifiedAt,
             String imageUrl,
             String content,
@@ -123,6 +139,13 @@ public class ChallengeVerification extends BaseEntity {
         this.memberChallenge = memberChallenge;
         this.participationRound = participationRound;
         this.verifiedDate = verifiedDate;
+        // 파생값이지만 기본값을 두지 않는다. verifiedDate 로 대신 채우면 DAILY 에서는 맞고
+        // WEEKLY·MONTHLY 에서만 틀리는데, 그건 "주기 1회"가 조용히 뚫리는 것이라 알아채기
+        // 어렵다. 주기를 아는 호출부가 반드시 계산해 넘기게 한다.
+        if (periodStartDate == null) {
+            throw new IllegalArgumentException("periodStartDate 는 주기로 계산해 넘겨야 합니다.");
+        }
+        this.periodStartDate = periodStartDate;
         this.verifiedAt = verifiedAt;
         this.imageUrl = imageUrl;
         this.content = content;

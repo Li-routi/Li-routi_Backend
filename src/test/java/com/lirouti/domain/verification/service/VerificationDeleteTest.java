@@ -1,5 +1,6 @@
 package com.lirouti.domain.verification.service;
 
+import com.lirouti.domain.challenge.enums.RoutineCycle;
 import com.lirouti.domain.challenge.entity.Challenge;
 import com.lirouti.domain.challenge.entity.MemberChallenge;
 import com.lirouti.domain.challenge.enums.ChallengeCategory;
@@ -112,7 +113,8 @@ class VerificationDeleteTest {
     private ChallengeVerification verificationOn(LocalDate date) {
         ChallengeVerification v = ChallengeVerification.builder()
                 .memberChallenge(participation).participationRound(1)
-                .verifiedDate(date).verifiedAt(date.atTime(10, 0))
+                .verifiedDate(date)
+                .periodStartDate(date).verifiedAt(date.atTime(10, 0))
                 .imageUrl(PUBLIC_KEY).content("인증")
                 .build();
         em.persist(v);
@@ -125,7 +127,7 @@ class VerificationDeleteTest {
     void delete_KeepsTheFactOfVerification() {
         // given
         ChallengeVerification v = verificationOn(today());
-        participation.applyVerification(today());
+        participation.applyVerification(today(), RoutineCycle.DAILY);
         em.flush();
 
         // when
@@ -146,8 +148,8 @@ class VerificationDeleteTest {
         // given: 어제·오늘 이어서 인증해 스트릭 2
         verificationOn(today().minusDays(1));
         ChallengeVerification todayOne = verificationOn(today());
-        participation.applyVerification(today().minusDays(1));
-        participation.applyVerification(today());
+        participation.applyVerification(today().minusDays(1), RoutineCycle.DAILY);
+        participation.applyVerification(today(), RoutineCycle.DAILY);
         em.flush();
 
         // when
@@ -166,9 +168,9 @@ class VerificationDeleteTest {
         ChallengeVerification twoDaysAgo = verificationOn(today().minusDays(2));
         verificationOn(today().minusDays(1));
         verificationOn(today());
-        participation.applyVerification(today().minusDays(2));
-        participation.applyVerification(today().minusDays(1));
-        participation.applyVerification(today());
+        participation.applyVerification(today().minusDays(2), RoutineCycle.DAILY);
+        participation.applyVerification(today().minusDays(1), RoutineCycle.DAILY);
+        participation.applyVerification(today(), RoutineCycle.DAILY);
         em.flush();
 
         // when
@@ -272,7 +274,7 @@ class VerificationDeleteTest {
     void delete_PhotoReplacedJustBefore_RemovesCurrentPhoto() {
         // given: 오늘 인증이 있고, 그 사이 당일 재인증으로 사진이 갈렸다
         ChallengeVerification v = verificationOn(today());
-        participation.applyVerification(today());
+        participation.applyVerification(today(), RoutineCycle.DAILY);
         em.flush();
 
         challengeVerificationService.verify(me.getId(), challenge.getId(),
@@ -293,7 +295,7 @@ class VerificationDeleteTest {
     void delete_ThenVerifyAgain_RevivesSameRow() {
         // given: 오늘 인증했다가 내렸다
         ChallengeVerification v = verificationOn(today());
-        participation.applyVerification(today());
+        participation.applyVerification(today(), RoutineCycle.DAILY);
         em.flush();
         challengeVerificationService.deleteVerification(me.getId(), challenge.getId(), v.getId());
         em.flush();

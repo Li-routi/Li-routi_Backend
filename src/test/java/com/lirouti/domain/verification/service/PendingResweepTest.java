@@ -142,7 +142,8 @@ class PendingResweepTest {
 
         ChallengeVerification v = ChallengeVerification.builder()
                 .memberChallenge(mc).participationRound(1)
-                .verifiedDate(LocalDate.now()).verifiedAt(LocalDateTime.now())
+                .verifiedDate(LocalDate.now())
+                .periodStartDate(LocalDate.now()).verifiedAt(LocalDateTime.now())
                 .imageUrl(STAGING_KEY).content("보류 건")
                 .reviewStatus(ReviewStatus.PENDING).pendingSince(pendingSince)
                 .build();

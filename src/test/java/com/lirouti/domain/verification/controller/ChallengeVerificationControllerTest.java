@@ -89,6 +89,7 @@ class ChallengeVerificationControllerTest {
         ChallengeVerification v = ChallengeVerification.builder()
                 .memberChallenge(mc).participationRound(1)
                 .verifiedDate(LocalDate.now(ZoneId.of("Asia/Seoul")))
+                .periodStartDate(LocalDate.now(ZoneId.of("Asia/Seoul")))
                 .verifiedAt(LocalDateTime.now())
                 .imageUrl(PUBLIC_KEY).content("신고 대상")
                 .build();

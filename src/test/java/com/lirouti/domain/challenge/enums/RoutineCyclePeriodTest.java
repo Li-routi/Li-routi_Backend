@@ -79,4 +79,65 @@ class RoutineCyclePeriodTest {
                         LocalDate.parse("2026-08-31"), LocalDate.parse("2026-09-01"))).isFalse()
         );
     }
+
+    @ParameterizedTest
+    @CsvSource({
+            // 직전 주는 정확히 7일 앞의 일요일이다.
+            "2026-08-05, 2026-07-26",   // 수(8/2 주) → 직전 주는 7/26
+            "2026-08-02, 2026-07-26",   // 그 주 첫날에서도 같다
+            "2026-08-09, 2026-08-02",
+    })
+    @DisplayName("주간 직전 구간은 7일 앞 일요일이다")
+    void weekly_previousPeriodStart(String date, String expected) {
+        assertThat(RoutineCycle.WEEKLY.previousPeriodStart(LocalDate.parse(date)))
+                .isEqualTo(LocalDate.parse(expected));
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            // 달은 길이가 제각각이라 날짜 빼기로는 안 된다. 1일로 맞춘 뒤 한 달을 뺀다.
+            "2026-03-15, 2026-02-01",   // 3월의 직전은 28일짜리 2월
+            "2026-03-01, 2026-02-01",
+            "2026-01-10, 2025-12-01",   // 해를 넘는다
+            "2026-05-31, 2026-04-01",   // 31일 → 30일짜리 달로 가도 안전하다
+    })
+    @DisplayName("월간 직전 구간은 지난 달 1일이다 — 달 길이가 달라도 어긋나지 않는다")
+    void monthly_previousPeriodStart(String date, String expected) {
+        assertThat(RoutineCycle.MONTHLY.previousPeriodStart(LocalDate.parse(date)))
+                .isEqualTo(LocalDate.parse(expected));
+    }
+
+    @Test
+    @DisplayName("일간 직전 구간은 어제다")
+    void daily_previousPeriodStart() {
+        assertThat(RoutineCycle.DAILY.previousPeriodStart(LocalDate.parse("2026-08-05")))
+                .isEqualTo(LocalDate.parse("2026-08-04"));
+    }
+
+    @Test
+    @DisplayName("같은 구간은 직전 구간이 아니다 — 이미 인증한 구간에 또 해도 연속이 늘면 안 된다")
+    void isPreviousPeriod_SamePeriodIsFalse() {
+        LocalDate monday = LocalDate.parse("2026-08-03");
+        LocalDate wednesday = LocalDate.parse("2026-08-05");
+
+        assertAll(
+                () -> assertThat(RoutineCycle.WEEKLY.isSamePeriod(monday, wednesday)).isTrue(),
+                () -> assertThat(RoutineCycle.WEEKLY.isPreviousPeriod(monday, wednesday)).isFalse()
+        );
+    }
+
+    @Test
+    @DisplayName("주 경계를 하루 넘으면 직전 구간이 된다 — 토→일이 연속의 갈림길이다")
+    void isPreviousPeriod_AcrossWeekBoundary() {
+        LocalDate saturday = LocalDate.parse("2026-08-08");
+        LocalDate sunday = LocalDate.parse("2026-08-09");
+
+        assertAll(
+                () -> assertThat(RoutineCycle.WEEKLY.isSamePeriod(saturday, sunday)).isFalse(),
+                () -> assertThat(RoutineCycle.WEEKLY.isPreviousPeriod(saturday, sunday)).isTrue(),
+                // 두 주를 건너뛰면 끊긴 것이다
+                () -> assertThat(RoutineCycle.WEEKLY
+                        .isPreviousPeriod(saturday, LocalDate.parse("2026-08-16"))).isFalse()
+        );
+    }
 }

@@ -56,7 +56,7 @@ class ChallengeQueryServiceTest {
         lenient().when(challengeRepository.countVerificationPostsByChallengeIds(anyList())).thenReturn(Map.of());
         // 대부분의 테스트는 인증 여부를 보지 않는다. 기본은 "인증 없음"으로 둔다.
         lenient().when(challengeVerificationRepository
-                        .findByMemberChallengeIdAndVerifiedDate(any(), any(LocalDate.class)))
+                        .findByMemberChallengeIdAndPeriodStart(any(), any(LocalDate.class)))
                 .thenReturn(Optional.empty());
     }
 

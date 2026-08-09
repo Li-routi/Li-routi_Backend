@@ -168,7 +168,7 @@ class RejoinDailyOnceTest {
         // 인증 행이 늘지 않았다 — 예전에는 여기서 하루 두 건이 됐다
         em.flush();
         em.clear();
-        assertThat(verificationRepository.findByMemberChallengeIdAndVerifiedDate(
+        assertThat(verificationRepository.findByMemberChallengeIdAndPeriodStart(
                 mc.getId(), LocalDate.now(KST))).isPresent();
         assertThat(em.createQuery(
                         "select count(v) from ChallengeVerification v where v.memberChallenge.id = :id",
@@ -211,6 +211,7 @@ class RejoinDailyOnceTest {
         ChallengeVerification yesterday = ChallengeVerification.builder()
                 .memberChallenge(mc).participationRound(1)
                 .verifiedDate(LocalDate.now(KST).minusDays(1))
+                .periodStartDate(LocalDate.now(KST).minusDays(1))
                 .verifiedAt(LocalDateTime.now().minusDays(1))
                 .imageUrl(PUBLIC_KEY).content("어제").build();
         em.persist(yesterday);

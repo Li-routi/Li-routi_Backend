@@ -118,7 +118,7 @@ public class PendingReviewCommandService {
         if (locked != null && round.equals(locked.getParticipationRound())) {
             List<LocalDate> approved = challengeVerificationRepository
                     .findApprovedDatesInRound(locked.getId(), round);
-            locked.recalculateStreak(approved);
+            locked.recalculateStreak(approved, locked.getChallenge().getRoutineCycle());
         }
 
         log.info("보류가 반려로 확정돼 인증을 지웠습니다. verificationId={}, memberId={}, challengeId={}",

@@ -88,7 +88,8 @@ class VerificationMemoUpdateTest {
         em.persist(mc);
         ChallengeVerification v = ChallengeVerification.builder()
                 .memberChallenge(mc).participationRound(1)
-                .verifiedDate(date).verifiedAt(date.atTime(9, 0))
+                .verifiedDate(date)
+                .periodStartDate(date).verifiedAt(date.atTime(9, 0))
                 .imageUrl(KEY).content("원래 메모").build();
         em.persist(v);
         em.flush();

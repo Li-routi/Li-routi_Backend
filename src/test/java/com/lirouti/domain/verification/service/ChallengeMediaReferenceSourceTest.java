@@ -76,6 +76,7 @@ class ChallengeMediaReferenceSourceTest {
                 .memberChallenge(mc)
                 .participationRound(1)
                 .verifiedDate(LocalDate.of(2026, 7, 23).plusDays(seq.incrementAndGet()))
+                .periodStartDate(LocalDate.of(2026, 7, 23).plusDays(seq.incrementAndGet()))
                 .verifiedAt(LocalDateTime.of(2026, 7, 23, 9, 0))
                 .imageUrl(imageUrl)
                 .content("인증")

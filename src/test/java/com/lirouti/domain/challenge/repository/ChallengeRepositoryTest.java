@@ -82,7 +82,8 @@ class ChallengeRepositoryTest {
     private void verify(MemberChallenge mc, int round, LocalDate date) {
         em.persist(ChallengeVerification.builder()
                 .memberChallenge(mc).participationRound(round)
-                .verifiedDate(date).verifiedAt(LocalDateTime.now())
+                .verifiedDate(date)
+                .periodStartDate(date).verifiedAt(LocalDateTime.now())
                 .imageUrl("https://img/x.jpg").build());
     }
 
