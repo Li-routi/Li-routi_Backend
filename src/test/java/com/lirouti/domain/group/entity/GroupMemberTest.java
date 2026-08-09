@@ -93,6 +93,21 @@ class GroupMemberTest {
     }
 
     @Test
+    @DisplayName("방장 위임 시 기존 방장은 MEMBER가 되고 대상 구성원은 OWNER가 된다")
+    void transferOwnership_ChangesBothRoles() {
+        GroupMember owner = GroupMember.builder()
+                .member(mock(Member.class)).group(mock(Group.class)).role(GroupMemberRole.OWNER).build();
+        GroupMember member = GroupMember.builder()
+                .member(mock(Member.class)).group(mock(Group.class)).role(GroupMemberRole.MEMBER).build();
+
+        owner.demoteToMember();
+        member.promoteToOwner();
+
+        assertThat(owner.getRole()).isEqualTo(GroupMemberRole.MEMBER);
+        assertThat(member.getRole()).isEqualTo(GroupMemberRole.OWNER);
+    }
+
+    @Test
     @DisplayName("LEFT 구성원은 전달받은 기준 시각으로 일반 ACTIVE 구성원으로 재가입한다")
     void rejoin_LeftMember_RestoresActiveStateAtReferenceTime() {
         GroupMember groupMember = GroupMember.builder()

@@ -533,4 +533,76 @@ public interface GroupControllerDocs {
             @Parameter(description = "그룹 ID", required = true) Long groupId
     );
 
+    @Operation(
+            summary = "그룹 방 이름 변경",
+            description = """
+                    ACTIVE OWNER가 그룹 이름을 변경합니다. 이름은 앞뒤 공백을 제거한 뒤 1~20자여야 합니다.
+
+                    ### 에러 코드
+
+                    | code | HTTP | 설명 |
+                    | --- | --- | --- |
+                    | `COMMON400_1` | 400 | 요청 DTO 검증 실패 |
+                    | `GROUP403_1` | 403 | 비활성 그룹 |
+                    | `GROUP403_2` | 403 | ACTIVE 그룹 구성원이 아님 |
+                    | `GROUP403_3` | 403 | ACTIVE OWNER가 아님 |
+                    | `GROUP404_1` | 404 | 그룹을 찾을 수 없음 |
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200", description = "그룹 방 이름 변경 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "400", description = "요청 DTO 검증 실패"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401", description = "유효하지 않거나 만료된 인증 토큰"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "403", description = "비활성 그룹, 비활성 구성원 또는 OWNER 권한 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404", description = "그룹 또는 회원을 찾을 수 없음")
+    })
+    ApiResponse<Void> updateGroupName(
+            @Parameter(hidden = true) CustomUserDetails userDetails,
+            @Parameter(description = "그룹 ID", required = true) Long groupId,
+            GroupReqDTO.UpdateName request
+    );
+
+    @Operation(
+            summary = "그룹 방장 위임",
+            description = """
+                    ACTIVE OWNER가 같은 그룹의 ACTIVE 구성원에게 방장 권한을 위임합니다.
+                    동일 그룹의 동시 위임 요청은 그룹 행 잠금으로 직렬화됩니다.
+
+                    ### 에러 코드
+
+                    | code | HTTP | 설명 |
+                    | --- | --- | --- |
+                    | `COMMON400_1` | 400 | 요청 DTO 검증 실패 |
+                    | `GROUP403_1` | 403 | 비활성 그룹 |
+                    | `GROUP403_2` | 403 | ACTIVE 그룹 구성원이 아님 |
+                    | `GROUP403_3` | 403 | ACTIVE OWNER가 아님 |
+                    | `GROUP404_1` | 404 | 그룹을 찾을 수 없음 |
+                    | `GROUP409_13` | 409 | 방장 권한을 본인에게 위임하려고 함 |
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200", description = "그룹 방장 위임 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "400", description = "요청 DTO 검증 실패"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401", description = "유효하지 않거나 만료된 인증 토큰"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "403", description = "비활성 그룹, 비활성 구성원 또는 OWNER 권한 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404", description = "그룹 또는 회원을 찾을 수 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "409", description = "방장 권한을 본인에게 위임할 수 없음")
+    })
+    ApiResponse<Void> transferGroupOwner(
+            @Parameter(hidden = true) CustomUserDetails userDetails,
+            @Parameter(description = "그룹 ID", required = true) Long groupId,
+            GroupReqDTO.TransferOwner request
+    );
+
 }
