@@ -91,7 +91,7 @@ public interface ChallengeVerificationControllerDocs {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "인증 성공(덮어쓰기 포함)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "발급 규칙에 맞지 않는 미디어 key"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "인증 필요(미인증)"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "참여 중이 아님 / 동시 중복 요청 / 나갔다 들어왔지만 오늘 이미 인증함"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "참여 중이 아님 / 동시 중복 요청 / 나갔다 들어왔지만 이번 구간에 이미 인증함(CHALLENGE409_5) / 주간·월간인데 이번 구간에 이미 인증함(CHALLENGE409_6)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "422", description = "AI 심사 반려 — 챌린지 불일치(CHALLENGE422_1) 또는 공개 불가(CHALLENGE422_2)")
     })
     ApiResponse<ChallengeVerificationResDTO.Verification> verify(

@@ -59,7 +59,7 @@ public class ChallengeVerificationCommandService {
      * 덮어쓴다(당일 재인증). 이때 스트릭은 오르지 않는다. 주간·월간은 덮어쓰지 않고 409 다.
      *
      * 인증 INSERT와 스트릭 갱신을 한 트랜잭션에 두는 것이 중복 증가를 막는 핵심이다 —
-     * 동시 요청은 UNIQUE(member_challenge_id, participation_round, verified_date)에 걸려 실패하고,
+     * 동시 요청은 UNIQUE(member_challenge_id, participation_round, period_start_date)에 걸려 실패하고,
      * 그 예외로 트랜잭션 전체가 롤백되어 스트릭 갱신도 함께 되돌아간다.
      *
      * 비활성 챌린지라도 참여 중이면 인증할 수 있다. 운영이 챌린지를 내려도 진행 중인 스트릭이
@@ -201,12 +201,6 @@ public class ChallengeVerificationCommandService {
     }
 
     /**
-     * 보류 시작 시각. <b>인증 시각을 그대로 쓴다.</b>
-     *
-     * <p>따로 {@code now()} 를 부르지 않는 이유는 기준일·인증 시각과 같은 순간에서 뽑아야
-     * 하기 때문이다. 자정 경계에서 두 값이 다른 날을 가리키면 상한 계산이 하루 어긋난다.
-     */
-    /**
      * "이미 인증했다" 를 알리는 코드. <b>주기마다 문장이 달라야 한다.</b>
      *
      * <p>주간 챌린지에 "오늘은 이미 인증했습니다" 가 나가면 사용자는 내일 다시 눌러 본다 —
@@ -218,6 +212,12 @@ public class ChallengeVerificationCommandService {
                 : ChallengeVerificationErrorCode.ALREADY_VERIFIED_IN_PERIOD;
     }
 
+    /**
+     * 보류 시작 시각. <b>인증 시각을 그대로 쓴다.</b>
+     *
+     * <p>따로 {@code now()} 를 부르지 않는 이유는 기준일·인증 시각과 같은 순간에서 뽑아야
+     * 하기 때문이다. 자정 경계에서 두 값이 다른 날을 가리키면 상한 계산이 하루 어긋난다.
+     */
     private LocalDateTime pendingSinceFor(ReviewStatus reviewStatus, LocalDateTime verifiedAt) {
         return reviewStatus == ReviewStatus.PENDING ? verifiedAt : null;
     }

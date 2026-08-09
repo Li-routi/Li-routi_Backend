@@ -13,9 +13,10 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
- * 챌린지 참여의 일자별 인증 이력. 한 참여 회차 안에서 하루에 한 건만 존재한다.
+ * 챌린지 참여의 인증 이력. 한 참여 회차 안에서 <b>한 주기 구간에 한 건</b>만 존재한다
+ * ({@code DAILY} 면 하루, {@code WEEKLY} 면 한 주, {@code MONTHLY} 면 한 달).
  *
- * 소프트 삭제는 쓰지 않는다 — 당일 재인증은 삭제 후 재등록이 아니라 {@link #reverify}로 덮어쓴다.
+ * 당일 재인증({@code DAILY} 만)은 삭제 후 재등록이 아니라 {@link #reverify}로 덮어쓴다.
  *
  * 피드 조회용 별도 인덱스는 두지 않는다. 아래 유니크 제약의 선두 컬럼이 member_challenge_id라,
  * 그 인덱스가 피드의 참여 조인과 "이번 구간 인증 행 찾기"를 커버한다.
@@ -30,9 +31,12 @@ import java.time.LocalDateTime;
 @Table(
         name = "challenge_verification",
         uniqueConstraints = {
+                // 주기 1회를 DB 가 보장하는 제약이다. 마이그레이션의 이름·컬럼과 반드시 같아야
+                // 하는데, Hibernate 의 validate 는 유니크 제약을 대조하지 않아 어긋나도 부팅이
+                // 막히지 않는다. 여기를 고칠 일이 있으면 마이그레이션도 함께 본다.
                 @UniqueConstraint(
-                        name = "uk_verification_round_date",
-                        columnNames = {"member_challenge_id", "participation_round", "verified_date"}
+                        name = "uk_verification_round_period",
+                        columnNames = {"member_challenge_id", "participation_round", "period_start_date"}
                 )
         }
 )
