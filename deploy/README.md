@@ -154,9 +154,21 @@ JSON 키 파일을 서버에 올려야 한다. `.env`(`ENV_FILE`)에는 넣지 �
 담기 부적합해서 Caddyfile처럼 별도 scp로 관리한다.
 
 ```bash
-# 로컬 PC에서 실행 (<pem>·<서버IP>·<키파일>은 본인 값)
+# 로컬 PC에서 실행 (<pem>·<서버IP>·<로컬키파일경로>는 본인 값 — Firebase가 준 파일명을
+# 그대로 써도 되고, 다른 이름이어도 상관없다. 서버 쪽 대상 파일명만 firebase-adminsdk.json으로 고정)
 ssh -i <pem> ubuntu@<서버IP> 'mkdir -p /opt/app/secrets'
-scp -i <pem> firebase-adminsdk.json ubuntu@<서버IP>:/opt/app/secrets/firebase-adminsdk.json
+scp -i <pem> <로컬키파일경로>.json ubuntu@<서버IP>:/opt/app/secrets/firebase-adminsdk.json
+```
+
+권한을 조인다. 컨테이너 안의 앱은 `appuser`(UID **10001**, [Dockerfile](../Dockerfile) 참고)로 도는데,
+바인드 마운트는 호스트의 숫자 UID를 그대로 컨테이너에 넘긴다. `chmod 600`만 해두면 소유자(`ubuntu`,
+보통 UID 1000)만 읽을 수 있어 **컨테이너 안의 appuser(10001)는 못 읽고 부팅이 실패한다** — 반드시
+파일 소유자를 10001로 바꿔야 한다:
+
+```bash
+# 서버에서 실행
+sudo chown 10001:10001 /opt/app/secrets/firebase-adminsdk.json
+sudo chmod 400 /opt/app/secrets/firebase-adminsdk.json   # 그 UID만 읽기 전용으로 접근 가능
 ```
 
 > **`FCM_ENABLED=false`인 동안은 이 파일이 없어도 무방하다.** 다만 `docker-compose.prod.yml`이

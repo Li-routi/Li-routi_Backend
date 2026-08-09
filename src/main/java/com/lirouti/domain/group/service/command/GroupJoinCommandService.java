@@ -80,7 +80,7 @@ public class GroupJoinCommandService {
                         NotificationType.GROUP_MEMBER_JOINED, "새로운 그룹원이 참여했어요",
                         lockedMember.getNickname() + "님이 " + lockedGroup.getName() + "에 참여했습니다.",
                         lockedGroup.getId(), memberId, "GROUP_MEMBER",
-                        "group-joined:" + lockedGroup.getId() + ":" + memberId + ":" + joinedAt.toLocalDate())));
+                        "group-joined:" + lockedGroup.getId() + ":" + memberId + ":" + joinedAt)));
 
         log.info("초대코드 기반 그룹 가입을 완료했습니다. groupId={}, memberId={}",
                 lockedGroup.getId(), lockedMember.getId());

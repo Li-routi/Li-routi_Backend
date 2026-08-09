@@ -60,7 +60,7 @@ CREATE TABLE group_poke (
     updated_at DATETIME(6) NOT NULL,
     PRIMARY KEY (id),
     CONSTRAINT uk_group_poke_daily UNIQUE (group_id, sender_id, recipient_id, poked_date),
-    CONSTRAINT fk_group_poke_group FOREIGN KEY (group_id) REFERENCES member_group (id),
+    CONSTRAINT fk_group_poke_group FOREIGN KEY (group_id) REFERENCES member_group (id) ON DELETE CASCADE,
     CONSTRAINT fk_group_poke_sender FOREIGN KEY (sender_id) REFERENCES member (id) ON DELETE CASCADE,
     CONSTRAINT fk_group_poke_recipient FOREIGN KEY (recipient_id) REFERENCES member (id) ON DELETE CASCADE,
     CONSTRAINT ck_group_poke_not_self CHECK (sender_id <> recipient_id)

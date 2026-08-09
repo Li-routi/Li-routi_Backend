@@ -365,15 +365,23 @@ public interface GroupRoutineAssignmentRepository
             @Param("startBoundary") boolean startBoundary,
             @Param("terminalStatuses") List<GroupRoutineAssignmentStatus> terminalStatuses);
 
-    /** 완료 여부와 무관하게 현재 분에 종료되는 할당을 그룹 종료 알림용으로 조회한다. */
+    /**
+     * 완료 여부와 무관하게 현재 분에 종료되는 할당을 그룹 종료 알림용으로 조회한다.
+     * 완료·미이행 할당은 회원 탈퇴 후에도 이력으로 남으므로, 현재 그 그룹의 ACTIVE 구성원에게만 보낸다.
+     */
     @Query("""
             select assignment from GroupRoutineAssignment assignment
-            join fetch assignment.member
+            join fetch assignment.member member
             join fetch assignment.groupRoutine routine
-            join fetch routine.group
+            join fetch routine.group grp
             where assignment.assignedDate = :date
               and assignment.scheduledEndTime >= :from
               and assignment.scheduledEndTime < :to
+              and exists (
+                  select 1 from GroupMember groupMember
+                  where groupMember.group = grp and groupMember.member = member
+                    and groupMember.status = com.lirouti.domain.group.enums.GroupMemberStatus.ACTIVE
+              )
             """)
     List<GroupRoutineAssignment> findEndingForNotification(
             @Param("date") LocalDate date,

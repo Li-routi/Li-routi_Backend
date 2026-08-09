@@ -16,6 +16,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 import java.time.*;
 import java.util.List;
 
@@ -126,8 +127,12 @@ public class NotificationScheduler {
         }
     }
 
-    /** 디자인 정책에 맞춰 매일 새벽 최근 7일보다 오래된 알림을 정리한다. */
+    /**
+     * 디자인 정책에 맞춰 매일 새벽 최근 7일보다 오래된 알림을 정리한다.
+     * derived delete 메서드는 쓰기 작업이라 트랜잭션 없이 호출하면 TransactionRequiredException이 난다.
+     */
     @Scheduled(cron = "0 30 3 * * *", zone = "Asia/Seoul")
+    @Transactional
     public void deleteExpiredNotifications() {
         notificationRepository.deleteByCreatedAtBefore(LocalDateTime.now(clock).minusDays(7));
     }
