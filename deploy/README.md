@@ -436,7 +436,7 @@ WEBP 는 표준 ImageIO 로 디코딩되지 않아 줄이지 못하고 **원본 
 
 ## 미참조 미디어 정리 (#19)
 
-업로드는 됐지만 **DB 어디서도 참조하지 않는 오브젝트**를 매일 새벽 4시(KST)에 지운다. presigned URL로 S3에 올린 뒤 저장 API를 호출하지 않으면 그 파일은 아무도 모르는 채 영원히 남는다 — 앱이 죽거나 사용자가 이탈하면 생기고, 당일 재인증으로 `image_url`을 덮어쓸 때도 이전 key가 남는다. 비용보다 **개인정보** 문제다.
+업로드는 됐지만 **DB 어디서도 참조하지 않는 오브젝트**를 매일 새벽 4시(KST)에 지운다. presigned URL로 S3에 올린 뒤 저장 API를 호출하지 않으면 그 파일은 아무도 모르는 채 영원히 남는다 — 앱이 죽거나 사용자가 이탈하면 생기고, 당일 재인증으로 `image_url`을 덮어쓸 때도 이전 key가 남는다. 운영 이모티콘도 S3 업로드 뒤 DB 저장이 실패하고 즉시 삭제까지 실패하면 같은 고아 상태가 된다. 비용보다 **개인정보와 운영 자산 관리** 문제다.
 
 ### 라이프사이클 규칙이 아니라 DB 대조인 이유
 
@@ -450,12 +450,19 @@ S3 라이프사이클(“N일 지난 객체 자동 삭제”)이 가장 단순�
 
 | Sid | 액션 | 리소스 | 왜 |
 | --- | --- | --- | --- |
-| `MediaCleanupList` | `s3:ListBucket` | `arn:aws:s3:::lirouti-prod-bucket` (버킷 자체)<br>+ `Condition: s3:prefix = challenge-verifications/*` | 날짜 prefix 아래 오브젝트 목록을 얻는다 |
-| `MediaCleanupDelete` | `s3:DeleteObject` | `arn:aws:s3:::lirouti-prod-bucket/challenge-verifications/*` | 미참조 오브젝트를 지운다 |
+| `MediaCleanupList` | `s3:ListBucket` | `arn:aws:s3:::lirouti-prod-bucket` (버킷 자체)<br>+ `Condition: s3:prefix = challenge-verifications/* 또는 chat-emoticons/*` | 두 용도의 날짜 prefix 아래 오브젝트 목록을 얻는다 |
+| `MediaCleanupDelete` | `s3:DeleteObject` | `arn:aws:s3:::lirouti-prod-bucket/challenge-verifications/*`<br>`arn:aws:s3:::lirouti-prod-bucket/chat-emoticons/*` | 미참조 오브젝트와 등록 실패 이모티콘을 지운다 |
 
 > `ListBucket`의 리소스는 **버킷 ARN이지 `/*`가 아니다.** 오브젝트 액션과 리소스 형태가 다르다 — `/*`를 붙이면 조용히 권한이 안 먹는다.
 
-**둘 다 `challenge-verifications/` 아래로 좁혀 뒀다.** 이 배치가 만지는 prefix가 거기 하나뿐이라 기능 손실이 없고, 앞으로 추가될 비공개 미디어(개인 루틴·그룹 채팅 사진)는 **앱 역할로도 열거·삭제할 수 없다.**
+**둘 다 `challenge-verifications/`와 `chat-emoticons/` 아래로만 좁혀 뒀다.** 앞으로 추가될 다른 비공개 미디어(개인 루틴·그룹 채팅 사진)는 **앱 역할로도 열거·삭제할 수 없다.**
+
+채팅 이모티콘에는 삭제 안전망이 두 겹이다.
+
+1. S3 업로드 뒤 URL 생성이나 DB 저장이 실패하면, 같은 요청 안에서 방금 만든 정확한 key를 즉시 지운다. 이 경로에는 `DeleteObject`만 필요하다.
+2. 즉시 삭제도 실패하면 원래 등록 오류를 유지하고 key를 로그에 남긴다. 이후 정리 배치가 `ListBucket`으로 날짜 prefix를 훑고 DB와 대조해 고아 key만 다시 지운다.
+
+`ChatMediaReferenceSource`는 활성 여부와 관계없이 `chat_emoticon` 행이 참조하는 key를 모두 반환한다. 비활성 이모티콘도 과거 메시지에서 보여야 하므로 **비활성이라는 이유로 정리하지 않는다.** `chat-emoticons/`는 비공개 prefix이며 공개 버킷 정책에는 추가하지 않는다.
 
 정리 배치는 앱 안의 스케줄러라 앱과 같은 인스턴스 프로필을 쓴다. 즉 **앱이 침해되면 이 권한도 함께 넘어간다.** 배치를 별도 역할로 떼어내는 것이 이론상 더 안전하지만, 그러려면 배치를 앱 밖(Lambda·별도 컨테이너)으로 옮겨야 하고 지금은 그 실행 기반이 없다. 게다가 `DeleteObject`는 **탈퇴 시 사진 삭제가 앱 안에서 지워야 해서** 어차피 앱 역할에 남는다. 그래서 분리 대신 **리소스를 좁히는 쪽**으로 위험을 줄였다.
 
@@ -590,7 +597,7 @@ LiRouti는 **umc 계정 하나에만** 있고 다른 계정과 리소스를 공�
 
 IAM → 정책 → 정책 생성 → JSON 탭에 [`deploy/iam-policy.json`](./iam-policy.json)의 내용을 붙여넣는다. 이름은 `lirouti-app-s3`.
 
-미디어 버킷에는 `PutObject`·`GetObject`(업로드·검증·서빙, 버킷 전체)에 더해 **`ListBucket`·`DeleteObject`(미참조 이미지 정리)** 를 허용하되, 뒤의 둘은 **`challenge-verifications/` 아래로만** 좁힌다. 백업 버킷은 `PutObject`만 준다 — 백업은 쓰기만 하면 되고, 읽기·삭제까지 주면 앱 침해 시 백업을 지울 수 있다.
+미디어 버킷에는 `PutObject`·`GetObject`(업로드·검증·서빙, 버킷 전체)에 더해 **`ListBucket`·`DeleteObject`(미참조 이미지 정리와 이모티콘 등록 실패 보상 삭제)** 를 허용하되, 뒤의 둘은 **`challenge-verifications/`와 `chat-emoticons/` 아래로만** 좁힌다. 백업 버킷은 `PutObject`만 준다 — 백업은 쓰기만 하면 되고, 읽기·삭제까지 주면 앱 침해 시 백업을 지울 수 있다.
 
 > **`ListBucket`만 리소스가 버킷 ARN(`arn:aws:s3:::lirouti-prod-bucket`)이고 나머지는 오브젝트(`/*`)다.** 버킷 수준 액션과 오브젝트 수준 액션은 리소스 형태가 다르다. `ListBucket`에 `/*`를 붙이면 **오류 없이 조용히 권한이 안 먹는다.** prefix 제한은 리소스가 아니라 `Condition`의 `s3:prefix`로 건다.
 >
@@ -730,7 +737,46 @@ echo "③ OK"
 
 ①이 컨테이너의 자격증명 수령을, ③이 그 자격증명으로 서명까지 되는지를 본다. **③이 최종 판정이다** — presigned URL 발급은 서명에 자격증명이 필요하므로, 역할이 없으면 여기서 먼저 실패한다.
 
-> ③으로 올린 `probe.jpg`도 역할로는 못 지운다. 콘솔에서 함께 지운다.
+> ③으로 올린 `probe.jpg`는 현재 `challenge-verifications/` 삭제 권한 범위에 있다. 테스트 직후 exact key를 확인해 지우거나, 찾지 못했다면 정리 배치가 grace 기간 뒤 DB 미참조 파일로 정리한다.
+
+#### 채팅 이모티콘 권한 갱신 확인 (#161)
+
+레포의 정책 파일을 고치는 것만으로 AWS 역할은 바뀌지 않는다. IAM 콘솔에서 `lirouti-app-s3` 정책 JSON을 갱신한 뒤 EC2 호스트에서 아래를 실행한다. 허용된 `chat-emoticons/`에서는 업로드·목록·삭제가 모두 성공하고, 범위 밖인 `profiles/` 목록은 `AccessDenied`여야 한다.
+
+```bash
+set -euo pipefail
+export AWS_DEFAULT_REGION=ap-northeast-2
+
+PROBE_FILE=/tmp/chat-emoticon-iam-probe.txt
+PROBE_DATE="$(TZ=Asia/Seoul date +%Y/%m/%d)"
+PROBE_UUID="$(tr -d '\n' < /proc/sys/kernel/random/uuid)"
+PROBE_KEY="chat-emoticons/$PROBE_DATE/$PROBE_UUID.png"
+printf 'permission-probe' > "$PROBE_FILE"
+
+aws s3 cp "$PROBE_FILE" "s3://lirouti-prod-bucket/$PROBE_KEY"
+aws s3api list-objects-v2 \
+  --bucket lirouti-prod-bucket \
+  --prefix "chat-emoticons/$PROBE_DATE/" \
+  --max-keys 1 >/dev/null
+aws s3api delete-object \
+  --bucket lirouti-prod-bucket \
+  --key "$PROBE_KEY" >/dev/null
+
+if aws s3api list-objects-v2 \
+  --bucket lirouti-prod-bucket \
+  --prefix profiles/ \
+  --max-keys 1 >/tmp/chat-emoticon-list-denied.out 2>&1; then
+  echo "허용하지 않은 prefix도 조회된다 — 정책 범위가 너무 넓다" >&2
+  exit 1
+fi
+grep -q "AccessDenied" /tmp/chat-emoticon-list-denied.out || {
+  echo "거부됐지만 사유가 AccessDenied가 아니다" >&2
+  exit 1
+}
+echo "채팅 이모티콘 IAM 권한 OK"
+```
+
+이 검증은 테스트 오브젝트를 마지막에 삭제한다. 중간 실패로 남더라도 실제 발급 규칙과 같은 날짜·UUID key라 정리 배치가 grace 기간 뒤 회수할 수 있다. 실패하면 관리자 이모티콘 등록을 열기 전에 IAM 정책 적용 상태부터 바로잡는다.
 
 #### 실측 결과 (2026-07-27)
 
@@ -746,7 +792,7 @@ echo "③ OK"
 | 미디어 버킷 `PutObject` | 성공 | ✅ |
 | 미디어 버킷 `GetObject` | 성공 | ✅ 내용까지 일치 (#22가 쓸 권한) |
 | 백업 버킷 `GetObject` | **거부** | ✅ `403 Forbidden` (Put만 부여했으므로) |
-| 미디어 버킷 `DeleteObject` | **거부** | ✅ `AccessDenied` <br>⚠️ 미참조 정리 도입 전 기록이다. 지금은 `challenge-verifications/` 아래만 **허용**이고 그 밖의 경로는 여전히 거부다 |
+| 미디어 버킷 `DeleteObject` | **거부** | ✅ `AccessDenied` <br>⚠️ 미참조 정리 도입 전 기록이다. 현재 정책 문서상 `challenge-verifications/`와 `chat-emoticons/` 아래만 **허용**이고 그 밖의 경로는 여전히 거부다 |
 
 앱 상태도 함께 확인했다 — 컨테이너 `running`, `GET /api/challenges` 200, 재시작 후 로그에 자격증명·S3 오류 0건.
 

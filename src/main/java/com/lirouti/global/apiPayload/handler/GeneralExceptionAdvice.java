@@ -1,12 +1,8 @@
 package com.lirouti.global.apiPayload.handler;
 
-import com.lirouti.global.apiPayload.ApiResponse;
-import com.lirouti.global.apiPayload.code.BaseErrorCode;
-import com.lirouti.global.apiPayload.code.GeneralErrorCode;
-import com.lirouti.global.apiPayload.exception.GeneralException;
-import com.lirouti.global.ratelimit.RateLimitExceededException;
-import lombok.NonNull;
-import lombok.extern.slf4j.Slf4j;
+import java.sql.SQLException;
+import java.util.function.Predicate;
+
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpHeaders;
@@ -17,11 +13,19 @@ import org.springframework.validation.BindException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
-import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
-import java.sql.SQLException;
-import java.util.function.Predicate;
+import com.lirouti.domain.media.exception.code.error.MediaErrorCode;
+import com.lirouti.global.apiPayload.ApiResponse;
+import com.lirouti.global.apiPayload.code.BaseErrorCode;
+import com.lirouti.global.apiPayload.code.GeneralErrorCode;
+import com.lirouti.global.apiPayload.exception.GeneralException;
+import com.lirouti.global.ratelimit.RateLimitExceededException;
+
+import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @RestControllerAdvice
@@ -58,6 +62,19 @@ public class GeneralExceptionAdvice {
                 .status(e.getCode().getHttpStatus())
                 .header(HttpHeaders.RETRY_AFTER, String.valueOf(e.getRetryAfterSeconds()))
                 .body(ApiResponse.onFailure(e.getCode()));
+    }
+
+    /** Controller 진입 전에 multipart 상한으로 거부된 요청을 미디어 413 계약으로 변환한다. */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<@NonNull ApiResponse<Void>> handleMaxUploadSizeExceeded(
+            MaxUploadSizeExceededException e
+    ) {
+        log.warn("multipart 요청이 허용 용량을 초과했습니다. maxUploadSize={}",
+                e.getMaxUploadSize());
+
+        return ResponseEntity
+                .status(MediaErrorCode.FILE_TOO_LARGE.getHttpStatus())
+                .body(ApiResponse.onFailure(MediaErrorCode.FILE_TOO_LARGE));
     }
 
     // @Valid에서 검증 오류가 발생한 예외에 대한 핸들러

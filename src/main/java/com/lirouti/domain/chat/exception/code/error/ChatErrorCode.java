@@ -42,6 +42,11 @@ public enum ChatErrorCode implements BaseErrorCode {
             HttpStatus.NOT_FOUND,
             "이모티콘을 찾을 수 없습니다.",
             "CHAT404_2"
+    ),
+    DUPLICATE_EMOTICON_CODE(
+            HttpStatus.CONFLICT,
+            "이미 등록된 이모티콘 코드입니다.",
+            "CHAT409_1"
     );
 
     private final HttpStatus httpStatus;
