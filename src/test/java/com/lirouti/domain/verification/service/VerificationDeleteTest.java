@@ -1,5 +1,6 @@
 package com.lirouti.domain.verification.service;
 
+import com.lirouti.domain.verification.enums.ReportType;
 import com.lirouti.domain.challenge.enums.RoutineCycle;
 import com.lirouti.domain.challenge.entity.Challenge;
 import com.lirouti.domain.challenge.entity.MemberChallenge;
@@ -245,7 +246,7 @@ class VerificationDeleteTest {
                 .as("되살아났을 때 엉뚱한 좋아요 수를 달고 나타나면 안 된다")
                 .isInstanceOf(RuntimeException.class);
         assertThatThrownBy(() -> challengeVerificationService.report(me.getId(), challenge.getId(), v.getId(),
-                new ChallengeVerificationReqDTO.Report(null)))
+                new ChallengeVerificationReqDTO.Report(ReportType.IRRELEVANT, null)))
                 .as("이미 내려간 글로 숨김 임계값을 채우면 안 된다")
                 .isInstanceOf(RuntimeException.class);
         assertThatThrownBy(() -> challengeVerificationService.updateMemo(me.getId(), challenge.getId(), v.getId(),

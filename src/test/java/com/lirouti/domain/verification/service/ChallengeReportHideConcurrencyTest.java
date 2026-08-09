@@ -1,5 +1,6 @@
 package com.lirouti.domain.verification.service;
 
+import com.lirouti.domain.verification.enums.ReportType;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.LocalDate;
@@ -138,7 +139,7 @@ class ChallengeReportHideConcurrencyTest {
                     ready.countDown();
                     start.await();
                     challengeVerificationService.report(reporterId, challengeId, verificationId,
-                            new ChallengeVerificationReqDTO.Report("부적절한 사진"));
+                            new ChallengeVerificationReqDTO.Report(ReportType.IRRELEVANT, null));
                 } catch (InterruptedException ignored) {
                     Thread.currentThread().interrupt();
                 } catch (RuntimeException e) {
