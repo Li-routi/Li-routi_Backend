@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import com.lirouti.domain.verification.dto.response.ChallengeVerificationResDTO;
 import com.lirouti.domain.verification.enums.ReviewStatus;
+import com.lirouti.domain.verification.enums.VerificationSort;
 import com.lirouti.domain.verification.dto.request.ChallengeVerificationReqDTO;
 
 @Tag(name = "Challenge", description = "챌린지 인증 API")
@@ -127,11 +128,32 @@ public interface ChallengeVerificationControllerDocs {
     @Operation(
             summary = "최신 인증 피드 조회",
             description = """
-                    챌린지의 인증을 최신순으로 조회합니다. 인증이 필요합니다.
+                    챌린지의 인증을 조회합니다. 인증이 필요합니다.
 
                     무한 스크롤용 커서 페이지네이션입니다. 첫 요청은 cursor 없이 보내고,
                     응답의 nextCursor를 다음 요청의 cursor로 넘깁니다. hasNext가 false면 멈춥니다.
                     커서 값은 verificationId입니다.
+
+                    ### 정렬
+
+                    | `sort` | 뜻 | 페이징 |
+                    | --- | --- | --- |
+                    | `LATEST` (기본) | 최신순 | **커서로 끝까지** |
+                    | `LIKES` | 좋아요순 | **상위 몇 개만** — `hasNext=false`, `nextCursor=null` |
+
+                    **응답 형태는 둘이 같습니다.** `LIKES` 도 커서 규약을 그대로 따르시면 한
+                    페이지에서 자연히 멈춥니다 — 나중에 페이징이 붙어도 클라이언트를 고칠
+                    필요가 없습니다.
+
+                    `LIKES` 를 페이징하지 않는 이유는 **정렬 키가 스크롤 도중 바뀌기** 때문입니다.
+                    좋아요가 하나 눌리면 그 인증이 위로 올라가, 다음 페이지에서 이미 본 항목이
+                    다시 나오거나 밀려 내려간 항목을 건너뜁니다. 좋아요 수가 같으면 최신순으로
+                    가릅니다.
+
+                    **`LATEST` 는 "사진을 마지막으로 올린 순서"가 아닙니다.** 인증 행이 만들어진
+                    순서이고, 지우고 다시 인증하면 원래 자리에 그대로 있습니다.
+
+                    좋아요 수는 정렬에도 화면에도 **같은 규칙**으로 셉니다(탈퇴 회원 제외).
 
                     탈퇴한 회원의 인증은 제외됩니다. 같은 날 그만뒀다 다시 참여해 인증한 경우는
                     별개의 인증이므로 둘 다 보입니다.
@@ -157,6 +179,7 @@ public interface ChallengeVerificationControllerDocs {
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "sort 가 LATEST·LIKES 가 아님"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "인증 필요(미인증)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "존재하지 않거나 비활성 챌린지")
     })
@@ -164,15 +187,24 @@ public interface ChallengeVerificationControllerDocs {
             CustomUserDetails userDetails,
             @Parameter(description = "챌린지 ID") Long challengeId,
             @Parameter(description = "이전 응답의 nextCursor. 첫 요청에서는 생략") Long cursor,
-            @Parameter(description = "페이지 크기(기본 20, 최대 50)") Integer size
+            @Parameter(description = "페이지 크기(기본 20, 최대 50). LIKES 에서는 가져올 상위 개수") Integer size,
+            @Parameter(description = "정렬. LATEST(기본, 최신순) · LIKES(좋아요순 상위 N개, 페이징 없음)")
+            VerificationSort sort
     );
 
     @Operation(
             summary = "내가 인증한 게시물만 조회",
             description = """
-                    그 챌린지에서 **내가 남긴 인증만** 최신순으로 조회합니다. 인증이 필요합니다.
+                    그 챌린지에서 **내가 남긴 인증만** 조회합니다. 인증이 필요합니다.
 
-                    커서 페이지네이션은 피드와 같습니다(커서 값은 verificationId).
+                    정렬 규약은 피드와 같습니다.
+
+                    | `sort` | 뜻 | 페이징 |
+                    | --- | --- | --- |
+                    | `LATEST` (기본) | 최신순 | **커서로 끝까지** (커서 값은 verificationId) |
+                    | `LIKES` | 좋아요순 | **상위 `size` 개만** — `hasNext=false`, `nextCursor=null` |
+
+                    `LIKES` 에서 `size` 는 페이지 크기가 아니라 **가져올 상위 개수**입니다.
 
                     ### 전체 회차가 나옵니다
                     그만뒀다 다시 참여해도 **지난 참여의 인증이 그대로 보입니다.** 이탈은
@@ -211,6 +243,7 @@ public interface ChallengeVerificationControllerDocs {
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "sort 가 LATEST·LIKES 가 아님 / status 가 PENDING·APPROVED 가 아님"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "인증 필요(미인증)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "그 챌린지에 참여한 이력이 없음")
     })
@@ -218,9 +251,11 @@ public interface ChallengeVerificationControllerDocs {
             CustomUserDetails userDetails,
             @Parameter(description = "챌린지 ID") Long challengeId,
             @Parameter(description = "이전 응답의 nextCursor. 첫 요청에서는 생략") Long cursor,
-            @Parameter(description = "페이지 크기(기본 20, 최대 50)") Integer size,
+            @Parameter(description = "페이지 크기(기본 20, 최대 50). LIKES 에서는 가져올 상위 개수") Integer size,
             @Parameter(description = "심사 상태로 좁힌다. 생략하면 전부. PENDING 이면 심사 중인 것만")
-            ReviewStatus status
+            ReviewStatus status,
+            @Parameter(description = "정렬. LATEST(기본, 최신순) · LIKES(좋아요순 상위 N개, 페이징 없음)")
+            VerificationSort sort
     );
 
     @Operation(

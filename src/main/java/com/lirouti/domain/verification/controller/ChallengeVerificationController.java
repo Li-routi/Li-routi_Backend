@@ -2,6 +2,7 @@ package com.lirouti.domain.verification.controller;
 
 import com.lirouti.domain.verification.dto.response.ChallengeVerificationResDTO;
 import com.lirouti.domain.verification.enums.ReviewStatus;
+import com.lirouti.domain.verification.enums.VerificationSort;
 import com.lirouti.domain.verification.dto.request.ChallengeVerificationReqDTO;
 import com.lirouti.domain.verification.controller.docs.ChallengeVerificationControllerDocs;
 import com.lirouti.domain.verification.service.ChallengeVerificationService;
@@ -43,12 +44,13 @@ public class ChallengeVerificationController implements ChallengeVerificationCon
             @AuthenticationPrincipal CustomUserDetails userDetails,
             @PathVariable Long challengeId,
             @RequestParam(required = false) Long cursor,
-            @RequestParam(required = false) Integer size
+            @RequestParam(required = false) Integer size,
+            @RequestParam(required = false, defaultValue = "LATEST") VerificationSort sort
     ) {
         // 조회자가 신고한 인증을 빼려면 누가 보는지 알아야 한다. 이 API는 인증이 필요해
         // principal이 null이 아니지만, 서비스는 null이면 필터를 걸지 않도록 되어 있다.
         ChallengeVerificationResDTO.Feed result = challengeVerificationQueryService
-                .getVerificationFeed(challengeId, userDetails.getMemberId(), cursor, size);
+                .getVerificationFeed(challengeId, userDetails.getMemberId(), cursor, size, sort);
         return ApiResponse.onSuccess(ChallengeVerificationSuccessCode.VERIFICATION_FEED_FETCH_SUCCESS, result);
     }
 
@@ -59,12 +61,13 @@ public class ChallengeVerificationController implements ChallengeVerificationCon
             @PathVariable Long challengeId,
             @RequestParam(required = false) Long cursor,
             @RequestParam(required = false) Integer size,
-            @RequestParam(required = false) ReviewStatus status
+            @RequestParam(required = false) ReviewStatus status,
+            @RequestParam(required = false, defaultValue = "LATEST") VerificationSort sort
     ) {
         // 피드(GET /)와 파라미터를 공유하지 않고 경로를 나눈 것은, 한 엔드포인트가 두 화면을
         // 겸하면 응답 형태와 Swagger 설명이 섞이기 때문이다.
         ChallengeVerificationResDTO.MyVerifications result = challengeVerificationQueryService
-                .getMyVerifications(userDetails.getMemberId(), challengeId, cursor, size, status);
+                .getMyVerifications(userDetails.getMemberId(), challengeId, cursor, size, status, sort);
         return ApiResponse.onSuccess(ChallengeVerificationSuccessCode.MY_VERIFICATION_FETCH_SUCCESS, result);
     }
 
