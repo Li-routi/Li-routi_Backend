@@ -42,4 +42,14 @@ public interface ChallengeRepositoryCustom {
      * 탈퇴 회원의 인증은 제외한다. (상세 조회용)
      */
     long countVerificationPosts(Long challengeId);
+
+    /**
+     * 챌린지별 대표 이미지 후보(좋아요 1위 인증 사진의 S3 key). 목록 카드용 배치 조회다.
+     *
+     * <p>숨김·보류·삭제·탈퇴 회원 인증은 제외한다. 좋아요가 같으면 최신 인증({@code id} 내림차순)
+     * 이 이긴다 — tie-break 가 없으면 요청마다 표지가 바뀐다.
+     *
+     * <p>인증이 없는 챌린지는 결과에 담기지 않는다.
+     */
+    Map<Long, String> coverImagesByChallengeIds(List<Long> challengeIds);
 }

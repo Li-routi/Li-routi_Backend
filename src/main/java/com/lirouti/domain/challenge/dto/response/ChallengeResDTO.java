@@ -32,6 +32,9 @@ public final class ChallengeResDTO {
             Long challengeId,
             String name,
             String description,
+            // 대표 이미지. 운영이 지정한 표지가 있으면 그것이고, 없으면 그 챌린지에서 좋아요를
+            // 가장 많이 받은 인증 사진이다. 인증이 하나도 없으면 null 이라 자리표시자를 그린다.
+            // 좋아요가 바뀌면 값도 바뀐다 — 고정된 주소가 아니다.
             String imageUrl,
             ChallengeCategory category,
             RoutineCycle routineCycle,
@@ -54,6 +57,9 @@ public final class ChallengeResDTO {
             Long challengeId,
             String name,
             String description,
+            // 대표 이미지. 운영이 지정한 표지가 있으면 그것이고, 없으면 그 챌린지에서 좋아요를
+            // 가장 많이 받은 인증 사진이다. 인증이 하나도 없으면 null 이라 자리표시자를 그린다.
+            // 좋아요가 바뀌면 값도 바뀐다 — 고정된 주소가 아니다.
             String imageUrl,
             ChallengeCategory category
     ) {
@@ -92,6 +98,9 @@ public final class ChallengeResDTO {
             Long challengeId,
             String name,
             String description,
+            // 대표 이미지. 운영이 지정한 표지가 있으면 그것이고, 없으면 그 챌린지에서 좋아요를
+            // 가장 많이 받은 인증 사진이다. 인증이 하나도 없으면 null 이라 자리표시자를 그린다.
+            // 좋아요가 바뀌면 값도 바뀐다 — 고정된 주소가 아니다.
             String imageUrl,
             ChallengeCategory category,
             RoutineCycle routineCycle,
