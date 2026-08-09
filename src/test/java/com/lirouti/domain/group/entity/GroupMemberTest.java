@@ -19,6 +19,20 @@ import static org.mockito.Mockito.mock;
 class GroupMemberTest {
 
     @Test
+    @DisplayName("신규 ACTIVE 참여 관계는 기본 그룹별 상태 메시지로 생성한다")
+    void createActive_InitializesDefaultStatusMessage() {
+        GroupMember groupMember = GroupMember.createActive(
+                mock(Member.class),
+                mock(Group.class),
+                GroupMemberRole.MEMBER,
+                LocalDateTime.of(2026, 8, 9, 9, 0)
+        );
+
+        assertThat(groupMember.getStatus()).isEqualTo(GroupMemberStatus.ACTIVE);
+        assertThat(groupMember.getStatusMessage()).isEqualTo(GroupMember.DEFAULT_STATUS_MESSAGE);
+    }
+
+    @Test
     @DisplayName("방장은 권한 위임 또는 그룹 삭제 전까지 일반 탈퇴할 수 없다")
     void leave_Owner_ThrowsOwnerCannotLeave() {
         // given
@@ -114,6 +128,7 @@ class GroupMemberTest {
                 .member(mock(Member.class)).group(mock(Group.class))
                 .role(GroupMemberRole.MEMBER).joinedAt(LocalDateTime.of(2026, 8, 7, 9, 0)).build();
         groupMember.leave();
+        groupMember.updateStatusMessage("기존 그룹 메시지");
         LocalDateTime rejoinedAt = LocalDateTime.of(2026, 8, 7, 10, 30);
 
         groupMember.rejoin(rejoinedAt);
@@ -122,6 +137,7 @@ class GroupMemberTest {
         assertThat(groupMember.getStatus()).isEqualTo(GroupMemberStatus.ACTIVE);
         assertThat(groupMember.getJoinedAt()).isEqualTo(rejoinedAt);
         assertThat(groupMember.getLeftAt()).isNull();
+        assertThat(groupMember.getStatusMessage()).isEqualTo("기존 그룹 메시지");
     }
 
     @Test

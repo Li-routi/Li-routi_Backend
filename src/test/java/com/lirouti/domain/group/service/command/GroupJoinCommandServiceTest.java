@@ -92,6 +92,8 @@ class GroupJoinCommandServiceTest {
         assertThat(membershipCaptor.getValue().getMember()).isSameAs(lockedMember);
         assertThat(membershipCaptor.getValue().getRole()).isEqualTo(GroupMemberRole.MEMBER);
         assertThat(membershipCaptor.getValue().getJoinedAt()).isEqualTo(JOINED_AT);
+        assertThat(membershipCaptor.getValue().getStatusMessage())
+                .isEqualTo(GroupMember.DEFAULT_STATUS_MESSAGE);
         verify(groupValidationService).validateJoinLimits(GROUP_ID, MEMBER_ID);
         verify(assignmentCommandService).assignTodayRoutinesToMember(GROUP_ID, MEMBER_ID, JOINED_AT);
         assertThat(result).isEqualTo(new GroupResDTO.JoinResult(
@@ -105,6 +107,7 @@ class GroupJoinCommandServiceTest {
                 .group(lockedGroup).member(lockedMember).role(GroupMemberRole.MEMBER)
                 .joinedAt(JOINED_AT.minusDays(1)).build();
         leftMembership.leave();
+        leftMembership.updateStatusMessage("기존 그룹 메시지");
         ReflectionTestUtils.setField(leftMembership, "id", 500L);
         when(groupMemberRepository.findByGroupIdAndMemberId(GROUP_ID, MEMBER_ID))
                 .thenReturn(Optional.of(leftMembership));
@@ -114,6 +117,7 @@ class GroupJoinCommandServiceTest {
         assertThat(leftMembership.getStatus()).isEqualTo(GroupMemberStatus.ACTIVE);
         assertThat(leftMembership.getJoinedAt()).isEqualTo(JOINED_AT);
         assertThat(leftMembership.getLeftAt()).isNull();
+        assertThat(leftMembership.getStatusMessage()).isEqualTo("기존 그룹 메시지");
         verify(groupMemberRepository).saveAndFlush(leftMembership);
         verify(lockedGroup, never()).addMember(any(GroupMember.class));
         verify(assignmentCommandService).assignTodayRoutinesToMember(GROUP_ID, MEMBER_ID, JOINED_AT);

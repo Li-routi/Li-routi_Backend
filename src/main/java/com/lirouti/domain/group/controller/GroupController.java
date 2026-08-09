@@ -143,6 +143,25 @@ public class GroupController implements GroupControllerDocs {
         return ApiResponse.onSuccess(GroupSuccessCode.GROUP_DETAIL_FETCH_SUCCESS, result);
     }
 
+    /** ACTIVE 구성원이 자신이 참여한 그룹 안에서만 보이는 상태 메시지를 수정한다. */
+    @Override
+    @PatchMapping("/{groupId}/members/me/status-message")
+    public ApiResponse<GroupResDTO.StatusMessageUpdate> updateMyStatusMessage(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long groupId,
+            @Valid @RequestBody GroupReqDTO.UpdateMyStatusMessage request
+    ) {
+        GroupResDTO.StatusMessageUpdate result = groupCommandService.updateMyStatusMessage(
+                groupId,
+                userDetails.getMemberId(),
+                request
+        );
+        return ApiResponse.onSuccess(
+                GroupSuccessCode.GROUP_MEMBER_STATUS_MESSAGE_UPDATE_SUCCESS,
+                result
+        );
+    }
+
     /** ACTIVE OWNER가 그룹 전용 사용자 카테고리를 추가한다. */
     @Override
     @PostMapping("/{groupId}/categories")
