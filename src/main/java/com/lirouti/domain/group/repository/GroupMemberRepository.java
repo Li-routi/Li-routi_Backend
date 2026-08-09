@@ -34,6 +34,44 @@ public interface GroupMemberRepository extends JpaRepository<GroupMember, Long> 
             @Param("memberId") Long memberId
     );
 
+    /** 찌르기 대상인 ACTIVE 참여 관계의 회원 ID·행 ID를 행 ID 순서로 찾는다. */
+    @Query("""
+            select new com.lirouti.domain.group.repository.GroupMemberLockCandidate(
+                groupMember.member.id,
+                groupMember.id
+            )
+            from GroupMember groupMember
+            where groupMember.group.id = :groupId
+              and groupMember.member.id in :memberIds
+              and groupMember.status = com.lirouti.domain.group.enums.GroupMemberStatus.ACTIVE
+            order by groupMember.id asc
+            """)
+    List<GroupMemberLockCandidate> findActiveMembershipLockCandidatesByGroupIdAndMemberIds(
+            @Param("groupId") Long groupId,
+            @Param("memberIds") List<Long> memberIds
+    );
+
+    /**
+     * 찌르기 명령이 후보 행을 GroupMember ID 순서대로 하나씩 잠근다.
+     * 연관 엔티티를 join하지 않아 MySQL의 FOR UPDATE가 member·member_group까지 전파되지 않는다.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select groupMember from GroupMember groupMember where groupMember.id = :groupMemberId")
+    Optional<GroupMember> findByIdForUpdate(@Param("groupMemberId") Long groupMemberId);
+
+    /**
+     * 그룹 삭제가 cascade delete 전에 참여 관계를 ID 순서대로 잠근다.
+     * 찌르기의 부분 잠금과 같은 순서를 사용해 교차 대기를 피한다.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select groupMember
+            from GroupMember groupMember
+            where groupMember.group.id = :groupId
+            order by groupMember.id asc
+            """)
+    List<GroupMember> findAllByGroupIdForUpdate(@Param("groupId") Long groupId);
+
     /** 실제 Like INSERT와 같은 트랜잭션에서 DB의 현재 가입 회차·ACTIVE 조건을 만족할 때만 증가시킨다. */
     @Modifying(flushAutomatically = true)
     @Query(value = """

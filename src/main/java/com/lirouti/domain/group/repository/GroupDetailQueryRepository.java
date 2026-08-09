@@ -43,7 +43,8 @@ public class GroupDetailQueryRepository {
                         groupMember.member.profileImageKey,
                         groupMember.statusMessage,
                         groupMember.currentStreak,
-                        groupMember.totalLikeCount
+                        groupMember.totalLikeCount,
+                        groupMember.totalPokeCount
                 ))
                 .from(groupMember)
                 .join(groupMember.group, group)
@@ -108,7 +109,8 @@ public class GroupDetailQueryRepository {
             String profileImageKey,
             String statusMessage,
             int currentStreak,
-            long totalLikeCount
+            long totalLikeCount,
+            long totalPokeCount
     ) {
     }
 

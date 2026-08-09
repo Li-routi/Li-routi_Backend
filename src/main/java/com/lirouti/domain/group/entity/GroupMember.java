@@ -91,6 +91,10 @@ public class GroupMember extends BaseEntity {
     @Column(name = "total_like_count", nullable = false)
     private long totalLikeCount;
 
+    /** 현재 가입 회차에서 다른 ACTIVE 구성원에게 받은 누적 찌르기 수다. */
+    @Column(name = "total_poke_count", nullable = false)
+    private long totalPokeCount;
+
     /**
      * 신규 참여 관계는 항상 ACTIVE 상태로 시작한다.
      * 그룹 생성자는 이 빌더에 OWNER role을 전달해 그룹 생성 트랜잭션 안에서 함께 저장한다.
@@ -187,6 +191,10 @@ public class GroupMember extends BaseEntity {
         totalLikeCount++;
     }
 
+    public void increaseTotalPokeCount() {
+        totalPokeCount++;
+    }
+
     /** 실제 Like 삭제와 카운터 감소를 함께 롤백시키기 위해 음수 상태를 허용하지 않는다. */
     public void decreaseTotalLikeCount() {
         if (totalLikeCount == 0) {
@@ -220,6 +228,7 @@ public class GroupMember extends BaseEntity {
         longestStreak = 0;
         lastStreakCompletedDate = null;
         totalLikeCount = 0;
+        totalPokeCount = 0;
     }
 
     /*

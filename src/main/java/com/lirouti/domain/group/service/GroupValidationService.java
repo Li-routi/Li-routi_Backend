@@ -177,6 +177,27 @@ public class GroupValidationService {
     }
 
     /**
+     * 이미 그룹 행을 잠근 명령에서 참여 관계까지 잠가 상태 변경을 직렬화한다.
+     * 탈퇴·강퇴는 찌르기와 같은 GroupMember 행을 잠그므로 오래된 엔티티 상태가 카운터를 덮어쓰지 않는다.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public GroupMember validateActiveGroupMemberForUpdate(Group group, Long memberId) {
+        if (group == null) {
+            throw new GroupException(GroupErrorCode.GROUP_NOT_FOUND);
+        }
+        validateActiveGroup(group.getId(), group);
+        Member member = memberQueryService.getActiveMember(memberId);
+
+        GroupMember groupMember = groupMemberRepository
+                .findByGroupIdAndMemberIdForUpdate(group.getId(), member.getId())
+                .orElseThrow(() -> new GroupException(GroupErrorCode.GROUP_MEMBER_ACCESS_DENIED));
+        if (groupMember.getStatus() != GroupMemberStatus.ACTIVE) {
+            throw new GroupException(GroupErrorCode.GROUP_MEMBER_ACCESS_DENIED);
+        }
+        return groupMember;
+    }
+
+    /**
      * ACTIVE 구성원 검증 후 해당 그룹에서 OWNER인지 추가로 검증한다.
      * 다른 그룹의 OWNER 권한은 현재 요청 대상 그룹에 영향을 주지 않는다.
      */

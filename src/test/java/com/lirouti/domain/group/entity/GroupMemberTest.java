@@ -19,6 +19,14 @@ import static org.mockito.Mockito.mock;
 class GroupMemberTest {
 
     @Test
+    @DisplayName("신규 참여 관계의 누적 찔림 수는 0으로 시작한다")
+    void newMembership_TotalPokeCount_StartsAtZero() {
+        GroupMember groupMember = GroupMember.builder()
+                .member(mock(Member.class)).group(mock(Group.class)).role(GroupMemberRole.MEMBER).build();
+
+        assertThat(groupMember.getTotalPokeCount()).isZero();
+    }
+
     @DisplayName("신규 ACTIVE 참여 관계는 기본 그룹별 상태 메시지로 생성한다")
     void createActive_InitializesDefaultStatusMessage() {
         GroupMember groupMember = GroupMember.createActive(
@@ -217,6 +225,7 @@ class GroupMemberTest {
                 .member(mock(Member.class)).group(mock(Group.class)).role(GroupMemberRole.MEMBER).build();
         groupMember.recordStreakCompletion(LocalDate.of(2026, 8, 6));
         groupMember.increaseTotalLikeCount();
+        groupMember.increaseTotalPokeCount();
 
         groupMember.resetActivityForNewMembership();
 
@@ -224,6 +233,7 @@ class GroupMemberTest {
         assertThat(groupMember.getLongestStreak()).isZero();
         assertThat(groupMember.getLastStreakCompletedDate()).isNull();
         assertThat(groupMember.getTotalLikeCount()).isZero();
+        assertThat(groupMember.getTotalPokeCount()).isZero();
     }
 
 }

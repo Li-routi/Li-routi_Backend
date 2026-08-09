@@ -6,6 +6,7 @@ import com.lirouti.domain.group.enums.GroupMemberStatus;
 import com.lirouti.domain.group.exception.code.success.GroupSuccessCode;
 import com.lirouti.domain.group.service.command.GroupCommandService;
 import com.lirouti.domain.group.service.command.GroupJoinCommandService;
+import com.lirouti.domain.group.service.command.GroupPokeCommandService;
 import com.lirouti.domain.group.service.query.GroupInviteCodeQueryService;
 import com.lirouti.domain.group.service.query.GroupJoinQueryService;
 import com.lirouti.domain.group.service.query.GroupQueryService;
@@ -43,6 +44,8 @@ class GroupControllerUnitTest {
     private GroupJoinQueryService groupJoinQueryService;
     @Mock
     private GroupJoinCommandService groupJoinCommandService;
+    @Mock
+    private GroupPokeCommandService groupPokeCommandService;
     @InjectMocks
     private GroupController groupController;
 
@@ -119,6 +122,19 @@ class GroupControllerUnitTest {
     }
 
     @Test
+    @DisplayName("인증 회원 ID와 그룹·대상 회원 ID를 찌르기 Command에 전달한다")
+    void pokeMember_AuthenticatedMember_ReturnsPokeResult() {
+        CustomUserDetails principal = new CustomUserDetails(MEMBER_ID, Role.ROLE_USER);
+        GroupResDTO.PokeResult result = new GroupResDTO.PokeResult(2L, 7L);
+        when(groupPokeCommandService.poke(GROUP_ID, MEMBER_ID, 2L)).thenReturn(result);
+
+        ApiResponse<GroupResDTO.PokeResult> response = groupController.pokeMember(principal, GROUP_ID, 2L);
+
+        assertThat(response.getCode()).isEqualTo(GroupSuccessCode.GROUP_MEMBER_POKE_SUCCESS.getCode());
+        assertThat(response.getResult()).isSameAs(result);
+        verify(groupPokeCommandService).poke(GROUP_ID, MEMBER_ID, 2L);
+    }
+
     @DisplayName("인증 회원 ID와 상태 메시지 요청을 수정 서비스에 전달한다")
     void updateMyStatusMessage_AuthenticatedMember_ReturnsUpdatedMessage() {
         CustomUserDetails principal = new CustomUserDetails(MEMBER_ID, Role.ROLE_USER);

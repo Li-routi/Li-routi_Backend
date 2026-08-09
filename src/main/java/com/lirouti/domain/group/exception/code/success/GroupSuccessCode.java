@@ -104,6 +104,11 @@ public enum GroupSuccessCode implements BaseSuccessCode {
             HttpStatus.OK,
             "그룹 방장 위임에 성공했습니다.",
             "GROUP200_13"
+    ),
+    GROUP_MEMBER_POKE_SUCCESS(
+            HttpStatus.OK,
+            "그룹 구성원을 찔렀습니다.",
+            "GROUP200_15"
     );
 
     private final HttpStatus httpStatus;
