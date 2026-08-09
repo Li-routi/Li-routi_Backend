@@ -201,12 +201,19 @@ public interface ChallengeVerificationRepository
      * 리포트 집계용. 기간 내 회원의 챌린지 인증 건수. 완료한 챌린지가 아니라 "인증한 횟수"다
      * (한 회원이 여러 챌린지에 참여하면 하루에도 여러 건일 수 있다) — 개인/그룹 루틴과 달리
      * 달성률 계산에는 넣지 않고 별도 지표로만 보여주기로 했다.
+     *
+     * <p><b>내려간 글은 세지 않는다.</b> 짝이 되는 목록({@code findByMemberAndDate})이 빼는
+     * 것과 같은 기준이어야 한다 — 목록에 없는 것이 개수에는 잡히면 같은 화면이 서로 다른
+     * 말을 한다.
+     *
+     * <p>아직 이 지표를 쓰는 화면이 없다. 쓰는 쪽이 생기기 전에 기준을 맞춰 둔다.
      */
     @Query("""
             select count(v)
             from ChallengeVerification v
             where v.memberChallenge.member.id = :memberId
               and v.verifiedDate between :start and :end
+              and v.deletedAt is null
             """)
     long countByMemberAndDateBetween(
             @Param("memberId") Long memberId,
