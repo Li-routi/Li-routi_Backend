@@ -1,4 +1,4 @@
-package com.lirouti.domain.challenge.service.query;
+package com.lirouti.domain.verification.service.query;
 
 import com.lirouti.domain.challenge.dto.response.ChallengeResDTO;
 import com.lirouti.domain.challenge.entity.Challenge;
@@ -36,7 +36,7 @@ class MyVerificationsQueryTest {
     private static final String KEY_PREFIX = "challenge-verifications/";
 
     @Autowired
-    private ChallengeQueryService challengeQueryService;
+    private ChallengeVerificationQueryService challengeVerificationQueryService;
 
     @PersistenceContext
     private EntityManager em;
@@ -96,7 +96,7 @@ class MyVerificationsQueryTest {
         em.flush();
 
         ChallengeVerificationResDTO.MyVerifications result =
-                challengeQueryService.getMyVerifications(me.getId(), c.getId(), null, null, null);
+                challengeVerificationQueryService.getMyVerifications(me.getId(), c.getId(), null, null, null);
 
         assertThat(result.verifications()).hasSize(1);
         assertThat(result.verifications().get(0).content()).isEqualTo("내 것");
@@ -116,7 +116,7 @@ class MyVerificationsQueryTest {
         em.flush();
 
         ChallengeVerificationResDTO.MyVerifications result =
-                challengeQueryService.getMyVerifications(me.getId(), c.getId(), null, null, null);
+                challengeVerificationQueryService.getMyVerifications(me.getId(), c.getId(), null, null, null);
 
         // 예전에는 1회차가 빠졌다. 그러면 피드에는 mine=true 로 남아 있는 글이
         // 내 목록에는 없는 상태가 되고, 회차는 되돌아가지 않아 영영 다시 보이지 않는다.
@@ -138,7 +138,7 @@ class MyVerificationsQueryTest {
         em.flush();
 
         ChallengeVerificationResDTO.MyVerifications result =
-                challengeQueryService.getMyVerifications(me.getId(), c.getId(), null, null, null);
+                challengeVerificationQueryService.getMyVerifications(me.getId(), c.getId(), null, null, null);
 
         // 항목의 회차가 currentParticipationRound 보다 작으면 지난 참여다.
         // 이 값이 없으면 목록이 전체 회차를 담아도 클라이언트가 어디까지가 이번 참여인지 모른다.
@@ -161,7 +161,7 @@ class MyVerificationsQueryTest {
         em.flush();
 
         ChallengeVerificationResDTO.MyVerifications result =
-                challengeQueryService.getMyVerifications(me.getId(), c.getId(), null, null, null);
+                challengeVerificationQueryService.getMyVerifications(me.getId(), c.getId(), null, null, null);
 
         assertThat(result.verifications()).hasSize(1);
         assertThat(result.verifications().get(0).content()).isEqualTo("그만두기 전 인증");
@@ -175,7 +175,7 @@ class MyVerificationsQueryTest {
         em.flush();
 
         assertThatThrownBy(() ->
-                challengeQueryService.getMyVerifications(stranger.getId(), c.getId(), null, null, null))
+                challengeVerificationQueryService.getMyVerifications(stranger.getId(), c.getId(), null, null, null))
                 .isInstanceOf(ChallengeException.class)
                 .hasFieldOrPropertyWithValue("code", ChallengeErrorCode.NOT_PARTICIPATING);
     }
@@ -194,7 +194,7 @@ class MyVerificationsQueryTest {
         em.flush();
 
         ChallengeVerificationResDTO.MyVerifications first =
-                challengeQueryService.getMyVerifications(me.getId(), c.getId(), null, 2, null);
+                challengeVerificationQueryService.getMyVerifications(me.getId(), c.getId(), null, 2, null);
 
         assertThat(first.verifications()).hasSize(2);
         assertThat(first.hasNext()).isTrue();
@@ -202,7 +202,7 @@ class MyVerificationsQueryTest {
         assertThat(first.verifications()).extracting(ChallengeVerificationResDTO.MyVerificationItem::content)
                 .containsExactly("오늘", "2일전");
 
-        ChallengeVerificationResDTO.MyVerifications second = challengeQueryService
+        ChallengeVerificationResDTO.MyVerifications second = challengeVerificationQueryService
                 .getMyVerifications(me.getId(), c.getId(), first.nextCursor(), 2, null);
 
         assertThat(second.verifications()).extracting(ChallengeVerificationResDTO.MyVerificationItem::content)
@@ -221,7 +221,7 @@ class MyVerificationsQueryTest {
         persistVerification(mc, 1, today, "필드 확인");
         em.flush();
 
-        ChallengeVerificationResDTO.MyVerificationItem item = challengeQueryService
+        ChallengeVerificationResDTO.MyVerificationItem item = challengeVerificationQueryService
                 .getMyVerifications(me.getId(), c.getId(), null, null, null)
                 .verifications().get(0);
 
@@ -240,7 +240,7 @@ class MyVerificationsQueryTest {
         em.flush();
 
         ChallengeVerificationResDTO.MyVerifications result =
-                challengeQueryService.getMyVerifications(me.getId(), c.getId(), null, null, null);
+                challengeVerificationQueryService.getMyVerifications(me.getId(), c.getId(), null, null, null);
 
         assertThat(result.verifications()).isEmpty();
         assertThat(result.hasNext()).isFalse();
@@ -265,7 +265,7 @@ class MyVerificationsQueryTest {
         em.flush();
 
         ChallengeVerificationResDTO.MyVerifications result =
-                challengeQueryService.getMyVerifications(me.getId(), c.getId(), null, null, null);
+                challengeVerificationQueryService.getMyVerifications(me.getId(), c.getId(), null, null, null);
 
         assertThat(result.currentStreak()).isZero();
     }
@@ -285,7 +285,7 @@ class MyVerificationsQueryTest {
         em.flush();
 
         ChallengeVerificationResDTO.MyVerifications result =
-                challengeQueryService.getMyVerifications(me.getId(), a.getId(), null, null, null);
+                challengeVerificationQueryService.getMyVerifications(me.getId(), a.getId(), null, null, null);
 
         assertThat(result.verifications()).hasSize(1);
         assertThat(result.verifications().get(0).content()).isEqualTo("A챌린지");
@@ -307,7 +307,7 @@ class MyVerificationsQueryTest {
         ChallengeVerification foreign = persistVerification(otherMc, 1, today, "남의 것");
         em.flush();
 
-        ChallengeVerificationResDTO.MyVerifications result = challengeQueryService
+        ChallengeVerificationResDTO.MyVerifications result = challengeVerificationQueryService
                 .getMyVerifications(me.getId(), c.getId(), foreign.getId(), null, null);
 
         // 커서는 id 상한으로만 작용하고, 결과는 여전히 내 참여 행으로 좁혀진다.
@@ -327,7 +327,7 @@ class MyVerificationsQueryTest {
         em.flush();
 
         ChallengeVerificationResDTO.MyVerifications result =
-                challengeQueryService.getMyVerifications(me.getId(), c.getId(), null, null, null);
+                challengeVerificationQueryService.getMyVerifications(me.getId(), c.getId(), null, null, null);
 
         assertThat(result.verifications()).hasSize(1);
         assertThat(result.verifications().get(0).content()).isNull();
@@ -347,7 +347,7 @@ class MyVerificationsQueryTest {
 
         for (Integer size : List.of(0, -1)) {
             ChallengeVerificationResDTO.MyVerifications result =
-                    challengeQueryService.getMyVerifications(me.getId(), c.getId(), null, size, null);
+                    challengeVerificationQueryService.getMyVerifications(me.getId(), c.getId(), null, size, null);
             assertThat(result.verifications()).as("size=%s", size).hasSize(1);
         }
     }
@@ -365,7 +365,7 @@ class MyVerificationsQueryTest {
         em.flush();
 
         ChallengeVerificationResDTO.MyVerifications result =
-                challengeQueryService.getMyVerifications(me.getId(), c.getId(), null, 9999, null);
+                challengeVerificationQueryService.getMyVerifications(me.getId(), c.getId(), null, 9999, null);
 
         // 데이터가 3건뿐이라 전부 나오되, 예외 없이 처리되는 것이 요점이다.
         assertThat(result.verifications()).hasSize(3);

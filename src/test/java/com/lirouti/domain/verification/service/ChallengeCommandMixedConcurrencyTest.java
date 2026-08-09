@@ -1,5 +1,6 @@
-package com.lirouti.domain.challenge.service.command;
+package com.lirouti.domain.verification.service;
 
+import com.lirouti.domain.challenge.service.command.ChallengeCommandService;
 import com.lirouti.domain.media.service.MediaImageLoad;
 import com.lirouti.domain.challenge.entity.Challenge;
 import com.lirouti.domain.challenge.entity.MemberChallenge;
@@ -60,6 +61,10 @@ class ChallengeCommandMixedConcurrencyTest {
     @MockitoBean
     private MediaService mediaService;
 
+    @Autowired
+    private ChallengeVerificationService challengeVerificationService;
+    // 이탈은 챌린지 도메인에 남아 있다. 이 테스트가 두 서비스를 함께 잡는 이유가 그것이다 —
+    // 인증과 이탈이 같은 참여 행을 잠그므로, 도메인이 갈려도 잠금 순서는 그대로여야 한다.
     @Autowired
     private ChallengeCommandService challengeCommandService;
     @Autowired
@@ -132,7 +137,7 @@ class ChallengeCommandMixedConcurrencyTest {
             try {
                 ready.countDown();
                 start.await();
-                challengeCommandService.verify(
+                challengeVerificationService.verify(
                         memberId, challengeId, new ChallengeVerificationReqDTO.Verify(MEDIA_KEY, "동시 인증"));
                 verifySucceeded.incrementAndGet();
             } catch (ChallengeException e) {

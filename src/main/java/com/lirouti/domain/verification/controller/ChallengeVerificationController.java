@@ -4,10 +4,8 @@ import com.lirouti.domain.verification.dto.response.ChallengeVerificationResDTO;
 import com.lirouti.domain.verification.enums.ReviewStatus;
 import com.lirouti.domain.verification.dto.request.ChallengeVerificationReqDTO;
 import com.lirouti.domain.verification.controller.docs.ChallengeVerificationControllerDocs;
-import com.lirouti.domain.challenge.dto.response.ChallengeResDTO;
-import com.lirouti.domain.challenge.exception.code.success.ChallengeSuccessCode;
-import com.lirouti.domain.challenge.service.command.ChallengeCommandService;
-import com.lirouti.domain.challenge.service.query.ChallengeQueryService;
+import com.lirouti.domain.verification.service.ChallengeVerificationService;
+import com.lirouti.domain.verification.service.query.ChallengeVerificationQueryService;
 import com.lirouti.global.apiPayload.ApiResponse;
 import com.lirouti.global.auth.CustomUserDetails;
 import jakarta.validation.Valid;
@@ -24,8 +22,8 @@ import com.lirouti.domain.verification.exception.code.success.ChallengeVerificat
 @RequiredArgsConstructor
 @RequestMapping("/api/challenges/{challengeId}/verifications")
 public class ChallengeVerificationController implements ChallengeVerificationControllerDocs {
-    private final ChallengeCommandService challengeCommandService;
-    private final ChallengeQueryService challengeQueryService;
+    private final ChallengeVerificationService challengeVerificationService;
+    private final ChallengeVerificationQueryService challengeVerificationQueryService;
 
     @Override
     @PostMapping
@@ -35,7 +33,7 @@ public class ChallengeVerificationController implements ChallengeVerificationCon
             @Valid @RequestBody ChallengeVerificationReqDTO.Verify request
     ) {
         ChallengeVerificationResDTO.Verification result =
-                challengeCommandService.verify(userDetails.getMemberId(), challengeId, request);
+                challengeVerificationService.verify(userDetails.getMemberId(), challengeId, request);
         return ApiResponse.onSuccess(ChallengeVerificationSuccessCode.CHALLENGE_VERIFY_SUCCESS, result);
     }
 
@@ -49,7 +47,7 @@ public class ChallengeVerificationController implements ChallengeVerificationCon
     ) {
         // 조회자가 신고한 인증을 빼려면 누가 보는지 알아야 한다. 이 API는 인증이 필요해
         // principal이 null이 아니지만, 서비스는 null이면 필터를 걸지 않도록 되어 있다.
-        ChallengeVerificationResDTO.Feed result = challengeQueryService
+        ChallengeVerificationResDTO.Feed result = challengeVerificationQueryService
                 .getVerificationFeed(challengeId, userDetails.getMemberId(), cursor, size);
         return ApiResponse.onSuccess(ChallengeVerificationSuccessCode.VERIFICATION_FEED_FETCH_SUCCESS, result);
     }
@@ -65,7 +63,7 @@ public class ChallengeVerificationController implements ChallengeVerificationCon
     ) {
         // 피드(GET /)와 파라미터를 공유하지 않고 경로를 나눈 것은, 한 엔드포인트가 두 화면을
         // 겸하면 응답 형태와 Swagger 설명이 섞이기 때문이다.
-        ChallengeVerificationResDTO.MyVerifications result = challengeQueryService
+        ChallengeVerificationResDTO.MyVerifications result = challengeVerificationQueryService
                 .getMyVerifications(userDetails.getMemberId(), challengeId, cursor, size, status);
         return ApiResponse.onSuccess(ChallengeVerificationSuccessCode.MY_VERIFICATION_FETCH_SUCCESS, result);
     }
@@ -79,7 +77,7 @@ public class ChallengeVerificationController implements ChallengeVerificationCon
     ) {
         // 이미 눌러둔 상태여도 성공이다. 좋아요는 토글이라 같은 요청이 두 번 오는 것이 정상이다.
         ChallengeVerificationResDTO.Like result =
-                challengeCommandService.like(userDetails.getMemberId(), challengeId, verificationId);
+                challengeVerificationService.like(userDetails.getMemberId(), challengeId, verificationId);
         return ApiResponse.onSuccess(ChallengeVerificationSuccessCode.VERIFICATION_LIKE_SUCCESS, result);
     }
 
@@ -91,7 +89,7 @@ public class ChallengeVerificationController implements ChallengeVerificationCon
             @PathVariable Long verificationId
     ) {
         ChallengeVerificationResDTO.Like result =
-                challengeCommandService.unlike(userDetails.getMemberId(), challengeId, verificationId);
+                challengeVerificationService.unlike(userDetails.getMemberId(), challengeId, verificationId);
         return ApiResponse.onSuccess(ChallengeVerificationSuccessCode.VERIFICATION_UNLIKE_SUCCESS, result);
     }
 
@@ -103,7 +101,7 @@ public class ChallengeVerificationController implements ChallengeVerificationCon
             @PathVariable Long verificationId,
             @Valid @RequestBody ChallengeVerificationReqDTO.Report request
     ) {
-        ChallengeVerificationResDTO.Report result = challengeCommandService
+        ChallengeVerificationResDTO.Report result = challengeVerificationService
                 .report(userDetails.getMemberId(), challengeId, verificationId, request);
         return ApiResponse.onSuccess(ChallengeVerificationSuccessCode.VERIFICATION_REPORT_SUCCESS, result);
     }
@@ -116,7 +114,7 @@ public class ChallengeVerificationController implements ChallengeVerificationCon
             @PathVariable Long verificationId,
             @Valid @RequestBody ChallengeVerificationReqDTO.UpdateMemo request
     ) {
-        ChallengeVerificationResDTO.MemoUpdate result = challengeCommandService
+        ChallengeVerificationResDTO.MemoUpdate result = challengeVerificationService
                 .updateMemo(userDetails.getMemberId(), challengeId, verificationId, request);
         return ApiResponse.onSuccess(ChallengeVerificationSuccessCode.VERIFICATION_MEMO_UPDATE_SUCCESS, result);
     }
@@ -128,7 +126,7 @@ public class ChallengeVerificationController implements ChallengeVerificationCon
             @PathVariable Long challengeId,
             @PathVariable Long verificationId
     ) {
-        ChallengeVerificationResDTO.Deletion result = challengeCommandService
+        ChallengeVerificationResDTO.Deletion result = challengeVerificationService
                 .deleteVerification(userDetails.getMemberId(), challengeId, verificationId);
         return ApiResponse.onSuccess(ChallengeVerificationSuccessCode.VERIFICATION_DELETE_SUCCESS, result);
     }

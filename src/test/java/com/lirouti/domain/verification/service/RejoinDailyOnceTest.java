@@ -1,4 +1,4 @@
-package com.lirouti.domain.challenge.service.command;
+package com.lirouti.domain.verification.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -23,8 +23,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.lirouti.domain.media.service.MediaImageLoad;
-import com.lirouti.domain.challenge.client.AnthropicVerificationReviewClient;
-import com.lirouti.domain.challenge.client.VerificationReview;
+import com.lirouti.domain.verification.client.AnthropicVerificationReviewClient;
+import com.lirouti.domain.verification.client.VerificationReview;
 import com.lirouti.domain.challenge.dto.response.ChallengeResDTO;
 import com.lirouti.domain.challenge.entity.Challenge;
 import com.lirouti.domain.verification.exception.VerificationException;
@@ -71,7 +71,7 @@ class RejoinDailyOnceTest {
             "challenge-verifications/11111111-1111-4111-8111-111111111111.jpg";
 
     @Autowired
-    private ChallengeCommandService challengeCommandService;
+    private ChallengeVerificationService challengeVerificationService;
     @Autowired
     private ChallengeQueryService challengeQueryService;
     @Autowired
@@ -136,7 +136,7 @@ class RejoinDailyOnceTest {
     }
 
     private void verify(Member m, Challenge c) {
-        challengeCommandService.verify(m.getId(), c.getId(), request());
+        challengeVerificationService.verify(m.getId(), c.getId(), request());
     }
 
     /** 나갔다 다시 들어온다. 회차가 오르고 lastVerifiedDate 가 초기화된다. */
@@ -234,7 +234,7 @@ class RejoinDailyOnceTest {
 
         // when: 회차가 그대로이므로 덮어쓰기다
         ChallengeVerificationResDTO.Verification result =
-                challengeCommandService.verify(me.getId(), c.getId(),
+                challengeVerificationService.verify(me.getId(), c.getId(),
                         new ChallengeVerificationReqDTO.Verify(STAGING_KEY, "고친 코멘트"));
         em.flush();
         em.clear();

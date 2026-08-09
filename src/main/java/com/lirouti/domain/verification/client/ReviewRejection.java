@@ -1,4 +1,4 @@
-package com.lirouti.domain.challenge.client;
+package com.lirouti.domain.verification.client;
 
 /**
  * 반려 사유의 종류.

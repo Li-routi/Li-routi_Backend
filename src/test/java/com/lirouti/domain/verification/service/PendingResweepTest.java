@@ -1,8 +1,8 @@
 package com.lirouti.domain.verification.service;
 
-import com.lirouti.domain.challenge.client.AnthropicVerificationReviewClient;
-import com.lirouti.domain.challenge.client.ReviewRejection;
-import com.lirouti.domain.challenge.client.VerificationReview;
+import com.lirouti.domain.verification.client.AnthropicVerificationReviewClient;
+import com.lirouti.domain.verification.client.ReviewRejection;
+import com.lirouti.domain.verification.client.VerificationReview;
 import com.lirouti.domain.challenge.entity.Challenge;
 import com.lirouti.domain.challenge.entity.MemberChallenge;
 import com.lirouti.domain.challenge.enums.ChallengeCategory;

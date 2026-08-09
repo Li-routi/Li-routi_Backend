@@ -1,4 +1,4 @@
-package com.lirouti.domain.challenge.service.command;
+package com.lirouti.domain.verification.service;
 
 import com.lirouti.domain.media.service.MediaImageLoad;
 import com.lirouti.domain.challenge.entity.Challenge;
@@ -58,7 +58,7 @@ class ChallengeVerificationConcurrencyTest {
     private MediaService mediaService;
 
     @Autowired
-    private ChallengeCommandService challengeCommandService;
+    private ChallengeVerificationService challengeVerificationService;
     @Autowired
     private MemberRepository memberRepository;
     @Autowired
@@ -127,7 +127,7 @@ class ChallengeVerificationConcurrencyTest {
                 try {
                     ready.countDown();       // 게이트 앞 도착 알림
                     start.await();
-                    challengeCommandService.verify(
+                    challengeVerificationService.verify(
                             memberId, challengeId, new ChallengeVerificationReqDTO.Verify(mediaKey, "동시 인증"));
                     success.incrementAndGet();
                 } catch (ChallengeException e) {

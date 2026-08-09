@@ -32,7 +32,7 @@ import com.lirouti.domain.verification.exception.code.error.ChallengeVerificatio
 /**
  * 인증의 <b>저장 단계</b>만 담당한다. 트랜잭션 경계가 이 클래스에 있다.
  *
- * {@link ChallengeCommandService#verify}에서 분리한 이유는 트랜잭션 밖에서 끝내야 하는 일이
+ * {@code ChallengeVerificationService#verify}에서 분리한 이유는 트랜잭션 밖에서 끝내야 하는 일이
  * 앞에 있기 때문이다(업로드 바이트 검증, 이어서 AI 심사). 두 단계를 한 메서드에 두면
  * 외부 API 호출이 트랜잭션 안으로 들어가 DB 커넥션과 행 락을 그 시간만큼 붙잡는다
  * (service_convention: 트랜잭션 내 장시간 외부 API 호출 금지).
