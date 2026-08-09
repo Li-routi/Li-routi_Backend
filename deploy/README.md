@@ -95,6 +95,7 @@ scp -i <pem> deploy/backup.sh               ubuntu@<서버IP>:/opt/app/backup.sh
 | `KAKAO_APP_ID` | 카카오 앱 ID |
 | `GOOGLE_WEB_CLIENT_ID` · `GOOGLE_ALLOWED_ISSUERS` | 구글 OAuth |
 | `AWS_S3_BUCKET` · `AWS_REGION` | S3 (자격증명은 IAM Role로 자동 획득 — 여기 두지 않는다) |
+| `FCM_ENABLED` · `FCM_PROJECT_ID` | (선택) 켜려면 8번 섹션에서 서비스 계정 키 파일도 함께 배치해야 한다 |
 
 서버 쪽에서는 백업 스크립트 실행 권한만 준다:
 
@@ -145,6 +146,36 @@ crontab -l                      # 등록 확인
 > 수동 실행과 cron 최소 환경(`env -i PATH=/usr/bin:/bin`) 양쪽에서 업로드까지 성공을 확인했다(`2026-08-03.sql.gz`, gzip 11.7 KiB).
 >
 > **이 문서의 날짜는 모두 KST다.** 서버·GitHub·S3 로그가 UTC라 아홉 시간 차이로 하루가 어긋나 보일 수 있다.
+
+### 8) FCM 서비스 계정 키 배치 (선택, Push 알림을 켤 때만)
+
+`FCM_ENABLED=true`로 켜려면, Firebase 콘솔(프로젝트 설정 → 서비스 계정 → 새 비공개 키 생성)에서 받은
+JSON 키 파일을 서버에 올려야 한다. `.env`(`ENV_FILE`)에는 넣지 않는다 — 평문 key=value라 JSON을
+담기 부적합해서 Caddyfile처럼 별도 scp로 관리한다.
+
+```bash
+# 로컬 PC에서 실행 (<pem>·<서버IP>·<로컬키파일경로>는 본인 값 — Firebase가 준 파일명을
+# 그대로 써도 되고, 다른 이름이어도 상관없다. 서버 쪽 대상 파일명만 firebase-adminsdk.json으로 고정)
+ssh -i <pem> ubuntu@<서버IP> 'mkdir -p /opt/app/secrets'
+scp -i <pem> <로컬키파일경로>.json ubuntu@<서버IP>:/opt/app/secrets/firebase-adminsdk.json
+```
+
+권한을 조인다. 컨테이너 안의 앱은 `appuser`(UID **10001**, [Dockerfile](../Dockerfile) 참고)로 도는데,
+바인드 마운트는 호스트의 숫자 UID를 그대로 컨테이너에 넘긴다. `chmod 600`만 해두면 소유자(`ubuntu`,
+보통 UID 1000)만 읽을 수 있어 **컨테이너 안의 appuser(10001)는 못 읽고 부팅이 실패한다** — 반드시
+파일 소유자를 10001로 바꿔야 한다:
+
+```bash
+# 서버에서 실행
+sudo chown 10001:10001 /opt/app/secrets/firebase-adminsdk.json
+sudo chmod 400 /opt/app/secrets/firebase-adminsdk.json   # 그 UID만 읽기 전용으로 접근 가능
+```
+
+> **`FCM_ENABLED=false`인 동안은 이 파일이 없어도 무방하다.** 다만 `docker-compose.prod.yml`이
+> 이 경로를 **파일 볼륨**으로 마운트하므로, 파일을 올리기 전에 먼저 `docker compose up`을 돌리면
+> Docker가 그 경로에 **빈 디렉터리**를 만들어 버린다. 그 상태에서는 나중에 진짜 키 파일을 올려도
+> 컨테이너 안에서 디렉터리로 보여 앱이 못 읽는다 — `sudo rm -rf /opt/app/secrets/firebase-adminsdk.json`으로
+> 지우고 위 scp를 다시 해야 한다.
 
 ## AWS / 네트워크
 

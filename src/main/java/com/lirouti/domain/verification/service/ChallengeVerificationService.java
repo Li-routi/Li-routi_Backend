@@ -3,6 +3,7 @@ package com.lirouti.domain.verification.service;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -21,6 +22,9 @@ import com.lirouti.domain.media.service.MediaImageLoad;
 import com.lirouti.domain.media.service.MediaService;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.repository.MemberRepository;
+import com.lirouti.domain.notification.enums.NotificationCategory;
+import com.lirouti.domain.notification.enums.NotificationType;
+import com.lirouti.domain.notification.event.NotificationRequestedEvent;
 import com.lirouti.domain.verification.client.AnthropicVerificationReviewClient;
 import com.lirouti.domain.verification.client.ReviewOutcome;
 import com.lirouti.domain.verification.client.ReviewRejection;
@@ -75,6 +79,7 @@ public class ChallengeVerificationService {
     private final ChallengeVerificationCommandService challengeVerificationCommandService;
     // 미디어 key의 발급 규칙·공개 URL 조립은 media 도메인이 소유한다. DB를 다루지 않는 유틸성 서비스다.
     private final MediaService mediaService;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * 챌린지 인증. <b>트랜잭션 밖에서 끝내야 하는 검증을 먼저 하고</b> 저장은 다른 빈에 위임한다.
@@ -317,7 +322,15 @@ public class ChallengeVerificationService {
             throw new VerificationException(ChallengeVerificationErrorCode.ALREADY_REPORTED);
         }
 
-        hideIfReportedEnough(verification);
+        if (hideIfReportedEnough(verification)) {
+            Long authorId = verification.getMemberChallenge().getMember().getId();
+            eventPublisher.publishEvent(new NotificationRequestedEvent(authorId,
+                    NotificationCategory.CHALLENGE, NotificationType.CHALLENGE_RESTRICTED,
+                    "인증이 신고 누적으로 제한됐어요",
+                    "커뮤니티 기준에 따라 챌린지 인증 노출이 제한됐습니다.",
+                    null, verificationId, "CHALLENGE_VERIFICATION",
+                    "challenge-restricted:" + verificationId));
+        }
         return ChallengeVerificationConverter.toReport(saved);
     }
 
@@ -343,18 +356,19 @@ public class ChallengeVerificationService {
      *
      * <p>가려도 인증 행과 스트릭은 그대로다. 막는 것은 노출뿐이다.
      */
-    private void hideIfReportedEnough(ChallengeVerification verification) {
+    private boolean hideIfReportedEnough(ChallengeVerification verification) {
         if (verification.isHidden()) {
-            return;
+            return false;
         }
         long reportCount = challengeVerificationReportRepository
                 .countByChallengeVerificationId(verification.getId());
         if (reportCount < challengeReportProperties.getHideThreshold()) {
-            return;
+            return false;
         }
         verification.hide(LocalDateTime.now(TimeUtil.KST));
         log.warn("신고 누적으로 인증을 전체 숨김 처리했습니다. verificationId={}, 신고={}건, 임계값={}",
                 verification.getId(), reportCount, challengeReportProperties.getHideThreshold());
+        return true;
     }
 
     /**
@@ -370,8 +384,17 @@ public class ChallengeVerificationService {
      */
     @Transactional
     public ChallengeVerificationResDTO.Like like(Long memberId, Long challengeId, Long verificationId) {
-        findVerificationInChallenge(challengeId, verificationId);
-        challengeVerificationLikeRepository.insertIfAbsent(verificationId, memberId);
+        ChallengeVerification verification = findVerificationInChallenge(challengeId, verificationId);
+        int inserted = challengeVerificationLikeRepository.insertIfAbsent(verificationId, memberId);
+        Long authorId = verification.getMemberChallenge().getMember().getId();
+        if (inserted == 1 && !authorId.equals(memberId)) {
+            String actor = memberRepository.findById(memberId).map(Member::getNickname).orElse("누군가");
+            eventPublisher.publishEvent(new NotificationRequestedEvent(authorId,
+                    NotificationCategory.CHALLENGE, NotificationType.CHALLENGE_VERIFICATION_LIKED,
+                    "챌린지 인증에 좋아요가 달렸어요",
+                    actor + "님이 회원님의 인증을 좋아합니다.", null, verificationId,
+                    "CHALLENGE_VERIFICATION", "challenge-like:" + verificationId + ":" + memberId));
+        }
         return buildLikeResult(verificationId, true);
     }
 

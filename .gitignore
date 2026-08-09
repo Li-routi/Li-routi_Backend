@@ -79,6 +79,12 @@ CLAUDE.md
 ### Codex ###
 AGENTS.md
 
+### Firebase ###
+# Firebase Admin SDK 서비스 계정 키와 기타 로컬 비밀 파일은 절대 커밋하지 않는다.
+.secrets/
+**/*firebase-adminsdk*.json
+**/service-account*.json
+
 # 개인 작업 핸드오프 파일
 docs/handoff/
 docs/harness/personal_convention/

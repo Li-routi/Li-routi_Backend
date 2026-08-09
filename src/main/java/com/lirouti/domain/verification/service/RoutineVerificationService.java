@@ -5,8 +5,15 @@ import java.time.LocalDateTime;
 import java.time.ZonedDateTime;
 
 import org.springframework.stereotype.Service;
+import org.springframework.context.ApplicationEventPublisher;
 
 import com.lirouti.domain.media.enums.MediaPurpose;
+import com.lirouti.domain.group.entity.GroupMember;
+import com.lirouti.domain.group.enums.GroupMemberStatus;
+import com.lirouti.domain.group.repository.GroupMemberRepository;
+import com.lirouti.domain.notification.enums.NotificationCategory;
+import com.lirouti.domain.notification.enums.NotificationType;
+import com.lirouti.domain.notification.event.NotificationRequestedEvent;
 import com.lirouti.domain.media.service.MediaService;
 import com.lirouti.domain.routine.entity.MemberRoutine;
 import com.lirouti.domain.routine.repository.MemberRoutineRepository;
@@ -43,6 +50,8 @@ public class RoutineVerificationService {
     private final MemberRoutineRepository memberRoutineRepository;
     private final MemberRoutineVerificationRepository memberRoutineVerificationRepository;
     private final RoutineVerificationCommandService commandService;
+    private final GroupMemberRepository groupMemberRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * 그룹 루틴 인증.
@@ -74,9 +83,39 @@ public class RoutineVerificationService {
                 verifiedAt
         );
 
+        publishGroupVerificationNotifications(saved, memberId, groupId);
+
         return new VerificationResDTO.GroupRoutine(
                 saved.getId(), saved.getAssignment().getId(), saved.getImageUrl(),
                 saved.getContent(), saved.getVerifiedAt());
+    }
+
+    /** 인증한 본인을 제외한 현재 그룹원에게 새 인증 소식을 전달한다. */
+    private void publishGroupVerificationNotifications(
+            GroupRoutineVerification verification,
+            Long verifierId,
+            Long groupId
+    ) {
+        String verifierNickname = verification.getAssignment().getMember().getNickname();
+        String routineTitle = verification.getAssignment().getGroupRoutine().getTitle();
+        for (GroupMember groupMember : groupMemberRepository.findAllByGroupIdAndStatus(
+                groupId, GroupMemberStatus.ACTIVE)) {
+            Long recipientId = groupMember.getMember().getId();
+            if (recipientId.equals(verifierId)) {
+                continue;
+            }
+            eventPublisher.publishEvent(new NotificationRequestedEvent(
+                    recipientId,
+                    NotificationCategory.GROUP_ROUTINE,
+                    NotificationType.GROUP_MEMBER_VERIFIED,
+                    "새로운 그룹 루틴 인증이 올라왔어요!",
+                    verifierNickname + "님이 " + routineTitle + " 인증을 완료했어요.",
+                    groupId,
+                    verification.getId(),
+                    "GROUP_ROUTINE_VERIFICATION",
+                    "group-verification:" + verification.getId() + ":" + recipientId
+            ));
+        }
     }
 
     /**

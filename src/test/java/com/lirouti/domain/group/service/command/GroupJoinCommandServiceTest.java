@@ -21,6 +21,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.sql.SQLException;
@@ -46,6 +47,7 @@ class GroupJoinCommandServiceTest {
     @Mock private GroupMemberRepository groupMemberRepository;
     @Mock private GroupValidationService groupValidationService;
     @Mock private GroupRoutineAssignmentCommandService assignmentCommandService;
+    @Mock private ApplicationEventPublisher eventPublisher;
     @Mock private Group lookupGroup;
     @Mock private Group lockedGroup;
     @Mock private Member lockedMember;
@@ -60,7 +62,8 @@ class GroupJoinCommandServiceTest {
                 groupMemberRepository,
                 groupValidationService,
                 assignmentCommandService,
-                clock
+                clock,
+                eventPublisher
         );
         lenient().when(groupRepository.findByInviteCodeForUpdate(INVITE_CODE))
                 .thenReturn(Optional.of(lookupGroup));

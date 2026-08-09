@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
+import java.util.List;
 
 public interface MemberChallengeRepository
         extends JpaRepository<MemberChallenge, Long>, MemberChallengeRepositoryCustom {
@@ -53,4 +54,14 @@ public interface MemberChallengeRepository
             Long memberId,
             LocalDateTime monthEndExclusive
     );
+
+    /** 새 챌린지 수행 주기 알림 대상인 활성 참여와 회원·챌린지를 함께 조회한다. */
+    @Query("""
+            select participation from MemberChallenge participation
+            join fetch participation.member member
+            join fetch participation.challenge challenge
+            where participation.active = true and challenge.active = true
+              and member.isActive = true and member.deletedAt is null
+            """)
+    List<MemberChallenge> findAllActiveForCycleNotification();
 }

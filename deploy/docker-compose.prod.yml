@@ -95,6 +95,11 @@ services:
       AI_REVIEW_MAX_IMAGE_DIMENSION: ${AI_REVIEW_MAX_IMAGE_DIMENSION:-1568}
       # 신고 누적 자동 숨김 임계값
       CHALLENGE_REPORT_HIDE_THRESHOLD: ${CHALLENGE_REPORT_HIDE_THRESHOLD:-3}
+      # FCM 푸시 알림. 서비스 계정 키가 없는 동안은 기본 꺼짐(안전한 기본값) —
+      # 키 파일은 .env(ENV_FILE)에 넣지 않고 아래 volumes로 별도 마운트한다(8번 섹션 참고).
+      FCM_ENABLED: ${FCM_ENABLED:-false}
+      FCM_PROJECT_ID: ${FCM_PROJECT_ID:-}
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/firebase-adminsdk.json
       # 미참조 미디어 정리
       MEDIA_CLEANUP_ENABLED: ${MEDIA_CLEANUP_ENABLED:-false}
       MEDIA_CLEANUP_DRY_RUN: ${MEDIA_CLEANUP_DRY_RUN:-true}
@@ -121,6 +126,12 @@ services:
     # db 가 이미 같은 방식이다.
     ports:
       - "127.0.0.1:8080:8080"
+    volumes:
+      # FCM 서비스 계정 키. .env(ENV_FILE)는 평문 key=value라 JSON 파일을 담기 부적합해서
+      # Caddyfile처럼 별도로 scp하는 파일로 둔다(8번 섹션). FCM_ENABLED=false인 동안은
+      # 앱이 이 경로를 읽지 않으므로, 파일이 없으면 아래 줄 전체를 주석 처리해도 된다 —
+      # 있는 채로 소스 파일이 없으면 Docker가 그 경로에 빈 디렉터리를 만들어 버린다.
+      - ${FCM_CREDENTIALS_HOST_PATH:-./secrets/firebase-adminsdk.json}:/run/secrets/firebase-adminsdk.json:ro
 
   caddy:
     image: caddy:2-alpine
