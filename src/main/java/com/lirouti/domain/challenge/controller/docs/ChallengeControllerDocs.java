@@ -76,7 +76,7 @@ public interface ChallengeControllerDocs {
 
                     routineCycle(DAILY/WEEKLY/MONTHLY), reward(달성 시 부여되는 재화 수량),
                     participating(조회자 참여 여부), participantCount(참여자 수),
-                    verificationPostCount(인증 게시글 수), todayCompletionCount(오늘 완료자 수).
+                    verificationPostCount(인증 게시글 수).
                     """
     )
     @ApiResponses({
