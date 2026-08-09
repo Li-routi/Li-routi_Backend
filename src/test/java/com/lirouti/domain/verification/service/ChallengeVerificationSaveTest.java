@@ -1,6 +1,5 @@
-package com.lirouti.domain.verification.service.command;
+package com.lirouti.domain.verification.service;
 
-import com.lirouti.domain.verification.service.ChallengeVerificationService;
 import com.lirouti.domain.challenge.dto.response.ChallengeResDTO;
 import com.lirouti.domain.challenge.entity.Challenge;
 import com.lirouti.domain.verification.dto.response.ChallengeVerificationResDTO;
@@ -33,10 +32,18 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+/**
+ * 인증이 저장될 때의 의미를 본다 — 스트릭 셈법, 당일 재인증 덮어쓰기, 참여 상태 검증,
+ * 승격된 key 가 저장되는지.
+ *
+ * <p><b>들어가는 문은 {@code verify} 다.</b> 저장은 {@code ChallengeVerificationCommandService}
+ * 가 맡지만 그것을 직접 부르면 미디어 검증·AI 심사·승격이 통째로 빠져, 실제로 저장되는 값이
+ * 달라진다(대기 key 냐 승격된 공개 key 냐). 실제 경로로 들어가야 그 차이가 검증된다.
+ */
 @SpringBootTest
 @Transactional
-@DisplayName("ChallengeVerificationCommandService 저장 테스트")
-class ChallengeVerificationCommandServiceTest {
+@DisplayName("인증 저장과 스트릭")
+class ChallengeVerificationSaveTest {
 
     private static final String KEY_1 = "challenge-verifications-staging/11111111-1111-4111-8111-111111111111.jpg";
     private static final String KEY_2 = "challenge-verifications-staging/22222222-2222-4222-8222-222222222222.png";
