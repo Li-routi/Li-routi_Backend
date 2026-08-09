@@ -64,6 +64,7 @@ public class ChallengeVerificationQueryService {
             Long challengeId,
             Long viewerId,
             Long cursor,
+            Long cursorLikeCount,
             Integer size,
             VerificationSort sort
     ) {
@@ -75,8 +76,8 @@ public class ChallengeVerificationQueryService {
         CursorPage<ChallengeVerification> page = fetchPage(sort, appliedSize,
                 () -> challengeVerificationRepository
                         .findFeedByCursor(challengeId, viewerId, cursor, appliedSize + 1),
-                () -> challengeVerificationRepository
-                        .findFeedByLikes(challengeId, viewerId, appliedSize));
+                () -> challengeVerificationRepository.findFeedByLikes(
+                        challengeId, viewerId, cursorLikeCount, cursor, appliedSize + 1));
 
         // DB에는 오브젝트 key만 있으므로 공개 URL은 여기서 조립해 Converter에 넘긴다.
         // 보류 건은 아직 대기 prefix 에 있어 공개 주소가 없다 — 그 주소로 열면 403 이다.
@@ -97,7 +98,7 @@ public class ChallengeVerificationQueryService {
 
         return ChallengeVerificationConverter.toFeed(
                 page.rows(), imageUrls, likeCounts, likedIds, viewerId,
-                page.nextCursor(), page.hasNext());
+                page.nextCursor(), nextLikeCursor(sort, page, likeCounts), page.hasNext());
     }
 
     /**
@@ -131,6 +132,7 @@ public class ChallengeVerificationQueryService {
             Long memberId,
             Long challengeId,
             Long cursor,
+            Long cursorLikeCount,
             Integer size,
             ReviewStatus statusFilter,
             VerificationSort sort
@@ -144,7 +146,8 @@ public class ChallengeVerificationQueryService {
                 () -> challengeVerificationRepository.findMineByCursor(
                         memberChallenge.getId(), cursor, appliedSize + 1, statusFilter),
                 () -> challengeVerificationRepository.findMineByLikes(
-                        memberChallenge.getId(), appliedSize, statusFilter));
+                        memberChallenge.getId(), cursorLikeCount, cursor,
+                        appliedSize + 1, statusFilter));
 
         // 보류 건은 아직 대기 prefix 에 있어 공개 주소가 없다 — 그 주소로 열면 403 이다.
         // 이 조회는 memberId 로 좁혀 본인 것만 담으므로, 여기서만 서명을 붙인다.
@@ -167,7 +170,8 @@ public class ChallengeVerificationQueryService {
 
         return ChallengeVerificationConverter.toMyVerifications(
                 page.rows(), imageUrls, likeCounts, currentStreak,
-                memberChallenge.getParticipationRound(), page.nextCursor(), page.hasNext());
+                memberChallenge.getParticipationRound(), page.nextCursor(),
+                nextLikeCursor(sort, page, likeCounts), page.hasNext());
     }
 
     /**
@@ -186,10 +190,29 @@ public class ChallengeVerificationQueryService {
             Supplier<List<ChallengeVerification>> byLatest,
             Supplier<List<ChallengeVerification>> byLikes
     ) {
-        if (sort == VerificationSort.LIKES) {
-            return new CursorPage<>(byLikes.get(), null, false);
+        List<ChallengeVerification> rows =
+                (sort == VerificationSort.LIKES) ? byLikes.get() : byLatest.get();
+        return sliceByCursor(rows, size, ChallengeVerification::getId);
+    }
+
+    /**
+     * 좋아요순 커서의 두 번째 값. <b>다음 요청은 {@code nextCursor}(id) 와 이 값을 함께</b>
+     * 보내야 한다 — 좋아요 수는 0 이 많아 겹치므로 id 하나로는 좌표가 안 잡힌다.
+     *
+     * <p>이번 페이지 <b>마지막 항목의 좋아요 수</b>다. 표시용 집계에서 그대로 가져오므로
+     * 화면에 보이는 수와 커서가 같은 값을 쓴다 — 갈리면 다음 페이지가 어긋난다.
+     *
+     * <p>최신순이거나 다음 페이지가 없으면 {@code null} 이다.
+     */
+    private Long nextLikeCursor(
+            VerificationSort sort,
+            CursorPage<ChallengeVerification> page,
+            Map<Long, Long> likeCounts
+    ) {
+        if (sort != VerificationSort.LIKES || !page.hasNext() || page.nextCursor() == null) {
+            return null;
         }
-        return sliceByCursor(byLatest.get(), size, ChallengeVerification::getId);
+        return likeCounts.getOrDefault(page.nextCursor(), 0L);
     }
 
     /** size + 1로 받아온 행에서 현재 페이지·다음 커서·다음 페이지 여부를 뽑아낸 결과. */

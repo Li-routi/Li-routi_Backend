@@ -50,6 +50,7 @@ public final class ChallengeVerificationResDTO {
     public record Feed(
             List<FeedItem> verifications,
             Long nextCursor,
+            Long nextCursorLikeCount,
             boolean hasNext
     ) {
     }
@@ -152,6 +153,7 @@ public final class ChallengeVerificationResDTO {
             int currentStreak,
             int currentParticipationRound,
             Long nextCursor,
+            Long nextCursorLikeCount,
             boolean hasNext
     ) {
     }

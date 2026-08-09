@@ -68,11 +68,19 @@ public interface ChallengeVerificationRepositoryCustom {
      *
      * <p>세는 규칙은 표시용 집계와 같다(탈퇴 회원 제외). 갈리면 정렬과 화면이 어긋난다.
      */
-    List<ChallengeVerification> findFeedByLikes(Long challengeId, Long viewerId, int limit);
+    List<ChallengeVerification> findFeedByLikes(
+            Long challengeId,
+            Long viewerId,
+            Long cursorLikeCount,
+            Long cursorId,
+            int limit
+    );
 
     /** 내 인증 목록의 좋아요순 상위 N개. 피드와 같은 셈법이고 보이는 범위만 다르다. */
     List<ChallengeVerification> findMineByLikes(
             Long memberChallengeId,
+            Long cursorLikeCount,
+            Long cursorId,
             int limit,
             ReviewStatus statusFilter
     );

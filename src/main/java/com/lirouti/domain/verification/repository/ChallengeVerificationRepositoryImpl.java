@@ -132,7 +132,13 @@ public class ChallengeVerificationRepositoryImpl implements ChallengeVerificatio
      * {@code on} 절에서 뗀다 — {@code where} 로 옮기면 그 좋아요만 달린 인증이 통째로 빠진다.
      */
     @Override
-    public List<ChallengeVerification> findFeedByLikes(Long challengeId, Long viewerId, int limit) {
+    public List<ChallengeVerification> findFeedByLikes(
+            Long challengeId,
+            Long viewerId,
+            Long cursorLikeCount,
+            Long cursorId,
+            int limit
+    ) {
         return queryFactory
                 .selectFrom(verification)
                 .join(verification.memberChallenge, memberChallenge).fetchJoin()
@@ -148,6 +154,7 @@ public class ChallengeVerificationRepositoryImpl implements ChallengeVerificatio
                         notReportedBy(viewerId)
                 )
                 .groupBy(verification.id, memberChallenge.id, member.id)
+                .having(afterLikeCursor(cursorLikeCount, cursorId))
                 // 같은 수면 최신순으로 가른다. 안 그러면 같은 요청에도 순서가 흔들린다.
                 .orderBy(likeCountOf().desc(), verification.id.desc())
                 .limit(limit)
@@ -158,6 +165,8 @@ public class ChallengeVerificationRepositoryImpl implements ChallengeVerificatio
     @Override
     public List<ChallengeVerification> findMineByLikes(
             Long memberChallengeId,
+            Long cursorLikeCount,
+            Long cursorId,
             int limit,
             ReviewStatus statusFilter
     ) {
@@ -172,9 +181,29 @@ public class ChallengeVerificationRepositoryImpl implements ChallengeVerificatio
                         statusEq(statusFilter)
                 )
                 .groupBy(verification.id)
+                .having(afterLikeCursor(cursorLikeCount, cursorId))
                 .orderBy(likeCountOf().desc(), verification.id.desc())
                 .limit(limit)
                 .fetch();
+    }
+
+    /**
+     * 좋아요순 커서. <b>정렬 키가 좋아요 수 하나로는 부족하다</b> — 0개가 대부분이라 값이
+     * 겹쳐서 "어디까지 봤는지"를 못 가린다. {@code (좋아요 수, id)} 조합은 유일하다.
+     *
+     * <p>정렬이 {@code 좋아요 desc, id desc} 이므로 "그 좌표보다 뒤" 는
+     * <b>좋아요가 더 적거나, 같으면서 id 가 더 작은</b> 것이다.
+     *
+     * <p>집계값으로 거르는 것이라 {@code where} 가 아니라 {@code having} 에 들어간다.
+     *
+     * <p>첫 요청이면 {@code null} 을 돌려 조건을 걸지 않는다.
+     */
+    private BooleanExpression afterLikeCursor(Long cursorLikeCount, Long cursorId) {
+        if (cursorLikeCount == null || cursorId == null) {
+            return null;
+        }
+        return likeCountOf().lt(cursorLikeCount)
+                .or(likeCountOf().eq(cursorLikeCount).and(verification.id.lt(cursorId)));
     }
 
     /**

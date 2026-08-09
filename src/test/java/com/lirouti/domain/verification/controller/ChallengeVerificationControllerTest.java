@@ -546,8 +546,8 @@ class ChallengeVerificationControllerTest {
     }
 
     @Test
-    @DisplayName("좋아요순은 커서를 내려주지 않는다 — 클라이언트가 이어서 요청하면 안 된다")
-    void feed_LikesSort_DoesNotPaginate() throws Exception {
+    @DisplayName("좋아요순은 커서 값을 둘 내려준다 — id 하나로는 좌표가 안 잡힌다")
+    void feed_LikesSort_ReturnsCompositeCursor() throws Exception {
         Member viewer = persistMember("sortviewer2");
         Challenge c = persistChallenge();
         persistVerification(persistMember("sortauthorC"), c);
@@ -558,8 +558,10 @@ class ChallengeVerificationControllerTest {
                         .param("sort", "LIKES").param("size", "1")
                         .with(user(principal(viewer))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.result.hasNext").value(false))
-                .andExpect(jsonPath("$.result.nextCursor").doesNotExist());
+                .andExpect(jsonPath("$.result.hasNext").value(true))
+                .andExpect(jsonPath("$.result.nextCursor").isNumber())
+                // 좋아요 수가 0 이어도 값이 실려야 한다. 없으면 다음 페이지를 못 만든다.
+                .andExpect(jsonPath("$.result.nextCursorLikeCount").value(0));
     }
 
     @Test

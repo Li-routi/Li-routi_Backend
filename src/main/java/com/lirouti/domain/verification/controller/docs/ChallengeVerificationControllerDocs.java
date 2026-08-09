@@ -136,19 +136,25 @@ public interface ChallengeVerificationControllerDocs {
 
                     ### 정렬
 
-                    | `sort` | 뜻 | 페이징 |
+                    | `sort` | 뜻 | 다음 페이지에 보낼 것 |
                     | --- | --- | --- |
-                    | `LATEST` (기본) | 최신순 | **커서로 끝까지** |
-                    | `LIKES` | 좋아요순 | **상위 몇 개만** — `hasNext=false`, `nextCursor=null` |
+                    | `LATEST` (기본) | 최신순 | `cursor` |
+                    | `LIKES` | 좋아요순 | `cursor` **+ `cursorLikeCount`** |
 
-                    **응답 형태는 둘이 같습니다.** `LIKES` 도 커서 규약을 그대로 따르시면 한
-                    페이지에서 자연히 멈춥니다 — 나중에 페이징이 붙어도 클라이언트를 고칠
-                    필요가 없습니다.
+                    **둘 다 커서로 끝까지 넘길 수 있습니다.** `LIKES` 만 커서 값이 둘인데,
+                    좋아요 수는 0 이 많아 겹치므로 `cursor`(verificationId) 하나로는
+                    "어디까지 봤는지" 를 가릴 수 없기 때문입니다. 응답의 `nextCursor` 와
+                    `nextCursorLikeCount` 를 **함께** 되돌려 보내면 됩니다.
+                    (`LATEST` 에서는 `nextCursorLikeCount` 가 `null` 입니다.)
 
-                    `LIKES` 를 페이징하지 않는 이유는 **정렬 키가 스크롤 도중 바뀌기** 때문입니다.
-                    좋아요가 하나 눌리면 그 인증이 위로 올라가, 다음 페이지에서 이미 본 항목이
-                    다시 나오거나 밀려 내려간 항목을 건너뜁니다. 좋아요 수가 같으면 최신순으로
-                    가릅니다.
+                    같은 좋아요 수는 최신순으로 가릅니다.
+
+                    > ⚠️ **좋아요순은 근사 정렬입니다.** 스크롤하는 동안 누가 좋아요를 누르면
+                    > 그 인증의 순위가 바뀝니다. 그 항목이 커서 경계를 넘나들면 **이미 본 것이
+                    > 한 번 더 나오거나 한 건이 빠질 수 있습니다.** 정렬 키가 실시간으로 변하는
+                    > 데이터라 어떤 페이징 방식으로도 없앨 수 없고, 커서는 그 영향이 경계 근처로
+                    > 한정됩니다(offset 은 앞에서 하나만 움직여도 그 뒤 전체가 밀립니다).
+                    > 중복이 신경 쓰이면 클라이언트에서 `verificationId` 로 걸러 주세요.
 
                     **`LATEST` 는 "사진을 마지막으로 올린 순서"가 아닙니다.** 인증 행이 만들어진
                     순서이고, 지우고 다시 인증하면 원래 자리에 그대로 있습니다.
@@ -187,7 +193,9 @@ public interface ChallengeVerificationControllerDocs {
             CustomUserDetails userDetails,
             @Parameter(description = "챌린지 ID") Long challengeId,
             @Parameter(description = "이전 응답의 nextCursor. 첫 요청에서는 생략") Long cursor,
-            @Parameter(description = "페이지 크기(기본 20, 최대 50). LIKES 에서는 가져올 상위 개수") Integer size,
+            @Parameter(description = "좋아요순 페이징에서만 씁니다. 직전 응답의 nextCursorLikeCount 를 cursor 와 함께 보냅니다")
+            Long cursorLikeCount,
+            @Parameter(description = "페이지 크기(기본 20, 최대 50)") Integer size,
             @Parameter(description = "정렬. LATEST(기본, 최신순) · LIKES(좋아요순 상위 N개, 페이징 없음)")
             VerificationSort sort
     );
@@ -201,10 +209,11 @@ public interface ChallengeVerificationControllerDocs {
 
                     | `sort` | 뜻 | 페이징 |
                     | --- | --- | --- |
-                    | `LATEST` (기본) | 최신순 | **커서로 끝까지** (커서 값은 verificationId) |
-                    | `LIKES` | 좋아요순 | **상위 `size` 개만** — `hasNext=false`, `nextCursor=null` |
+                    | `LATEST` (기본) | 최신순 | `cursor`(verificationId) |
+                    | `LIKES` | 좋아요순 | `cursor` **+ `cursorLikeCount`** |
 
-                    `LIKES` 에서 `size` 는 페이지 크기가 아니라 **가져올 상위 개수**입니다.
+                    둘 다 커서로 끝까지 넘길 수 있습니다. 좋아요순의 근사 오차는 피드 설명을
+                    참고하세요.
 
                     ### 전체 회차가 나옵니다
                     그만뒀다 다시 참여해도 **지난 참여의 인증이 그대로 보입니다.** 이탈은
@@ -251,7 +260,9 @@ public interface ChallengeVerificationControllerDocs {
             CustomUserDetails userDetails,
             @Parameter(description = "챌린지 ID") Long challengeId,
             @Parameter(description = "이전 응답의 nextCursor. 첫 요청에서는 생략") Long cursor,
-            @Parameter(description = "페이지 크기(기본 20, 최대 50). LIKES 에서는 가져올 상위 개수") Integer size,
+            @Parameter(description = "좋아요순 페이징에서만 씁니다. 직전 응답의 nextCursorLikeCount 를 cursor 와 함께 보냅니다")
+            Long cursorLikeCount,
+            @Parameter(description = "페이지 크기(기본 20, 최대 50)") Integer size,
             @Parameter(description = "심사 상태로 좁힌다. 생략하면 전부. PENDING 이면 심사 중인 것만")
             ReviewStatus status,
             @Parameter(description = "정렬. LATEST(기본, 최신순) · LIKES(좋아요순 상위 N개, 페이징 없음)")
