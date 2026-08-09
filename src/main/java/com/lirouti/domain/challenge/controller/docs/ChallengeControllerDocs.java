@@ -51,7 +51,7 @@ public interface ChallengeControllerDocs {
     @Operation(
             summary = "챌린지 상세 조회",
             description = """
-                    챌린지 상세와 루틴 주기, 상단 통계(참여자 수·인증 게시글 수·오늘 완료자 수),
+                    챌린지 상세와 루틴 주기, 상단 통계(참여자 수·인증 게시글 수),
                     그리고 조회자의 참여 여부를 조회합니다. 인증이 필요합니다.
 
                     participating으로 '참여하기'/'인증하기' 버튼 상태를 정합니다.
@@ -76,7 +76,7 @@ public interface ChallengeControllerDocs {
 
                     routineCycle(DAILY/WEEKLY/MONTHLY), reward(달성 시 부여되는 재화 수량),
                     participating(조회자 참여 여부), participantCount(참여자 수),
-                    verificationPostCount(인증 게시글 수), todayCompletionCount(오늘 완료자 수).
+                    verificationPostCount(인증 게시글 수).
                     """
     )
     @ApiResponses({
