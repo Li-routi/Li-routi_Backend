@@ -264,7 +264,25 @@ public interface ChallengeVerificationControllerDocs {
                     챌린지 상세의 인증 게시글 수에서도 빠집니다. 이때도 작성자의 스트릭과 인증
                     기록은 그대로입니다. 가려지는 것은 노출뿐입니다.
 
-                    reason(신고 사유)은 선택입니다. 사유 선택 없이 바로 신고할 수 있습니다.
+                    ### 사유 선택은 필수입니다
+
+                    | `reportType` | 화면 문구(참고) | `reason` |
+                    | --- | --- | --- |
+                    | `IRRELEVANT` | 실제 루틴 수행과 무관한 사진이에요 | 보내지 않습니다 |
+                    | `REUSED` | 예전에 인증했던 사진을 재사용했어요 | 보내지 않습니다 |
+                    | `STOLEN` | 타인의 사진을 도용한 것 같아요 | 보내지 않습니다 |
+                    | `SPAM` | 스팸 또는 광고성 콘텐츠예요 | 보내지 않습니다 |
+                    | `ETC` | 기타 | **필수** (1~100자) |
+
+                    **화면 문구는 클라이언트가 가집니다.** 서버가 내려주면 문구를 고칠 때마다
+                    서버 배포가 필요해집니다.
+
+                    `ETC` 가 아닌데 `reason` 을 함께 보내도 **거절하지 않고 버립니다.** 라디오를
+                    바꿀 때 입력란 값을 지우지 않고 보내는 실수 때문에 신고 자체가 실패하는 것이
+                    더 나쁘다고 봤습니다. 다만 저장하지도 않습니다.
+
+                    **사유는 숨김 판정에 쓰이지 않습니다.** 가려지는 기준은 그대로 신고 **건수**
+                    입니다. 사유는 우선 기록만 하고, 쌓인 뒤에 판단합니다.
 
                     같은 인증을 두 번 신고하면 409입니다. 신고 취소는 제공하지 않습니다.
 
@@ -273,7 +291,7 @@ public interface ChallengeVerificationControllerDocs {
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "신고 성공"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "신고 사유가 255자를 초과"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "reportType 누락 / ETC 인데 reason 없음 / reason 이 100자 초과"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "인증 필요(미인증)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "해당 챌린지에 그 인증이 없음"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "이미 신고한 인증")

@@ -1,5 +1,8 @@
 package com.lirouti.domain.verification.dto.request;
 
+import com.lirouti.domain.verification.enums.ReportType;
+import jakarta.validation.constraints.AssertTrue;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -44,13 +47,39 @@ public final class ChallengeVerificationReqDTO {
     /**
      * 인증 신고하기.
      *
-     * reason은 선택이다. 화면의 더보기 메뉴에서 사유 선택 없이 바로 신고할 수 있어야 하므로
-     * 필수로 두지 않는다(database-schema.md의 reason NULL 허용과 짝을 이룬다).
+     * <p><b>사유 선택({@code reportType})은 필수다.</b> 예전에는 자유 입력 하나뿐이라 신고를
+     * 모아 봐도 무엇 때문인지 알 수 없었다 — 대부분 비어 있었고, 채워져 있어도 자유 문장이라
+     * 셀 수가 없었다.
+     *
+     * <p>{@code reason}(직접 입력)은 <b>{@link ReportType#ETC} 일 때만 필수다.</b> 나머지 넷은
+     * 화면에 입력란이 없다.
      */
     @Schema(name = "ChallengeVerificationReportRequest", description = "챌린지 인증 신고 요청")
     public record Report(
-            @Size(max = 255, message = "신고 사유는 255자를 넘을 수 없습니다.")
+            @Schema(description = "신고 사유 종류", example = "IRRELEVANT",
+                    allowableValues = {"IRRELEVANT", "REUSED", "STOLEN", "SPAM", "ETC"})
+            @NotNull(message = "신고 사유를 선택해 주세요.")
+            ReportType reportType,
+
+            @Schema(description = "직접 입력한 사유. reportType 이 ETC 일 때만 보냅니다", example = "광고 링크가 적혀 있어요")
+            @Size(max = 100, message = "직접 입력한 사유는 100자를 넘을 수 없습니다.")
             String reason
     ) {
+        /**
+         * {@code ETC} 면 직접 입력이 있어야 한다.
+         *
+         * <p>입력값만으로 판단되는 규칙이라 DTO 에 둔다(dto_convention: null 여부·길이·형식은
+         * 요청 DTO 에서 검증한다). 서비스로 내리면 같은 판단이 두 계층에 흩어진다.
+         *
+         * <p>{@code reportType} 이 null 인 경우는 {@code true} 를 돌려준다 — 그건
+         * {@code @NotNull} 이 이미 잡는다. 여기서 또 잡으면 오류 메시지가 두 개 나간다.
+         */
+        @AssertTrue(message = "기타를 선택하면 사유를 직접 입력해 주세요.")
+        public boolean isReasonPresentWhenEtc() {
+            if (reportType != ReportType.ETC) {
+                return true;
+            }
+            return reason != null && !reason.isBlank();
+        }
     }
 }
