@@ -1,4 +1,4 @@
-package com.lirouti.domain.challenge.service.command;
+package com.lirouti.domain.verification.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -53,7 +53,7 @@ class VerificationMemoUpdateTest {
             "challenge-verifications/dddddddd-dddd-4ddd-8ddd-dddddddddddd.jpg";
 
     @Autowired
-    private ChallengeCommandService challengeCommandService;
+    private ChallengeVerificationService challengeVerificationService;
 
     @PersistenceContext
     private EntityManager em;
@@ -112,7 +112,7 @@ class VerificationMemoUpdateTest {
 
         // when
         ChallengeVerificationResDTO.MemoUpdate result =
-                challengeCommandService.updateMemo(me.getId(), c.getId(), v.getId(), memo("고친 메모"));
+                challengeVerificationService.updateMemo(me.getId(), c.getId(), v.getId(), memo("고친 메모"));
         em.flush();
         em.clear();
 
@@ -137,7 +137,7 @@ class VerificationMemoUpdateTest {
         em.flush();
 
         // when & then
-        assertThatThrownBy(() -> challengeCommandService
+        assertThatThrownBy(() -> challengeVerificationService
                 .updateMemo(intruder.getId(), c.getId(), others.getId(), memo("가로챈 메모")))
                 .isInstanceOf(VerificationException.class)
                 .hasFieldOrPropertyWithValue("code", ChallengeVerificationErrorCode.VERIFICATION_NOT_FOUND);
@@ -156,7 +156,7 @@ class VerificationMemoUpdateTest {
         ChallengeVerification yesterday = verification(me, c, LocalDate.now(KST).minusDays(1));
 
         // when
-        challengeCommandService.updateMemo(me.getId(), c.getId(), yesterday.getId(), memo("뒤늦게 고침"));
+        challengeVerificationService.updateMemo(me.getId(), c.getId(), yesterday.getId(), memo("뒤늦게 고침"));
         em.flush();
         em.clear();
 
@@ -175,7 +175,7 @@ class VerificationMemoUpdateTest {
 
         // when: 공백만 보낸다. 빈 문자열로 남으면 "메모 없음"이 두 가지 모양이 된다
         ChallengeVerificationResDTO.MemoUpdate result =
-                challengeCommandService.updateMemo(me.getId(), c.getId(), v.getId(), memo("   "));
+                challengeVerificationService.updateMemo(me.getId(), c.getId(), v.getId(), memo("   "));
         em.flush();
         em.clear();
 
@@ -197,7 +197,7 @@ class VerificationMemoUpdateTest {
         em.flush();
 
         // when & then
-        assertThatThrownBy(() -> challengeCommandService
+        assertThatThrownBy(() -> challengeVerificationService
                 .updateMemo(me.getId(), c.getId(), v.getId(), memo("되살리기 시도")))
                 .isInstanceOf(VerificationException.class)
                 .hasFieldOrPropertyWithValue("code", ChallengeVerificationErrorCode.VERIFICATION_NOT_FOUND);
@@ -214,7 +214,7 @@ class VerificationMemoUpdateTest {
         em.flush();
 
         // when & then: 내 인증이지만 경로의 챌린지가 다르다
-        assertThatThrownBy(() -> challengeCommandService
+        assertThatThrownBy(() -> challengeVerificationService
                 .updateMemo(me.getId(), other.getId(), v.getId(), memo("엉뚱한 경로")))
                 .isInstanceOf(VerificationException.class)
                 .hasFieldOrPropertyWithValue("code", ChallengeVerificationErrorCode.VERIFICATION_NOT_FOUND);

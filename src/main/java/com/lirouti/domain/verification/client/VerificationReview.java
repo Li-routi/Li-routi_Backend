@@ -1,4 +1,4 @@
-package com.lirouti.domain.challenge.client;
+package com.lirouti.domain.verification.client;
 
 /**
  * 인증 사진 AI 심사 결과.

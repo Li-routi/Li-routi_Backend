@@ -3,7 +3,6 @@ package com.lirouti.domain.verification.service;
 import com.lirouti.domain.challenge.entity.Challenge;
 import com.lirouti.domain.challenge.entity.MemberChallenge;
 import com.lirouti.domain.challenge.enums.ChallengeCategory;
-import com.lirouti.domain.challenge.service.command.ChallengeCommandService;
 import com.lirouti.domain.challenge.service.query.ChallengeQueryService;
 import com.lirouti.domain.media.service.MediaImageLoad;
 import com.lirouti.domain.media.service.MediaService;
@@ -57,7 +56,7 @@ class VerificationDeleteTest {
             "challenge-verifications/2026/08/09/cccccccc-cccc-4ccc-8ccc-cccccccccccc.jpg";
 
     @Autowired
-    private ChallengeCommandService challengeCommandService;
+    private ChallengeVerificationService challengeVerificationService;
 
     @Autowired
     private ChallengeQueryService challengeQueryService;
@@ -130,7 +129,7 @@ class VerificationDeleteTest {
         em.flush();
 
         // when
-        challengeCommandService.deleteVerification(me.getId(), challenge.getId(), v.getId());
+        challengeVerificationService.deleteVerification(me.getId(), challenge.getId(), v.getId());
         em.flush();
 
         // then
@@ -152,7 +151,7 @@ class VerificationDeleteTest {
         em.flush();
 
         // when
-        challengeCommandService.deleteVerification(me.getId(), challenge.getId(), todayOne.getId());
+        challengeVerificationService.deleteVerification(me.getId(), challenge.getId(), todayOne.getId());
         em.flush();
 
         // then — 시간 기준으로 깎으면 그만큼 기다려 우회되고, 정당하게 지우는 사람만 다친다.
@@ -173,7 +172,7 @@ class VerificationDeleteTest {
         em.flush();
 
         // when
-        challengeCommandService.deleteVerification(me.getId(), challenge.getId(), twoDaysAgo.getId());
+        challengeVerificationService.deleteVerification(me.getId(), challenge.getId(), twoDaysAgo.getId());
         em.flush();
 
         // then
@@ -188,7 +187,7 @@ class VerificationDeleteTest {
         ChallengeVerification v = verificationOn(today());
 
         // when
-        challengeCommandService.deleteVerification(me.getId(), challenge.getId(), v.getId());
+        challengeVerificationService.deleteVerification(me.getId(), challenge.getId(), v.getId());
 
         // then
         verify(mediaService).deleteQuietly(PUBLIC_KEY);
@@ -199,12 +198,12 @@ class VerificationDeleteTest {
     void delete_Twice_IsIdempotent() {
         // given
         ChallengeVerification v = verificationOn(today());
-        challengeCommandService.deleteVerification(me.getId(), challenge.getId(), v.getId());
+        challengeVerificationService.deleteVerification(me.getId(), challenge.getId(), v.getId());
         em.flush();
         LocalDateTime firstDeletedAt = v.getDeletedAt();
 
         // when
-        challengeCommandService.deleteVerification(me.getId(), challenge.getId(), v.getId());
+        challengeVerificationService.deleteVerification(me.getId(), challenge.getId(), v.getId());
         em.flush();
 
         // then — 시각을 덮어쓰지 않고, 사진 삭제도 한 번뿐이다
@@ -225,7 +224,7 @@ class VerificationDeleteTest {
         em.flush();
 
         // when & then
-        assertThatThrownBy(() -> challengeCommandService
+        assertThatThrownBy(() -> challengeVerificationService
                 .deleteVerification(other.getId(), challenge.getId(), v.getId()))
                 .isInstanceOf(RuntimeException.class);
         verify(mediaService, never()).deleteQuietly(any());
@@ -236,18 +235,18 @@ class VerificationDeleteTest {
     void deletedVerification_RejectsOtherActions() {
         // given
         ChallengeVerification v = verificationOn(today());
-        challengeCommandService.deleteVerification(me.getId(), challenge.getId(), v.getId());
+        challengeVerificationService.deleteVerification(me.getId(), challenge.getId(), v.getId());
         em.flush();
 
         // when & then
-        assertThatThrownBy(() -> challengeCommandService.like(me.getId(), challenge.getId(), v.getId()))
+        assertThatThrownBy(() -> challengeVerificationService.like(me.getId(), challenge.getId(), v.getId()))
                 .as("되살아났을 때 엉뚱한 좋아요 수를 달고 나타나면 안 된다")
                 .isInstanceOf(RuntimeException.class);
-        assertThatThrownBy(() -> challengeCommandService.report(me.getId(), challenge.getId(), v.getId(),
+        assertThatThrownBy(() -> challengeVerificationService.report(me.getId(), challenge.getId(), v.getId(),
                 new ChallengeVerificationReqDTO.Report(null)))
                 .as("이미 내려간 글로 숨김 임계값을 채우면 안 된다")
                 .isInstanceOf(RuntimeException.class);
-        assertThatThrownBy(() -> challengeCommandService.updateMemo(me.getId(), challenge.getId(), v.getId(),
+        assertThatThrownBy(() -> challengeVerificationService.updateMemo(me.getId(), challenge.getId(), v.getId(),
                 new ChallengeVerificationReqDTO.UpdateMemo("고침")))
                 .isInstanceOf(RuntimeException.class);
     }
@@ -257,7 +256,7 @@ class VerificationDeleteTest {
     void deletedVerification_IsNotCountedAsReference() {
         // given
         ChallengeVerification v = verificationOn(today());
-        challengeCommandService.deleteVerification(me.getId(), challenge.getId(), v.getId());
+        challengeVerificationService.deleteVerification(me.getId(), challenge.getId(), v.getId());
         em.flush();
         em.clear();
 
@@ -276,13 +275,13 @@ class VerificationDeleteTest {
         participation.applyVerification(today());
         em.flush();
 
-        challengeCommandService.verify(me.getId(), challenge.getId(),
+        challengeVerificationService.verify(me.getId(), challenge.getId(),
                 new ChallengeVerificationReqDTO.Verify(NEW_STAGING_KEY, "사진 교체"));
         em.flush();
         assertThat(v.getImageUrl()).isEqualTo(NEW_PUBLIC_KEY);
 
         // when
-        challengeCommandService.deleteVerification(me.getId(), challenge.getId(), v.getId());
+        challengeVerificationService.deleteVerification(me.getId(), challenge.getId(), v.getId());
 
         // then — 잠그고 다시 읽지 않으면 옛 key(PUBLIC_KEY)를 지워, 현재 사진이 공개 prefix 에 남는다.
         verify(mediaService).deleteQuietly(NEW_PUBLIC_KEY);
@@ -296,13 +295,13 @@ class VerificationDeleteTest {
         ChallengeVerification v = verificationOn(today());
         participation.applyVerification(today());
         em.flush();
-        challengeCommandService.deleteVerification(me.getId(), challenge.getId(), v.getId());
+        challengeVerificationService.deleteVerification(me.getId(), challenge.getId(), v.getId());
         em.flush();
 
         // when: 실제 인증 경로로 다시 올린다.
         // 저장 경로가 "오늘 인증 찾기" 에서 내린 행을 못 찾으면 새로 INSERT 하고
         // 유니크 제약에 걸린다 — 소프트 삭제가 성립하는지를 여기서 본다.
-        challengeCommandService.verify(me.getId(), challenge.getId(),
+        challengeVerificationService.verify(me.getId(), challenge.getId(),
                 new ChallengeVerificationReqDTO.Verify(NEW_STAGING_KEY, "다시 올림"));
         em.flush();
 

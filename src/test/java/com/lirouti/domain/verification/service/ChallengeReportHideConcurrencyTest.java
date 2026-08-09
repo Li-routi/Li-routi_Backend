@@ -1,4 +1,4 @@
-package com.lirouti.domain.challenge.service.command;
+package com.lirouti.domain.verification.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -54,7 +54,7 @@ class ChallengeReportHideConcurrencyTest {
             "challenge-verifications/2026/07/31/dddddddd-dddd-4ddd-8ddd-dddddddddddd.jpg";
 
     @Autowired
-    private ChallengeCommandService challengeCommandService;
+    private ChallengeVerificationService challengeVerificationService;
     @Autowired
     private ChallengeReportProperties reportProperties;
     @Autowired
@@ -136,7 +136,7 @@ class ChallengeReportHideConcurrencyTest {
                 try {
                     ready.countDown();
                     start.await();
-                    challengeCommandService.report(reporterId, challengeId, verificationId,
+                    challengeVerificationService.report(reporterId, challengeId, verificationId,
                             new ChallengeVerificationReqDTO.Report("부적절한 사진"));
                 } catch (InterruptedException ignored) {
                     Thread.currentThread().interrupt();

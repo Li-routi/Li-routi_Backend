@@ -1,4 +1,4 @@
-package com.lirouti.domain.challenge.client;
+package com.lirouti.domain.verification.client;
 
 /**
  * 인증 사진 심사가 어떻게 끝났는지.

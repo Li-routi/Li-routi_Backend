@@ -1,4 +1,4 @@
-package com.lirouti.domain.challenge.service.command;
+package com.lirouti.domain.verification.service;
 
 import com.lirouti.domain.challenge.entity.Challenge;
 import com.lirouti.domain.verification.entity.ChallengeVerification;
@@ -49,7 +49,7 @@ class ChallengeLikeConcurrencyTest {
             "challenge-verifications/cccccccc-cccc-4ccc-8ccc-cccccccccccc.jpg";
 
     @Autowired
-    private ChallengeCommandService challengeCommandService;
+    private ChallengeVerificationService challengeVerificationService;
     @Autowired
     private MemberRepository memberRepository;
     @Autowired
@@ -93,7 +93,7 @@ class ChallengeLikeConcurrencyTest {
     void tearDown() {
         // 리포지토리의 벌크 삭제는 @Modifying이라 트랜잭션이 필요하다. 이 테스트는 @Transactional을
         // 쓰지 않으므로(스레드마다 각자 커밋해야 한다) 트랜잭션을 가진 서비스 쪽을 부른다.
-        challengeCommandService.unlike(memberId, challengeId, verificationId);
+        challengeVerificationService.unlike(memberId, challengeId, verificationId);
         challengeVerificationRepository.deleteById(verificationId);
         memberChallengeRepository.deleteById(memberChallengeId);
         challengeRepository.deleteById(challengeId);
@@ -142,7 +142,7 @@ class ChallengeLikeConcurrencyTest {
     @DisplayName("같은 좋아요가 동시에 들어와도 둘 다 성공하고 행은 하나다")
     void concurrentLike_BothSucceed_SingleRow() throws InterruptedException {
         Result result = runConcurrently(() ->
-                challengeCommandService.like(memberId, challengeId, verificationId));
+                challengeVerificationService.like(memberId, challengeId, verificationId));
 
         assertThat(result.failure()).as("멱등이므로 아무도 오류를 받지 않는다").isNull();
         assertThat(result.success()).isEqualTo(2);
@@ -153,10 +153,10 @@ class ChallengeLikeConcurrencyTest {
     @Test
     @DisplayName("같은 취소가 동시에 들어와도 둘 다 성공하고 행이 남지 않는다")
     void concurrentUnlike_BothSucceed_NoRow() throws InterruptedException {
-        challengeCommandService.like(memberId, challengeId, verificationId);
+        challengeVerificationService.like(memberId, challengeId, verificationId);
 
         Result result = runConcurrently(() ->
-                challengeCommandService.unlike(memberId, challengeId, verificationId));
+                challengeVerificationService.unlike(memberId, challengeId, verificationId));
 
         assertThat(result.failure()).isNull();
         assertThat(result.success()).isEqualTo(2);

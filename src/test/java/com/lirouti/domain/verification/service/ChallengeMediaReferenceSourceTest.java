@@ -1,4 +1,4 @@
-package com.lirouti.domain.challenge.service;
+package com.lirouti.domain.verification.service;
 
 import com.lirouti.domain.challenge.entity.Challenge;
 import com.lirouti.domain.verification.entity.ChallengeVerification;

@@ -1,8 +1,8 @@
 package com.lirouti.domain.verification.service.command;
 
+import com.lirouti.domain.verification.service.ChallengeVerificationService;
 import com.lirouti.domain.challenge.dto.response.ChallengeResDTO;
 import com.lirouti.domain.challenge.entity.Challenge;
-import com.lirouti.domain.challenge.service.command.ChallengeCommandService;
 import com.lirouti.domain.verification.dto.response.ChallengeVerificationResDTO;
 import com.lirouti.domain.verification.dto.request.ChallengeVerificationReqDTO;
 import com.lirouti.domain.verification.entity.ChallengeVerification;
@@ -35,7 +35,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest
 @Transactional
-@DisplayName("ChallengeCommandService 인증 테스트")
+@DisplayName("ChallengeVerificationCommandService 저장 테스트")
 class ChallengeVerificationCommandServiceTest {
 
     private static final String KEY_1 = "challenge-verifications-staging/11111111-1111-4111-8111-111111111111.jpg";
@@ -53,7 +53,7 @@ class ChallengeVerificationCommandServiceTest {
             "challenge-verifications/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.png");
 
     @Autowired
-    private ChallengeCommandService challengeCommandService;
+    private ChallengeVerificationService challengeVerificationService;
 
     @PersistenceContext
     private EntityManager em;
@@ -115,7 +115,7 @@ class ChallengeVerificationCommandServiceTest {
         em.flush();
 
         ChallengeVerificationResDTO.Verification result =
-                challengeCommandService.verify(m.getId(), c.getId(), request(KEY_1, "첫 인증"));
+                challengeVerificationService.verify(m.getId(), c.getId(), request(KEY_1, "첫 인증"));
 
         assertThat(result.currentStreak()).isEqualTo(1);
         assertThat(result.reverified()).isFalse();
@@ -134,7 +134,7 @@ class ChallengeVerificationCommandServiceTest {
         em.flush();
 
         ChallengeVerificationResDTO.Verification result =
-                challengeCommandService.verify(m.getId(), c.getId(), request(KEY_1, null));
+                challengeVerificationService.verify(m.getId(), c.getId(), request(KEY_1, null));
 
         assertThat(result.currentStreak()).isEqualTo(4);
         assertThat(mc.getCurrentStreak()).isEqualTo(4);
@@ -149,7 +149,7 @@ class ChallengeVerificationCommandServiceTest {
         em.flush();
 
         ChallengeVerificationResDTO.Verification result =
-                challengeCommandService.verify(m.getId(), c.getId(), request(KEY_1, null));
+                challengeVerificationService.verify(m.getId(), c.getId(), request(KEY_1, null));
 
         assertThat(result.currentStreak()).isEqualTo(1);
         assertThat(mc.getCurrentStreak()).isEqualTo(1);
@@ -164,11 +164,11 @@ class ChallengeVerificationCommandServiceTest {
         MemberChallenge mc = join(m, c, true, null, 0);
         em.flush();
 
-        challengeCommandService.verify(m.getId(), c.getId(), request(KEY_1, "처음"));
+        challengeVerificationService.verify(m.getId(), c.getId(), request(KEY_1, "처음"));
         String firstStoredKey = verificationsOf(mc).get(0).getImageUrl();
 
         ChallengeVerificationResDTO.Verification second =
-                challengeCommandService.verify(m.getId(), c.getId(), request(KEY_2, "바꿈"));
+                challengeVerificationService.verify(m.getId(), c.getId(), request(KEY_2, "바꿈"));
 
         assertThat(second.reverified()).isTrue();
         assertThat(second.content()).isEqualTo("바꿈");
@@ -200,9 +200,9 @@ class ChallengeVerificationCommandServiceTest {
         MemberChallenge mc = join(m, c, true, today().minusDays(1), 5);
         em.flush();
 
-        challengeCommandService.verify(m.getId(), c.getId(), request(KEY_1, null));
+        challengeVerificationService.verify(m.getId(), c.getId(), request(KEY_1, null));
         ChallengeVerificationResDTO.Verification second =
-                challengeCommandService.verify(m.getId(), c.getId(), request(KEY_2, null));
+                challengeVerificationService.verify(m.getId(), c.getId(), request(KEY_2, null));
 
         // 어제 → 오늘로 한 번만 올라 6이어야 하고, 두 번째 인증으로 7이 되면 안 된다.
         assertThat(second.currentStreak()).isEqualTo(6);
@@ -218,7 +218,7 @@ class ChallengeVerificationCommandServiceTest {
         em.flush();
 
         assertThatThrownBy(() ->
-                challengeCommandService.verify(m.getId(), c.getId(), request(KEY_1, null)))
+                challengeVerificationService.verify(m.getId(), c.getId(), request(KEY_1, null)))
                 .isInstanceOf(ChallengeException.class)
                 .hasFieldOrPropertyWithValue("code", ChallengeErrorCode.NOT_PARTICIPATING);
     }
@@ -232,7 +232,7 @@ class ChallengeVerificationCommandServiceTest {
         em.flush();
 
         assertThatThrownBy(() ->
-                challengeCommandService.verify(m.getId(), c.getId(), request(KEY_1, null)))
+                challengeVerificationService.verify(m.getId(), c.getId(), request(KEY_1, null)))
                 .isInstanceOf(ChallengeException.class)
                 .hasFieldOrPropertyWithValue("code", ChallengeErrorCode.NOT_PARTICIPATING);
     }
@@ -246,7 +246,7 @@ class ChallengeVerificationCommandServiceTest {
         em.flush();
 
         ChallengeVerificationResDTO.Verification result =
-                challengeCommandService.verify(m.getId(), c.getId(), request(KEY_1, null));
+                challengeVerificationService.verify(m.getId(), c.getId(), request(KEY_1, null));
 
         assertThat(result.currentStreak()).isEqualTo(1);
     }
@@ -261,7 +261,7 @@ class ChallengeVerificationCommandServiceTest {
         em.flush();
 
         assertThatThrownBy(() ->
-                challengeCommandService.verify(m.getId(), c.getId(), request("profiles/whatever.jpg", null)))
+                challengeVerificationService.verify(m.getId(), c.getId(), request("profiles/whatever.jpg", null)))
                 .isInstanceOf(MediaException.class)
                 .hasFieldOrPropertyWithValue("code", MediaErrorCode.INVALID_MEDIA_KEY);
 

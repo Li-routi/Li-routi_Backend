@@ -1,4 +1,4 @@
-package com.lirouti.domain.challenge.service.query;
+package com.lirouti.domain.verification.service.query;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertAll;
@@ -48,7 +48,7 @@ class FeedMineFlagTest {
             "challenge-verifications/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.jpg";
 
     @Autowired
-    private ChallengeQueryService challengeQueryService;
+    private ChallengeVerificationQueryService challengeVerificationQueryService;
 
     @PersistenceContext
     private EntityManager em;
@@ -88,7 +88,7 @@ class FeedMineFlagTest {
     /** 인증 id → 그 카드의 mine 값. */
     private Map<Long, Boolean> mineByVerificationId(Long challengeId, Long viewerId) {
         ChallengeVerificationResDTO.Feed feed =
-                challengeQueryService.getVerificationFeed(challengeId, viewerId, null, null);
+                challengeVerificationQueryService.getVerificationFeed(challengeId, viewerId, null, null);
         return feed.verifications().stream().collect(Collectors.toMap(
                 ChallengeVerificationResDTO.FeedItem::verificationId,
                 ChallengeVerificationResDTO.FeedItem::mine,
@@ -155,7 +155,7 @@ class FeedMineFlagTest {
 
         // when
         ChallengeVerificationResDTO.Feed feed =
-                challengeQueryService.getVerificationFeed(challenge.getId(), me.getId(), null, null);
+                challengeVerificationQueryService.getVerificationFeed(challenge.getId(), me.getId(), null, null);
         Map<Long, ChallengeVerificationResDTO.FeedItem> byId = feed.verifications().stream()
                 .collect(Collectors.toMap(ChallengeVerificationResDTO.FeedItem::verificationId,
                         Function.identity()));

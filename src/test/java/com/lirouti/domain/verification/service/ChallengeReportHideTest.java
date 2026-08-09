@@ -1,5 +1,6 @@
-package com.lirouti.domain.challenge.service.command;
+package com.lirouti.domain.verification.service;
 
+import com.lirouti.domain.verification.service.query.ChallengeVerificationQueryService;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.LocalDate;
@@ -45,7 +46,10 @@ class ChallengeReportHideTest {
     private static final int BIG = 100;
 
     @Autowired
-    private ChallengeCommandService challengeCommandService;
+    private ChallengeVerificationService challengeVerificationService;
+    @Autowired
+    private ChallengeVerificationQueryService challengeVerificationQueryService;
+    // 상세의 인증 게시글 수는 챌린지 응답의 일부라 조회가 challenge 에 남아 있다.
     @Autowired
     private ChallengeQueryService challengeQueryService;
     @Autowired
@@ -97,7 +101,7 @@ class ChallengeReportHideTest {
     /** 서로 다른 회원이 n번 신고한다. */
     private void reportBy(int count, Challenge c, ChallengeVerification v) {
         for (int i = 0; i < count; i++) {
-            challengeCommandService.report(
+            challengeVerificationService.report(
                     member().getId(), c.getId(), v.getId(),
                     new ChallengeVerificationReqDTO.Report("부적절한 사진"));
         }
@@ -119,7 +123,7 @@ class ChallengeReportHideTest {
         reportBy(reportProperties.getHideThreshold(), c, v);
 
         // then
-        assertThat(challengeQueryService.getVerificationFeed(c.getId(), viewer.getId(), null, BIG)
+        assertThat(challengeVerificationQueryService.getVerificationFeed(c.getId(), viewer.getId(), null, BIG)
                 .verifications())
                 .isEmpty();
     }
@@ -137,7 +141,7 @@ class ChallengeReportHideTest {
         reportBy(reportProperties.getHideThreshold() - 1, c, v);
 
         // then
-        assertThat(challengeQueryService.getVerificationFeed(c.getId(), viewer.getId(), null, BIG)
+        assertThat(challengeVerificationQueryService.getVerificationFeed(c.getId(), viewer.getId(), null, BIG)
                 .verifications())
                 .extracting(ChallengeVerificationResDTO.FeedItem::verificationId)
                 .containsExactly(v.getId());
@@ -156,7 +160,7 @@ class ChallengeReportHideTest {
         reportBy(reportProperties.getHideThreshold(), c, v);
 
         // then
-        assertThat(challengeQueryService.getMyVerifications(author.getId(), c.getId(), null, BIG, null)
+        assertThat(challengeVerificationQueryService.getMyVerifications(author.getId(), c.getId(), null, BIG, null)
                 .verifications())
                 .isEmpty();
     }

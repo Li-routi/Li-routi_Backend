@@ -1,5 +1,6 @@
-package com.lirouti.domain.challenge.service.command;
+package com.lirouti.domain.verification.service;
 
+import com.lirouti.domain.verification.service.query.ChallengeVerificationQueryService;
 import com.lirouti.domain.challenge.dto.response.ChallengeResDTO;
 import com.lirouti.domain.challenge.entity.Challenge;
 import com.lirouti.domain.verification.exception.VerificationException;
@@ -10,7 +11,6 @@ import com.lirouti.domain.challenge.enums.ChallengeCategory;
 import com.lirouti.domain.challenge.exception.ChallengeException;
 import com.lirouti.domain.challenge.exception.code.error.ChallengeErrorCode;
 import com.lirouti.domain.verification.repository.ChallengeVerificationLikeRepository;
-import com.lirouti.domain.challenge.service.query.ChallengeQueryService;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.enums.Role;
 import com.lirouti.domain.member.enums.SocialProvider;
@@ -39,9 +39,9 @@ class ChallengeLikeTest {
             "challenge-verifications/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.jpg";
 
     @Autowired
-    private ChallengeCommandService challengeCommandService;
+    private ChallengeVerificationService challengeVerificationService;
     @Autowired
-    private ChallengeQueryService challengeQueryService;
+    private ChallengeVerificationQueryService challengeVerificationQueryService;
     @Autowired
     private ChallengeVerificationLikeRepository likeRepository;
 
@@ -88,7 +88,7 @@ class ChallengeLikeTest {
         ChallengeVerification v = persistVerification(author, c);
 
         ChallengeVerificationResDTO.Like result =
-                challengeCommandService.like(liker.getId(), c.getId(), v.getId());
+                challengeVerificationService.like(liker.getId(), c.getId(), v.getId());
 
         assertThat(result.verificationId()).isEqualTo(v.getId());
         assertThat(result.likeCount()).isEqualTo(1);
@@ -103,9 +103,9 @@ class ChallengeLikeTest {
         Challenge c = persistChallenge();
         ChallengeVerification v = persistVerification(author, c);
 
-        challengeCommandService.like(liker.getId(), c.getId(), v.getId());
+        challengeVerificationService.like(liker.getId(), c.getId(), v.getId());
         ChallengeVerificationResDTO.Like second =
-                challengeCommandService.like(liker.getId(), c.getId(), v.getId());
+                challengeVerificationService.like(liker.getId(), c.getId(), v.getId());
 
         assertThat(second.likeCount()).isEqualTo(1);
         assertThat(second.liked()).isTrue();
@@ -120,9 +120,9 @@ class ChallengeLikeTest {
         Challenge c = persistChallenge();
         ChallengeVerification v = persistVerification(author, c);
 
-        challengeCommandService.like(liker.getId(), c.getId(), v.getId());
+        challengeVerificationService.like(liker.getId(), c.getId(), v.getId());
         ChallengeVerificationResDTO.Like result =
-                challengeCommandService.unlike(liker.getId(), c.getId(), v.getId());
+                challengeVerificationService.unlike(liker.getId(), c.getId(), v.getId());
 
         assertThat(result.likeCount()).isZero();
         assertThat(result.liked()).isFalse();
@@ -137,7 +137,7 @@ class ChallengeLikeTest {
         ChallengeVerification v = persistVerification(author, c);
 
         ChallengeVerificationResDTO.Like result =
-                challengeCommandService.unlike(other.getId(), c.getId(), v.getId());
+                challengeVerificationService.unlike(other.getId(), c.getId(), v.getId());
 
         assertThat(result.likeCount()).isZero();
         assertThat(result.liked()).isFalse();
@@ -151,10 +151,10 @@ class ChallengeLikeTest {
         Challenge c = persistChallenge();
         ChallengeVerification v = persistVerification(author, c);
 
-        challengeCommandService.like(liker.getId(), c.getId(), v.getId());
-        challengeCommandService.unlike(liker.getId(), c.getId(), v.getId());
+        challengeVerificationService.like(liker.getId(), c.getId(), v.getId());
+        challengeVerificationService.unlike(liker.getId(), c.getId(), v.getId());
         ChallengeVerificationResDTO.Like again =
-                challengeCommandService.like(liker.getId(), c.getId(), v.getId());
+                challengeVerificationService.like(liker.getId(), c.getId(), v.getId());
 
         assertThat(again.likeCount()).isEqualTo(1);
         assertThat(again.liked()).isTrue();
@@ -168,7 +168,7 @@ class ChallengeLikeTest {
         ChallengeVerification v = persistVerification(author, c);
 
         ChallengeVerificationResDTO.Like result =
-                challengeCommandService.like(author.getId(), c.getId(), v.getId());
+                challengeVerificationService.like(author.getId(), c.getId(), v.getId());
 
         assertThat(result.likeCount()).isEqualTo(1);
     }
@@ -182,12 +182,12 @@ class ChallengeLikeTest {
         ChallengeVerification v = persistVerification(author, c);
 
         assertThatThrownBy(() ->
-                challengeCommandService.like(author.getId(), other.getId(), v.getId()))
+                challengeVerificationService.like(author.getId(), other.getId(), v.getId()))
                 .isInstanceOf(VerificationException.class)
                 .hasFieldOrPropertyWithValue("code", ChallengeVerificationErrorCode.VERIFICATION_NOT_FOUND);
 
         assertThatThrownBy(() ->
-                challengeCommandService.unlike(author.getId(), other.getId(), v.getId()))
+                challengeVerificationService.unlike(author.getId(), other.getId(), v.getId()))
                 .isInstanceOf(VerificationException.class)
                 .hasFieldOrPropertyWithValue("code", ChallengeVerificationErrorCode.VERIFICATION_NOT_FOUND);
     }
@@ -200,17 +200,17 @@ class ChallengeLikeTest {
         Challenge c = persistChallenge();
         ChallengeVerification v = persistVerification(author, c);
 
-        challengeCommandService.like(liker.getId(), c.getId(), v.getId());
+        challengeVerificationService.like(liker.getId(), c.getId(), v.getId());
 
         // 누른 사람에게는 liked=true
-        ChallengeVerificationResDTO.FeedItem forLiker = challengeQueryService
+        ChallengeVerificationResDTO.FeedItem forLiker = challengeVerificationQueryService
                 .getVerificationFeed(c.getId(), liker.getId(), null, null)
                 .verifications().get(0);
         assertThat(forLiker.likeCount()).isEqualTo(1);
         assertThat(forLiker.liked()).isTrue();
 
         // 안 누른 사람에게는 수만 보이고 liked=false
-        ChallengeVerificationResDTO.FeedItem forAuthor = challengeQueryService
+        ChallengeVerificationResDTO.FeedItem forAuthor = challengeVerificationQueryService
                 .getVerificationFeed(c.getId(), author.getId(), null, null)
                 .verifications().get(0);
         assertThat(forAuthor.likeCount()).isEqualTo(1);
@@ -225,12 +225,12 @@ class ChallengeLikeTest {
         Challenge c = persistChallenge();
         ChallengeVerification v = persistVerification(author, c);
 
-        challengeCommandService.like(liker.getId(), c.getId(), v.getId());
+        challengeVerificationService.like(liker.getId(), c.getId(), v.getId());
 
-        long feedCount = challengeQueryService
+        long feedCount = challengeVerificationQueryService
                 .getVerificationFeed(c.getId(), author.getId(), null, null)
                 .verifications().get(0).likeCount();
-        long mineCount = challengeQueryService
+        long mineCount = challengeVerificationQueryService
                 .getMyVerifications(author.getId(), c.getId(), null, null, null)
                 .verifications().get(0).likeCount();
 
@@ -245,8 +245,8 @@ class ChallengeLikeTest {
         Challenge c = persistChallenge();
         ChallengeVerification v = persistVerification(author, c);
 
-        challengeCommandService.like(leaver.getId(), c.getId(), v.getId());
-        assertThat(challengeCommandService.like(leaver.getId(), c.getId(), v.getId()).likeCount())
+        challengeVerificationService.like(leaver.getId(), c.getId(), v.getId());
+        assertThat(challengeVerificationService.like(leaver.getId(), c.getId(), v.getId()).likeCount())
                 .isEqualTo(1);
 
         // 좋아요 취소가 JPQL 벌크 삭제라 영속성 컨텍스트를 비운다(@Modifying clearAutomatically).
@@ -256,7 +256,7 @@ class ChallengeLikeTest {
         em.flush();
         em.clear();
 
-        long count = challengeQueryService
+        long count = challengeVerificationQueryService
                 .getVerificationFeed(c.getId(), author.getId(), null, null)
                 .verifications().get(0).likeCount();
 

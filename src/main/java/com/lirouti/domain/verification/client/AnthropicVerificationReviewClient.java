@@ -1,4 +1,4 @@
-package com.lirouti.domain.challenge.client;
+package com.lirouti.domain.verification.client;
 
 import java.net.http.HttpClient;
 import java.time.Duration;

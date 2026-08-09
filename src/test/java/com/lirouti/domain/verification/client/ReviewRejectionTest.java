@@ -1,4 +1,4 @@
-package com.lirouti.domain.challenge.client;
+package com.lirouti.domain.verification.client;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

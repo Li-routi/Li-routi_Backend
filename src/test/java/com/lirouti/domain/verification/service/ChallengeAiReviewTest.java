@@ -1,4 +1,4 @@
-package com.lirouti.domain.challenge.service.command;
+package com.lirouti.domain.verification.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -21,9 +21,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.lirouti.domain.challenge.client.AnthropicVerificationReviewClient;
-import com.lirouti.domain.challenge.client.ReviewRejection;
-import com.lirouti.domain.challenge.client.VerificationReview;
+import com.lirouti.domain.verification.client.AnthropicVerificationReviewClient;
+import com.lirouti.domain.verification.client.ReviewRejection;
+import com.lirouti.domain.verification.client.VerificationReview;
 import com.lirouti.domain.challenge.entity.Challenge;
 import com.lirouti.domain.challenge.entity.MemberChallenge;
 import com.lirouti.domain.challenge.enums.ChallengeCategory;
@@ -63,7 +63,7 @@ class ChallengeAiReviewTest {
             "challenge-verifications/2026/07/31/11111111-1111-4111-8111-111111111111.jpg";
 
     @Autowired
-    private ChallengeCommandService challengeCommandService;
+    private ChallengeVerificationService challengeVerificationService;
     @Autowired
     private ChallengeVerificationRepository verificationRepository;
 
@@ -127,7 +127,7 @@ class ChallengeAiReviewTest {
         long before = savedCount();
 
         // when
-        challengeCommandService.verify(memberId, challengeId, request());
+        challengeVerificationService.verify(memberId, challengeId, request());
 
         // then
         assertThat(savedCount()).isEqualTo(before + 1);
@@ -140,16 +140,16 @@ class ChallengeAiReviewTest {
         // 로그 문자열 자체를 단언하는 대신, 세 경로가 서로 다른 결과로 갈리는지를 본다.
         when(reviewClient.review(any(), any(), any())).thenReturn(VerificationReview.pass());
         long before = savedCount();
-        challengeCommandService.verify(memberId, challengeId, request());
+        challengeVerificationService.verify(memberId, challengeId, request());
         assertThat(savedCount()).as("통과는 저장된다").isEqualTo(before + 1);
 
         when(reviewClient.review(any(), any(), any())).thenReturn(VerificationReview.transientFailure("장애"));
-        challengeCommandService.verify(memberId, challengeId, request());
+        challengeVerificationService.verify(memberId, challengeId, request());
         assertThat(savedCount()).as("장애도 통과시킨다(덮어쓰기)").isEqualTo(before + 1);
 
         when(reviewClient.review(any(), any(), any()))
                 .thenReturn(VerificationReview.reject(ReviewRejection.MISMATCH, "무관한 사진"));
-        assertThatThrownBy(() -> challengeCommandService.verify(memberId, challengeId, request()))
+        assertThatThrownBy(() -> challengeVerificationService.verify(memberId, challengeId, request()))
                 .as("반려는 막힌다")
                 .isInstanceOf(VerificationException.class);
     }
@@ -163,7 +163,7 @@ class ChallengeAiReviewTest {
         long before = savedCount();
 
         // when & then
-        assertThatThrownBy(() -> challengeCommandService.verify(memberId, challengeId, request()))
+        assertThatThrownBy(() -> challengeVerificationService.verify(memberId, challengeId, request()))
                 .isInstanceOf(VerificationException.class)
                 .hasFieldOrPropertyWithValue("code", ChallengeVerificationErrorCode.VERIFICATION_REJECTED_BY_REVIEW);
         assertThat(savedCount()).isEqualTo(before);
@@ -177,7 +177,7 @@ class ChallengeAiReviewTest {
         long before = savedCount();
 
         // when
-        challengeCommandService.verify(memberId, challengeId, request());
+        challengeVerificationService.verify(memberId, challengeId, request());
 
         // then
         assertThat(savedCount()).isEqualTo(before + 1);
@@ -192,7 +192,7 @@ class ChallengeAiReviewTest {
         long before = savedCount();
 
         // when
-        challengeCommandService.verify(memberId, challengeId, request());
+        challengeVerificationService.verify(memberId, challengeId, request());
 
         // then
         assertThat(savedCount()).isEqualTo(before + 1);
@@ -207,7 +207,7 @@ class ChallengeAiReviewTest {
                 .thenReturn(VerificationReview.reject(ReviewRejection.UNSAFE, "노출이 과합니다."));
 
         // when & then
-        assertThatThrownBy(() -> challengeCommandService.verify(memberId, challengeId, request()))
+        assertThatThrownBy(() -> challengeVerificationService.verify(memberId, challengeId, request()))
                 .isInstanceOf(VerificationException.class)
                 .hasFieldOrPropertyWithValue("code", ChallengeVerificationErrorCode.VERIFICATION_REJECTED_AS_UNSAFE);
     }
@@ -220,7 +220,7 @@ class ChallengeAiReviewTest {
                 .thenReturn(VerificationReview.reject(ReviewRejection.UNSAFE, "노출이 과합니다."));
 
         // when
-        assertThatThrownBy(() -> challengeCommandService.verify(memberId, challengeId, request()))
+        assertThatThrownBy(() -> challengeVerificationService.verify(memberId, challengeId, request()))
                 .isInstanceOf(VerificationException.class);
 
         // then
@@ -234,7 +234,7 @@ class ChallengeAiReviewTest {
         when(reviewClient.review(any(), any(), any())).thenReturn(VerificationReview.pass());
 
         // when
-        challengeCommandService.verify(memberId, challengeId, request());
+        challengeVerificationService.verify(memberId, challengeId, request());
 
         // then — 저장이 커밋된 뒤 대기본을 지운다. 공개본을 지우면 방금 저장한 인증의 사진이 사라진다.
         verify(mediaService).deleteQuietly(STAGING_KEY);
@@ -248,7 +248,7 @@ class ChallengeAiReviewTest {
         when(reviewClient.review(any(), any(), any())).thenReturn(VerificationReview.transientFailure("장애"));
 
         // when
-        challengeCommandService.verify(memberId, challengeId, request());
+        challengeVerificationService.verify(memberId, challengeId, request());
 
         // then — 통과 경로와 같다. 대기본은 지우고 공개본은 남긴다.
         verify(mediaService).deleteQuietly(STAGING_KEY);
@@ -278,7 +278,7 @@ class ChallengeAiReviewTest {
 
         // when & then — 지금은 둘 다 통과시킨다. 갈리는 것은 결과 값이지 동작이 아니다.
         long before = savedCount();
-        challengeCommandService.verify(memberId, challengeId, request());
+        challengeVerificationService.verify(memberId, challengeId, request());
         assertThat(savedCount()).as("보류 처리는 다음 단계다. 지금은 통과시킨다").isEqualTo(before + 1);
 
         assertThat(MediaImageLoad.readFailed().failure())
@@ -300,7 +300,7 @@ class ChallengeAiReviewTest {
 
         // when & then
         assertThatThrownBy(() ->
-                challengeCommandService.verify(outsider.getId(), challengeId, request()))
+                challengeVerificationService.verify(outsider.getId(), challengeId, request()))
                 .isInstanceOf(ChallengeException.class)
                 .hasFieldOrPropertyWithValue("code", ChallengeErrorCode.NOT_PARTICIPATING);
         verify(reviewClient, never()).review(any(), any(), any());
@@ -313,7 +313,7 @@ class ChallengeAiReviewTest {
         when(reviewClient.review(any(), any(), any())).thenReturn(VerificationReview.pass());
 
         // when
-        challengeCommandService.verify(memberId, challengeId, request());
+        challengeVerificationService.verify(memberId, challengeId, request());
 
         // then
         verify(reviewClient).review(eq("물 1L 마시기"), eq("하루에 물 1L 이상"), any());
