@@ -42,7 +42,7 @@ import com.lirouti.domain.verification.exception.code.error.ChallengeVerificatio
  * 트랜잭션이 걸리지 않는다(service_convention). 그래서 빈을 분리했다.
  * {@code AuthService}가 외부 인증 후 {@code MemberCommandService}에 저장을 위임하는 것과 같은 모양이다.
  *
- * <b>이 메서드 안의 순서는 그대로 유지해야 한다.</b> 행 락 → 오늘 인증 조회 → INSERT/덮어쓰기 →
+ * <b>이 메서드 안의 순서는 그대로 유지해야 한다.</b> 행 락 → 이번 구간 인증 조회 → INSERT/덮어쓰기 →
  * 스트릭 갱신이 한 트랜잭션에 있어야 중복 증가와 stale update가 모두 막힌다(database-schema.md).
  */
 @Slf4j
@@ -55,8 +55,8 @@ public class ChallengeVerificationCommandService {
     private final MediaService mediaService;
 
     /**
-     * 인증 저장과 스트릭 갱신. 오늘 이미 인증했으면 행을 새로 만들지 않고 덮어쓴다(당일 재인증).
-     * 이때 스트릭은 오르지 않는다.
+     * 인증 저장과 스트릭 갱신. <b>DAILY</b> 에서 오늘 이미 인증했으면 행을 새로 만들지 않고
+     * 덮어쓴다(당일 재인증). 이때 스트릭은 오르지 않는다. 주간·월간은 덮어쓰지 않고 409 다.
      *
      * 인증 INSERT와 스트릭 갱신을 한 트랜잭션에 두는 것이 중복 증가를 막는 핵심이다 —
      * 동시 요청은 UNIQUE(member_challenge_id, participation_round, verified_date)에 걸려 실패하고,
@@ -180,7 +180,7 @@ public class ChallengeVerificationCommandService {
                 .pendingSince(pendingSinceFor(reviewStatus, verifiedAt))
                 .build();
         try {
-            // "오늘 인증이 없다"는 선검사와 저장 사이의 동시 요청 경합은 유니크 제약이 막는다.
+            // "이번 구간 인증이 없다"는 선검사와 저장 사이의 동시 요청 경합은 유니크 제약이 막는다.
             // saveAndFlush로 그 실패를 여기서 잡아 409로 바꾼다.
             //
             // 두 예외를 모두 잡는다. 같은 유니크 키로 INSERT가 겹칠 때 InnoDB는 늘 중복 키 오류

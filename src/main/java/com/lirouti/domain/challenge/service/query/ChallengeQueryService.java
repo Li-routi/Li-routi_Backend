@@ -128,7 +128,7 @@ public class ChallengeQueryService {
      *
      * <p><b>참여 행의 {@code lastVerifiedDate} 를 쓰지 않는다.</b> 재참여가 그 값을 {@code null}
      * 로 초기화하기 때문이다 — 오늘 인증한 뒤 나갔다 다시 들어오면 "아직 안 함"으로 보여
-     * 버튼이 다시 열렸다. 하루 1회는 회차를 넘어 적용하므로 <b>인증 테이블을 직접 본다.</b>
+     * 버튼이 다시 열렸다. 주기 1회는 회차를 넘어 적용하므로 <b>인증 테이블을 직접 본다.</b>
      *
      * <p>쓰기 쪽도 같은 기준으로 막는다(ChallengeVerificationCommandService). 한쪽만 고치면
      * 버튼은 잠겨 있는데 API 로는 되거나, 그 반대가 된다.

@@ -54,7 +54,7 @@ public enum ChallengeVerificationErrorCode implements BaseErrorCode {
     /**
      * 나갔다 다시 들어왔는데 그날 이미 인증한 이력이 있는 경우.
      *
-     * <p>하루 1회는 참여 회차를 넘어 적용된다. 회차가 올라가도 그날 인증한 사실은 남으므로,
+     * <p>주기 1회는 참여 회차를 넘어 적용된다. 회차가 올라가도 인증한 사실은 남으므로,
      * 재참여로 인증 횟수를 늘릴 수 없다.
      */
     ALREADY_VERIFIED_TODAY(
