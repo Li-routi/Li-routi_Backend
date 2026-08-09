@@ -87,8 +87,7 @@ public final class ChallengeConverter {
             boolean participating,
             boolean verifiedInCurrentPeriod,
             long participantCount,
-            long verificationPostCount,
-            long todayCompletionCount
+            long verificationPostCount
     ) {
         return ChallengeResDTO.Detail.builder()
                 .challengeId(challenge.getId())
@@ -102,7 +101,6 @@ public final class ChallengeConverter {
                 .verifiedInCurrentPeriod(verifiedInCurrentPeriod)
                 .participantCount(participantCount)
                 .verificationPostCount(verificationPostCount)
-                .todayCompletionCount(todayCompletionCount)
                 .build();
     }
 }

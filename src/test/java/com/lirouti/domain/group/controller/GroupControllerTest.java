@@ -971,6 +971,105 @@ class GroupControllerTest {
                 """.formatted(categoryId, title, today().getDayOfWeek().name());
     }
 
+    @Test
+    @DisplayName("ACTIVE OWNER가 그룹 방 이름을 변경하면 변경된 이름이 저장된다")
+    void updateGroupName_Owner_UpdatesPersistedName() throws Exception {
+        Group group = group("GN00001");
+        Member owner = member();
+        membership(owner, group, GroupMemberRole.OWNER);
+        em.flush();
+
+        mockMvc.perform(patch("/api/groups/{groupId}/name", group.getId())
+                        .with(user(principal(owner)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"  변경된 모임  \"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.isSuccess").value(true))
+                .andExpect(jsonPath("$.code").value("GROUP200_12"))
+                .andExpect(jsonPath("$.result").doesNotExist());
+
+        em.flush();
+        em.clear();
+        assertThat(em.find(Group.class, group.getId()).getName()).isEqualTo("변경된 모임");
+    }
+
+    @Test
+    @DisplayName("방 이름 변경은 생성 이름 정책과 같이 DTO 검증 실패 시 COMMON400_1을 반환한다")
+    void updateGroupName_BlankName_ReturnsCommonValidationError() throws Exception {
+        Member owner = member();
+        em.flush();
+
+        mockMvc.perform(patch("/api/groups/{groupId}/name", Long.MAX_VALUE)
+                        .with(user(principal(owner)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"   \"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("COMMON400_1"));
+    }
+
+    @Test
+    @DisplayName("ACTIVE OWNER가 ACTIVE 구성원에게 방장을 위임하면 역할이 교체된다")
+    void transferGroupOwner_Owner_ExchangesPersistedRoles() throws Exception {
+        Group group = group("GO00001");
+        Member owner = member();
+        Member target = member();
+        GroupMember ownerMembership = membership(owner, group, GroupMemberRole.OWNER);
+        GroupMember targetMembership = membership(target, group, GroupMemberRole.MEMBER);
+        em.flush();
+        Long ownerMembershipId = ownerMembership.getId();
+        Long targetMembershipId = targetMembership.getId();
+
+        mockMvc.perform(patch("/api/groups/{groupId}/owner", group.getId())
+                        .with(user(principal(owner)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"targetMemberId\":%d}".formatted(target.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.isSuccess").value(true))
+                .andExpect(jsonPath("$.code").value("GROUP200_13"));
+
+        em.flush();
+        em.clear();
+        assertThat(em.find(GroupMember.class, ownerMembershipId).getRole())
+                .isEqualTo(GroupMemberRole.MEMBER);
+        assertThat(em.find(GroupMember.class, targetMembershipId).getRole())
+                .isEqualTo(GroupMemberRole.OWNER);
+    }
+
+    @Test
+    @DisplayName("방장은 본인에게 방장 권한을 위임할 수 없다")
+    void transferGroupOwner_SelfTarget_ReturnsConflictWithoutRoleChange() throws Exception {
+        Group group = group("GO00002");
+        Member owner = member();
+        GroupMember ownerMembership = membership(owner, group, GroupMemberRole.OWNER);
+        em.flush();
+        Long ownerMembershipId = ownerMembership.getId();
+
+        mockMvc.perform(patch("/api/groups/{groupId}/owner", group.getId())
+                        .with(user(principal(owner)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"targetMemberId\":%d}".formatted(owner.getId())))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("GROUP409_13"));
+
+        em.clear();
+        assertThat(em.find(GroupMember.class, ownerMembershipId).getRole())
+                .isEqualTo(GroupMemberRole.OWNER);
+    }
+
+    @Test
+    @DisplayName("방장 위임 대상 ID는 null 또는 양수가 아니면 COMMON400_1을 반환한다")
+    void transferGroupOwner_InvalidTargetId_ReturnsCommonValidationError() throws Exception {
+        Member owner = member();
+        em.flush();
+
+        mockMvc.perform(patch("/api/groups/{groupId}/owner", Long.MAX_VALUE)
+                        .with(user(principal(owner)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"targetMemberId\":0}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("COMMON400_1"));
+    }
+
     private String updateRequest(
             Long categoryId,
             String title,

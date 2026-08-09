@@ -164,7 +164,6 @@ class ChallengeControllerTest {
                 .andExpect(jsonPath("$.result.reward").value(30))
                 .andExpect(jsonPath("$.result.participantCount").value(1))
                 .andExpect(jsonPath("$.result.verificationPostCount").value(1))
-                .andExpect(jsonPath("$.result.todayCompletionCount").value(1))
                 // 조회자가 참여하지 않았으므로 false다.
                 .andExpect(jsonPath("$.result.participating").value(false));
     }

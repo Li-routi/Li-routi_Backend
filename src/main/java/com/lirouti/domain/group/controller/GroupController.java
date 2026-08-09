@@ -88,6 +88,30 @@ public class GroupController implements GroupControllerDocs {
         return ApiResponse.onSuccess(GroupSuccessCode.GROUP_UNLOCK_SUCCESS, result);
     }
 
+    /** ACTIVE OWNER가 그룹 이름을 변경한다. */
+    @Override
+    @PatchMapping("/{groupId}/name")
+    public ApiResponse<Void> updateGroupName(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long groupId,
+            @Valid @RequestBody GroupReqDTO.UpdateName request
+    ) {
+        groupCommandService.updateGroupName(groupId, userDetails.getMemberId(), request);
+        return ApiResponse.onSuccess(GroupSuccessCode.GROUP_NAME_UPDATE_SUCCESS, null);
+    }
+
+    /** ACTIVE OWNER가 같은 그룹의 ACTIVE 구성원에게 방장 권한을 위임한다. */
+    @Override
+    @PatchMapping("/{groupId}/owner")
+    public ApiResponse<Void> transferGroupOwner(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long groupId,
+            @Valid @RequestBody GroupReqDTO.TransferOwner request
+    ) {
+        groupCommandService.transferGroupOwner(groupId, userDetails.getMemberId(), request);
+        return ApiResponse.onSuccess(GroupSuccessCode.GROUP_OWNER_TRANSFER_SUCCESS, null);
+    }
+
     /** ACTIVE 그룹 구성원이 사용할 수 있는 그룹 루틴 카테고리를 조회한다. */
     @Override
     @GetMapping("/{groupId}/categories")

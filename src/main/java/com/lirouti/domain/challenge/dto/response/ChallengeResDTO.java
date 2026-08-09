@@ -99,8 +99,7 @@ public final class ChallengeResDTO {
             boolean participating,
             boolean verifiedInCurrentPeriod,
             long participantCount,
-            long verificationPostCount,
-            long todayCompletionCount
+            long verificationPostCount
     ) {
     }
 }

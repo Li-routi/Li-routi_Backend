@@ -116,11 +116,8 @@ public class ChallengeQueryService {
 
         long participantCount = challengeRepository.countActiveParticipants(challengeId);
         long verificationPostCount = challengeRepository.countVerificationPosts(challengeId);
-        long todayCompletionCount =
-                challengeRepository.countTodayCompletions(challengeId, LocalDate.now(TimeUtil.KST));
-
         return ChallengeConverter.toDetail(challenge, participating, verifiedInCurrentPeriod,
-                participantCount, verificationPostCount, todayCompletionCount);
+                participantCount, verificationPostCount);
     }
 
     /**
