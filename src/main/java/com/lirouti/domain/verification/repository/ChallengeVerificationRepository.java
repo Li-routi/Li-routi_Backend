@@ -221,18 +221,28 @@ public interface ChallengeVerificationRepository
      * 선두 컬럼만으로도 후보가 크게 줄어든다.
      *
      * <p>챌린지 이름·설명이 심사 입력이라 함께 읽는다. 없으면 건마다 조회하는 N+1 이 된다.
+     *
+     * <p><b>내려간 글은 가져오지 않는다.</b> 아무도 볼 수 없는 행을 최대 24시간 동안 다시
+     * 심사하는 것은 낭비이고, 더 나쁜 경우도 있다 — 삭제할 때 대기 prefix 사진을 지우는데
+     * 그것이 실패했다면(deleteQuietly 는 실패를 삼킨다) 재심사가 통과시켜 <b>사용자가 지운
+     * 사진을 공개 prefix 로 승격</b>한다. 행은 내려가 있어 화면엔 안 나오지만 공개 주소는
+     * 살아난다.
+     *
+     * <p>지운 뒤 다시 인증하면 {@code reverify} 가 심사 상태와 시도 횟수를 초기화하므로,
+     * 되살아난 건은 자연히 다시 이 큐에 들어온다.
      */
     @Query("""
             select v from ChallengeVerification v
             join fetch v.memberChallenge mc
             join fetch mc.challenge
             where v.reviewStatus = com.lirouti.domain.verification.enums.ReviewStatus.PENDING
+              and v.deletedAt is null
             order by v.pendingSince asc
             """)
     List<ChallengeVerification> findPendingOldestFirst(Pageable pageable);
 
     /** 보류 건수. 쌓이는 것을 아무도 모르는 상태가 가장 나쁘다 — 주기적으로 로그에 남긴다. */
-    long countByReviewStatus(ReviewStatus reviewStatus);
+    long countByReviewStatusAndDeletedAtIsNull(ReviewStatus reviewStatus);
 
     /**
      * 그 회차의 <b>유효한</b> 인증 날짜를 오름차순으로. 스트릭을 다시 셀 때 쓴다.

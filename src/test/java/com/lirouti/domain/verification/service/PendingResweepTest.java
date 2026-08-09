@@ -30,6 +30,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import static org.junit.jupiter.api.Assertions.assertAll;
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -333,4 +335,33 @@ class PendingResweepTest {
                 .isZero();
         assertThat(mc.getLastVerifiedDate()).isNull();
     }
+
+    @Test
+    @DisplayName("내려간 보류 건은 재심사하지 않는다 — 지운 사진이 승격되면 안 된다")
+    void resweep_DeletedPending_IsSkipped() {
+        // given: 보류 상태에서 글을 내렸다
+        givenPending(LocalDateTime.now().minusMinutes(30), 0);
+        new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            ChallengeVerification row = challengeVerificationRepository
+                    .findById(verificationId).orElseThrow();
+            row.softDelete(LocalDateTime.now());
+        });
+        when(reviewClient.review(any(), any(), any())).thenReturn(VerificationReview.pass());
+
+        // when
+        pendingReviewService.sweepPending();
+
+        // then: 손대지 않는다. 통과시켰다면 사용자가 지운 사진이 공개 prefix 로 올라간다 —
+        // 행은 내려가 있어 화면엔 안 나오지만 공개 주소는 살아난다.
+        ChallengeVerification row = challengeVerificationRepository.findById(verificationId).orElseThrow();
+        assertAll(
+                () -> assertThat(row.getReviewStatus())
+                        .as("재심사 대상이 아니다").isEqualTo(ReviewStatus.PENDING),
+                () -> assertThat(row.getImageUrl())
+                        .as("승격되지 않았다").isEqualTo(STAGING_KEY),
+                () -> assertThat(row.getReviewAttempts())
+                        .as("시도 횟수도 오르지 않는다").isZero()
+        );
+    }
+
 }
