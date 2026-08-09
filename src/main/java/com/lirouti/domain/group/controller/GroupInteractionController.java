@@ -32,6 +32,7 @@ public class GroupInteractionController implements GroupInteractionControllerDoc
                 service.undisappoint(user.getMemberId(), groupId, verificationId));
     }
     @Override
+    @Deprecated
     @PostMapping("/members/{recipientId}/poke")
     public ApiResponse<GroupInteractionResDTO.Poke> poke(
             @AuthenticationPrincipal CustomUserDetails user, @PathVariable Long groupId,
