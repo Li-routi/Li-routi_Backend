@@ -14,6 +14,8 @@ import com.lirouti.domain.member.enums.SocialProvider;
 import com.lirouti.domain.verification.dto.request.ChallengeVerificationReqDTO;
 import com.lirouti.domain.verification.entity.ChallengeVerification;
 import com.lirouti.domain.verification.repository.ChallengeVerificationRepository;
+import com.lirouti.domain.verification.exception.VerificationException;
+import com.lirouti.domain.verification.exception.code.error.ChallengeVerificationErrorCode;
 import com.lirouti.global.util.TimeUtil;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -322,4 +324,34 @@ class VerificationDeleteTest {
                 .as("행이 늘지 않는다 — 하루 한 건이 유지된다")
                 .isEqualTo(1L);
     }
+
+    @Test
+    @DisplayName("신고로 가려진 글은 지울 수도 다시 낼 수도 없다 — 그 구간은 닫힌 채로 끝난다")
+    void hidden_ClosesThePeriod() {
+        // given: 오늘 인증이 신고 누적으로 가려졌다
+        ChallengeVerification v = verificationOn(today());
+        participation.applyVerification(today(), RoutineCycle.DAILY);
+        v.hide(LocalDateTime.now(TimeUtil.KST));
+        em.flush();
+
+        // 지울 수 없다 — 지워서 신고 누적을 회피하는 길을 막는다
+        assertThatThrownBy(() ->
+                challengeVerificationService.deleteVerification(me.getId(), challenge.getId(), v.getId()))
+                .isInstanceOf(VerificationException.class)
+                .hasFieldOrPropertyWithValue("code",
+                        ChallengeVerificationErrorCode.VERIFICATION_NOT_FOUND);
+
+        // 다시 낼 수도 없다 — 지우지 않은 인증은 구간을 점유한다
+        assertThatThrownBy(() -> challengeVerificationService.verify(me.getId(), challenge.getId(),
+                new ChallengeVerificationReqDTO.Verify(NEW_STAGING_KEY, "다시 올림")))
+                .isInstanceOf(VerificationException.class)
+                .hasFieldOrPropertyWithValue("code",
+                        ChallengeVerificationErrorCode.ALREADY_VERIFIED_TODAY);
+
+        // 가려짐은 제재이므로 그 구간을 소진한 것으로 본다. 다시 열어 주면 신고를 받은
+        // 사람이 사진만 바꿔 계속 낼 수 있어 숨김이 힘을 잃는다.
+        assertThat(v.isDeleted()).isFalse();
+        assertThat(v.getImageUrl()).as("사진도 그대로다").isEqualTo(PUBLIC_KEY);
+    }
+
 }

@@ -113,6 +113,11 @@ public class ChallengeVerificationCommandService {
         // 보류(PENDING) 도 막는다. 심사 중이어도 이미 낸 것이고, 통과·반려는 서버가 알아서
         // 정리한다(반려로 확정되면 행을 지우므로 그 시점에 자연히 다시 열린다).
         //
+        // 신고로 가려진 글도 여기서 막힌다. 그리고 가려진 글은 지울 수도 없으므로
+        // (findMineInChallenge 가 hiddenAt is null 로 거른다) 그 구간은 닫힌 채로 끝난다.
+        // 의도한 것이다 — 다시 열어 주면 신고를 받은 사람이 사진만 바꿔 계속 낼 수 있어
+        // 숨김이 제재로서 힘을 잃는다.
+        //
         // 지난 회차 것이어도 같다. 회차가 올라가도 그 구간에 인증한 사실은 남는다 —
         // 나가기/들어오기로 인증 횟수를 늘릴 수 없다.
         ChallengeVerification occupied = periodVerification
