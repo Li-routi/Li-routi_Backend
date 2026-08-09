@@ -1,5 +1,6 @@
 package com.lirouti.domain.verification.dto.request;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.lirouti.domain.verification.enums.ReportType;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotNull;
@@ -73,8 +74,14 @@ public final class ChallengeVerificationReqDTO {
          *
          * <p>{@code reportType} 이 null 인 경우는 {@code true} 를 돌려준다 — 그건
          * {@code @NotNull} 이 이미 잡는다. 여기서 또 잡으면 오류 메시지가 두 개 나간다.
+         *
+         * <p><b>{@code @JsonIgnore} 가 없으면 안 된다.</b> 없으면 springdoc 이 이 getter 를
+         * 요청 스키마의 필드로 올려 {@code "reasonPresentWhenEtc": {"type":"boolean"}} 가
+         * 문서에 실린다 — 클라이언트가 보내지도 않을 값을 보내야 하는 줄 알게 된다.
+         * 실제로 그렇게 나가는 것을 확인하고 붙였다. 검증은 그대로 돈다.
          */
         @AssertTrue(message = "기타를 선택하면 사유를 직접 입력해 주세요.")
+        @JsonIgnore
         public boolean isReasonPresentWhenEtc() {
             if (reportType != ReportType.ETC) {
                 return true;
