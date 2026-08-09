@@ -23,6 +23,7 @@ import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -46,7 +47,12 @@ class GroupPokeCommandServiceTest {
                 groupValidationService, groupMemberRepository, eventPublisher);
         GroupMember requester = membership(REQUESTER_ID);
         GroupMember target = membership(TARGET_ID);
-        when(target.getTotalPokeCount()).thenReturn(7L);
+        AtomicLong pokeCount = new AtomicLong(7L);
+        when(target.getTotalPokeCount()).thenAnswer(invocation -> pokeCount.get());
+        doAnswer(invocation -> {
+            pokeCount.incrementAndGet();
+            return null;
+        }).when(target).increaseTotalPokeCount();
         when(target.getJoinedAt()).thenReturn(LocalDateTime.of(2026, 8, 9, 12, 30));
         when(groupMemberRepository.findActiveMembershipLockCandidatesByGroupIdAndMemberIds(
                 GROUP_ID, List.of(REQUESTER_ID, TARGET_ID)))
@@ -56,7 +62,7 @@ class GroupPokeCommandServiceTest {
 
         GroupResDTO.PokeResult result = service.poke(GROUP_ID, REQUESTER_ID, TARGET_ID);
 
-        assertThat(result).isEqualTo(new GroupResDTO.PokeResult(TARGET_ID, 7L));
+        assertThat(result).isEqualTo(new GroupResDTO.PokeResult(TARGET_ID, 8L));
         verify(target).increaseTotalPokeCount();
         ArgumentCaptor<NotificationRequestedEvent> eventCaptor =
                 ArgumentCaptor.forClass(NotificationRequestedEvent.class);
@@ -70,7 +76,7 @@ class GroupPokeCommandServiceTest {
                 GROUP_ID,
                 REQUESTER_ID,
                 "GROUP_MEMBER",
-                "group-poke:10:1:2:2026-08-09T12:30:7"
+                "group-poke:10:1:2:2026-08-09T12:30:8"
         ));
         InOrder order = inOrder(groupValidationService, groupMemberRepository);
         order.verify(groupValidationService).validateActiveGroupMember(GROUP_ID, REQUESTER_ID);

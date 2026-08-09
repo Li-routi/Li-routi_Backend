@@ -12,6 +12,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.core.task.TaskExecutor;
+import org.springframework.core.task.TaskRejectedException;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
@@ -41,6 +42,20 @@ class NotificationEventListenerTest {
                 event.memberId(), event.category(), event.type(), event.title(), event.body(),
                 event.groupId(), event.referenceId(), event.referenceType(), event.deduplicationKey());
         verify(deliveryProvider).getIfAvailable();
+    }
+
+    @Test
+    @DisplayName("executor 제출이 실패해도 예외를 전파하지 않는다")
+    void handle_GroupMemberPoked_ExecutorRejects_DoesNotThrow() {
+        NotificationEventListener listener = new NotificationEventListener(
+                creationService, deliveryProvider, notificationTaskExecutor);
+        doThrow(new TaskRejectedException("full"))
+                .when(notificationTaskExecutor).execute(any(Runnable.class));
+
+        listener.handle(event(NotificationType.GROUP_MEMBER_POKED));
+
+        verify(notificationTaskExecutor).execute(any(Runnable.class));
+        verifyNoInteractions(creationService, deliveryProvider);
     }
 
     @Test

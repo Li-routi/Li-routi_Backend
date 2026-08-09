@@ -3,6 +3,8 @@ package com.lirouti.domain.group.service.command;
 import com.lirouti.domain.group.entity.Group;
 import com.lirouti.domain.group.entity.GroupMember;
 import com.lirouti.domain.group.enums.GroupMemberRole;
+import com.lirouti.domain.group.exception.GroupException;
+import com.lirouti.domain.group.exception.code.error.GroupErrorCode;
 import com.lirouti.domain.group.repository.GroupMemberRepository;
 import com.lirouti.domain.group.repository.GroupRepository;
 import com.lirouti.domain.member.entity.Member;
@@ -22,9 +24,11 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.List;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest
 @DisplayName("누적형 그룹 poke 알림 통합 테스트")
@@ -70,6 +74,29 @@ class GroupPokeNotificationIntegrationTest {
             assertThat(notification.getReferenceType()).isEqualTo("GROUP_MEMBER");
         });
         assertThat(notifications.stream().map(Notification::getDeduplicationKey).distinct()).hasSize(2);
+    }
+
+    @Test
+    @DisplayName("탈퇴한 대상은 ACTIVE GroupMember 관계가 남아도 poke 후보에서 제외된다")
+    void poke_WithdrawnTarget_DoesNotIncreaseCountOrPublishNotification() {
+        seed = createSeed();
+        Member target = memberRepository.findById(seed.targetId()).orElseThrow();
+        String tombstone = "withdrawn-target-" + seed.targetId();
+        target.withdraw(tombstone + "@example.com", tombstone, LocalDateTime.now());
+        memberRepository.saveAndFlush(target);
+
+        assertThatThrownBy(() -> groupPokeCommandService.poke(
+                seed.groupId(), seed.requesterId(), seed.targetId()))
+                .isInstanceOf(GroupException.class)
+                .extracting("code")
+                .isEqualTo(GroupErrorCode.ACTIVE_GROUP_MEMBER_NOT_FOUND);
+
+        GroupMember targetMembership = groupMemberRepository
+                .findById(seed.targetMembershipId()).orElseThrow();
+        assertThat(targetMembership.getTotalPokeCount()).isZero();
+        assertThat(notificationRepository.findAll().stream()
+                .filter(notification -> seed.groupId().equals(notification.getGroupId()))
+                .toList()).isEmpty();
     }
 
     private Seed createSeed() {
