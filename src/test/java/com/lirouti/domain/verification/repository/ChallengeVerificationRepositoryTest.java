@@ -286,11 +286,11 @@ class ChallengeVerificationRepositoryTest {
         // when & then: 수요일에 열어도 구간 첫날은 같은 일요일이라 "이번 주에 했다"가 나온다
         assertAll(
                 () -> assertThat(challengeVerificationRepository
-                        .existsByMemberChallengeIdAndPeriodStartDate(mc.getId(), weekStart))
+                        .existsByMemberChallengeIdAndPeriodStartDateAndDeletedAtIsNull(mc.getId(), weekStart))
                         .isTrue(),
                 // 그날을 구간으로 착각해 물으면 못 찾는다 — 호출부가 주기로 계산해 넘겨야 하는 이유다
                 () -> assertThat(challengeVerificationRepository
-                        .existsByMemberChallengeIdAndPeriodStartDate(mc.getId(), wednesday))
+                        .existsByMemberChallengeIdAndPeriodStartDateAndDeletedAtIsNull(mc.getId(), wednesday))
                         .isFalse()
         );
     }
@@ -307,7 +307,7 @@ class ChallengeVerificationRepositoryTest {
         em.flush();
 
         assertThat(challengeVerificationRepository
-                .existsByMemberChallengeIdAndPeriodStartDate(mc.getId(), weekStart))
+                .existsByMemberChallengeIdAndPeriodStartDateAndDeletedAtIsNull(mc.getId(), weekStart))
                 .isFalse();
     }
 
@@ -322,7 +322,7 @@ class ChallengeVerificationRepositoryTest {
         em.flush();
 
         assertThat(challengeVerificationRepository
-                .existsByMemberChallengeIdAndPeriodStartDate(mc.getId(), day))
+                .existsByMemberChallengeIdAndPeriodStartDateAndDeletedAtIsNull(mc.getId(), day))
                 .isTrue();
     }
 }

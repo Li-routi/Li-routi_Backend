@@ -83,12 +83,16 @@ public interface ChallengeVerificationRepository
      * <p>회차를 조건에 넣지 않는다. 재참여로 회차가 올라가도 그 구간에 인증한 사실은 남는다 —
      * 회차를 넣으면 나갔다 들어온 뒤 버튼이 다시 열린다.
      *
-     * <p><b>내려간 글도 인증한 것으로 센다.</b> 삭제는 글을 내리는 것이지 인증을 취소하는 것이
-     * 아니다(database-schema.md). 그래서 {@code deleted_at} 을 조건에 넣지 않는다.
+     * <p><b>내려간 글은 세지 않는다.</b> 지우면 그 구간이 다시 열리므로(재화 회수가 그 자리를
+     * 막는다), 버튼도 다시 열려야 한다. 세면 <b>서버는 재인증을 받아 주는데 버튼이 잠긴 채라
+     * 사용자가 거기 닿을 수 없다.</b>
+     *
+     * <p>예전에는 일부러 셌다 — 그때는 "지우면 하루 1회가 뚫린다" 가 근거였다. 뚫리는 것을
+     * 막는 역할이 리워드 회수로 넘어가면서 그 근거가 사라졌다.
      *
      * <p>엔티티가 아니라 존재 여부만 돌려준다. 판정에 쓸 뿐이라 행을 읽을 필요가 없다.
      */
-    boolean existsByMemberChallengeIdAndPeriodStartDate(
+    boolean existsByMemberChallengeIdAndPeriodStartDateAndDeletedAtIsNull(
             Long memberChallengeId,
             LocalDate periodStartDate
     );

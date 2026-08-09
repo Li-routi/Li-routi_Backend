@@ -103,37 +103,39 @@ public class ChallengeVerificationCommandService {
         Optional<ChallengeVerification> periodVerification = challengeVerificationRepository
                 .findByMemberChallengeIdAndPeriodStart(memberChallenge.getId(), periodStart);
 
-        // 지난 회차에 이번 구간 인증이 있으면 덮어쓰지 않고 막는다.
+        // 이번 구간에 이미 인증이 있으면 막는다. <b>주기로 가르지 않는다</b> — 주가 지나지
+        // 않았으면 주간도 하루와 똑같이 "이미 낸 것" 이다.
         //
-        // 덮어쓰면 그 인증이 지난 참여의 기록인데 오늘 올린 사진으로 바뀌고, 회차와 내용이
-        // 어긋난다. 새로 만들면 한 구간에 두 건이 되어 애초에 막으려던 것이 된다. 남는 선택은
-        // 거절뿐이다 — 이미 했으므로 "다시 할 수 없다"가 맞다.
-        boolean fromPreviousRound = periodVerification
-                .filter(v -> v.getParticipationRound() < memberChallenge.getParticipationRound())
-                .isPresent();
-        if (fromPreviousRound) {
-            log.warn("지난 회차에 이번 구간 인증 이력이 있어 재인증을 막았습니다."
-                            + " memberId={}, challengeId={}, cycle={}, currentRound={}",
-                    memberId, challengeId, cycle, memberChallenge.getParticipationRound());
+        // 유일한 예외가 본인이 지운 경우다. 지우면 그 구간이 다시 열린다 — 대신 그때 리워드를
+        // 회수한다(재화 이슈). "올리고 기록만 챙긴 뒤 지우기" 를 막는 역할은 회수가 가져가고,
+        // 여기서는 막지 않는다.
+        //
+        // 보류(PENDING) 도 막는다. 심사 중이어도 이미 낸 것이고, 통과·반려는 서버가 알아서
+        // 정리한다(반려로 확정되면 행을 지우므로 그 시점에 자연히 다시 열린다).
+        //
+        // 지난 회차 것이어도 같다. 회차가 올라가도 그 구간에 인증한 사실은 남는다 —
+        // 나가기/들어오기로 인증 횟수를 늘릴 수 없다.
+        ChallengeVerification occupied = periodVerification
+                .filter(v -> !v.isDeleted())
+                .orElse(null);
+        if (occupied != null) {
+            log.info("이번 구간에 이미 인증이 있어 재인증을 막았습니다."
+                            + " memberId={}, challengeId={}, cycle={}, periodStart={}, round={}",
+                    memberId, challengeId, cycle, periodStart, occupied.getParticipationRound());
             throw new VerificationException(alreadyVerified(cycle));
         }
 
-        // 덮어쓰기(재인증)는 DAILY 에만 남긴다.
+        // 여기부터는 "지워진 행이 있거나, 아무것도 없거나" 둘 중 하나다.
         //
-        // 당일 재인증은 "오늘 올린 사진이 마음에 안 들어 바꾸는" 흐름인데, 주간·월간은 한 번
-        // 올리면 그 구간이 끝나는 성격이라 교체 욕구가 약하다. 그대로 두면 양쪽이 다 깨진다 —
-        // 사진은 수요일 것인데 verified_date 는 월요일로 남아 날짜와 내용이 어긋나고, 반대로
-        // verified_date 를 바꾸면 "그 구간의 인증일"이라는 뜻이 흔들린다.
-        if (periodVerification.isPresent() && cycle != RoutineCycle.DAILY) {
-            log.info("이번 구간에 이미 인증해 재인증을 막았습니다."
-                            + " memberId={}, challengeId={}, cycle={}, periodStart={}",
-                    memberId, challengeId, cycle, periodStart);
-            throw new VerificationException(alreadyVerified(cycle));
-        }
+        // 지워진 행이 <b>지난 회차</b> 것이면 되살리지 않고 새로 만든다. 되살리면 회차가 옛
+        // 값으로 남아 "이번 참여의 기록" 이라는 뜻이 어긋난다. 유니크 키에 회차가 들어 있어
+        // 새 행을 만들어도 부딪히지 않는다.
+        Optional<ChallengeVerification> revivable = periodVerification
+                .filter(v -> v.getParticipationRound().equals(memberChallenge.getParticipationRound()));
 
-        boolean reverified = periodVerification.isPresent();
+        boolean reverified = revivable.isPresent();
 
-        ChallengeVerification verification = periodVerification
+        ChallengeVerification verification = revivable
                 .map(existing -> {
                     existing.reverify(storedMediaKey, request.content(), verifiedAt,
                             reviewStatus, pendingSinceFor(reviewStatus, verifiedAt));
