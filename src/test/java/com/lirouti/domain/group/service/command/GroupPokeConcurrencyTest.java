@@ -5,6 +5,7 @@ import com.lirouti.domain.group.entity.GroupMember;
 import com.lirouti.domain.group.enums.GroupMemberRole;
 import com.lirouti.domain.group.enums.GroupMemberStatus;
 import com.lirouti.domain.group.exception.GroupException;
+import com.lirouti.domain.group.exception.code.error.GroupErrorCode;
 import com.lirouti.domain.group.repository.GroupMemberRepository;
 import com.lirouti.domain.group.repository.GroupRepository;
 import com.lirouti.domain.member.entity.Member;
@@ -209,6 +210,8 @@ class GroupPokeConcurrencyTest {
         assertThat(failures).allSatisfy(failure -> {
             if (failure != null) {
                 assertThat(failure).isInstanceOf(GroupException.class);
+                assertThat(((GroupException) failure).getCode())
+                        .isEqualTo(GroupErrorCode.ACTIVE_GROUP_MEMBER_NOT_FOUND);
             }
         });
         assertThat(failures.stream().filter(failure -> failure instanceof GroupException)).hasSizeLessThanOrEqualTo(1);
