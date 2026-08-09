@@ -1,5 +1,7 @@
 spring:
   datasource:
+    # CI는 이 기본값(3306/lirouti)의 서비스 컨테이너로 접속한다. 로컬 포트가 다르면(예: 3307)
+    # .env의 DB_URL로 덮어써서 쓴다 — 새 환경변수를 따로 만들지 않는다.
     url: ${DB_URL:jdbc:mysql://localhost:3306/lirouti?serverTimezone=Asia/Seoul&characterEncoding=UTF-8&allowPublicKeyRetrieval=true&useSSL=false}
     username: ${DB_USERNAME:lirouti}
     password: ${DB_PASSWORD:lirouti1234}
@@ -45,3 +47,13 @@ aws:
 # @TestPropertySource로 다시 켜서 검증한다.
 rate-limit:
   enabled: false
+
+# 테스트에서는 보류를 끈다. 테스트의 S3 는 mock 이라 심사용 사진 읽기가 늘 실패하는데,
+# 그것을 보류로 다루면 인증을 다루는 모든 테스트가 PENDING 이 되어 원래 보려던 것을 못 본다.
+# 실제 장애가 아니라 테스트 환경의 성질이다.
+#
+# 보류 자체를 보는 테스트는 @TestPropertySource 로 이 값을 켠다.
+ai:
+  review:
+    pending:
+      enabled: false

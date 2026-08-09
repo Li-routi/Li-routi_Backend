@@ -1,0 +1,518 @@
+package com.lirouti.domain.verification.service;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.CannotAcquireLockException;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.lirouti.domain.challenge.entity.Challenge;
+import com.lirouti.domain.challenge.entity.MemberChallenge;
+import com.lirouti.domain.challenge.exception.ChallengeException;
+import com.lirouti.domain.challenge.exception.code.error.ChallengeErrorCode;
+import com.lirouti.domain.challenge.repository.ChallengeRepository;
+import com.lirouti.domain.challenge.repository.MemberChallengeRepository;
+import com.lirouti.domain.media.enums.MediaPurpose;
+import com.lirouti.domain.media.service.MediaImage;
+import com.lirouti.domain.media.service.MediaImageLoad;
+import com.lirouti.domain.media.service.MediaService;
+import com.lirouti.domain.member.entity.Member;
+import com.lirouti.domain.member.repository.MemberRepository;
+import com.lirouti.domain.notification.enums.NotificationCategory;
+import com.lirouti.domain.notification.enums.NotificationType;
+import com.lirouti.domain.notification.event.NotificationRequestedEvent;
+import com.lirouti.domain.verification.client.AnthropicVerificationReviewClient;
+import com.lirouti.domain.verification.client.ReviewOutcome;
+import com.lirouti.domain.verification.client.ReviewRejection;
+import com.lirouti.domain.verification.client.VerificationReview;
+import com.lirouti.domain.verification.converter.ChallengeVerificationConverter;
+import com.lirouti.domain.verification.dto.request.ChallengeVerificationReqDTO;
+import com.lirouti.domain.verification.dto.response.ChallengeVerificationResDTO;
+import com.lirouti.domain.verification.entity.ChallengeVerification;
+import com.lirouti.domain.verification.entity.ChallengeVerificationReport;
+import com.lirouti.domain.verification.enums.ReviewStatus;
+import com.lirouti.domain.verification.exception.VerificationException;
+import com.lirouti.domain.verification.exception.code.error.ChallengeVerificationErrorCode;
+import com.lirouti.domain.verification.repository.ChallengeVerificationLikeRepository;
+import com.lirouti.domain.verification.repository.ChallengeVerificationReportRepository;
+import com.lirouti.domain.verification.repository.ChallengeVerificationRepository;
+import com.lirouti.domain.verification.service.command.ChallengeVerificationCommandService;
+import com.lirouti.global.properties.AiReviewProperties;
+import com.lirouti.global.properties.ChallengeReportProperties;
+import com.lirouti.global.properties.PendingReviewProperties;
+import com.lirouti.global.util.TimeUtil;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
+/**
+ * 챌린지 인증의 흐름을 엮는다 — 인증·신고·좋아요·메모 수정·삭제.
+ *
+ * <p>DB 를 직접 다루지 않고 트랜잭션 경계도 갖지 않는 메서드가 섞여 있어 조회/변경 구분이
+ * 무의미하므로 CQRS 를 적용하지 않는다(service_convention 의 CQRS 예외 도메인).
+ * 저장·삭제의 트랜잭션은 {@link ChallengeVerificationCommandService} 가 갖는다 — 자기 호출로는
+ * 트랜잭션이 걸리지 않아 빈을 나눴다. {@link RoutineVerificationService} 와 같은 모양이다.
+ *
+ * <p><b>참여·이탈은 여기 없다.</b> 그 둘은 인증이 아니라 챌린지 자체의 상태를 바꾸므로
+ * {@code ChallengeCommandService} 에 남는다.
+ */
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class ChallengeVerificationService {
+    private final ChallengeRepository challengeRepository;
+    private final MemberChallengeRepository memberChallengeRepository;
+    // 신고가 대상 인증을 찾을 때 쓴다. 인증 저장은 ChallengeVerificationCommandService가 맡는다.
+    private final ChallengeVerificationRepository challengeVerificationRepository;
+    private final ChallengeVerificationReportRepository challengeVerificationReportRepository;
+    private final ChallengeVerificationLikeRepository challengeVerificationLikeRepository;
+    private final MemberRepository memberRepository;
+    private final ChallengeReportProperties challengeReportProperties;
+    private final AiReviewProperties aiReviewProperties;
+    private final PendingReviewProperties pendingReviewProperties;
+    private final AnthropicVerificationReviewClient reviewClient;
+    // 인증 저장의 트랜잭션 경계는 이 빈에 있다. 자기 호출로는 트랜잭션이 걸리지 않아 분리했다.
+    private final ChallengeVerificationCommandService challengeVerificationCommandService;
+    // 미디어 key의 발급 규칙·공개 URL 조립은 media 도메인이 소유한다. DB를 다루지 않는 유틸성 서비스다.
+    private final MediaService mediaService;
+    private final ApplicationEventPublisher eventPublisher;
+
+    /**
+     * 챌린지 인증. <b>트랜잭션 밖에서 끝내야 하는 검증을 먼저 하고</b> 저장은 다른 빈에 위임한다.
+     *
+     * 이 메서드에 @Transactional이 없는 것은 의도다. 아래 미디어 바이트 검증이 S3를 실제로
+     * 호출하는데, 트랜잭션 안에서 부르면 DB 커넥션과 참여 행 락을 S3 왕복 시간만큼 붙잡는다
+     * (service_convention: 트랜잭션 내 장시간 외부 API 호출 금지).
+     * 저장·스트릭 갱신의 트랜잭션 경계는 {@link ChallengeVerificationCommandService#save}에 있다.
+     * 자기 호출로는 트랜잭션이 걸리지 않아 빈을 나눴다(AuthService → MemberCommandService와 같은 모양).
+     *
+     * 사진이 챌린지 의도에 맞는지는 AI 가 심사한다. 통과하지 못하면 422 로 반려하고 저장하지 않는다.
+     */
+    public ChallengeVerificationResDTO.Verification verify(
+            Long memberId,
+            Long challengeId,
+            ChallengeVerificationReqDTO.Verify request
+    ) {
+        // ① key는 서버가 발급하지만 요청으로 되돌아오므로, 저장 전에 발급 규칙과 대조한다.
+        mediaService.validateMediaKey(request.mediaKey(), MediaPurpose.CHALLENGE_VERIFICATION);
+
+        // ② 업로드된 실제 바이트가 그 형식이 맞는지 확인한다. S3를 호출하므로 트랜잭션 밖이다.
+        //    presigned URL은 요청 메타데이터(Content-Type·Length)만 강제할 뿐 바이트 내용은 막지 못한다.
+        //    이 호출이 오브젝트 존재 확인도 겸한다 — 업로드하지 않은 key면 404로 걸린다.
+        mediaService.validateUploadedBytes(request.mediaKey(), MediaPurpose.CHALLENGE_VERIFICATION);
+
+        // ③ 참여 중인지 먼저 본다. 심사는 유료 외부 호출이라, 참여하지도 않은 요청에 그 값을
+        //    치르지 않는다. 응답 코드도 뒤바뀐다 — 이 확인이 없으면 미참여자가 409(참여 아님)
+        //    대신 422(심사 반려)를 받는다.
+        //
+        //    여기서는 잠금을 걸지 않는다. 경합 판정은 ⑤의 잠금 조회가 그대로 맡는다.
+        //    이 조회는 "부를 가치가 있는 요청인지" 거르는 용도라 그 사이 상태가 바뀌어도
+        //    최종 판정이 틀어지지 않는다.
+        memberChallengeRepository.findByMemberIdAndChallengeId(memberId, challengeId)
+                .filter(MemberChallenge::isParticipating)
+                .orElseThrow(() -> new ChallengeException(ChallengeErrorCode.NOT_PARTICIPATING));
+
+        // ④ 사진이 챌린지 의도에 맞는지 심사한다. ②와 같은 트랜잭션 밖 구간이다.
+        //    통과하지 못하면 저장도 스트릭도 없다. 심사기가 답을 못 주면 통과시킨다(아래 참고).
+        ReviewedPhoto reviewed = reviewPhoto(challengeId, request.mediaKey());
+
+        // ④-1 심사가 답을 못 줬으면 보류한다. 승격하지 않으므로 사진은 대기 prefix 에 남고
+        //     공개 주소가 생기지 않는다. 저장하는 key 도 대기 key 그대로다.
+        //
+        //     저장은 한다 — 사용자는 이미 사진을 올렸고, 저장하지 않으면 그 수고가 사라지는
+        //     데다 재심사 대상을 DB 밖에서 관리해야 한다. 스트릭도 올린다: 남의 서비스 장애로
+        //     내 기록이 끊기는 것은 납득하기 어렵다(database-schema.md).
+        //     보류를 꺼 두면 예전처럼 바로 통과시킨다. 재심사가 오작동해 보류만 쌓일 때의
+        //     탈출구다 — 스위치를 만들어 놓고 연결하지 않으면 끌 수가 없다.
+        if (reviewed.outcome().shouldHold() && pendingReviewProperties.isEnabled()) {
+            log.warn("심사가 답을 못 줘 인증을 보류합니다. challengeId={}, mediaKey={}",
+                    challengeId, request.mediaKey());
+            return challengeVerificationCommandService.save(
+                    memberId, challengeId, request, request.mediaKey(), ReviewStatus.PENDING);
+        }
+
+        String reviewedETag = reviewed.etag();
+
+        // ⑤ 승격. 여기까지 온 사진만 공개 prefix 로 옮긴다 — 업로드는 비공개 대기 prefix 로 받았다.
+        //    이 단계가 있어야 AI 심사가 "공개 전에 거르는" 장치가 된다. 예전에는 업로드 순간부터
+        //    공개 주소가 살아 있어서, 반려해도 그 사이 열람하거나 공유한 것은 회수되지 않았다.
+        //
+        //    S3 호출이라 ②와 같은 트랜잭션 밖 구간이다. 실패하면 대기본이 남고 사용자는 저장
+        //    실패를 받는다 — 사진이 사라진 채 인증만 저장되는 방향으로는 실패하지 않는다.
+        //    심사한 바이트와 같을 때만 옮긴다. presigned URL 은 만료 전까지 여러 번 쓸 수 있어서,
+        //    이 조건이 없으면 심사 뒤에 같은 key 로 올린 다른 사진이 공개될 수 있다.
+        String publicKey = mediaService.promote(
+                request.mediaKey(), MediaPurpose.CHALLENGE_VERIFICATION, reviewedETag);
+
+        // ⑥ 저장·스트릭 갱신. 여기서부터가 트랜잭션이고, 여기가 커밋 지점이다.
+        //    저장하는 것은 요청의 key 가 아니라 승격된 공개 key 다.
+        //
+        //    저장이 실패해도 방금 만든 공개본을 지우지 않는다. 아무도 참조하지 않으므로 미참조
+        //    정리가 가져간다 — database-schema.md 가 정한 실패 처리다. 그 자리에서 지우면
+        //    같은 공개본을 다른 인증이 참조하고 있을 때 멀쩡한 사진을 지우게 된다.
+        ChallengeVerificationResDTO.Verification saved = challengeVerificationCommandService.save(
+                memberId, challengeId, request, publicKey, ReviewStatus.APPROVED);
+
+        // ⑦ 대기본 삭제. 커밋된 뒤라 여기서 실패해도 인증은 이미 저장돼 있다.
+        //    대기본 하나를 못 지운 것 때문에 저장을 되돌리는 편이 더 나쁘다 — 남은 것은
+        //    나이 기반 수명 주기가 치운다. 그래서 성공 조건에 넣지 않는다.
+        mediaService.deleteQuietly(request.mediaKey());
+
+        return saved;
+    }
+
+    /**
+     * 사진이 챌린지 의도에 맞는지 심사한다. 맞지 않으면 422 로 막는다.
+     *
+     * <h3>심사기가 답을 못 주면 통과시킨다</h3>
+     * 장애·타임아웃·설정 꺼짐은 전부 통과다. 외부 API 하나가 인증 기능 전체를 멈추게 두지
+     * 않는다는 결정이다. 막는 쪽으로 두면 Anthropic 이 죽는 순간 아무도 인증을 못 하는데,
+     * 그때 어차피 킬 스위치를 켜서 통과시키게 된다. 그럴 거면 처음부터 통과시키고 로그로
+     * 드러내는 편이 정직하다.
+     *
+     * <p>부적절한 사진의 방어선이 이것 하나가 아니라는 점도 근거다 — 신고가 임계값만큼 쌓이면
+     * 전체 회원에게 가려진다.
+     *
+     * <p><b>대신 심사 없이 통과한 사실은 반드시 로그에 남는다.</b> 나중에 "이 기간 인증은
+     * 심사를 안 거쳤다"를 되짚을 수 있어야 한다.
+     *
+     * <h3>비활성 챌린지는 심사하지 않는다</h3>
+     * 판정 기준이 챌린지의 이름·설명이라 그것을 못 읽으면 물어볼 말이 없다. 참여·저장 단계에서
+     * 어차피 걸리므로 여기서 막지 않는다.
+     */
+    private ReviewedPhoto reviewPhoto(Long challengeId, String mediaKey) {
+        if (!aiReviewProperties.isEnabled()) {
+            log.debug("AI 심사가 꺼져 있어 건너뜁니다. mediaKey={}", mediaKey);
+            return skipReview(VerificationReview.disabled(), challengeId, mediaKey, null);
+        }
+        Challenge challenge = challengeRepository.findByIdAndActiveTrue(challengeId).orElse(null);
+        if (challenge == null) {
+            log.warn("심사할 챌린지를 찾지 못해 건너뜁니다. challengeId={}", challengeId);
+            return skipReview(VerificationReview.notApplicable("챌린지 없음"), challengeId, mediaKey, null);
+        }
+
+        // 못 읽은 이유를 그대로 결과에 옮긴다. S3 일시 오류는 다시 하면 될 수 있고(보류 대상),
+        // 상한 초과는 몇 번을 해도 같다(통과). 예전에는 둘이 같은 빈 값이라 가를 수가 없었다.
+        MediaImageLoad load = mediaService.loadForReview(mediaKey, aiReviewProperties.getMaxImageDimension());
+        MediaImage image = load.image();
+        VerificationReview review = image == null
+                ? fromLoadFailure(load.failure())
+                : reviewClient.review(challenge.getName(), challenge.getDescription(), image);
+
+        if (!review.outcome().decided()) {
+            return skipReview(review, challengeId, mediaKey, image);
+        }
+        if (!review.approved()) {
+            // 사유 문장은 로그에만 남는다. 응답 message 는 에러 코드의 고정 문장이다 —
+            // 이 프로젝트는 응답 메시지를 에러 코드로만 만들기 때문이다(exception_convention).
+            log.info("AI 심사에서 반려했습니다. challengeId={}, mediaKey={}, 종류={}, 사유={}",
+                    challengeId, mediaKey, review.rejection(), review.reason());
+
+            // 반려된 사진은 승격 전이라 대기 prefix 에 있다. 공개된 적이 없으므로 급히 지울
+            // 이유는 사라졌지만(수명 주기가 어차피 가져간다), 유해로 반려된 것을 며칠 두는 것보다
+            // 그 자리에서 치우는 편이 낫다. 실패해도 넘어간다.
+            mediaService.deleteQuietly(mediaKey);
+
+            throw new VerificationException(review.rejection() == ReviewRejection.UNSAFE
+                    ? ChallengeVerificationErrorCode.VERIFICATION_REJECTED_AS_UNSAFE
+                    : ChallengeVerificationErrorCode.VERIFICATION_REJECTED_BY_REVIEW);
+        }
+
+        // 통과에도 한 줄 남긴다. 없으면 "심사가 돌고 있다"를 로그로 확인할 방법이 사라진다 —
+        // 반려·장애에만 찍히면 로그가 비어 있는 것이 "요청이 없었다"인지 "전부 통과했다"인지
+        // 구분되지 않는다. 실제로 그 구분이 안 돼 심사가 꺼진 채 도는 것을 한동안 몰랐다.
+        log.info("AI 심사를 통과했습니다. challengeId={}, mediaKey={}", challengeId, mediaKey);
+
+        // 심사한 바로 그 바이트를 특정해 돌려준다. 승격은 이 값과 같을 때만 복사한다.
+        return new ReviewedPhoto(ReviewOutcome.APPROVED, image.etag());
+    }
+
+    /**
+     * 심사가 판정을 못 낸 경우의 처리.
+     *
+     * <p>{@link ReviewOutcome#TRANSIENT_FAILURE} 만 보류로 가고 나머지는 통과다. 여기서는
+     * 원인을 구분해 로그에 남기고, 보류 여부의 판단은 호출부가 한다.
+     *
+     * <p>어느 경우든 <b>심사 없이 통과한 사실은 남긴다.</b> 나중에 "이 기간 인증은 심사를
+     * 안 거쳤다"를 되짚을 수 있어야 한다.
+     */
+    private ReviewedPhoto skipReview(
+            VerificationReview review,
+            Long challengeId,
+            String mediaKey,
+            MediaImage image
+    ) {
+        // 보류로 갈 것은 여기서 "통과시켰다"고 적지 않는다. 통과와 보류가 같은 문장으로 남으면
+        // 로그만 보고는 그 기간 인증이 실제로 어떻게 처리됐는지 가릴 수 없다.
+        if (!review.shouldHold()) {
+            log.warn("AI 심사 없이 인증을 통과시켰습니다. challengeId={}, mediaKey={}, 사유={}, 이유={}",
+                    challengeId, mediaKey, review.outcome(), review.reason());
+        }
+        return new ReviewedPhoto(review.outcome(), image == null ? null : image.etag());
+    }
+
+    /**
+     * 심사가 끝난 사진. 결과와 <b>심사한 그 바이트의 ETag</b> 를 함께 든다.
+     *
+     * <p>ETag 가 필요한 이유는 승격이 그 값과 같을 때만 복사하기 때문이다 — presigned URL 은
+     * 만료 전까지 여러 번 쓸 수 있어, 심사 뒤 같은 key 로 다른 사진을 올리면 심사하지 않은
+     * 바이트가 공개될 수 있다.
+     */
+    private record ReviewedPhoto(ReviewOutcome outcome, String etag) {
+    }
+
+    /** 사진을 못 읽은 이유를 심사 결과로 옮긴다. */
+    private VerificationReview fromLoadFailure(MediaImageLoad.Failure failure) {
+        return failure == MediaImageLoad.Failure.TOO_LARGE
+                ? VerificationReview.notApplicable("사진이 심사 상한을 넘음")
+                : VerificationReview.transientFailure("심사용 사진을 읽지 못함");
+    }
+
+    /**
+     * 인증 신고. 인증은 삭제되지 않는다. 효과가 두 단계다 — 신고 즉시 신고자 본인의 조회에서
+     * 빠지고, 신고가 임계값만큼 쌓이면 전체 회원에게 가려진다(database-schema.md).
+     *
+     * 자기 인증을 신고하는 것을 막지 않는다. 기획에 그런 제약이 없다. 다만 자기 신고도 임계값
+     * 집계에 포함되므로 "본인 화면에서만 안 보인다"로 끝나지 않는다. 한 사람이 한 번만 신고할 수
+     * 있어 혼자서는 임계값을 채울 수 없다. 필요해지면 조건을 추가한다.
+     *
+     * 중복 신고는 UNIQUE(challenge_verification_id, reporter_id)가 막는다. "이미 신고했는지"를
+     * 먼저 조회해 판단하지 않는 이유는 조회와 저장 사이의 동시 요청을 막지 못하기 때문이다.
+     * 제약 위반을 잡아 409로 바꾼다(인증 저장과 같은 방식).
+     */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public ChallengeVerificationResDTO.Report report(
+            Long memberId,
+            Long challengeId,
+            Long verificationId,
+            ChallengeVerificationReqDTO.Report request
+    ) {
+        // 경로의 challengeId와 실제 인증의 챌린지가 맞는지까지 확인한다. 어긋나면 404다.
+        // 보류 건도 여기서 걸러진다 — 남에게 보이지 않는 글이라 신고 대상이 아니다.
+        // 거르지 않으면 공개된 적도 없는 사진이 숨김 임계값에 걸리고, 신고 행이 붙으면
+        // 반려 확정 때 인증 삭제가 외래 키에 막혀 그 행이 영원히 보류로 남는다.
+        ChallengeVerification verification = findVerificationInChallenge(challengeId, verificationId);
+
+        // 숨김 판정을 직렬화하기 위해 인증 행을 잠근다. 신고 INSERT 전에 잡아야 한다 —
+        // 저장 후에 잠그면 그 사이 다른 트랜잭션이 이미 세기를 마치고 지나갈 수 있다.
+        verification = challengeVerificationRepository.findByIdForUpdate(verificationId)
+                .orElseThrow(() -> new VerificationException(ChallengeVerificationErrorCode.VERIFICATION_NOT_FOUND));
+
+        // 신고자는 FK만 필요하므로 프록시 참조로 불필요한 회원 조회를 피한다(참여 생성과 같은 이유).
+        Member reporter = memberRepository.getReferenceById(memberId);
+
+        ChallengeVerificationReport report = ChallengeVerificationReport.builder()
+                .challengeVerification(verification)
+                .reporter(reporter)
+                .reason(request.reason())
+                .build();
+        ChallengeVerificationReport saved;
+        try {
+            // saveAndFlush로 제약 위반을 이 자리에서 잡는다. 커밋 시점까지 미루면
+            // 트랜잭션 밖에서 터져 도메인 코드로 바꿀 수 없다.
+            //
+            // 두 예외를 모두 잡는 이유는 인증 저장과 같다. 같은 유니크 키로 INSERT가 겹칠 때
+            // InnoDB가 중복 키 오류 대신 데드락으로 판정해 CannotAcquireLockException을 줄 수 있다.
+            saved = challengeVerificationReportRepository.saveAndFlush(report);
+        } catch (DataIntegrityViolationException | CannotAcquireLockException e) {
+            throw new VerificationException(ChallengeVerificationErrorCode.ALREADY_REPORTED);
+        }
+
+        if (hideIfReportedEnough(verification)) {
+            Long authorId = verification.getMemberChallenge().getMember().getId();
+            eventPublisher.publishEvent(new NotificationRequestedEvent(authorId,
+                    NotificationCategory.CHALLENGE, NotificationType.CHALLENGE_RESTRICTED,
+                    "인증이 신고 누적으로 제한됐어요",
+                    "커뮤니티 기준에 따라 챌린지 인증 노출이 제한됐습니다.",
+                    null, verificationId, "CHALLENGE_VERIFICATION",
+                    "challenge-restricted:" + verificationId));
+        }
+        return ChallengeVerificationConverter.toReport(saved);
+    }
+
+    /**
+     * 신고가 임계값만큼 쌓였으면 전체 회원에게 가린다.
+     *
+     * <p><b>세는 시점을 조회가 아니라 신고 때로 둔다.</b> 피드에서 매번
+     * {@code having count(*) >= N}으로 세면 읽기 경로가 무거워진다. 신고는 드물고 조회는
+     * 잦으므로 쓰기 시점 계산이 맞다.
+     *
+     * <p><b>정확히 세려면 두 가지가 다 필요하다.</b>
+     *
+     * <p>하나는 <b>인증 행 잠금</b>이다. 잠금이 없으면 동시 신고가 각자 INSERT 하고 각자 세는데,
+     * 서로의 미커밋 INSERT 가 안 보여 전부 임계값 미만으로 판단한다. 정확히 임계값만큼만 동시에
+     * 들어오면 그 뒤로 신고가 없는 한 <b>영원히 가려지지 않는다.</b>
+     *
+     * <p>다른 하나는 <b>READ_COMMITTED</b>다. MySQL 기본값인 REPEATABLE READ 에서는 트랜잭션의
+     * 첫 조회 시점에 스냅샷이 고정되어, 잠금을 잡고 기다린 뒤에 세어도 그동안 커밋된 신고가
+     * 보이지 않는다. 잠금만으로는 순서만 정해질 뿐 값이 낡은 채다. 실측으로 확인했다 —
+     * 잠금만 넣었을 때 동시성 테스트가 그대로 실패했다.
+     *
+     * <p>신고는 드문 요청이라 이 잠금이 경합을 만들 일은 거의 없다.
+     *
+     * <p>가려도 인증 행과 스트릭은 그대로다. 막는 것은 노출뿐이다.
+     */
+    private boolean hideIfReportedEnough(ChallengeVerification verification) {
+        if (verification.isHidden()) {
+            return false;
+        }
+        long reportCount = challengeVerificationReportRepository
+                .countByChallengeVerificationId(verification.getId());
+        if (reportCount < challengeReportProperties.getHideThreshold()) {
+            return false;
+        }
+        verification.hide(LocalDateTime.now(TimeUtil.KST));
+        log.warn("신고 누적으로 인증을 전체 숨김 처리했습니다. verificationId={}, 신고={}건, 임계값={}",
+                verification.getId(), reportCount, challengeReportProperties.getHideThreshold());
+        return true;
+    }
+
+    /**
+     * 인증 게시물에 좋아요. 이미 눌러둔 상태여도 성공으로 처리한다.
+     *
+     * 좋아요는 토글이라 같은 요청이 두 번 오는 것이 정상 사용이다(따닥 누르기). 신고처럼 409를
+     * 돌려주면 화면이 흔들리므로, 최종 상태를 그대로 응답한다(database-schema.md).
+     *
+     * 중복을 예외로 잡지 않고 ON DUPLICATE KEY UPDATE로 흡수한다. 제약 위반이 나면 트랜잭션이
+     * 롤백 전용이 되어, 예외를 잡아 넘겨도 이어지는 집계가 커밋에서 터지기 때문이다.
+     *
+     * 자기 인증에 누르는 것을 막지 않는다. 막으면 검증 분기와 에러 코드가 늘지만 얻는 것이 적다.
+     */
+    @Transactional
+    public ChallengeVerificationResDTO.Like like(Long memberId, Long challengeId, Long verificationId) {
+        ChallengeVerification verification = findVerificationInChallenge(challengeId, verificationId);
+        int inserted = challengeVerificationLikeRepository.insertIfAbsent(verificationId, memberId);
+        Long authorId = verification.getMemberChallenge().getMember().getId();
+        if (inserted == 1 && !authorId.equals(memberId)) {
+            String actor = memberRepository.findById(memberId).map(Member::getNickname).orElse("누군가");
+            eventPublisher.publishEvent(new NotificationRequestedEvent(authorId,
+                    NotificationCategory.CHALLENGE, NotificationType.CHALLENGE_VERIFICATION_LIKED,
+                    "챌린지 인증에 좋아요가 달렸어요",
+                    actor + "님이 회원님의 인증을 좋아합니다.", null, verificationId,
+                    "CHALLENGE_VERIFICATION", "challenge-like:" + verificationId + ":" + memberId));
+        }
+        return buildLikeResult(verificationId, true);
+    }
+
+    /**
+     * 좋아요 취소. 누르지 않은 상태여도 성공으로 처리한다.
+     *
+     * 취소는 행 삭제다. 소프트 삭제를 쓰면 취소 후 다시 누를 때 남아 있는 행이 유니크 제약에
+     * 걸린다(database-schema.md).
+     */
+    @Transactional
+    public ChallengeVerificationResDTO.Like unlike(Long memberId, Long challengeId, Long verificationId) {
+        // 없는 인증에 대한 취소는 404로 알린다. 멱등한 것은 "좋아요가 없는 경우"이지
+        // "인증이 없는 경우"가 아니다 — 후자는 클라이언트가 잘못된 id를 보낸 것이다.
+        findVerificationInChallenge(challengeId, verificationId);
+        challengeVerificationLikeRepository.deleteLike(verificationId, memberId);
+        return buildLikeResult(verificationId, false);
+    }
+
+    /**
+     * 내 인증의 메모를 고친다. <b>사진과 인증 시각은 그대로다.</b>
+     *
+     * <p>사진을 바꾸는 것은 그날 다시 인증하는 것(재인증)이고 심사를 다시 거친다. 메모는 그
+     * 사진에 덧붙이는 말이라 심사 대상이 아니고 <b>날짜 제한도 없다</b> — 어제 쓴 오타를 오늘
+     * 고쳐도 "그날 수행했다"는 사실이 흔들리지 않는다.
+     *
+     * <p>남의 글·없는 글·가려진 글을 모두 404 로 묶는다. 셋을 구분해 알려주면 응답만으로
+     * 그 id 의 존재와 작성자가 드러난다. 조건을 전부 조회에 넣는 이유가 그것이다.
+     *
+     * <p>스트릭·좋아요·신고는 건드리지 않는다. 행이 사라지지 않고 인증일도 그대로라 그 셋이
+     * 참조하는 것이 하나도 바뀌지 않는다.
+     */
+    @Transactional
+    public ChallengeVerificationResDTO.MemoUpdate updateMemo(
+            Long memberId,
+            Long challengeId,
+            Long verificationId,
+            ChallengeVerificationReqDTO.UpdateMemo request
+    ) {
+        ChallengeVerification verification = challengeVerificationRepository
+                .findMineInChallenge(verificationId, challengeId, memberId)
+                // 내려간 글은 고칠 대상이 아니다. 조회에서 빼지 않고 여기서 거르는 이유는,
+                // 같은 조회를 삭제도 쓰는데 그쪽은 내려간 글을 찾아야 하기 때문이다
+                // (두 번 지워도 성공으로 답한다).
+                .filter(v -> !v.isDeleted())
+                .orElseThrow(() -> {
+                    log.warn("수정할 수 없는 인증입니다. memberId={}, challengeId={}, verificationId={}",
+                            memberId, challengeId, verificationId);
+                    return new VerificationException(ChallengeVerificationErrorCode.VERIFICATION_NOT_FOUND);
+                });
+
+        verification.updateContent(request.content());
+        return ChallengeVerificationConverter.toMemoUpdate(verification);
+    }
+
+    /**
+     * 인증 게시글을 내린다. <b>인증을 취소하는 것이 아니다.</b>
+     *
+     * <p>글과 사진만 안 보이게 하고 "그날 인증했다" 는 사실은 남긴다 — 지운 뒤 다시 인증할 수
+     * 있으면 하루 1회가 뚫린다. 그래서 버튼은 완료 상태 그대로다.
+     *
+     * <h3>스트릭은 건드리지 않는다</h3>
+     * "올리고 기록만 챙긴 뒤 지우기" 는 <b>재화 회수가 막는다</b>(재화 이슈). 스트릭을 시간
+     * 기준으로 깎는 방식은 그만큼 기다리면 우회되고, 정작 정당하게 지우는 사람만 다친다.
+     *
+     * <h3>사진은 지운다</h3>
+     * 공개 prefix 라 조회에서 빼도 <b>URL 을 아는 사람은 계속 볼 수 있다.</b> 지우고 싶어 지운
+     * 사람에게 그 상태는 삭제가 아니다. 남는 죽은 {@code image_url} 은 그대로 둔다 —
+     * {@code NOT NULL} 이라 비울 수 없고, 다시 인증하면 새 key 로 덮인다.
+     *
+     * <p>이 메서드에 {@code @Transactional} 이 없는 것은 의도다. S3 삭제가 트랜잭션 밖이어야
+     * 한다(service_convention). DB 변경은 {@link ChallengeVerificationCommandService#softDelete}
+     * 가 맡는다.
+     */
+    public ChallengeVerificationResDTO.Deletion deleteVerification(
+            Long memberId,
+            Long challengeId,
+            Long verificationId
+    ) {
+        ChallengeVerificationCommandService.DeleteResult result =
+                challengeVerificationCommandService.softDelete(memberId, challengeId, verificationId);
+
+        // 커밋된 뒤에 지운다. 순서를 뒤집으면 그 사이에 죽었을 때 사진 없는 글이 남는다 —
+        // 남는 방향의 실패는 미참조 정리가 치우고, 사라지는 방향의 실패는 낫지 않는다.
+        //
+        // 이미 내려간 글을 다시 지우는 요청이면 사진은 이미 없다. 그때는 부르지 않는다.
+        if (result.deletedNow()) {
+            mediaService.deleteQuietly(result.imageKey());
+        }
+
+        return ChallengeVerificationConverter.toDeletion(verificationId);
+    }
+
+    /** 경로의 challengeId와 인증의 챌린지가 맞는지까지 확인한다. 어긋나면 404다(신고와 같은 기준). */
+    private ChallengeVerification findVerificationInChallenge(Long challengeId, Long verificationId) {
+        return challengeVerificationRepository
+                .findByIdAndMemberChallengeChallengeId(verificationId, challengeId)
+                // 보류 건과 내려간 글은 남에게 보이지 않으므로 좋아요·신고 대상이 아니다.
+                // 없는 것처럼 다룬다.
+                //
+                // 보류를 거르지 않으면 두 가지가 깨진다. 신고가 임계값에 닿으면 공개된 적도 없는
+                // 사진이 숨겨지고, 좋아요·신고 행이 붙으면 반려 확정 때 인증 삭제가 외래 키에
+                // 걸려 실패한다 — 그 행은 영원히 보류로 남는다.
+                //
+                // 내려간 글도 같다. 피드에 없는 글에 좋아요가 쌓이고, 다시 올려 되살아나면
+                // 엉뚱한 수를 달고 나타난다. 이미 내려간 글을 신고해 숨김 임계값을 채우는 것도
+                // 막는다.
+                .filter(v -> !v.isPending() && !v.isDeleted())
+                .orElseThrow(() -> new VerificationException(ChallengeVerificationErrorCode.VERIFICATION_NOT_FOUND));
+    }
+
+    /**
+     * 응답에 최종 상태를 실어 클라이언트가 재조회 없이 화면을 갱신하게 한다.
+     * 집계는 피드와 같은 배치 쿼리를 한 건짜리로 부른다 — 세는 규칙(탈퇴 회원 제외)이 갈리지 않도록.
+     */
+    private ChallengeVerificationResDTO.Like buildLikeResult(Long verificationId, boolean liked) {
+        long likeCount = challengeVerificationLikeRepository
+                .countByVerificationIds(List.of(verificationId))
+                .getOrDefault(verificationId, 0L);
+        return ChallengeVerificationConverter.toLike(verificationId, likeCount, liked);
+    }
+}

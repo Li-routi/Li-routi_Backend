@@ -2,9 +2,6 @@ package com.lirouti.domain.challenge.converter;
 
 import com.lirouti.domain.challenge.dto.response.ChallengeResDTO;
 import com.lirouti.domain.challenge.entity.Challenge;
-import com.lirouti.domain.verification.dto.response.ChallengeVerificationResDTO;
-import com.lirouti.domain.verification.entity.ChallengeVerification;
-import com.lirouti.domain.verification.entity.ChallengeVerificationReport;
 import com.lirouti.domain.challenge.entity.MemberChallenge;
 
 import java.util.List;

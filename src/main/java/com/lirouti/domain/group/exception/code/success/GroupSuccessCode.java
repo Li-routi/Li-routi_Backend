@@ -93,7 +93,17 @@ public enum GroupSuccessCode implements BaseSuccessCode {
     GROUP_MEMBER_STATUS_MESSAGE_UPDATE_SUCCESS(
             HttpStatus.OK,
             "그룹별 상태 메시지를 수정했습니다.",
+            "GROUP200_14"
+    ),
+    GROUP_NAME_UPDATE_SUCCESS(
+            HttpStatus.OK,
+            "그룹 이름 변경에 성공했습니다.",
             "GROUP200_12"
+    ),
+    GROUP_OWNER_TRANSFER_SUCCESS(
+            HttpStatus.OK,
+            "그룹 방장 위임에 성공했습니다.",
+            "GROUP200_13"
     );
 
     private final HttpStatus httpStatus;

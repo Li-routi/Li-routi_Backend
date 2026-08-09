@@ -2,8 +2,10 @@ package com.lirouti.domain.group.service.command;
 
 import java.util.HashSet;
 import java.util.Set;
+import java.util.UUID;
 
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -17,13 +19,18 @@ import com.lirouti.domain.group.entity.GroupMember;
 import com.lirouti.domain.group.entity.GroupRoutine;
 import com.lirouti.domain.group.entity.GroupRoutineCategory;
 import com.lirouti.domain.group.enums.GroupStatus;
+import com.lirouti.domain.group.enums.GroupMemberStatus;
 import com.lirouti.domain.group.exception.GroupException;
 import com.lirouti.domain.group.exception.code.error.GroupErrorCode;
 import com.lirouti.domain.group.repository.GroupRepository;
+import com.lirouti.domain.group.repository.GroupMemberRepository;
 import com.lirouti.domain.group.repository.GroupRoutineCategoryRepository;
 import com.lirouti.domain.group.repository.GroupRoutineRepository;
 import com.lirouti.domain.group.service.GroupValidationService;
 import com.lirouti.domain.verification.repository.GroupRoutineVerificationReadRepository;
+import com.lirouti.domain.notification.enums.NotificationCategory;
+import com.lirouti.domain.notification.enums.NotificationType;
+import com.lirouti.domain.notification.event.NotificationRequestedEvent;
 import com.lirouti.global.websocket.WebSocketSessionRegistry;
 
 import jakarta.validation.ConstraintViolation;
@@ -44,6 +51,8 @@ public class GroupCommandService {
     private final GroupCreationAttemptService groupCreationAttemptService;
     private final GroupInviteCodeUniqueViolationDetector uniqueViolationDetector;
     private final Validator validator;
+    private final GroupMemberRepository groupMemberRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     private final WebSocketSessionRegistry webSocketSessionRegistry;
 
@@ -57,7 +66,9 @@ public class GroupCommandService {
             GroupCreationAttemptService groupCreationAttemptService,
             GroupInviteCodeUniqueViolationDetector uniqueViolationDetector,
             Validator validator,
-            WebSocketSessionRegistry webSocketSessionRegistry
+            WebSocketSessionRegistry webSocketSessionRegistry,
+            GroupMemberRepository groupMemberRepository,
+            ApplicationEventPublisher eventPublisher
     ) {
         this.groupValidationService = groupValidationService;
         this.groupRepository = groupRepository;
@@ -69,6 +80,8 @@ public class GroupCommandService {
         this.uniqueViolationDetector = uniqueViolationDetector;
         this.validator = validator;
         this.webSocketSessionRegistry = webSocketSessionRegistry;
+        this.groupMemberRepository = groupMemberRepository;
+        this.eventPublisher = eventPublisher;
     }
 
     /** 잠긴 ACTIVE OWNER 그룹을 애그리거트 루트에서 Hard Delete한다. */
@@ -103,6 +116,40 @@ public class GroupCommandService {
         groupValidationService.validateGroupOwner(group, memberId);
         group.unlock();
         return GroupConverter.toLockState(group);
+    }
+
+    /** ACTIVE OWNER가 그룹 행 잠금 안에서 그룹 이름을 변경한다. */
+    @Transactional
+    public void updateGroupName(
+            Long groupId,
+            Long memberId,
+            GroupReqDTO.UpdateName request
+    ) {
+        Group group = groupValidationService.lockActiveGroupForUpdate(groupId);
+        groupValidationService.validateGroupOwner(group, memberId);
+        group.updateName(request.name());
+    }
+
+    /**
+     * 동일 그룹의 동시 위임을 그룹 행 비관적 잠금으로 직렬화하고 OWNER 권한을 원자적으로 교체한다.
+     */
+    @Transactional
+    public void transferGroupOwner(
+            Long groupId,
+            Long ownerId,
+            GroupReqDTO.TransferOwner request
+    ) {
+        Group group = groupValidationService.lockActiveGroupForUpdate(groupId);
+        GroupMember owner = groupValidationService.validateGroupOwner(group, ownerId);
+        Long targetMemberId = request.targetMemberId();
+        if (ownerId.equals(targetMemberId)) {
+            throw new GroupException(GroupErrorCode.OWNER_CANNOT_TRANSFER_TO_SELF);
+        }
+
+        GroupMember target = groupValidationService
+                .validateActiveGroupMember(groupId, targetMemberId);
+        owner.demoteToMember();
+        target.promoteToOwner();
     }
 
     /** 그룹 행 잠금 안에서 OWNER 권한, 상한, 이름 중복을 검증하고 사용자 카테고리를 생성한다. */
@@ -371,7 +418,40 @@ public class GroupCommandService {
         log.info("그룹 루틴 수정을 완료했습니다. "
                         + "groupId={}, routineId={}, memberId={}, assignmentCount={}",
                 groupId, routineId, memberId, assignmentCount);
+        publishRoutineUpdatedNotifications(groupRoutine, memberId);
         return GroupConverter.toRoutineUpdateResult(groupRoutine, assignmentCount);
+    }
+
+    /** 일정 변경을 수정자 외의 현재 참여자에게 트랜잭션 커밋 후 알린다. */
+    private void publishRoutineUpdatedNotifications(GroupRoutine routine, Long actorId) {
+        // 일부 기존 순수 단위 테스트는 알림 협력자 없이 서비스 생성자를 직접 호출한다.
+        if (groupMemberRepository == null || eventPublisher == null) {
+            return;
+        }
+        String updateEventId = UUID.randomUUID().toString();
+        var recipients = groupMemberRepository.findAllByGroupIdAndStatus(
+                routine.getGroup().getId(), GroupMemberStatus.ACTIVE);
+        if (recipients == null) {
+            return;
+        }
+        for (GroupMember groupMember : recipients) {
+            Long recipientId = groupMember.getMember().getId();
+            if (recipientId.equals(actorId)) {
+                continue;
+            }
+            eventPublisher.publishEvent(new NotificationRequestedEvent(
+                    recipientId,
+                    NotificationCategory.GROUP_ROUTINE,
+                    NotificationType.GROUP_ROUTINE_UPDATED,
+                    "그룹 루틴이 변경됐어요",
+                    routine.getTitle() + "의 변경 내용을 확인해 주세요.",
+                    routine.getGroup().getId(),
+                    routine.getId(),
+                    "GROUP_ROUTINE",
+                    "group-routine-updated:" + routine.getId() + ":" + updateEventId
+                            + ":" + recipientId
+            ));
+        }
     }
 
     /**

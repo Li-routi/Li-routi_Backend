@@ -7,18 +7,21 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.UncheckedIOException;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.Iterator;
+import java.util.Optional;
+import java.util.UUID;
 
 import javax.imageio.ImageIO;
 import javax.imageio.ImageReadParam;
 import javax.imageio.ImageReader;
 import javax.imageio.stream.ImageInputStream;
-import java.util.Optional;
-import java.util.UUID;
 
+import org.springframework.core.io.InputStreamSource;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
@@ -34,34 +37,23 @@ import com.lirouti.global.properties.S3Properties;
 import com.lirouti.global.util.TimeUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.HttpStatus;
-import org.springframework.stereotype.Service;
 import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.exception.SdkException;
+import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.http.ContentStreamProvider;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.CopyObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.model.*;
-import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
-import software.amazon.awssdk.services.s3.model.GetObjectRequest;
-import software.amazon.awssdk.services.s3.model.GetObjectResponse;
-import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
-import software.amazon.awssdk.services.s3.model.PutObjectRequest;
-import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PresignedPutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
 
-import java.io.IOException;
-import java.time.Duration;
-import java.time.LocalDate;
-import java.util.Arrays;
-import java.util.UUID;
-
 /**
- * 미디어 업로드용 presigned URL을 발급하고, 저장된 미디어 key의 검증·URL 조립을 담당한다.
+ * 미디어 업로드용 presigned URL과 서비스 소유 자산의 직접 업로드를 제공하고,
+ * 저장된 미디어 key의 검증·URL 조립을 담당한다.
  * DB에는 오브젝트 key만 저장하므로(database-schema.md), key ↔ 공개 URL 규칙은 이 클래스가 소유한다.
  * DB를 다루지 않아 조회/변경 구분이 무의미하므로 CQRS를 적용하지 않는다.
  * (service_convention.md의 CQRS 예외 도메인)
@@ -74,6 +66,11 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class MediaService {
+    // RIFF 헤더와 VP8X chunk header 뒤 feature flags 바이트의 animation bit를 검사한다.
+    private static final int WEBP_ANIMATION_INSPECTION_LENGTH = 21;
+    private static final int WEBP_ANIMATION_FLAG_OFFSET = 20;
+    private static final int WEBP_ANIMATION_FLAG = 0x02;
+
     /** 조건부 복사에서 조건이 안 맞을 때 S3 가 주는 상태 코드. */
     private static final int PRECONDITION_FAILED = 412;
 
@@ -81,6 +78,9 @@ public class MediaService {
     // 업로드된 바이트를 실제로 읽어 검증하기 위한 클라이언트(#22). presigner와 달리 S3를 호출한다.
     private final S3Client s3Client;
     private final S3Properties s3Properties;
+
+    public record UploadedMedia(String mediaKey, String contentType) {
+    }
 
     public MediaResDTO.PresignedUrl issuePresignedUrl(MediaReqDTO.PresignedUrl request) {
         validateClientUploadPurpose(request.purpose());
@@ -125,6 +125,75 @@ public class MediaService {
     }
 
     /**
+     * 서버가 소유하는 이미지를 검증한 뒤 private S3 object로 업로드한다.
+     * {@code contentSource}는 signature 검사와 PUT에 각각 새 stream을 반환해야 한다.
+     */
+    public UploadedMedia uploadServiceOwnedImage(
+            MediaPurpose purpose,
+            String declaredContentType,
+            String fileContentType,
+            long contentLength,
+            InputStreamSource contentSource
+    ) {
+        if (purpose == null) {
+            throw new MediaException(MediaErrorCode.CONTENT_TYPE_NOT_ALLOWED_FOR_PURPOSE);
+        }
+        if (contentSource == null || contentLength <= 0) {
+            throw new MediaException(MediaErrorCode.EMPTY_FILE);
+        }
+
+        MediaContentType contentType = resolveContentType(declaredContentType);
+        validatePurposeAllows(purpose, contentType);
+        validateFileSize(contentType.getCategory(), contentLength);
+        validateFileContentType(fileContentType, contentType);
+        validateInputSignature(contentSource, contentType, purpose);
+
+        String mediaKey = generateMediaKey(purpose, contentType);
+        PutObjectRequest request = PutObjectRequest.builder()
+                .bucket(s3Properties.getBucket())
+                .key(mediaKey)
+                .contentType(contentType.getMimeType())
+                .contentLength(contentLength)
+                .build();
+
+        RequestBody requestBody = RequestBody.fromContentProvider(
+                ContentStreamProvider.fromInputStreamSupplier(
+                        () -> openInputStream(contentSource)
+                ),
+                contentLength,
+                contentType.getMimeType()
+        );
+
+        try {
+            s3Client.putObject(request, requestBody);
+            log.info("서비스 소유 미디어를 업로드했습니다. purpose={}, mediaKey={}", purpose, mediaKey);
+            return new UploadedMedia(mediaKey, contentType.getMimeType());
+        } catch (SdkException | UncheckedIOException e) {
+            log.error("서비스 소유 미디어 업로드에 실패했습니다. purpose={}, mediaKey={}",
+                    purpose, mediaKey, e);
+            throw new MediaException(MediaErrorCode.MEDIA_UPLOAD_FAILED);
+        }
+    }
+
+    /**
+     * 서비스 소유 object를 삭제한다. 호출자는 보상 삭제 실패가 원래 예외를 덮지 않게 처리해야 한다.
+     */
+    public void deleteServiceOwnedMedia(String mediaKey, MediaPurpose purpose) {
+        validateMediaKey(mediaKey, purpose);
+        try {
+            s3Client.deleteObject(DeleteObjectRequest.builder()
+                    .bucket(s3Properties.getBucket())
+                    .key(mediaKey)
+                    .build());
+            log.info("서비스 소유 미디어를 삭제했습니다. purpose={}, mediaKey={}", purpose, mediaKey);
+        } catch (SdkException e) {
+            log.error("서비스 소유 미디어 삭제에 실패했습니다. purpose={}, mediaKey={}",
+                    purpose, mediaKey, e);
+            throw new MediaException(MediaErrorCode.MEDIA_DELETE_FAILED);
+        }
+    }
+
+    /**
      * 저장된 key를 <b>그 용도에 맞는 방식</b>으로 읽을 수 있는 URL로 바꾼다.
      *
      * <p>공개 prefix 는 버킷 정책이 익명 읽기를 허용하므로 주소만 조립하면 되고, 비공개 prefix 는
@@ -152,6 +221,22 @@ public class MediaService {
      * <p>실패하면 예외를 던져 조회 자체를 실패시킨다. 여기서 삼키고 null 을 내리면 화면에는
      * 원인 없는 깨진 이미지만 남아, 설정 문제가 사용자 문제처럼 보인다.
      */
+    /**
+     * <b>용도와 무관하게</b> 서명 URL 을 발급한다. 보류 중인 사진처럼 <b>공개 prefix 규칙을
+     * 따르면 안 되는 경우</b>에만 쓴다.
+     *
+     * <p>{@link #resolveViewUrl} 은 {@link MediaPurpose} 만 보고 갈리는데, 챌린지 인증은
+     * {@code publicRead = true} 라 공개 주소를 조립해 돌려준다. <b>보류 사진은 아직 대기
+     * prefix 에 있어 그 주소로 열면 403 이다.</b>
+     *
+     * <p><b>권한은 여기서 못 막는다.</b> key 만 알아서 소유자를 모르기 때문이다. 부르는 쪽이
+     * "본인 것" 을 보장한 뒤에만 불러야 한다 — 그러지 않으면 그 순간 대기 prefix 가 공개된 것과
+     * 같아진다.
+     */
+    public String presignedViewUrl(String mediaKey) {
+        return presignViewUrl(mediaKey);
+    }
+
     private String presignViewUrl(String mediaKey) {
         GetObjectRequest getObjectRequest = GetObjectRequest.builder()
                 .bucket(s3Properties.getBucket())
@@ -195,7 +280,7 @@ public class MediaService {
      * 실제 오브젝트가 업로드됐는지, 그 바이트가 정말 이미지인지는 확인하지 않는다(#22·#19 범위).
      */
     public void validateMediaKey(String mediaKey, MediaPurpose purpose) {
-        if (!matchesIssuedKeyFormat(mediaKey, purpose)) {
+        if (purpose == null || !matchesIssuedKeyFormat(mediaKey, purpose)) {
             log.warn("발급 규칙에 맞지 않는 미디어 key입니다. purpose={}, mediaKey={}", purpose, mediaKey);
             throw new MediaException(MediaErrorCode.INVALID_MEDIA_KEY);
         }
@@ -449,6 +534,24 @@ public class MediaService {
                 log.warn("심사한 사진과 다른 바이트여서 공개하지 않았습니다. uploadKey={}", uploadKey);
                 throw new MediaException(MediaErrorCode.MEDIA_CHANGED_AFTER_REVIEW);
             }
+            // 원본이 없다. 다시 시도해도 같으므로 "일시 실패" 와 구분해 알려야 한다 —
+            // 구분하지 않으면 부르는 쪽이 영원히 재시도한다.
+            //
+            // 403 도 함께 본다. IAM 역할의 ListBucket 은 공개 prefix 에만 있어서, 대기
+            // prefix 의 없는 key 에는 S3 가 존재 여부를 숨기려고 NoSuchKey 대신 AccessDenied 를
+            // 준다(바이트 검증 쪽에 같은 분기가 있다). 403 을 일시 실패로 두면 이미 사라진
+            // 원본을 10분마다 영원히 승격하려 든다.
+            //
+            // 대신 진짜 권한 문제도 소실로 보이는 맹점이 생긴다. 다만 그 경우 개별 건이 아니라
+            // 모든 승격이 실패하므로, 아래 로그가 몰려 찍히면 권한 문제로 봐야 한다.
+            int status = e.statusCode();
+            if (status == HttpStatus.NOT_FOUND.value()
+                    || status == HttpStatus.FORBIDDEN.value()
+                    || e instanceof NoSuchKeyException) {
+                log.warn("옮길 원본이 없습니다(status={}). 이 로그가 몰려 찍히면 s3:GetObject"
+                        + " 권한을 확인하세요. uploadKey={}", status, uploadKey);
+                throw new MediaException(MediaErrorCode.MEDIA_SOURCE_GONE);
+            }
             log.error("심사를 통과한 사진을 공개 prefix 로 옮기지 못했습니다. uploadKey={}", uploadKey, e);
             throw new MediaException(MediaErrorCode.MEDIA_PROMOTION_FAILED);
         } catch (SdkException e) {
@@ -616,6 +719,68 @@ public class MediaService {
                     log.warn("허용하지 않는 미디어 형식으로 업로드를 시도했습니다. contentType={}", contentType);
                     return new MediaException(MediaErrorCode.UNSUPPORTED_CONTENT_TYPE);
                 });
+    }
+
+    private void validateFileContentType(
+            String fileContentType,
+            MediaContentType declaredContentType
+    ) {
+        if (fileContentType == null || fileContentType.isBlank()) {
+            return;
+        }
+
+        boolean matches = MediaContentType.from(fileContentType)
+                .map(type -> type == declaredContentType)
+                .orElse(false);
+        if (!matches) {
+            log.warn("요청 metadata와 파일의 미디어 형식이 다릅니다. declared={}, file={}",
+                    declaredContentType.getMimeType(), fileContentType);
+            throw new MediaException(MediaErrorCode.CONTENT_TYPE_MISMATCH);
+        }
+    }
+
+    private void validateInputSignature(
+            InputStreamSource contentSource,
+            MediaContentType contentType,
+            MediaPurpose purpose
+    ) {
+        try (InputStream inputStream = contentSource.getInputStream()) {
+            int inspectionLength = contentType == MediaContentType.WEBP
+                    ? WEBP_ANIMATION_INSPECTION_LENGTH
+                    : MediaContentType.SIGNATURE_LENGTH;
+            byte[] head = inputStream.readNBytes(inspectionLength);
+            if (!contentType.matchesSignature(head)) {
+                throw new MediaException(MediaErrorCode.MEDIA_CONTENT_MISMATCH);
+            }
+            if (purpose == MediaPurpose.CHAT_EMOTICON
+                    && contentType == MediaContentType.WEBP
+                    && isAnimatedWebp(head)) {
+                throw new MediaException(MediaErrorCode.CONTENT_TYPE_NOT_ALLOWED_FOR_PURPOSE);
+            }
+        } catch (MediaException e) {
+            throw e;
+        } catch (IOException e) {
+            log.error("서비스 소유 미디어 signature를 읽지 못했습니다. contentType={}",
+                    contentType.getMimeType(), e);
+            throw new MediaException(MediaErrorCode.MEDIA_UPLOAD_FAILED);
+        }
+    }
+
+    private boolean isAnimatedWebp(byte[] head) {
+        return head.length >= WEBP_ANIMATION_INSPECTION_LENGTH
+                && head[12] == 'V'
+                && head[13] == 'P'
+                && head[14] == '8'
+                && head[15] == 'X'
+                && (head[WEBP_ANIMATION_FLAG_OFFSET] & WEBP_ANIMATION_FLAG) != 0;
+    }
+
+    private InputStream openInputStream(InputStreamSource contentSource) {
+        try {
+            return contentSource.getInputStream();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
     /**

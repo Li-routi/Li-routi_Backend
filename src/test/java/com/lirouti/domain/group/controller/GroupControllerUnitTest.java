@@ -239,6 +239,33 @@ class GroupControllerUnitTest {
     }
 
     @Test
+    @DisplayName("인증 OWNER의 방 이름 변경 요청을 전용 서비스와 성공 코드로 처리한다")
+    void updateGroupName_AuthenticatedOwner_DelegatesAndReturnsSuccess() {
+        CustomUserDetails principal = new CustomUserDetails(MEMBER_ID, Role.ROLE_USER);
+        GroupReqDTO.UpdateName request = new GroupReqDTO.UpdateName("변경된 모임");
+
+        ApiResponse<Void> response = groupController.updateGroupName(principal, GROUP_ID, request);
+
+        assertThat(response.getCode()).isEqualTo(GroupSuccessCode.GROUP_NAME_UPDATE_SUCCESS.getCode());
+        assertThat(response.getResult()).isNull();
+        verify(groupCommandService).updateGroupName(GROUP_ID, MEMBER_ID, request);
+    }
+
+    @Test
+    @DisplayName("인증 OWNER의 방장 위임 요청을 전용 서비스와 성공 코드로 처리한다")
+    void transferGroupOwner_AuthenticatedOwner_DelegatesAndReturnsSuccess() {
+        CustomUserDetails principal = new CustomUserDetails(MEMBER_ID, Role.ROLE_USER);
+        GroupReqDTO.TransferOwner request = new GroupReqDTO.TransferOwner(2L);
+
+        ApiResponse<Void> response = groupController.transferGroupOwner(principal, GROUP_ID, request);
+
+        assertThat(response.getCode()).isEqualTo(
+                GroupSuccessCode.GROUP_OWNER_TRANSFER_SUCCESS.getCode());
+        assertThat(response.getResult()).isNull();
+        verify(groupCommandService).transferGroupOwner(GROUP_ID, MEMBER_ID, request);
+    }
+
+    @Test
     @DisplayName("참여 Preview 조회에 인증 회원 ID와 초대코드를 전달한다")
     void getJoinPreview_AuthenticatedMember_ReturnsPreview() {
         CustomUserDetails principal = new CustomUserDetails(MEMBER_ID, Role.ROLE_USER);

@@ -34,7 +34,7 @@ public interface ChallengeVerificationLikeRepository
             VALUES (:verificationId, :memberId, NOW(6), NOW(6))
             ON DUPLICATE KEY UPDATE id = id
             """, nativeQuery = true)
-    void insertIfAbsent(
+    int insertIfAbsent(
             @Param("verificationId") Long verificationId,
             @Param("memberId") Long memberId
     );

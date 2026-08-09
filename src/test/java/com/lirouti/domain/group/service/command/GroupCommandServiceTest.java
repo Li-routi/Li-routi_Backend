@@ -237,6 +237,92 @@ class GroupCommandServiceTest {
         )).isInstanceOf(IllegalArgumentException.class);
 
         verifyNoInteractions(groupValidationService);
+
+    }
+
+    @Test
+    @DisplayName("ACTIVE OWNER는 잠긴 그룹에서 이름을 변경한다")
+    void updateGroupName_ActiveOwner_UpdatesName() {
+        GroupReqDTO.UpdateName request = new GroupReqDTO.UpdateName("변경된 모임");
+        when(groupValidationService.lockActiveGroupForUpdate(GROUP_ID)).thenReturn(group);
+        when(groupValidationService.validateGroupOwner(group, OWNER_ID)).thenReturn(ownerMembership);
+
+        groupCommandService.updateGroupName(GROUP_ID, OWNER_ID, request);
+
+        InOrder inOrder = inOrder(groupValidationService, group);
+        inOrder.verify(groupValidationService).lockActiveGroupForUpdate(GROUP_ID);
+        inOrder.verify(groupValidationService).validateGroupOwner(group, OWNER_ID);
+        inOrder.verify(group).updateName("변경된 모임");
+    }
+
+    @Test
+    @DisplayName("OWNER 검증 실패 시 그룹 이름을 변경하지 않는다")
+    void updateGroupName_NotOwner_DoesNotUpdateName() {
+        GroupReqDTO.UpdateName request = new GroupReqDTO.UpdateName("변경된 모임");
+        when(groupValidationService.lockActiveGroupForUpdate(GROUP_ID)).thenReturn(group);
+        when(groupValidationService.validateGroupOwner(group, OWNER_ID))
+                .thenThrow(new GroupException(GroupErrorCode.GROUP_OWNER_ACCESS_DENIED));
+
+        assertThatThrownBy(() -> groupCommandService.updateGroupName(GROUP_ID, OWNER_ID, request))
+                .isInstanceOf(GroupException.class)
+                .extracting("code")
+                .isEqualTo(GroupErrorCode.GROUP_OWNER_ACCESS_DENIED);
+
+        verify(group, never()).updateName(any());
+    }
+
+    @Test
+    @DisplayName("잠긴 그룹에서 기존 OWNER와 대상 ACTIVE 구성원의 역할을 교체한다")
+    void transferGroupOwner_ActiveOwnerAndMember_ExchangesRoles() {
+        GroupReqDTO.TransferOwner request = new GroupReqDTO.TransferOwner(TARGET_MEMBER_ID);
+        when(groupValidationService.lockActiveGroupForUpdate(GROUP_ID)).thenReturn(group);
+        when(groupValidationService.validateGroupOwner(group, OWNER_ID)).thenReturn(ownerMembership);
+        when(groupValidationService.validateActiveGroupMember(GROUP_ID, TARGET_MEMBER_ID))
+                .thenReturn(targetMembership);
+
+        groupCommandService.transferGroupOwner(GROUP_ID, OWNER_ID, request);
+
+        InOrder inOrder = inOrder(groupValidationService, ownerMembership, targetMembership);
+        inOrder.verify(groupValidationService).lockActiveGroupForUpdate(GROUP_ID);
+        inOrder.verify(groupValidationService).validateGroupOwner(group, OWNER_ID);
+        inOrder.verify(groupValidationService).validateActiveGroupMember(GROUP_ID, TARGET_MEMBER_ID);
+        inOrder.verify(ownerMembership).demoteToMember();
+        inOrder.verify(targetMembership).promoteToOwner();
+    }
+
+    @Test
+    @DisplayName("방장은 본인에게 권한을 위임할 수 없고 역할은 그대로 유지된다")
+    void transferGroupOwner_SelfTarget_ThrowsWithoutChangingRoles() {
+        GroupReqDTO.TransferOwner request = new GroupReqDTO.TransferOwner(OWNER_ID);
+        when(groupValidationService.lockActiveGroupForUpdate(GROUP_ID)).thenReturn(group);
+        when(groupValidationService.validateGroupOwner(group, OWNER_ID)).thenReturn(ownerMembership);
+
+        assertThatThrownBy(() -> groupCommandService.transferGroupOwner(GROUP_ID, OWNER_ID, request))
+                .isInstanceOf(GroupException.class)
+                .extracting("code")
+                .isEqualTo(GroupErrorCode.OWNER_CANNOT_TRANSFER_TO_SELF);
+
+        verify(groupValidationService, never()).validateActiveGroupMember(any(), any());
+        verify(ownerMembership, never()).demoteToMember();
+        verify(ownerMembership, never()).promoteToOwner();
+    }
+
+    @Test
+    @DisplayName("대상 ACTIVE 구성원 검증 실패 시 기존 OWNER의 역할을 변경하지 않는다")
+    void transferGroupOwner_InactiveTarget_DoesNotChangeRoles() {
+        GroupReqDTO.TransferOwner request = new GroupReqDTO.TransferOwner(TARGET_MEMBER_ID);
+        when(groupValidationService.lockActiveGroupForUpdate(GROUP_ID)).thenReturn(group);
+        when(groupValidationService.validateGroupOwner(group, OWNER_ID)).thenReturn(ownerMembership);
+        when(groupValidationService.validateActiveGroupMember(GROUP_ID, TARGET_MEMBER_ID))
+                .thenThrow(new GroupException(GroupErrorCode.GROUP_MEMBER_ACCESS_DENIED));
+
+        assertThatThrownBy(() -> groupCommandService.transferGroupOwner(GROUP_ID, OWNER_ID, request))
+                .isInstanceOf(GroupException.class)
+                .extracting("code")
+                .isEqualTo(GroupErrorCode.GROUP_MEMBER_ACCESS_DENIED);
+
+        verify(ownerMembership, never()).demoteToMember();
+        verify(targetMembership, never()).promoteToOwner();
     }
 
     private void givenValidatedOwner() {

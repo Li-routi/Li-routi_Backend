@@ -89,6 +89,29 @@ class GroupReqDTOValidationTest {
     }
 
     @Test
+    @DisplayName("방 이름 변경 요청은 생성 요청과 같이 이름 앞뒤 공백을 제거하고 줄바꿈을 허용한다")
+    void updateName_TrimmedAndLineBreakAllowed() {
+        GroupReqDTO.UpdateName request = new GroupReqDTO.UpdateName("  아침\n모임  ");
+
+        assertThat(request.name()).isEqualTo("아침\n모임");
+        assertThat(validator.validate(request)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("방 이름 변경은 빈 값 또는 20자 초과를 거부하고 방장 위임 대상은 양수여야 한다")
+    void updateSettings_InvalidValues_HaveViolations() {
+        GroupReqDTO.UpdateName blankName = new GroupReqDTO.UpdateName("   ");
+        GroupReqDTO.UpdateName longName = new GroupReqDTO.UpdateName("가".repeat(21));
+        GroupReqDTO.TransferOwner nullTarget = new GroupReqDTO.TransferOwner(null);
+        GroupReqDTO.TransferOwner zeroTarget = new GroupReqDTO.TransferOwner(0L);
+
+        assertThat(validator.validate(blankName)).isNotEmpty();
+        assertThat(validator.validate(longName)).isNotEmpty();
+        assertThat(validator.validate(nullTarget)).isNotEmpty();
+        assertThat(validator.validate(zeroTarget)).isNotEmpty();
+    }
+
+    @Test
     @DisplayName("공백 categoryKey는 null로 정규화해 categoryId 참조를 허용한다")
     void construct_BlankCategoryKey_NormalizesToNull() {
         GroupReqDTO.CreateGroupRoutine routine = routine(

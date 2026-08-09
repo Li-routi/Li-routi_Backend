@@ -199,6 +199,16 @@ public class GroupMember extends BaseEntity {
         this.statusMessage = statusMessage;
     }
 
+    /** 방장 위임 시 기존 방장을 일반 구성원으로 전환한다. */
+    public void demoteToMember() {
+        this.role = GroupMemberRole.MEMBER;
+    }
+
+    /** 방장 위임 시 대상 ACTIVE 구성원을 방장으로 전환한다. */
+    public void promoteToOwner() {
+        this.role = GroupMemberRole.OWNER;
+    }
+
     /**
      * 새 가입 회차는 과거 활동 상태를 승계하지 않는다.
      *

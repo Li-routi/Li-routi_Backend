@@ -8,6 +8,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -22,13 +23,19 @@ import lombok.NoArgsConstructor;
 @Entity
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@Table(name = "chat_emoticon")
+@Table(
+        name = "chat_emoticon",
+        uniqueConstraints = @UniqueConstraint(
+                name = "uk_chat_emoticon_code",
+                columnNames = "code"
+        )
+)
 public class ChatEmoticon extends BaseEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, length = 100, unique = true)
+    @Column(nullable = false, length = 100)
     private String code;
 
     @Column(name = "asset_key", nullable = false, length = 500)
@@ -69,6 +76,10 @@ public class ChatEmoticon extends BaseEntity {
     /** 신규 메시지 선택 대상에서 제외하되 기존 메시지의 자산 참조는 보존한다. */
     public void deactivate() {
         this.active = false;
+    }
+
+    public void activate() {
+        this.active = true;
     }
 
     public boolean isActive() {

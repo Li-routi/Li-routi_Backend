@@ -2,11 +2,14 @@ package com.lirouti.domain.verification.repository;
 
 import static com.lirouti.domain.member.repository.MemberQuerySupport.activeMember;
 import static com.lirouti.domain.verification.repository.VerificationQuerySupport.notHidden;
+import static com.lirouti.domain.verification.repository.VerificationQuerySupport.notDeleted;
+import static com.lirouti.domain.verification.repository.VerificationQuerySupport.notPending;
 
 import java.util.List;
 
 import com.lirouti.domain.verification.entity.ChallengeVerification;
 import com.lirouti.domain.verification.entity.QChallengeVerification;
+import com.lirouti.domain.verification.enums.ReviewStatus;
 import com.lirouti.domain.verification.entity.QChallengeVerificationReport;
 import com.lirouti.domain.challenge.entity.QMemberChallenge;
 import com.lirouti.domain.member.entity.QMember;
@@ -44,6 +47,9 @@ public class ChallengeVerificationRepositoryImpl implements ChallengeVerificatio
                         memberChallenge.challenge.id.eq(challengeId),
                         activeMember(member),
                         notHidden(verification),
+                        // 승격되지 않아 공개 주소가 없다. 담으면 열리지 않는 사진이 나간다.
+                        notPending(verification),
+                        notDeleted(verification),
                         notReportedBy(viewerId),
                         cursorLt(cursor)
                 )
@@ -82,7 +88,8 @@ public class ChallengeVerificationRepositoryImpl implements ChallengeVerificatio
     public List<ChallengeVerification> findMineByCursor(
             Long memberChallengeId,
             Long cursor,
-            int limit
+            int limit,
+            ReviewStatus statusFilter
     ) {
         // 피드와 달리 fetch join이 없다. 응답에 닉네임을 싣지 않으므로 회원을 읽을 일이 없고,
         // 참여(member_challenge)도 서비스가 이미 조회해 두었다.
@@ -91,11 +98,21 @@ public class ChallengeVerificationRepositoryImpl implements ChallengeVerificatio
                 .where(
                         verification.memberChallenge.id.eq(memberChallengeId),
                         notHidden(verification),
+                        // 본인이 내린 글이다. 지운 사람에게도 보이면 삭제가 아니다.
+                        notDeleted(verification),
+                        // 보류를 빼지 않는다. 방금 올린 사진이 화면에서 사라지면 안 된다 —
+                        // 대신 상태를 함께 내려 "심사 중" 을 그리게 한다.
+                        statusEq(statusFilter),
                         cursorLt(cursor)
                 )
                 .orderBy(verification.id.desc())
                 .limit(limit)
                 .fetch();
+    }
+
+    /** 상태 필터. 주지 않으면 전부 담는다 — 기본값이 바뀌면 기존 클라이언트 화면이 조용히 달라진다. */
+    private BooleanExpression statusEq(ReviewStatus statusFilter) {
+        return (statusFilter != null) ? verification.reviewStatus.eq(statusFilter) : null;
     }
 
     private BooleanExpression cursorLt(Long cursor) {

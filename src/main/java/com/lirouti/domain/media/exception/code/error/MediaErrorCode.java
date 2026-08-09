@@ -24,6 +24,16 @@ public enum MediaErrorCode implements BaseErrorCode {
             "올바르지 않은 미디어 key입니다.",
             "MEDIA400_3"
     ),
+    EMPTY_FILE(
+            HttpStatus.BAD_REQUEST,
+            "빈 파일은 업로드할 수 없습니다.",
+            "MEDIA400_4"
+    ),
+    CONTENT_TYPE_MISMATCH(
+            HttpStatus.BAD_REQUEST,
+            "요청한 미디어 형식과 파일 형식이 일치하지 않습니다.",
+            "MEDIA400_5"
+    ),
     FILE_TOO_LARGE(
             HttpStatus.CONTENT_TOO_LARGE,
             "업로드 가능한 최대 용량을 초과했습니다.",
@@ -63,10 +73,28 @@ public enum MediaErrorCode implements BaseErrorCode {
             "인증 사진을 공개하지 못했습니다. 잠시 후 다시 시도해 주세요.",
             "MEDIA500_3"
     ),
+    // 옮길 원본이 아예 없는 경우. 위와 갈라 두는 이유는 재시도 여부가 다르기 때문이다 —
+    // 위는 다시 하면 될 수 있지만 이것은 몇 번을 해도 같다. 구분하지 않으면 재심사가 없는
+    // 원본을 영원히 승격하려 든다.
+    MEDIA_SOURCE_GONE(
+            HttpStatus.NOT_FOUND,
+            "인증 사진을 찾을 수 없습니다. 다시 업로드해 주세요.",
+            "MEDIA404_2"
+    ),
     MEDIA_VALIDATION_FAILED(
             HttpStatus.INTERNAL_SERVER_ERROR,
             "업로드된 파일을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.",
             "MEDIA500_2"
+    ),
+    MEDIA_UPLOAD_FAILED(
+            HttpStatus.INTERNAL_SERVER_ERROR,
+            "파일 업로드에 실패했습니다. 잠시 후 다시 시도해 주세요.",
+            "MEDIA500_3"
+    ),
+    MEDIA_DELETE_FAILED(
+            HttpStatus.INTERNAL_SERVER_ERROR,
+            "파일 삭제에 실패했습니다. 잠시 후 다시 시도해 주세요.",
+            "MEDIA500_4"
     );
 
     private final HttpStatus httpStatus;

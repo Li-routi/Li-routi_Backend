@@ -3,8 +3,11 @@ package com.lirouti.domain.chat.service.command;
 import java.time.LocalDateTime;
 import java.util.Objects;
 
+import org.hibernate.exception.ConstraintViolationException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.context.ApplicationEventPublisher;
 
 import com.lirouti.domain.chat.converter.ChatConverter;
 import com.lirouti.domain.chat.dto.request.ChatReqDTO;
@@ -19,6 +22,11 @@ import com.lirouti.domain.chat.repository.ChatEmoticonRepository;
 import com.lirouti.domain.chat.repository.ChatMessageRepository;
 import com.lirouti.domain.chat.repository.ChatReadRepository;
 import com.lirouti.domain.group.service.GroupValidationService;
+import com.lirouti.domain.group.repository.GroupMemberRepository;
+import com.lirouti.domain.group.enums.GroupMemberStatus;
+import com.lirouti.domain.notification.enums.NotificationCategory;
+import com.lirouti.domain.notification.enums.NotificationType;
+import com.lirouti.domain.notification.event.NotificationRequestedEvent;
 import com.lirouti.domain.media.enums.MediaPurpose;
 import com.lirouti.domain.media.service.MediaService;
 
@@ -27,11 +35,56 @@ import lombok.RequiredArgsConstructor;
 @Service
 @RequiredArgsConstructor
 public class ChatCommandService {
+    private static final String EMOTICON_CODE_UNIQUE_CONSTRAINT =
+            "uk_chat_emoticon_code";
+
     private final ChatMessageRepository chatMessageRepository;
     private final ChatEmoticonRepository chatEmoticonRepository;
     private final ChatReadRepository chatReadRepository;
     private final GroupValidationService groupValidationService;
     private final MediaService mediaService;
+    private final GroupMemberRepository groupMemberRepository;
+    private final ApplicationEventPublisher eventPublisher;
+
+    /**
+     * 검증과 S3 업로드가 끝난 이모티콘 메타데이터를 저장한다.
+     * flush 시점의 code unique 충돌은 동시 등록까지 포함해 도메인 예외로 변환한다.
+     */
+    @Transactional
+    public ChatEmoticon createEmoticonMetadata(
+            ChatReqDTO.RegisterEmoticon request,
+            String assetKey,
+            String contentType
+    ) {
+        ChatEmoticon emoticon = ChatConverter.toEntity(
+                request,
+                assetKey,
+                contentType
+        );
+        try {
+            return chatEmoticonRepository.saveAndFlush(emoticon);
+        } catch (DataIntegrityViolationException e) {
+            if (isEmoticonCodeUniqueViolation(e)) {
+                throw new ChatException(ChatErrorCode.DUPLICATE_EMOTICON_CODE);
+            }
+            throw e;
+        }
+    }
+
+    /**
+     * 이모티콘 상태를 같은 값으로 반복 요청해도 동일한 결과가 되도록 변경한다.
+     * 활성화 호출자는 이 transaction을 열기 전에 저장된 S3 object 검증을 끝내야 한다.
+     */
+    @Transactional
+    public void updateEmoticonStatus(Long emoticonId, boolean active) {
+        ChatEmoticon emoticon = chatEmoticonRepository.findById(emoticonId)
+                .orElseThrow(() -> new ChatException(ChatErrorCode.EMOTICON_NOT_FOUND));
+        if (active) {
+            emoticon.activate();
+            return;
+        }
+        emoticon.deactivate();
+    }
 
     /**
      * 활성 그룹 멤버의 메시지를 저장하고 서버 기준 응답을 반환한다.
@@ -82,7 +135,33 @@ public class ChatCommandService {
         if (!hasSamePayload(message, request)) {
             throw new ChatException(ChatErrorCode.CLIENT_MESSAGE_ID_INVALID);
         }
+        if (insertedCount == 1 && groupMemberRepository != null && eventPublisher != null) {
+            String senderName = groupValidationService.validateActiveGroupMember(groupId, memberId)
+                    .getMember().getNickname();
+            String preview = truncateForNotificationBody(
+                    request.type() == ChatMessageType.TEXT ? request.content() : "이모티콘을 보냈어요.");
+            groupMemberRepository.findAllByGroupIdAndStatus(groupId, GroupMemberStatus.ACTIVE).stream()
+                    .map(groupMember -> groupMember.getMember().getId())
+                    .filter(recipientId -> !recipientId.equals(memberId))
+                    .forEach(recipientId -> eventPublisher.publishEvent(new NotificationRequestedEvent(
+                            recipientId, NotificationCategory.CHAT, NotificationType.GROUP_CHAT_MESSAGE,
+                            senderName + "님의 새 메시지", preview, groupId, message.getId(),
+                            "CHAT_MESSAGE", "chat-message:" + message.getId() + ":" + recipientId)));
+        }
         return new ChatSendResult(toMessageResponse(message), insertedCount == 1);
+    }
+
+    /**
+     * notification.body는 VARCHAR(255)다. 채팅 본문은 최대 2000자까지 허용되므로,
+     * 그대로 넣으면 알림 저장이 DataIntegrityViolationException으로 조용히 실패한다.
+     */
+    private static final int NOTIFICATION_BODY_MAX_LENGTH = 255;
+
+    private String truncateForNotificationBody(String text) {
+        if (text.length() <= NOTIFICATION_BODY_MAX_LENGTH) {
+            return text;
+        }
+        return text.substring(0, NOTIFICATION_BODY_MAX_LENGTH - 1) + "…";
     }
 
     /**
@@ -212,5 +291,29 @@ public class ChatCommandService {
                                 MediaPurpose.CHAT_EMOTICON));
                                 
         return ChatConverter.toMessage(message, responseEmoticon);
+    }
+
+    private boolean isEmoticonCodeUniqueViolation(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            if (current instanceof ConstraintViolationException constraintViolation
+                    && constraintViolation.getKind()
+                    == ConstraintViolationException.ConstraintKind.UNIQUE
+                    && matchesEmoticonCodeConstraint(
+                            constraintViolation.getConstraintName())) {
+                return true;
+            }
+            if (current.getCause() == current) {
+                break;
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
+    private boolean matchesEmoticonCodeConstraint(String constraintName) {
+        return EMOTICON_CODE_UNIQUE_CONSTRAINT.equals(constraintName)
+                || constraintName != null
+                && constraintName.endsWith("." + EMOTICON_CODE_UNIQUE_CONSTRAINT);
     }
 }

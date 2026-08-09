@@ -2,6 +2,7 @@ package com.lirouti.domain.group.service.command;
 
 import com.lirouti.domain.group.entity.Group;
 import com.lirouti.domain.group.entity.GroupMember;
+import com.lirouti.domain.group.dto.request.GroupReqDTO;
 import com.lirouti.domain.group.enums.GroupMemberRole;
 import com.lirouti.domain.group.enums.GroupMemberStatus;
 import com.lirouti.domain.group.exception.GroupException;
@@ -115,6 +116,54 @@ class GroupMembershipCommandConcurrencyTest {
         )).isEqualTo(1);
     }
 
+    @Test
+    @DisplayName("같은 그룹의 동시 방장 위임은 직렬화되어 하나만 성공하고 ACTIVE OWNER를 한 명 유지한다")
+    void transferOwner_ConcurrentRequests_OnlyOneSucceedsAndKeepsOneOwner()
+            throws InterruptedException {
+        TransactionTemplate transaction = new TransactionTemplate(transactionManager);
+        Seed seed = transaction.execute(status -> createTransferSeed());
+        assertThat(seed).isNotNull();
+
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        CountDownLatch done = new CountDownLatch(2);
+        AtomicInteger success = new AtomicInteger();
+        AtomicInteger ownerAccessDenied = new AtomicInteger();
+        AtomicInteger unexpected = new AtomicInteger();
+
+        pool.submit(transferTask(
+                () -> groupCommandService.transferGroupOwner(
+                        seed.groupId(), seed.ownerMemberId(),
+                        new GroupReqDTO.TransferOwner(seed.targetMemberId())
+                ),
+                ready, start, done, success, ownerAccessDenied, unexpected
+        ));
+        pool.submit(transferTask(
+                () -> groupCommandService.transferGroupOwner(
+                        seed.groupId(), seed.ownerMemberId(),
+                        new GroupReqDTO.TransferOwner(seed.otherTargetMemberId())
+                ),
+                ready, start, done, success, ownerAccessDenied, unexpected
+        ));
+
+        boolean workersReady = ready.await(5, TimeUnit.SECONDS);
+        start.countDown();
+        boolean finished = done.await(15, TimeUnit.SECONDS);
+        pool.shutdownNow();
+
+        assertThat(workersReady).isTrue();
+        assertThat(finished).isTrue();
+        assertThat(success.get()).isEqualTo(1);
+        assertThat(ownerAccessDenied.get()).isEqualTo(1);
+        assertThat(unexpected.get()).isZero();
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from group_member where group_id = ? and status = 'ACTIVE' and role = 'OWNER'",
+                Long.class,
+                seed.groupId()
+        )).isEqualTo(1L);
+    }
+
     private Runnable commandTask(
             Runnable command,
             CountDownLatch ready,
@@ -133,6 +182,38 @@ class GroupMembershipCommandConcurrencyTest {
             } catch (GroupException exception) {
                 if (exception.getCode() == GroupErrorCode.GROUP_MEMBER_ACCESS_DENIED) {
                     accessDenied.incrementAndGet();
+                } else {
+                    unexpected.incrementAndGet();
+                }
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                unexpected.incrementAndGet();
+            } catch (RuntimeException exception) {
+                unexpected.incrementAndGet();
+            } finally {
+                done.countDown();
+            }
+        };
+    }
+
+    private Runnable transferTask(
+            Runnable command,
+            CountDownLatch ready,
+            CountDownLatch start,
+            CountDownLatch done,
+            AtomicInteger success,
+            AtomicInteger ownerAccessDenied,
+            AtomicInteger unexpected
+    ) {
+        return () -> {
+            try {
+                ready.countDown();
+                start.await();
+                command.run();
+                success.incrementAndGet();
+            } catch (GroupException exception) {
+                if (exception.getCode() == GroupErrorCode.GROUP_OWNER_ACCESS_DENIED) {
+                    ownerAccessDenied.incrementAndGet();
                 } else {
                     unexpected.incrementAndGet();
                 }
@@ -168,7 +249,22 @@ class GroupMembershipCommandConcurrencyTest {
                 .role(GroupMemberRole.MEMBER)
                 .build());
         groupMemberRepository.flush();
-        return new Seed(group.getId(), owner.getId(), target.getId());
+        return new Seed(group.getId(), owner.getId(), target.getId(), null);
+    }
+
+    private Seed createTransferSeed() {
+        Seed seed = createSeed();
+        String suffix = UUID.randomUUID().toString().replace("-", "");
+        Member otherTarget = saveMember("other-target", suffix);
+        Group group = groupRepository.findById(seed.groupId()).orElseThrow();
+        groupMemberRepository.save(GroupMember.builder()
+                .member(otherTarget)
+                .group(group)
+                .role(GroupMemberRole.MEMBER)
+                .build());
+        groupMemberRepository.flush();
+        return new Seed(
+                seed.groupId(), seed.ownerMemberId(), seed.targetMemberId(), otherTarget.getId());
     }
 
     private Member saveMember(String role, String suffix) {
@@ -183,6 +279,11 @@ class GroupMembershipCommandConcurrencyTest {
         return member;
     }
 
-    private record Seed(Long groupId, Long ownerMemberId, Long targetMemberId) {
+    private record Seed(
+            Long groupId,
+            Long ownerMemberId,
+            Long targetMemberId,
+            Long otherTargetMemberId
+    ) {
     }
 }

@@ -9,6 +9,7 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import com.lirouti.domain.verification.dto.response.ChallengeVerificationResDTO;
+import com.lirouti.domain.verification.enums.ReviewStatus;
 import com.lirouti.domain.verification.dto.request.ChallengeVerificationReqDTO;
 
 @Tag(name = "Challenge", description = "챌린지 인증 API")
@@ -42,6 +43,16 @@ public interface ChallengeVerificationControllerDocs {
 
                     두 기준은 판단 방향이 반대입니다. 챌린지 일치는 애매하면 통과시키고,
                     공개 가능 여부는 애매하면 반려합니다.
+
+                    **심사기가 답을 못 주면 보류됩니다(reviewStatus=PENDING).** 장애·타임아웃이
+                    그 경우이고, 막히는 것이 아니라 저장은 되며 스트릭도 오릅니다. 다만 아직
+                    공개되지 않아 피드에는 안 보이고 **본인에게만** 보입니다.
+
+                    보류일 때 imageUrl 은 공개 주소가 아니라 **한시적 서명 주소**입니다.
+                    오래 들고 있다가 쓰면 만료됩니다.
+
+                    서버가 10분마다 다시 심사하고, 통과하면 그때 공개됩니다. 24시간이 지나면
+                    더 기다리지 않고 통과시킵니다 — 남의 장애로 반려하지 않습니다.
 
                     반려 응답의 message는 코드별 고정 문구입니다. 구체적인 판단 근거는
                     서버 로그에만 남고 응답에는 실리지 않습니다.
@@ -145,6 +156,12 @@ public interface ChallengeVerificationControllerDocs {
                     응답 result: verifications[{ verificationId, imageUrl, content, verifiedDate,
                     verifiedAt, likeCount, participationRound }], currentStreak,
                     currentParticipationRound, nextCursor, hasNext.
+
+                    reviewStatus 로 심사 상태가 함께 내려갑니다. PENDING 이면 아직 공개되지 않은
+                    인증이라 피드에는 없고 여기서만 보이며, imageUrl 은 한시적 서명 주소입니다.
+                    화면에는 "심사 중" 으로 표시해 주세요.
+
+                    status=PENDING 으로 좁히면 심사 중인 것만 내려갑니다. 생략하면 전부입니다.
                     """
     )
     @ApiResponses({
@@ -156,7 +173,9 @@ public interface ChallengeVerificationControllerDocs {
             CustomUserDetails userDetails,
             @Parameter(description = "챌린지 ID") Long challengeId,
             @Parameter(description = "이전 응답의 nextCursor. 첫 요청에서는 생략") Long cursor,
-            @Parameter(description = "페이지 크기(기본 20, 최대 50)") Integer size
+            @Parameter(description = "페이지 크기(기본 20, 최대 50)") Integer size,
+            @Parameter(description = "심사 상태로 좁힌다. 생략하면 전부. PENDING 이면 심사 중인 것만")
+            ReviewStatus status
     );
 
     @Operation(
@@ -288,5 +307,42 @@ public interface ChallengeVerificationControllerDocs {
             @Parameter(description = "챌린지 ID") Long challengeId,
             @Parameter(description = "인증 ID") Long verificationId,
             ChallengeVerificationReqDTO.UpdateMemo request
+    );
+
+    @Operation(
+            summary = "인증 게시글 삭제",
+            description = """
+                    내가 올린 인증 게시글을 내립니다. 본인 글만 지울 수 있습니다.
+
+                    남의 글, 없는 글, 경로의 챌린지와 다른 인증, 신고로 가려진 글은 **전부 같은
+                    404** 입니다 — 존재 여부를 알려 주지 않습니다.
+
+                    **인증을 취소하는 것이 아니라 글을 내리는 것입니다.** "그날 인증했다" 는 사실은
+                    남아서, 지운 뒤에도 그날 버튼은 완료 상태 그대로입니다. 다시 올리면 그 자리가
+                    되살아납니다.
+
+                    사진은 S3 에서도 지웁니다. 공개 주소라 조회에서 빼는 것만으로는 URL 을 아는
+                    사람이 계속 볼 수 있기 때문입니다.
+
+                    **스트릭은 그대로입니다.** 사진을 올려 심사를 통과했다면 루틴은 실제로 한 것이라,
+                    공개를 원치 않아 내렸다고 "며칠째 이어왔다"까지 되돌리지는 않습니다.
+
+                    신고가 쌓여 가려진 글은 지울 수 없습니다(404). 본인에게도 안 보이는 글이고,
+                    지워서 신고 누적을 회피하는 길도 막습니다.
+
+                    이미 지운 글을 다시 지우면 성공으로 답합니다.
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "삭제 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증 필요(미로그인)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404",
+                    description = "없는 인증 · 내 글이 아님 · 경로의 챌린지와 다른 인증 · "
+                            + "신고로 가려진 글 — 전부 같은 404 다(CHALLENGE404_2)")
+    })
+    ApiResponse<ChallengeVerificationResDTO.Deletion> deleteVerification(
+            CustomUserDetails userDetails,
+            @Parameter(description = "챌린지 ID") Long challengeId,
+            @Parameter(description = "삭제할 인증 ID") Long verificationId
     );
 }

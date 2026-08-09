@@ -5,6 +5,7 @@ import com.lirouti.domain.media.service.MediaService;
 import com.lirouti.domain.verification.converter.MyVerificationConverter;
 import com.lirouti.domain.verification.dto.response.MyVerificationResDTO;
 import com.lirouti.domain.verification.entity.ChallengeVerification;
+import com.lirouti.domain.verification.enums.ReviewStatus;
 import com.lirouti.domain.verification.entity.GroupRoutineVerification;
 import com.lirouti.domain.verification.entity.MemberRoutineVerification;
 import com.lirouti.domain.verification.repository.ChallengeVerificationRepository;
@@ -27,18 +28,32 @@ public class MyVerificationQueryService {
     private final MediaService mediaService;
 
     @Transactional(readOnly = true)
-    public MyVerificationResDTO.DailyFeed getMyVerifications(Long memberId, LocalDate date) {
+    public MyVerificationResDTO.DailyFeed getMyVerifications(
+            Long memberId,
+            LocalDate date,
+            ReviewStatus statusFilter
+    ) {
         List<ChallengeVerification> challengeVerifications =
-                challengeVerificationRepository.findByMemberAndDate(memberId, date);
-        List<MemberRoutineVerification> memberRoutineVerifications =
-                memberRoutineVerificationRepository.findByMemberAndDate(memberId, date);
-        List<GroupRoutineVerification> groupRoutineVerifications =
-                groupRoutineVerificationRepository.findByMemberAndDate(memberId, date);
+                challengeVerificationRepository.findByMemberAndDate(memberId, date, statusFilter);
+        // 심사는 챌린지 인증에만 붙는다. PENDING 으로 좁혀 달라는 요청에 심사 자체가 없는
+        // 루틴 인증을 섞어 주면 "심사 중인 것만" 이라는 요청과 답이 어긋난다.
+        boolean pendingOnly = statusFilter == ReviewStatus.PENDING;
+        List<MemberRoutineVerification> memberRoutineVerifications = pendingOnly
+                ? List.of()
+                : memberRoutineVerificationRepository.findByMemberAndDate(memberId, date);
+        List<GroupRoutineVerification> groupRoutineVerifications = pendingOnly
+                ? List.of()
+                : groupRoutineVerificationRepository.findByMemberAndDate(memberId, date);
 
         List<MyVerificationResDTO.Item> items = new ArrayList<>();
 
-        for(ChallengeVerification v : challengeVerifications) {
-            String imageUrl = mediaService.resolveViewUrl(v.getImageUrl(), MediaPurpose.CHALLENGE_VERIFICATION);
+        for (ChallengeVerification v : challengeVerifications) {
+            // 보류 건에 resolveViewUrl 을 쓰면 안 된다. 챌린지 인증은 publicRead = true 라
+            // 공개 주소를 조립해 돌려주는데, 보류 사진은 아직 대기 prefix 에 있어 403 이다.
+            // 이 조회는 memberId 로 좁혀 본인 것만 담으므로 여기서 서명을 붙여도 된다.
+            String imageUrl = v.isPending()
+                    ? mediaService.presignedViewUrl(v.getImageUrl())
+                    : mediaService.resolveViewUrl(v.getImageUrl(), MediaPurpose.CHALLENGE_VERIFICATION);
             items.add(MyVerificationConverter.ChallengeToItem(v, imageUrl));
         }
         for (MemberRoutineVerification v : memberRoutineVerifications) {

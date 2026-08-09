@@ -69,4 +69,22 @@ public final class ChatResDTO {
             List<Emoticon> emoticons
     ) {
     }
+
+    @Builder
+    public record AdminEmoticon(
+            Long id,
+            String code,
+            String assetUrl,
+            String contentType,
+            Boolean animated,
+            Boolean active,
+            Integer displayOrder
+    ) {
+    }
+
+    @Builder
+    public record AdminEmoticonList(
+            List<AdminEmoticon> emoticons
+    ) {
+    }
 }

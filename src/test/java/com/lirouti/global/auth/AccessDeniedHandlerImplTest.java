@@ -18,18 +18,10 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * 권한 부족 응답.
+ * 권한 부족 핸들러의 최종 HTTP 응답 계약을 직접 검증한다.
  *
- * <p><b>지금 이 핸들러에 도달하는 요청이 없다.</b> 시큐리티가 역할을 구분하지 않고
- * {@code anyRequest().authenticated()} 만 걸고 있어, 통합 테스트로는 이 경로를 만들 수 없다.
- * 그래서 핸들러를 직접 불러 확인한다.
- *
- * <p>테스트가 필요한 이유가 바로 그 "도달하지 않는다"에 있다. 관리자 전용 경로처럼 역할 검사가
- * 생기는 날 이 배선이 끊겨 있으면 <b>그때부터 본문 0바이트 403 이 나가고, 원인을 찾기 어렵다.</b>
- * 지금 고정해 두면 그 사이 누가 설정을 건드려도 여기서 걸린다.
- *
- * <p>{@link ApiErrorResponseWriter} 를 mock 하지 않고 진짜를 쓴다. 확인하려는 것이 "위임했는가"가
- * 아니라 <b>클라이언트가 실제로 받는 JSON</b> 이기 때문이다.
+ * <p>관리자 역할 matcher의 진입 여부는 {@code SecurityConfigTest}가 맡는다. 여기서는
+ * {@link ApiErrorResponseWriter}를 실제로 사용해 클라이언트가 받는 403 JSON을 고정한다.
  */
 @DisplayName("권한 부족 응답 테스트")
 class AccessDeniedHandlerImplTest {

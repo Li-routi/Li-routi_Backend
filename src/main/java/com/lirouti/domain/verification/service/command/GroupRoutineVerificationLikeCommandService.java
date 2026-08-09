@@ -4,6 +4,7 @@ import java.util.List;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.context.ApplicationEventPublisher;
 
 import com.lirouti.domain.group.service.GroupValidationService;
 import com.lirouti.domain.group.entity.GroupMember;
@@ -17,6 +18,10 @@ import com.lirouti.domain.verification.exception.VerificationException;
 import com.lirouti.domain.verification.exception.code.error.VerificationErrorCode;
 import com.lirouti.domain.verification.repository.GroupRoutineVerificationLikeRepository;
 import com.lirouti.domain.verification.repository.GroupRoutineVerificationRepository;
+import com.lirouti.domain.verification.repository.GroupRoutineVerificationDisappointmentRepository;
+import com.lirouti.domain.notification.enums.NotificationCategory;
+import com.lirouti.domain.notification.enums.NotificationType;
+import com.lirouti.domain.notification.event.NotificationRequestedEvent;
 
 import lombok.RequiredArgsConstructor;
 
@@ -29,6 +34,8 @@ public class GroupRoutineVerificationLikeCommandService {
     private final GroupMemberRepository groupMemberRepository;
     private final GroupRoutineVerificationRepository groupRoutineVerificationRepository;
     private final GroupRoutineVerificationLikeRepository groupRoutineVerificationLikeRepository;
+    private final GroupRoutineVerificationDisappointmentRepository disappointmentRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public VerificationResDTO.GroupRoutineLike like(
@@ -37,12 +44,26 @@ public class GroupRoutineVerificationLikeCommandService {
             Long verificationId
     ) {
         GroupRoutineVerification verification = validateLikeTarget(memberId, groupId, verificationId);
+        // 기존 단위 테스트의 직접 생성 경로에서는 신규 저장소가 null일 수 있다.
+        // Spring 운영 빈에서는 항상 주입되어 좋아요/아쉬워요 상호 배타성을 보장한다.
+        if (disappointmentRepository != null) {
+            disappointmentRepository.deleteReaction(verificationId, memberId);
+        }
         int inserted = groupRoutineVerificationLikeRepository.insertIfAbsent(verificationId, memberId);
         if (inserted == 1) {
             AuthorVerificationContext author = authorContext(verification);
             GroupMember authorMembership = lockAuthorMembership(groupId, author.memberId());
             groupMemberRepository.incrementTotalLikeCountForCurrentActiveMembership(
                     authorMembership.getId(), author.assignmentId());
+            if (!author.memberId().equals(memberId) && eventPublisher != null) {
+                GroupMember actor = groupValidationService.validateActiveGroupMember(groupId, memberId);
+                if (actor != null) eventPublisher.publishEvent(new NotificationRequestedEvent(author.memberId(),
+                        NotificationCategory.GROUP_ROUTINE, NotificationType.GROUP_VERIFICATION_LIKED,
+                        "그룹 인증에 좋아요가 달렸어요",
+                        actor.getMember().getNickname() + "님이 회원님의 인증을 좋아합니다.",
+                        groupId, verificationId, "GROUP_ROUTINE_VERIFICATION",
+                        "group-like:" + verificationId + ":" + memberId));
+            }
         }
         return buildResult(verificationId, true);
     }

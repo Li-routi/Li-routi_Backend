@@ -1,6 +1,7 @@
 package com.lirouti.domain.verification.repository;
 
 import com.lirouti.domain.verification.entity.ChallengeVerification;
+import com.lirouti.domain.verification.enums.ReviewStatus;
 
 import java.util.List;
 
@@ -57,6 +58,7 @@ public interface ChallengeVerificationRepositoryCustom {
     List<ChallengeVerification> findMineByCursor(
             Long memberChallengeId,
             Long cursor,
-            int limit
+            int limit,
+            ReviewStatus statusFilter
     );
 }
