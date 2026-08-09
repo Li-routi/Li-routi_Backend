@@ -112,6 +112,25 @@ class WeeklyMonthlyVerificationTest {
         return new ChallengeVerificationReqDTO.Verify(KEY, "오늘도 했어요");
     }
 
+    /**
+     * 그 구간 안에서 <b>오늘이 아닌 날</b>을 고른다.
+     *
+     * <p>구간 첫날을 그대로 쓰면 <b>테스트가 무의미해지는 날이 있다.</b> 오늘이 일요일이면
+     * 그 주의 첫날이 곧 오늘이고, 매월 1일이면 그 달의 첫날이 곧 오늘이다. 그런 날에는
+     * {@code period_start_date} 대신 {@code verified_date} 를 보는 <b>틀린 구현도 이 테스트를
+     * 통과한다</b> — 두 컬럼 값이 같아지기 때문이다.
+     *
+     * <p>그래서 첫날이 오늘이면 하루 뒤를 쓴다. 같은 구간 안이므로 판정 결과는 같고,
+     * 두 컬럼 값만 갈라진다.
+     */
+    private LocalDate seedDateIn(LocalDate periodStart, LocalDate today) {
+        LocalDate seed = periodStart.isEqual(today) ? periodStart.plusDays(1) : periodStart;
+        assertThat(seed)
+                .as("구간 판정을 검증하려면 인증일이 오늘과 달라야 한다")
+                .isNotEqualTo(today);
+        return seed;
+    }
+
     @Test
     @DisplayName("주간: 이번 주에 이미 했으면 다른 날이어도 막힌다")
     void weekly_SameWeekIsBlocked() {
@@ -122,8 +141,9 @@ class WeeklyMonthlyVerificationTest {
         Member me = member();
         Challenge c = challenge(RoutineCycle.WEEKLY);
         MemberChallenge mc = join(me, c);
-        // 구간 첫날(일요일)에 인증했다고 둔다. 오늘이 일요일이면 그날 자신이다.
-        seedVerification(mc, weekStart, weekStart);
+        // 인증일은 오늘과 다르게, 구간 첫날은 이번 주 일요일로 심는다.
+        // 두 값이 갈려 있어야 period_start_date 로 판정한다는 것이 증명된다.
+        seedVerification(mc, seedDateIn(weekStart, today), weekStart);
 
         // when & then: 날짜는 다른데 같은 주라 막혀야 한다.
         // 예외 종류까지 본다 — RuntimeException 으로만 두면 S3·심사 단계에서 죽어도 통과한다.
@@ -163,7 +183,7 @@ class WeeklyMonthlyVerificationTest {
         Member me = member();
         Challenge c = challenge(RoutineCycle.MONTHLY);
         MemberChallenge mc = join(me, c);
-        seedVerification(mc, monthStart, monthStart);
+        seedVerification(mc, seedDateIn(monthStart, today), monthStart);
 
         assertThatThrownBy(() ->
                 challengeVerificationService.verify(me.getId(), c.getId(), request()))
@@ -183,7 +203,7 @@ class WeeklyMonthlyVerificationTest {
         Member me = member();
         Challenge c = challenge(RoutineCycle.WEEKLY);
         MemberChallenge mc = join(me, c);
-        ChallengeVerification seeded = seedVerification(mc, weekStart, weekStart);
+        ChallengeVerification seeded = seedVerification(mc, seedDateIn(weekStart, today), weekStart);
         String originalKey = seeded.getImageUrl();
 
         assertThatThrownBy(() ->
