@@ -209,14 +209,14 @@ class ChallengeLikeTest {
 
         // 누른 사람에게는 liked=true
         ChallengeVerificationResDTO.FeedItem forLiker = challengeVerificationQueryService
-                .getVerificationFeed(c.getId(), liker.getId(), null, null, VerificationSort.LATEST)
+                .getVerificationFeed(c.getId(), liker.getId(), null, null, null, VerificationSort.LATEST)
                 .verifications().get(0);
         assertThat(forLiker.likeCount()).isEqualTo(1);
         assertThat(forLiker.liked()).isTrue();
 
         // 안 누른 사람에게는 수만 보이고 liked=false
         ChallengeVerificationResDTO.FeedItem forAuthor = challengeVerificationQueryService
-                .getVerificationFeed(c.getId(), author.getId(), null, null, VerificationSort.LATEST)
+                .getVerificationFeed(c.getId(), author.getId(), null, null, null, VerificationSort.LATEST)
                 .verifications().get(0);
         assertThat(forAuthor.likeCount()).isEqualTo(1);
         assertThat(forAuthor.liked()).isFalse();
@@ -233,10 +233,10 @@ class ChallengeLikeTest {
         challengeVerificationService.like(liker.getId(), c.getId(), v.getId());
 
         long feedCount = challengeVerificationQueryService
-                .getVerificationFeed(c.getId(), author.getId(), null, null, VerificationSort.LATEST)
+                .getVerificationFeed(c.getId(), author.getId(), null, null, null, VerificationSort.LATEST)
                 .verifications().get(0).likeCount();
         long mineCount = challengeVerificationQueryService
-                .getMyVerifications(author.getId(), c.getId(), null, null, null, VerificationSort.LATEST)
+                .getMyVerifications(author.getId(), c.getId(), null, null, null, null, VerificationSort.LATEST)
                 .verifications().get(0).likeCount();
 
         assertThat(mineCount).isEqualTo(feedCount).isEqualTo(1);
@@ -262,7 +262,7 @@ class ChallengeLikeTest {
         em.clear();
 
         long count = challengeVerificationQueryService
-                .getVerificationFeed(c.getId(), author.getId(), null, null, VerificationSort.LATEST)
+                .getVerificationFeed(c.getId(), author.getId(), null, null, null, VerificationSort.LATEST)
                 .verifications().get(0).likeCount();
 
         assertThat(count).isZero();

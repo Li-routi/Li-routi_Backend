@@ -129,7 +129,7 @@ class ChallengeReportHideTest {
         reportBy(reportProperties.getHideThreshold(), c, v);
 
         // then
-        assertThat(challengeVerificationQueryService.getVerificationFeed(c.getId(), viewer.getId(), null, BIG, VerificationSort.LATEST)
+        assertThat(challengeVerificationQueryService.getVerificationFeed(c.getId(), viewer.getId(), null, null, BIG, VerificationSort.LATEST)
                 .verifications())
                 .isEmpty();
     }
@@ -147,7 +147,7 @@ class ChallengeReportHideTest {
         reportBy(reportProperties.getHideThreshold() - 1, c, v);
 
         // then
-        assertThat(challengeVerificationQueryService.getVerificationFeed(c.getId(), viewer.getId(), null, BIG, VerificationSort.LATEST)
+        assertThat(challengeVerificationQueryService.getVerificationFeed(c.getId(), viewer.getId(), null, null, BIG, VerificationSort.LATEST)
                 .verifications())
                 .extracting(ChallengeVerificationResDTO.FeedItem::verificationId)
                 .containsExactly(v.getId());
@@ -166,7 +166,7 @@ class ChallengeReportHideTest {
         reportBy(reportProperties.getHideThreshold(), c, v);
 
         // then
-        assertThat(challengeVerificationQueryService.getMyVerifications(author.getId(), c.getId(), null, BIG, null, VerificationSort.LATEST)
+        assertThat(challengeVerificationQueryService.getMyVerifications(author.getId(), c.getId(), null, null, BIG, null, VerificationSort.LATEST)
                 .verifications())
                 .isEmpty();
     }

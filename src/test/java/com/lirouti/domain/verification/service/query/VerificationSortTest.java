@@ -117,7 +117,7 @@ class VerificationSortTest {
         em.clear();
 
         ChallengeVerificationResDTO.Feed feed =
-                queryService.getVerificationFeed(c.getId(), null, null, null, VerificationSort.LATEST);
+                queryService.getVerificationFeed(c.getId(), null, null, null, null, VerificationSort.LATEST);
 
         assertThat(contentsOf(feed))
                 .as("id 내림차순 — 나중에 올린 것이 위다")
@@ -139,7 +139,7 @@ class VerificationSortTest {
         em.clear();
 
         ChallengeVerificationResDTO.Feed feed =
-                queryService.getVerificationFeed(c.getId(), null, null, null, VerificationSort.LIKES);
+                queryService.getVerificationFeed(c.getId(), null, null, null, null, VerificationSort.LIKES);
 
         assertThat(contentsOf(feed)).containsExactly("2개", "1개", "0개");
         // 좋아요가 없는 인증도 빠지지 않는다(left join 이라야 한다).
@@ -163,7 +163,7 @@ class VerificationSortTest {
         em.clear();
 
         ChallengeVerificationResDTO.Feed feed =
-                queryService.getVerificationFeed(c.getId(), null, null, null, VerificationSort.LIKES);
+                queryService.getVerificationFeed(c.getId(), null, null, null, null, VerificationSort.LIKES);
 
         assertAll(
                 () -> assertThat(contentsOf(feed))
@@ -190,31 +190,68 @@ class VerificationSortTest {
         // 같은 요청을 두 번 보내도 순서가 같아야 한다.
         for (int i = 0; i < 2; i++) {
             ChallengeVerificationResDTO.Feed feed =
-                    queryService.getVerificationFeed(c.getId(), null, null, null, VerificationSort.LIKES);
+                    queryService.getVerificationFeed(c.getId(), null, null, null, null, VerificationSort.LIKES);
             assertThat(contentsOf(feed)).containsExactly("나중", "먼저");
         }
         assertThat(newer.getId()).isGreaterThan(older.getId());
     }
 
     @Test
-    @DisplayName("좋아요순은 페이징하지 않는다 — 커서를 내려주면 클라이언트가 이어서 요청한다")
-    void likesSort_DoesNotPaginate() {
+    @DisplayName("좋아요순도 커서로 이어진다 — 페이지를 넘겨도 중복·누락이 없다")
+    void likesSort_PagesThroughWithCompositeCursor() {
         Challenge c = challenge();
-        for (int i = 0; i < 3; i++) {
-            verification(c, "인증" + i);
-        }
+        // 좋아요 수가 겹치게 만든다. 0개가 셋이라 id 없이는 좌표가 안 잡힌다.
+        ChallengeVerification two = verification(c, "2개");
+        ChallengeVerification oneA = verification(c, "1개A");
+        ChallengeVerification oneB = verification(c, "1개B");
+        ChallengeVerification zeroA = verification(c, "0개A");
+        ChallengeVerification zeroB = verification(c, "0개B");
+        like(two, member(true));
+        like(two, member(true));
+        like(oneA, member(true));
+        like(oneB, member(true));
         em.flush();
         em.clear();
 
-        // size 를 1로 줘도 다음 페이지를 알리지 않는다.
-        ChallengeVerificationResDTO.Feed feed =
-                queryService.getVerificationFeed(c.getId(), null, null, 1, VerificationSort.LIKES);
+        // 2개씩 끝까지 넘긴다.
+        List<String> seen = new java.util.ArrayList<>();
+        Long cursor = null;
+        Long cursorLikes = null;
+        for (int page = 0; page < 5; page++) {
+            ChallengeVerificationResDTO.Feed feed = queryService.getVerificationFeed(
+                    c.getId(), null, cursor, cursorLikes, 2, VerificationSort.LIKES);
+            seen.addAll(contentsOf(feed));
+            if (!feed.hasNext()) {
+                break;
+            }
+            cursor = feed.nextCursor();
+            cursorLikes = feed.nextCursorLikeCount();
+            assertThat(cursorLikes).as("좋아요순이면 두 번째 커서 값이 있어야 한다").isNotNull();
+        }
+
+        // 다섯 건이 정확히 한 번씩. 같은 수는 id 내림차순(나중에 만든 것이 위).
+        assertThat(seen).containsExactly("2개", "1개B", "1개A", "0개B", "0개A");
+        assertThat(oneB.getId()).isGreaterThan(oneA.getId());
+        assertThat(zeroB.getId()).isGreaterThan(zeroA.getId());
+    }
+
+    @Test
+    @DisplayName("최신순에는 두 번째 커서 값이 안 실린다")
+    void latestSort_HasNoLikeCursor() {
+        Challenge c = challenge();
+        verification(c, "하나");
+        verification(c, "둘");
+        em.flush();
+        em.clear();
+
+        ChallengeVerificationResDTO.Feed feed = queryService.getVerificationFeed(
+                c.getId(), null, null, null, 1, VerificationSort.LATEST);
 
         assertAll(
-                () -> assertThat(feed.verifications()).hasSize(1),
-                () -> assertThat(feed.hasNext())
-                        .as("정렬 키가 스크롤 중 바뀌어 페이지를 이어 붙일 수 없다").isFalse(),
-                () -> assertThat(feed.nextCursor()).isNull()
+                () -> assertThat(feed.hasNext()).isTrue(),
+                () -> assertThat(feed.nextCursor()).isNotNull(),
+                () -> assertThat(feed.nextCursorLikeCount())
+                        .as("최신순은 id 하나로 좌표가 잡힌다").isNull()
         );
     }
 }
