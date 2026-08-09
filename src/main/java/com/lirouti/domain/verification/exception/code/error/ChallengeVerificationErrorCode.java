@@ -54,13 +54,26 @@ public enum ChallengeVerificationErrorCode implements BaseErrorCode {
     /**
      * 나갔다 다시 들어왔는데 그날 이미 인증한 이력이 있는 경우.
      *
-     * <p>하루 1회는 참여 회차를 넘어 적용된다. 회차가 올라가도 그날 인증한 사실은 남으므로,
+     * <p>주기 1회는 참여 회차를 넘어 적용된다. 회차가 올라가도 인증한 사실은 남으므로,
      * 재참여로 인증 횟수를 늘릴 수 없다.
      */
     ALREADY_VERIFIED_TODAY(
             HttpStatus.CONFLICT,
             "오늘은 이미 인증했습니다.",
             "CHALLENGE409_5"
+    ),
+    /**
+     * 주간·월간 챌린지에서 이번 구간에 이미 인증한 경우.
+     *
+     * <p>{@link #ALREADY_VERIFIED_TODAY} 와 나눈 이유는 <b>메시지가 달라야 하기 때문</b>이다.
+     * 주간 챌린지에 "오늘은 이미 인증했습니다" 가 나가면 사용자는 내일 다시 눌러 보게 된다 —
+     * 실제로는 다음 주까지 기다려야 한다. 응답 메시지를 에러 코드로만 만드는 규칙
+     * (exception_convention) 이라 코드를 나누는 것이 유일한 방법이다.
+     */
+    ALREADY_VERIFIED_IN_PERIOD(
+            HttpStatus.CONFLICT,
+            "이번 주기에 이미 인증했습니다.",
+            "CHALLENGE409_6"
     );
 
     private final HttpStatus httpStatus;

@@ -13,12 +13,13 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
- * 챌린지 참여의 일자별 인증 이력. 한 참여 회차 안에서 하루에 한 건만 존재한다.
+ * 챌린지 참여의 인증 이력. 한 참여 회차 안에서 <b>한 주기 구간에 한 건</b>만 존재한다
+ * ({@code DAILY} 면 하루, {@code WEEKLY} 면 한 주, {@code MONTHLY} 면 한 달).
  *
- * 소프트 삭제는 쓰지 않는다 — 당일 재인증은 삭제 후 재등록이 아니라 {@link #reverify}로 덮어쓴다.
+ * 당일 재인증({@code DAILY} 만)은 삭제 후 재등록이 아니라 {@link #reverify}로 덮어쓴다.
  *
  * 피드 조회용 별도 인덱스는 두지 않는다. 아래 유니크 제약의 선두 컬럼이 member_challenge_id라,
- * 그 인덱스가 피드의 참여 조인과 "오늘 인증 행 찾기"를 커버한다.
+ * 그 인덱스가 피드의 참여 조인과 "이번 구간 인증 행 찾기"를 커버한다.
  *
  * 다만 챌린지 단위 피드의 정렬(id DESC + 커서 페이징)까지 커버하지는 못한다 — 그 챌린지에 달린
  * 인증 행을 모아서 정렬해야 하므로, 인증이 쌓일수록 페이지 한 장의 비용도 같이 늘어난다.
@@ -30,9 +31,12 @@ import java.time.LocalDateTime;
 @Table(
         name = "challenge_verification",
         uniqueConstraints = {
+                // 주기 1회를 DB 가 보장하는 제약이다. 마이그레이션의 이름·컬럼과 반드시 같아야
+                // 하는데, Hibernate 의 validate 는 유니크 제약을 대조하지 않아 어긋나도 부팅이
+                // 막히지 않는다. 여기를 고칠 일이 있으면 마이그레이션도 함께 본다.
                 @UniqueConstraint(
-                        name = "uk_verification_round_date",
-                        columnNames = {"member_challenge_id", "participation_round", "verified_date"}
+                        name = "uk_verification_round_period",
+                        columnNames = {"member_challenge_id", "participation_round", "period_start_date"}
                 )
         }
 )
@@ -51,6 +55,21 @@ public class ChallengeVerification extends BaseEntity {
 
     @Column(name = "verified_date", nullable = false)
     private LocalDate verifiedDate;
+
+    /**
+     * 이 인증이 속한 주기 구간의 첫날. <b>유니크 키에 들어가 "주기 1회"를 DB 가 보장한다.</b>
+     *
+     * <p>{@code DAILY} 면 {@code verifiedDate} 와 같은 값이고, {@code WEEKLY} 면 그 주 일요일,
+     * {@code MONTHLY} 면 그 달 1일이다. 애플리케이션에서 "이번 주에 인증이 있나"를 조회해 막는
+     * 것만으로는 동시 요청 두 건이 모두 통과하므로, 제약을 이 컬럼으로 옮겼다.
+     *
+     * <p><b>챌린지의 주기를 나중에 바꾸면 옛 행은 옛 기준으로 남는다.</b> 예를 들어 DAILY 로
+     * 쌓인 행들은 저마다 다른 {@code period_start_date} 를 들고 있어서, WEEKLY 로 바꾼 직후에는
+     * 같은 주에 한 건 더 들어갈 수 있다. 주기를 바꾸는 것은 운영 작업이므로 그때 백필을 함께
+     * 해야 한다 — 코드로 막지 않고 여기 적어 둔다.
+     */
+    @Column(name = "period_start_date", nullable = false)
+    private LocalDate periodStartDate;
 
     @Column(name = "verified_at", nullable = false)
     private LocalDateTime verifiedAt;
@@ -99,7 +118,7 @@ public class ChallengeVerification extends BaseEntity {
      * 작성자가 글을 내린 시각. NULL 이면 살아 있다.
      *
      * <p><b>인증을 취소하는 것이 아니다.</b> 글과 사진만 안 보이게 하고 "그날 인증했다" 는
-     * 사실은 남긴다 — 지운 뒤 다시 인증할 수 있으면 하루 1회가 뚫린다. 그래서 스트릭도
+     * 사실은 남긴다 — 지운 뒤 다시 인증할 수 있으면 주기 1회가 뚫린다. 그래서 스트릭도
      * 건드리지 않는다.
      *
      * <p>신고 숨김({@code hiddenAt}) 과는 다르다. 그쪽은 남이 가린 것이고 이쪽은 본인이 내린
@@ -114,6 +133,7 @@ public class ChallengeVerification extends BaseEntity {
             MemberChallenge memberChallenge,
             Integer participationRound,
             LocalDate verifiedDate,
+            LocalDate periodStartDate,
             LocalDateTime verifiedAt,
             String imageUrl,
             String content,
@@ -123,6 +143,13 @@ public class ChallengeVerification extends BaseEntity {
         this.memberChallenge = memberChallenge;
         this.participationRound = participationRound;
         this.verifiedDate = verifiedDate;
+        // 파생값이지만 기본값을 두지 않는다. verifiedDate 로 대신 채우면 DAILY 에서는 맞고
+        // WEEKLY·MONTHLY 에서만 틀리는데, 그건 "주기 1회"가 조용히 뚫리는 것이라 알아채기
+        // 어렵다. 주기를 아는 호출부가 반드시 계산해 넘기게 한다.
+        if (periodStartDate == null) {
+            throw new IllegalArgumentException("periodStartDate 는 주기로 계산해 넘겨야 합니다.");
+        }
+        this.periodStartDate = periodStartDate;
         this.verifiedAt = verifiedAt;
         this.imageUrl = imageUrl;
         this.content = content;

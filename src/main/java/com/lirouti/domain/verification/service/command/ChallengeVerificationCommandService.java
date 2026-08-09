@@ -8,6 +8,7 @@ import com.lirouti.domain.verification.dto.request.ChallengeVerificationReqDTO;
 import com.lirouti.domain.verification.entity.ChallengeVerification;
 import com.lirouti.domain.verification.enums.ReviewStatus;
 import com.lirouti.domain.challenge.entity.MemberChallenge;
+import com.lirouti.domain.challenge.enums.RoutineCycle;
 import com.lirouti.domain.challenge.exception.ChallengeException;
 import com.lirouti.domain.challenge.exception.code.error.ChallengeErrorCode;
 import com.lirouti.domain.verification.repository.ChallengeVerificationRepository;
@@ -41,7 +42,7 @@ import com.lirouti.domain.verification.exception.code.error.ChallengeVerificatio
  * 트랜잭션이 걸리지 않는다(service_convention). 그래서 빈을 분리했다.
  * {@code AuthService}가 외부 인증 후 {@code MemberCommandService}에 저장을 위임하는 것과 같은 모양이다.
  *
- * <b>이 메서드 안의 순서는 그대로 유지해야 한다.</b> 행 락 → 오늘 인증 조회 → INSERT/덮어쓰기 →
+ * <b>이 메서드 안의 순서는 그대로 유지해야 한다.</b> 행 락 → 이번 구간 인증 조회 → INSERT/덮어쓰기 →
  * 스트릭 갱신이 한 트랜잭션에 있어야 중복 증가와 stale update가 모두 막힌다(database-schema.md).
  */
 @Slf4j
@@ -54,11 +55,11 @@ public class ChallengeVerificationCommandService {
     private final MediaService mediaService;
 
     /**
-     * 인증 저장과 스트릭 갱신. 오늘 이미 인증했으면 행을 새로 만들지 않고 덮어쓴다(당일 재인증).
-     * 이때 스트릭은 오르지 않는다.
+     * 인증 저장과 스트릭 갱신. <b>DAILY</b> 에서 오늘 이미 인증했으면 행을 새로 만들지 않고
+     * 덮어쓴다(당일 재인증). 이때 스트릭은 오르지 않는다. 주간·월간은 덮어쓰지 않고 409 다.
      *
      * 인증 INSERT와 스트릭 갱신을 한 트랜잭션에 두는 것이 중복 증가를 막는 핵심이다 —
-     * 동시 요청은 UNIQUE(member_challenge_id, participation_round, verified_date)에 걸려 실패하고,
+     * 동시 요청은 UNIQUE(member_challenge_id, participation_round, period_start_date)에 걸려 실패하고,
      * 그 예외로 트랜잭션 전체가 롤백되어 스트릭 갱신도 함께 되돌아간다.
      *
      * 비활성 챌린지라도 참여 중이면 인증할 수 있다. 운영이 챌린지를 내려도 진행 중인 스트릭이
@@ -91,40 +92,58 @@ public class ChallengeVerificationCommandService {
         LocalDate today = now.toLocalDate();
         LocalDateTime verifiedAt = now.toLocalDateTime();
 
-        // 회차를 빼고 찾는다. 회차를 조건에 넣으면 나갔다 다시 들어온 뒤 같은 날 또 인증할 수
-        // 있다 — 새 회차에서는 기존 인증이 안 보여 덮어쓰기가 아니라 새 행이 되기 때문이다.
-        // 하루 1회는 회차를 넘어 적용한다.
-        Optional<ChallengeVerification> todayVerification = challengeVerificationRepository
-                .findByMemberChallengeIdAndVerifiedDate(memberChallenge.getId(), today);
+        // 주기는 챌린지가 정한다. 여기서 한 번 읽어 저장·스트릭이 같은 값을 쓰게 한다 —
+        // 두 번 읽으면 그 사이 운영이 주기를 바꿨을 때 한 요청 안에서 기준이 갈린다.
+        RoutineCycle cycle = memberChallenge.getChallenge().getRoutineCycle();
+        LocalDate periodStart = cycle.currentPeriodStart(today);
 
-        // 지난 회차에 오늘 인증한 것이면 덮어쓰지 않고 막는다.
+        // 회차를 빼고 찾는다. 회차를 조건에 넣으면 나갔다 다시 들어온 뒤 같은 구간에 또 인증할
+        // 수 있다 — 새 회차에서는 기존 인증이 안 보여 덮어쓰기가 아니라 새 행이 되기 때문이다.
+        // 주기 1회는 회차를 넘어 적용한다.
+        Optional<ChallengeVerification> periodVerification = challengeVerificationRepository
+                .findByMemberChallengeIdAndPeriodStart(memberChallenge.getId(), periodStart);
+
+        // 지난 회차에 이번 구간 인증이 있으면 덮어쓰지 않고 막는다.
         //
         // 덮어쓰면 그 인증이 지난 참여의 기록인데 오늘 올린 사진으로 바뀌고, 회차와 내용이
-        // 어긋난다. 새로 만들면 하루 두 건이 되어 애초에 막으려던 것이 된다. 남는 선택은
-        // 거절뿐이다 — 이미 오늘 했으므로 "다시 할 수 없다"가 맞다.
-        boolean fromPreviousRound = todayVerification
+        // 어긋난다. 새로 만들면 한 구간에 두 건이 되어 애초에 막으려던 것이 된다. 남는 선택은
+        // 거절뿐이다 — 이미 했으므로 "다시 할 수 없다"가 맞다.
+        boolean fromPreviousRound = periodVerification
                 .filter(v -> v.getParticipationRound() < memberChallenge.getParticipationRound())
                 .isPresent();
         if (fromPreviousRound) {
-            log.warn("지난 회차에 오늘 인증한 이력이 있어 재인증을 막았습니다."
-                            + " memberId={}, challengeId={}, currentRound={}",
-                    memberId, challengeId, memberChallenge.getParticipationRound());
-            throw new VerificationException(ChallengeVerificationErrorCode.ALREADY_VERIFIED_TODAY);
+            log.warn("지난 회차에 이번 구간 인증 이력이 있어 재인증을 막았습니다."
+                            + " memberId={}, challengeId={}, cycle={}, currentRound={}",
+                    memberId, challengeId, cycle, memberChallenge.getParticipationRound());
+            throw new VerificationException(alreadyVerified(cycle));
         }
 
-        boolean reverified = todayVerification.isPresent();
+        // 덮어쓰기(재인증)는 DAILY 에만 남긴다.
+        //
+        // 당일 재인증은 "오늘 올린 사진이 마음에 안 들어 바꾸는" 흐름인데, 주간·월간은 한 번
+        // 올리면 그 구간이 끝나는 성격이라 교체 욕구가 약하다. 그대로 두면 양쪽이 다 깨진다 —
+        // 사진은 수요일 것인데 verified_date 는 월요일로 남아 날짜와 내용이 어긋나고, 반대로
+        // verified_date 를 바꾸면 "그 구간의 인증일"이라는 뜻이 흔들린다.
+        if (periodVerification.isPresent() && cycle != RoutineCycle.DAILY) {
+            log.info("이번 구간에 이미 인증해 재인증을 막았습니다."
+                            + " memberId={}, challengeId={}, cycle={}, periodStart={}",
+                    memberId, challengeId, cycle, periodStart);
+            throw new VerificationException(alreadyVerified(cycle));
+        }
 
-        ChallengeVerification verification = todayVerification
+        boolean reverified = periodVerification.isPresent();
+
+        ChallengeVerification verification = periodVerification
                 .map(existing -> {
                     existing.reverify(storedMediaKey, request.content(), verifiedAt,
                             reviewStatus, pendingSinceFor(reviewStatus, verifiedAt));
                     return existing;
                 })
-                .orElseGet(() -> createVerification(
-                        memberChallenge, request, storedMediaKey, today, verifiedAt, reviewStatus));
+                .orElseGet(() -> createVerification(memberChallenge, request, storedMediaKey,
+                        today, periodStart, verifiedAt, reviewStatus));
 
-        // 재인증이면 applyVerification이 오늘 날짜를 보고 스트릭을 그대로 둔다.
-        memberChallenge.applyVerification(today);
+        // 재인증이면 applyVerification 이 같은 구간임을 보고 스트릭을 그대로 둔다.
+        memberChallenge.applyVerification(today, cycle);
 
         // 보류 건은 아직 대기 prefix 에 있어 공개 주소가 없다. 그 주소로 열면 403 이므로
         // 서명을 발급한다 — 본인이 방금 올린 사진이라 여기서 보여 주는 것은 문제가 없다.
@@ -135,7 +154,7 @@ public class ChallengeVerificationCommandService {
         return ChallengeVerificationConverter.toVerification(
                 verification,
                 viewUrl,
-                memberChallenge.currentStreakAsOf(today),
+                memberChallenge.currentStreakAsOf(today, cycle),
                 reverified
         );
     }
@@ -145,6 +164,7 @@ public class ChallengeVerificationCommandService {
             ChallengeVerificationReqDTO.Verify request,
             String storedMediaKey,
             LocalDate verifiedDate,
+            LocalDate periodStartDate,
             LocalDateTime verifiedAt,
             ReviewStatus reviewStatus
     ) {
@@ -152,6 +172,7 @@ public class ChallengeVerificationCommandService {
                 .memberChallenge(memberChallenge)
                 .participationRound(memberChallenge.getParticipationRound())
                 .verifiedDate(verifiedDate)
+                .periodStartDate(periodStartDate)
                 .verifiedAt(verifiedAt)
                 .imageUrl(storedMediaKey)
                 .content(request.content())
@@ -159,7 +180,7 @@ public class ChallengeVerificationCommandService {
                 .pendingSince(pendingSinceFor(reviewStatus, verifiedAt))
                 .build();
         try {
-            // "오늘 인증이 없다"는 선검사와 저장 사이의 동시 요청 경합은 유니크 제약이 막는다.
+            // "이번 구간 인증이 없다"는 선검사와 저장 사이의 동시 요청 경합은 유니크 제약이 막는다.
             // saveAndFlush로 그 실패를 여기서 잡아 409로 바꾼다.
             //
             // 두 예외를 모두 잡는다. 같은 유니크 키로 INSERT가 겹칠 때 InnoDB는 늘 중복 키 오류
@@ -177,6 +198,18 @@ public class ChallengeVerificationCommandService {
         } catch (DataIntegrityViolationException | CannotAcquireLockException e) {
             throw new VerificationException(ChallengeVerificationErrorCode.VERIFICATION_CONFLICT);
         }
+    }
+
+    /**
+     * "이미 인증했다" 를 알리는 코드. <b>주기마다 문장이 달라야 한다.</b>
+     *
+     * <p>주간 챌린지에 "오늘은 이미 인증했습니다" 가 나가면 사용자는 내일 다시 눌러 본다 —
+     * 실제로는 다음 주까지 기다려야 한다.
+     */
+    private ChallengeVerificationErrorCode alreadyVerified(RoutineCycle cycle) {
+        return cycle == RoutineCycle.DAILY
+                ? ChallengeVerificationErrorCode.ALREADY_VERIFIED_TODAY
+                : ChallengeVerificationErrorCode.ALREADY_VERIFIED_IN_PERIOD;
     }
 
     /**

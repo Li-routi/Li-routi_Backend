@@ -24,6 +24,7 @@ class ChallengeVerificationReviewStatusTest {
         return ChallengeVerification.builder()
                 .participationRound(1)
                 .verifiedDate(LocalDate.of(2026, 8, 8))
+                .periodStartDate(LocalDate.of(2026, 8, 8))
                 .verifiedAt(LocalDateTime.of(2026, 8, 8, 10, 0))
                 .imageUrl("challenge-verifications/2026/08/08/x.jpg");
     }

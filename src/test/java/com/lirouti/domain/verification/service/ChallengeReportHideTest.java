@@ -89,9 +89,13 @@ class ChallengeReportHideTest {
     }
 
     private ChallengeVerification verification(MemberChallenge mc) {
+        // now() 를 한 번만 부른다. 두 번 부르면 KST 자정 경계에서 verifiedDate 와
+        // periodStartDate 가 다른 날을 가리켜 테스트가 그때만 깨진다.
+        LocalDate today = LocalDate.now(KST);
         ChallengeVerification v = ChallengeVerification.builder()
                 .memberChallenge(mc).participationRound(1)
-                .verifiedDate(LocalDate.now(KST)).verifiedAt(LocalDateTime.now())
+                .verifiedDate(today)
+                .periodStartDate(today).verifiedAt(LocalDateTime.now())
                 .imageUrl(KEY).content("신고 대상").build();
         em.persist(v);
         em.flush();

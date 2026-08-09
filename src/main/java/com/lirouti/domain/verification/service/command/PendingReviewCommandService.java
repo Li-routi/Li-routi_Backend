@@ -74,8 +74,8 @@ public class PendingReviewCommandService {
     /**
      * 보류가 반려로 확정됐다. <b>오늘 반려와 같은 결과로 만든다</b> — 행을 지운다.
      *
-     * <p>반려 행을 남기지 않는 이유는 유니크 제약 {@code (참여, 회차, 날짜)} 이 그날의 재시도를
-     * 막기 때문이다. 사용자는 다시 찍어 올릴 수 있어야 한다.
+     * <p>반려 행을 남기지 않는 이유는 유니크 제약 {@code (참여, 회차, 구간 첫날)} 이 그 구간의
+     * 재시도를 막기 때문이다. 사용자는 다시 찍어 올릴 수 있어야 한다.
      *
      * <p><b>스트릭을 다시 센다.</b> 1 을 빼거나 날짜를 되돌리면 틀린 값이 남는다 — 이 인증
      * 뒤에 다른 인증이 붙어 있었다면 단순 감산은 그것까지 지운 셈이 된다.
@@ -118,7 +118,7 @@ public class PendingReviewCommandService {
         if (locked != null && round.equals(locked.getParticipationRound())) {
             List<LocalDate> approved = challengeVerificationRepository
                     .findApprovedDatesInRound(locked.getId(), round);
-            locked.recalculateStreak(approved);
+            locked.recalculateStreak(approved, locked.getChallenge().getRoutineCycle());
         }
 
         log.info("보류가 반려로 확정돼 인증을 지웠습니다. verificationId={}, memberId={}, challengeId={}",

@@ -88,7 +88,8 @@ class ChallengeReportHideConcurrencyTest {
                 .joinedAt(LocalDateTime.now()).active(true).build());
         ChallengeVerification v = challengeVerificationRepository.save(ChallengeVerification.builder()
                 .memberChallenge(mc).participationRound(1)
-                .verifiedDate(LocalDate.now(KST)).verifiedAt(LocalDateTime.now())
+                .verifiedDate(LocalDate.now(KST))
+                .periodStartDate(LocalDate.now(KST)).verifiedAt(LocalDateTime.now())
                 .imageUrl(KEY).content("동시 신고 대상").build());
 
         authorId = author.getId();

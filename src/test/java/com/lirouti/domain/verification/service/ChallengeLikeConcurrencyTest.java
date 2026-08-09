@@ -80,7 +80,8 @@ class ChallengeLikeConcurrencyTest {
                 .joinedAt(LocalDateTime.now()).active(true).build());
         ChallengeVerification v = challengeVerificationRepository.save(ChallengeVerification.builder()
                 .memberChallenge(mc).participationRound(1)
-                .verifiedDate(LocalDate.now(KST)).verifiedAt(LocalDateTime.now())
+                .verifiedDate(LocalDate.now(KST))
+                .periodStartDate(LocalDate.now(KST)).verifiedAt(LocalDateTime.now())
                 .imageUrl(KEY).content("동시 좋아요 대상").build());
 
         memberId = m.getId();

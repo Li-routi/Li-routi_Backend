@@ -1,5 +1,6 @@
 package com.lirouti.domain.challenge.entity;
 
+import com.lirouti.domain.challenge.enums.RoutineCycle;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.global.entity.BaseEntity;
 import jakarta.persistence.*;
@@ -107,15 +108,22 @@ public class MemberChallenge extends BaseEntity {
     }
 
     /**
-     * 인증 기록 시 스트릭 갱신. (실제 호출은 #14 인증에서.)
-     * 마지막 인증일이 어제면 +1, 오늘이면 그대로, 그보다 오래됐거나 없으면 1로 시작한다.
+     * 인증 기록 시 스트릭 갱신.
+     *
+     * <p><b>단위는 주기다.</b> {@code DAILY} 면 연속 며칠, {@code WEEKLY} 면 연속 몇 주,
+     * {@code MONTHLY} 면 연속 몇 달이다. 직전 구간에 인증했으면 +1, 같은 구간이면 그대로,
+     * 그보다 오래됐거나 없으면 1로 시작한다.
+     *
+     * <p>주기를 인자로 받는 이유는 <b>{@code challenge} 가 지연 로딩</b>이기 때문이다. 여기서
+     * {@code getChallenge().getRoutineCycle()} 을 부르면 스트릭을 만질 때마다 조회가 한 번씩
+     * 더 나간다. 호출부는 어차피 챌린지를 알고 있다.
      */
-    public void applyVerification(LocalDate today) {
-        if (lastVerifiedDate != null && lastVerifiedDate.isEqual(today)) {
-            return; // 오늘 이미 인증됨 — 스트릭 유지
+    public void applyVerification(LocalDate today, RoutineCycle cycle) {
+        if (lastVerifiedDate != null && cycle.isSamePeriod(lastVerifiedDate, today)) {
+            return; // 이번 구간에 이미 인증됨 — 스트릭 유지
         }
-        if (lastVerifiedDate != null && lastVerifiedDate.isEqual(today.minusDays(1))) {
-            this.currentStreak += 1; // 어제 이어서 → +1
+        if (lastVerifiedDate != null && cycle.isPreviousPeriod(lastVerifiedDate, today)) {
+            this.currentStreak += 1; // 직전 구간에서 이어짐 → +1
         } else {
             this.currentStreak = 1; // 처음이거나 끊긴 뒤 재시작 → 1
         }
@@ -124,13 +132,20 @@ public class MemberChallenge extends BaseEntity {
 
     /**
      * 조회 시점의 유효 스트릭. 저장값을 그대로 믿지 않는다.
-     * 마지막 인증일이 어제보다 오래됐으면(또는 없으면) 스트릭이 끊긴 것이므로 0.
+     *
+     * <p><b>연속이 끊기는 순간에는 아무 이벤트도 일어나지 않는다.</b> 이틀(또는 두 주·두 달)을
+     * 쉬어도 {@code currentStreak} 을 0으로 바꿔 주는 주체가 없으므로, 조회할 때마다 다시
+     * 판정한다(database-schema.md).
+     *
+     * <p>이번 구간도 직전 구간도 아니면 끊긴 것이다.
      */
-    public int currentStreakAsOf(LocalDate today) {
-        if (lastVerifiedDate == null || lastVerifiedDate.isBefore(today.minusDays(1))) {
+    public int currentStreakAsOf(LocalDate today, RoutineCycle cycle) {
+        if (lastVerifiedDate == null) {
             return 0;
         }
-        return currentStreak;
+        boolean alive = cycle.isSamePeriod(lastVerifiedDate, today)
+                || cycle.isPreviousPeriod(lastVerifiedDate, today);
+        return alive ? currentStreak : 0;
     }
 
     /**
@@ -146,7 +161,7 @@ public class MemberChallenge extends BaseEntity {
      *
      * <p>빈 목록이면 인증이 하나도 없는 상태로 되돌린다.
      */
-    public void recalculateStreak(List<LocalDate> verifiedDates) {
+    public void recalculateStreak(List<LocalDate> verifiedDates, RoutineCycle cycle) {
         if (verifiedDates.isEmpty()) {
             this.currentStreak = 0;
             this.lastVerifiedDate = null;
@@ -157,11 +172,12 @@ public class MemberChallenge extends BaseEntity {
         LocalDate previous = verifiedDates.get(0);
         for (int i = 1; i < verifiedDates.size(); i++) {
             LocalDate current = verifiedDates.get(i);
-            // 같은 날이 두 번 오는 일은 유니크 제약이 막지만, 들어와도 스트릭이 부풀지 않게 둔다.
-            if (current.isEqual(previous)) {
+            // 같은 구간이 두 번 오는 일은 유니크 제약이 막지만, 들어와도 스트릭이 부풀지 않게 둔다.
+            // 날짜가 아니라 구간으로 비교한다 — WEEKLY 는 같은 주의 다른 날이 같은 구간이다.
+            if (cycle.isSamePeriod(current, previous)) {
                 continue;
             }
-            streak = current.isEqual(previous.plusDays(1)) ? streak + 1 : 1;
+            streak = cycle.isPreviousPeriod(previous, current) ? streak + 1 : 1;
             previous = current;
         }
 

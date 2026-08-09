@@ -159,8 +159,9 @@ public class ChallengeVerificationQueryService {
         Map<Long, Long> likeCounts = challengeVerificationLikeRepository.countByVerificationIds(ids);
 
         // 스트릭은 저장된 값을 그대로 쓰지 않고 오늘 기준으로 다시 판정한다.
-        // 마지막 인증이 이틀 전이면 저장값은 그대로여도 실제로는 끊긴 상태다.
-        int currentStreak = memberChallenge.currentStreakAsOf(LocalDate.now(TimeUtil.KST));
+        // 마지막 인증이 직전 구간보다 오래됐으면 저장값은 그대로여도 실제로는 끊긴 상태다.
+        int currentStreak = memberChallenge.currentStreakAsOf(
+                LocalDate.now(TimeUtil.KST), memberChallenge.getChallenge().getRoutineCycle());
 
         return ChallengeVerificationConverter.toMyVerifications(
                 page.rows(), imageUrls, likeCounts, currentStreak,

@@ -47,7 +47,7 @@ public interface ChallengeVerificationRepositoryCustom {
      * "이번 참여 / 지난 참여"로 구분하게 한다.
      *
      * <p>조인이 없다. memberChallengeId 를 이미 알고 들어오므로
-     * UNIQUE(member_challenge_id, participation_round, verified_date) 의 선두 컬럼을 타고,
+     * UNIQUE(member_challenge_id, participation_round, period_start_date) 의 선두 컬럼을 타고,
      * 인덱스를 새로 만들 필요가 없다.
      *
      * <p>신고 필터를 걸지 않는다 — 내가 내 인증을 신고할 일이 없다.

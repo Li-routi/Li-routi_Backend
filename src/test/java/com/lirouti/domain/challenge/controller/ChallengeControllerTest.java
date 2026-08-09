@@ -87,7 +87,8 @@ class ChallengeControllerTest {
         LocalDate todayKst = LocalDate.now(ZoneId.of("Asia/Seoul"));
         em.persist(ChallengeVerification.builder()
                 .memberChallenge(mc).participationRound(1)
-                .verifiedDate(todayKst).verifiedAt(LocalDateTime.now())
+                .verifiedDate(todayKst)
+                .periodStartDate(todayKst).verifiedAt(LocalDateTime.now())
                 .imageUrl("https://img/proof.png").build());
         em.flush();
     }

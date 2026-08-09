@@ -70,11 +70,19 @@ class ChallengeVerificationRepositoryTest {
         return mc;
     }
 
+    /** DAILY 인증. 구간 첫날이 곧 인증일이다. */
     private ChallengeVerification verify(MemberChallenge mc, LocalDate date, int round) {
+        return verify(mc, date, date, round);
+    }
+
+    /** 구간 첫날을 따로 주는 인증. WEEKLY·MONTHLY 시나리오용이다. */
+    private ChallengeVerification verify(
+            MemberChallenge mc, LocalDate date, LocalDate periodStart, int round) {
         ChallengeVerification v = ChallengeVerification.builder()
                 .memberChallenge(mc)
                 .participationRound(round)
                 .verifiedDate(date)
+                .periodStartDate(periodStart)
                 .verifiedAt(date.atTime(9, 0))
                 .imageUrl("challenge-verifications/key-" + seq.incrementAndGet() + ".jpg")
                 .content("인증")
@@ -264,41 +272,42 @@ class ChallengeVerificationRepositoryTest {
 
     @Test
     @DisplayName("구간 안의 지난 날 인증도 찾는다 — 그날 하나만 보면 주간 판정이 깨진다")
-    void existsInPeriod_FindsEarlierDayInRange() {
-        // given: 2026-08-02(일) ~ 08-08(토) 주간 구간. 인증은 그 주 월요일에 있다
+    void existsInPeriod_FindsEarlierDayInSamePeriod() {
+        // given: 2026-08-02(일) ~ 08-08(토) 주간 구간. 인증은 그 주 월요일에 있다.
+        //        주간 인증이므로 구간 첫날은 인증일이 아니라 그 주 일요일로 저장된다.
         LocalDate weekStart = LocalDate.parse("2026-08-02");
         LocalDate monday = LocalDate.parse("2026-08-03");
         LocalDate wednesday = LocalDate.parse("2026-08-05");
 
         MemberChallenge mc = join(member(true), challenge(), 1, true);
-        verify(mc, monday, 1);
+        verify(mc, monday, weekStart, 1);
         em.flush();
 
-        // when & then: 수요일에 열어도 "이번 주에 했다"가 나와야 한다
+        // when & then: 수요일에 열어도 구간 첫날은 같은 일요일이라 "이번 주에 했다"가 나온다
         assertAll(
                 () -> assertThat(challengeVerificationRepository
-                        .existsByMemberChallengeIdAndVerifiedDateBetween(mc.getId(), weekStart, wednesday))
+                        .existsByMemberChallengeIdAndPeriodStartDate(mc.getId(), weekStart))
                         .isTrue(),
-                // 하루만 보는 조회로는 못 찾는다 — 이것이 회귀했던 지점이다
+                // 그날을 구간으로 착각해 물으면 못 찾는다 — 호출부가 주기로 계산해 넘겨야 하는 이유다
                 () -> assertThat(challengeVerificationRepository
-                        .findByMemberChallengeIdAndVerifiedDate(mc.getId(), wednesday))
-                        .isEmpty()
+                        .existsByMemberChallengeIdAndPeriodStartDate(mc.getId(), wednesday))
+                        .isFalse()
         );
     }
 
     @Test
     @DisplayName("구간 밖 인증은 찾지 않는다 — 지난 주 것으로 이번 주가 잠기면 안 된다")
-    void existsInPeriod_IgnoresOutsideRange() {
+    void existsInPeriod_IgnoresOtherPeriod() {
         LocalDate weekStart = LocalDate.parse("2026-08-02");
+        LocalDate previousWeekStart = LocalDate.parse("2026-07-26");
         LocalDate saturdayBefore = LocalDate.parse("2026-08-01");   // 지난 주 마지막 날
 
         MemberChallenge mc = join(member(true), challenge(), 1, true);
-        verify(mc, saturdayBefore, 1);
+        verify(mc, saturdayBefore, previousWeekStart, 1);
         em.flush();
 
         assertThat(challengeVerificationRepository
-                .existsByMemberChallengeIdAndVerifiedDateBetween(
-                        mc.getId(), weekStart, LocalDate.parse("2026-08-08")))
+                .existsByMemberChallengeIdAndPeriodStartDate(mc.getId(), weekStart))
                 .isFalse();
     }
 
@@ -313,7 +322,7 @@ class ChallengeVerificationRepositoryTest {
         em.flush();
 
         assertThat(challengeVerificationRepository
-                .existsByMemberChallengeIdAndVerifiedDateBetween(mc.getId(), day, day))
+                .existsByMemberChallengeIdAndPeriodStartDate(mc.getId(), day))
                 .isTrue();
     }
 }

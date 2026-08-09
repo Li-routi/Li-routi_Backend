@@ -66,12 +66,19 @@ class MyVerificationsQueryTest {
         return mc;
     }
 
-    /** verifiedDate는 유니크 제약(member_challenge, round, date)에 걸리므로 건마다 다르게 준다. */
+    /**
+     * 유니크 제약은 {@code (member_challenge, round, period_start_date)} 이므로 건마다
+     * 다른 날짜를 준다.
+     *
+     * <p><b>DAILY 전제다</b> — 구간 첫날을 인증일과 같은 값으로 넣는다. 주간·월간 픽스처가
+     * 필요하면 구간 첫날을 따로 받아야 한다.
+     */
     private ChallengeVerification persistVerification(
             MemberChallenge mc, int round, LocalDate date, String tag) {
         ChallengeVerification v = ChallengeVerification.builder()
                 .memberChallenge(mc).participationRound(round)
                 .verifiedDate(date)
+                .periodStartDate(date)
                 .verifiedAt(date.atTime(9, 0))
                 .imageUrl(KEY_PREFIX + "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.jpg")
                 .content(tag)
