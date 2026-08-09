@@ -17,6 +17,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.context.ApplicationEventPublisher;
+import com.lirouti.domain.notification.enums.NotificationCategory;
+import com.lirouti.domain.notification.enums.NotificationType;
+import com.lirouti.domain.notification.event.NotificationRequestedEvent;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
@@ -31,6 +35,7 @@ public class GroupJoinCommandService {
     private final GroupValidationService groupValidationService;
     private final GroupRoutineAssignmentCommandService assignmentCommandService;
     private final Clock clock;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public GroupResDTO.JoinResult join(Long memberId, GroupReqDTO.JoinGroup request) {
@@ -66,6 +71,16 @@ public class GroupJoinCommandService {
         saveMembership(membership, lockedGroup);
         assignmentCommandService.assignTodayRoutinesToMember(
                 lockedGroup.getId(), lockedMember.getId(), joinedAt);
+
+        groupMemberRepository.findAllByGroupIdAndStatus(lockedGroup.getId(), GroupMemberStatus.ACTIVE)
+                .stream().map(GroupMember::getMember)
+                .filter(member -> !member.getId().equals(memberId))
+                .forEach(member -> eventPublisher.publishEvent(new NotificationRequestedEvent(
+                        member.getId(), NotificationCategory.GROUP_ROUTINE,
+                        NotificationType.GROUP_MEMBER_JOINED, "새로운 그룹원이 참여했어요",
+                        lockedMember.getNickname() + "님이 " + lockedGroup.getName() + "에 참여했습니다.",
+                        lockedGroup.getId(), memberId, "GROUP_MEMBER",
+                        "group-joined:" + lockedGroup.getId() + ":" + memberId + ":" + joinedAt.toLocalDate())));
 
         log.info("초대코드 기반 그룹 가입을 완료했습니다. groupId={}, memberId={}",
                 lockedGroup.getId(), lockedMember.getId());

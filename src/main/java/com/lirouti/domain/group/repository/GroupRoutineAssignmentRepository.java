@@ -348,4 +348,36 @@ public interface GroupRoutineAssignmentRepository
             @Param("start") LocalDate start,
             @Param("end") LocalDate end
     );
+
+    /** 시작·마감·마감 임박 알림 계산용 오늘의 미완료 할당을 회원·그룹과 함께 읽는다. */
+    @Query("""
+            select assignment from GroupRoutineAssignment assignment
+            join fetch assignment.member
+            join fetch assignment.groupRoutine routine
+            join fetch routine.group
+            where assignment.assignedDate = :date
+              and assignment.status not in :terminalStatuses
+              and ((:startBoundary = true and assignment.scheduledStartTime >= :from and assignment.scheduledStartTime < :to)
+                or (:startBoundary = false and assignment.scheduledEndTime >= :from and assignment.scheduledEndTime < :to))
+            """)
+    List<GroupRoutineAssignment> findDueForNotification(
+            @Param("date") LocalDate date, @Param("from") LocalTime from, @Param("to") LocalTime to,
+            @Param("startBoundary") boolean startBoundary,
+            @Param("terminalStatuses") List<GroupRoutineAssignmentStatus> terminalStatuses);
+
+    /** 완료 여부와 무관하게 현재 분에 종료되는 할당을 그룹 종료 알림용으로 조회한다. */
+    @Query("""
+            select assignment from GroupRoutineAssignment assignment
+            join fetch assignment.member
+            join fetch assignment.groupRoutine routine
+            join fetch routine.group
+            where assignment.assignedDate = :date
+              and assignment.scheduledEndTime >= :from
+              and assignment.scheduledEndTime < :to
+            """)
+    List<GroupRoutineAssignment> findEndingForNotification(
+            @Param("date") LocalDate date,
+            @Param("from") LocalTime from,
+            @Param("to") LocalTime to
+    );
 }

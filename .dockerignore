@@ -16,3 +16,6 @@ build/reports
 build/resources
 build/tmp
 build/test-results
+.secrets/
+**/*firebase-adminsdk*.json
+**/service-account*.json

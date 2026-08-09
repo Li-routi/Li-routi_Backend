@@ -90,6 +90,13 @@ oauth:
     web-client-id: ${GOOGLE_WEB_CLIENT_ID}
     allowed-issuers: ${GOOGLE_ALLOWED_ISSUERS}
 
+# FCM 푸시 알림 설정.
+# 비공개 키 경로는 설정 파일에 저장하지 않고 GOOGLE_APPLICATION_CREDENTIALS로 주입한다.
+# 키가 없는 로컬·테스트·CI 환경이 부팅할 수 있도록 기본은 비활성화한다.
+fcm:
+  enabled: ${FCM_ENABLED:false}
+  project-id: ${FCM_PROJECT_ID:}
+
 # 미디어 업로드(S3 presigned URL) 설정
 # 자격증명은 여기에 두지 않는다. 운영은 EC2 인스턴스 프로필(IAM Role),
 # 로컬은 AWS CLI 프로파일에서 SDK가 자동으로 가져간다.

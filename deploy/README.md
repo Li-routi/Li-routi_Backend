@@ -95,6 +95,7 @@ scp -i <pem> deploy/backup.sh               ubuntu@<서버IP>:/opt/app/backup.sh
 | `KAKAO_APP_ID` | 카카오 앱 ID |
 | `GOOGLE_WEB_CLIENT_ID` · `GOOGLE_ALLOWED_ISSUERS` | 구글 OAuth |
 | `AWS_S3_BUCKET` · `AWS_REGION` | S3 (자격증명은 IAM Role로 자동 획득 — 여기 두지 않는다) |
+| `FCM_ENABLED` · `FCM_PROJECT_ID` | (선택) 켜려면 8번 섹션에서 서비스 계정 키 파일도 함께 배치해야 한다 |
 
 서버 쪽에서는 백업 스크립트 실행 권한만 준다:
 
@@ -145,6 +146,24 @@ crontab -l                      # 등록 확인
 > 수동 실행과 cron 최소 환경(`env -i PATH=/usr/bin:/bin`) 양쪽에서 업로드까지 성공을 확인했다(`2026-08-03.sql.gz`, gzip 11.7 KiB).
 >
 > **이 문서의 날짜는 모두 KST다.** 서버·GitHub·S3 로그가 UTC라 아홉 시간 차이로 하루가 어긋나 보일 수 있다.
+
+### 8) FCM 서비스 계정 키 배치 (선택, Push 알림을 켤 때만)
+
+`FCM_ENABLED=true`로 켜려면, Firebase 콘솔(프로젝트 설정 → 서비스 계정 → 새 비공개 키 생성)에서 받은
+JSON 키 파일을 서버에 올려야 한다. `.env`(`ENV_FILE`)에는 넣지 않는다 — 평문 key=value라 JSON을
+담기 부적합해서 Caddyfile처럼 별도 scp로 관리한다.
+
+```bash
+# 로컬 PC에서 실행 (<pem>·<서버IP>·<키파일>은 본인 값)
+ssh -i <pem> ubuntu@<서버IP> 'mkdir -p /opt/app/secrets'
+scp -i <pem> firebase-adminsdk.json ubuntu@<서버IP>:/opt/app/secrets/firebase-adminsdk.json
+```
+
+> **`FCM_ENABLED=false`인 동안은 이 파일이 없어도 무방하다.** 다만 `docker-compose.prod.yml`이
+> 이 경로를 **파일 볼륨**으로 마운트하므로, 파일을 올리기 전에 먼저 `docker compose up`을 돌리면
+> Docker가 그 경로에 **빈 디렉터리**를 만들어 버린다. 그 상태에서는 나중에 진짜 키 파일을 올려도
+> 컨테이너 안에서 디렉터리로 보여 앱이 못 읽는다 — `sudo rm -rf /opt/app/secrets/firebase-adminsdk.json`으로
+> 지우고 위 scp를 다시 해야 한다.
 
 ## AWS / 네트워크
 
