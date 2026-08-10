@@ -76,6 +76,15 @@ dependencies {
 	testAnnotationProcessor 'org.projectlombok:lombok'
 }
 
+tasks.register('issuePerformanceToken', JavaExec) {
+	group = 'performance'
+	description = '활성 로컬 회원의 JMeter 개발 토큰을 users.csv에 저장합니다.'
+	dependsOn tasks.named('testClasses')
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'com.lirouti.support.performance.PerformanceTokenCommand'
+	workingDir = layout.projectDirectory
+}
+
 // 배포는 bootJar(실행 jar)만 사용한다. 기본 jar 태스크가 만드는 -plain.jar를 꺼서
 // build/libs에 실행 jar 하나만 남게 한다(Dockerfile의 COPY build/libs/*.jar가 단일 파일이 되도록).
 tasks.named('jar') {

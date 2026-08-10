@@ -62,6 +62,28 @@ tasks:
     cmds:
       - '{{.GRADLEW}} bootRun'
 
+  performance-smoke:
+    desc: JMeter Smoke Test 실행 (1명, 20초)
+    cmds:
+      - ./performance/jmeter/run.sh smoke
+
+  performance-token:
+    desc: 로컬 테스트 회원의 개발 토큰 발급 (기본 memberId=9001)
+    env:
+      PERFORMANCE_MEMBER_ID: '{{if .MEMBER_ID}}{{.MEMBER_ID}}{{else}}9001{{end}}'
+    cmds:
+      - '{{.GRADLEW}} issuePerformanceToken'
+
+  performance-load:
+    desc: JMeter Load Test 실행 (5명, 120초)
+    cmds:
+      - ./performance/jmeter/run.sh load
+
+  performance-spike:
+    desc: JMeter Spike Test 실행 (30명, 60초)
+    cmds:
+      - ./performance/jmeter/run.sh spike
+
   docker-up:
     desc: 로컬 MySQL·Redis 컨테이너 기동 (백그라운드)
     cmds:
