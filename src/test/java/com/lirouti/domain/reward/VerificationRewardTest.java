@@ -208,7 +208,11 @@ class VerificationRewardTest {
                         .as("무료 재화로 들어간다").isPresent(),
                 () -> assertThat(memberWalletRepository
                         .findByMemberIdAndCurrency(me.getId(), Currency.GEM))
-                        .as("유료 재화는 현금으로만 얻는다 — 지갑이 생길 이유가 없다").isEmpty()
+                        .as("유료 재화는 현금으로만 얻는다 — 지갑이 생길 이유가 없다").isEmpty(),
+                // 회수는 지급 행에 적힌 재화로 차감한다. 지갑만 보면 지급 행이 다른 재화로
+                // 남아도 통과하는데, 그러면 삭제할 때 엉뚱한 지갑에서 빠진다.
+                () -> assertThat(grantOf(v).orElseThrow().getCurrency())
+                        .as("지급 행에 적힌 재화가 회수 대상을 정한다").isEqualTo(Currency.TOPAZ)
         );
     }
 
