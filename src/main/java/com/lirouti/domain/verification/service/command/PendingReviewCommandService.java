@@ -3,6 +3,7 @@ package com.lirouti.domain.verification.service.command;
 import com.lirouti.domain.challenge.entity.MemberChallenge;
 import com.lirouti.domain.challenge.repository.MemberChallengeRepository;
 import com.lirouti.domain.verification.entity.ChallengeVerification;
+import com.lirouti.domain.reward.service.command.RewardCommandService;
 import com.lirouti.domain.verification.repository.ChallengeVerificationRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -31,6 +32,7 @@ public class PendingReviewCommandService {
     private final ChallengeVerificationRepository challengeVerificationRepository;
     private final MemberChallengeRepository memberChallengeRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final RewardCommandService rewardCommandService;
 
     /**
      * 재심사를 한 번 시도했다고 기록한다. <b>심사를 부르기 전에</b> 올린다.
@@ -61,6 +63,13 @@ public class PendingReviewCommandService {
                 .filter(v -> reviewedKey.equals(v.getImageUrl()))
                 .map(v -> {
                     v.approveWith(publicKey);
+                    // 보류였던 인증도 승인되면 그 시점에 지급한다. 저장할 때는 아직 통과한
+                    // 것이 아니라 주지 않았다. 여기서 안 주면 남의 서비스 장애로 보류된
+                    // 사람만 리워드를 못 받는다 — 그때도 스트릭은 올려 주기로 한 것과 같은
+                    // 기준이다.
+                    rewardCommandService.grantForVerification(
+                            v.getMemberChallenge().getMember(), v.getId(),
+                            v.getMemberChallenge().getChallenge().getReward());
                     eventPublisher.publishEvent(reviewNotification(v, true));
                     return true;
                 })

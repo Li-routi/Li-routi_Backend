@@ -21,6 +21,8 @@ import com.lirouti.domain.media.exception.code.error.MediaErrorCode;
 import com.lirouti.global.apiPayload.ApiResponse;
 import com.lirouti.global.apiPayload.code.BaseErrorCode;
 import com.lirouti.global.apiPayload.code.GeneralErrorCode;
+import com.lirouti.domain.reward.dto.response.RewardResDTO;
+import com.lirouti.domain.reward.exception.RewardClawbackException;
 import com.lirouti.global.apiPayload.exception.GeneralException;
 import com.lirouti.global.ratelimit.RateLimitExceededException;
 
@@ -30,6 +32,28 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 @RestControllerAdvice
 public class GeneralExceptionAdvice {
+
+    /**
+     * 삭제가 재화 부족으로 거절된 경우. <b>GeneralException 처리기보다 먼저 잡아</b> 실패
+     * 응답에 "얼마가 모자란지" 를 함께 싣는다.
+     *
+     * <p>{@code GeneralException} 은 코드만 들고 다니므로 이 값이 들어갈 자리가 없다. 메시지
+     * 문자열에 숫자를 끼워 넣는 방법도 있지만, 그러면 클라이언트가 문구를 파싱하게 되고
+     * 문구를 고치는 순간 깨진다.
+     */
+    @ExceptionHandler(RewardClawbackException.class)
+    public ResponseEntity<@NonNull ApiResponse<RewardResDTO.ClawbackShortfall>> handleRewardClawback(
+            RewardClawbackException e) {
+        log.warn("재화가 모자라 인증 삭제를 거절했습니다. 필요={}, 보유={}", e.getRequired(), e.getBalance());
+        return ResponseEntity
+                .status(e.getCode().getHttpStatus())
+                .body(ApiResponse.onFailure(e.getCode(), RewardResDTO.ClawbackShortfall.builder()
+                        .required(e.getRequired())
+                        .balance(e.getBalance())
+                        .shortfall(e.shortfall())
+                        .build()));
+    }
+
     // 커스텀 예외 처리
     @ExceptionHandler(GeneralException.class)
     public ResponseEntity<@NonNull ApiResponse<Void>> handleGeneralException(GeneralException e) {

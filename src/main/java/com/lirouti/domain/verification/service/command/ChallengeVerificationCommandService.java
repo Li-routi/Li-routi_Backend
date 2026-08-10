@@ -14,6 +14,7 @@ import com.lirouti.domain.challenge.exception.code.error.ChallengeErrorCode;
 import com.lirouti.domain.verification.repository.ChallengeVerificationRepository;
 import com.lirouti.domain.challenge.repository.MemberChallengeRepository;
 import com.lirouti.domain.media.service.MediaService;
+import com.lirouti.domain.reward.service.command.RewardCommandService;
 import com.lirouti.global.util.TimeUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -53,6 +54,7 @@ public class ChallengeVerificationCommandService {
     private final ChallengeVerificationRepository challengeVerificationRepository;
     // 저장된 key를 공개 URL로 조립하는 데만 쓴다. DB를 다루지 않는 유틸성 서비스다.
     private final MediaService mediaService;
+    private final RewardCommandService rewardCommandService;
 
     /**
      * 인증 저장과 스트릭 갱신. <b>DAILY</b> 에서 오늘 이미 인증했으면 행을 새로 만들지 않고
@@ -151,6 +153,22 @@ public class ChallengeVerificationCommandService {
 
         // 재인증이면 applyVerification 이 같은 구간임을 보고 스트릭을 그대로 둔다.
         memberChallenge.applyVerification(today, cycle);
+
+        // 심사를 통과한 인증에만 지급한다. 보류는 아직 통과한 것이 아니므로 여기서 주지 않고,
+        // 나중에 재심사가 승인할 때 그 시점에 준다 — 남의 서비스 장애로 보류된 사람만 리워드를
+        // 못 받는 상태가 되면 안 된다(스트릭을 그때도 올려 주기로 한 것과 같은 기준이다).
+        //
+        // 같은 트랜잭션이라야 한다. 갈리면 "인증은 저장됐는데 리워드가 없는" 상태가 조용히
+        // 남고, 사용자는 안 들어온 것만 알 뿐 서버는 이유를 모른다.
+        //
+        // 재인증(되살리기)이면 verification 의 id 가 그대로라, 이미 지급된 건은 유니크 제약과
+        // 사전 조회가 함께 막는다 — 사진만 갈아끼우고 또 받는 길이 없다.
+        if (!verification.isPending()) {
+            challengeVerificationRepository.flush();   // id 가 있어야 지급 대상을 가리킬 수 있다
+            rewardCommandService.grantForVerification(
+                    memberChallenge.getMember(), verification.getId(),
+                    memberChallenge.getChallenge().getReward());
+        }
 
         // 보류 건은 아직 대기 prefix 에 있어 공개 주소가 없다. 그 주소로 열면 403 이므로
         // 서명을 발급한다 — 본인이 방금 올린 사진이라 여기서 보여 주는 것은 문제가 없다.
@@ -269,6 +287,14 @@ public class ChallengeVerificationCommandService {
                         ChallengeVerificationErrorCode.VERIFICATION_NOT_FOUND));
 
         String imageKey = locked.getImageUrl();
+
+        // 회수를 먼저 한다. 모자라면 예외가 나가 삭제까지 함께 되돌아간다 — 재화만 빼앗기고
+        // 글은 남거나, 글은 지워졌는데 재화는 그대로인 중간 상태를 만들지 않는다.
+        //
+        // 이미 내려간 글을 다시 지우는 요청이면 지급 행이 첫 삭제 때 사라졌으므로 회수할
+        // 것이 없다. 두 번 걷히지 않는다.
+        rewardCommandService.clawbackForVerification(memberId, verificationId);
+
         return new DeleteResult(locked.softDelete(LocalDateTime.now(TimeUtil.KST)), imageKey);
     }
 
