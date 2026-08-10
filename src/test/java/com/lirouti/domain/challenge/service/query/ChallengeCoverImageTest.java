@@ -112,6 +112,25 @@ class ChallengeCoverImageTest {
         }
     }
 
+    /** 이 챌린지에 참여 중인 회원 하나. 내 챌린지 목록에 뜨려면 참여 행이 있어야 한다. */
+    private Member participant(Challenge c) {
+        Member m = member(true);
+        em.persist(MemberChallenge.builder()
+                .member(m).challenge(c)
+                .participationRound(1).currentStreak(0)
+                .joinedAt(LocalDateTime.now()).active(true).build());
+        return m;
+    }
+
+    /** 내 챌린지 목록 카드의 표지. 변환 경로가 Summary·Detail 과 따로다. */
+    private String coverOfMyListing(Member me, Challenge c) {
+        return queryService.getMyChallenges(me.getId(), null, null)
+                .challenges().stream()
+                .filter(x -> x.challengeId().equals(c.getId()))
+                .findFirst().orElseThrow()
+                .imageUrl();
+    }
+
     /** 상세 응답의 표지. 목록과 갈라지지 않는지 볼 때도 쓴다. */
     private String coverOfDetail(Challenge c) {
         return queryService.getChallenge(c.getId(), null).imageUrl();
@@ -175,19 +194,49 @@ class ChallengeCoverImageTest {
     }
 
     @Test
-    @DisplayName("목록과 상세가 같은 사진을 준다")
-    void listingAndDetailAgree() {
+    @DisplayName("찾아보기 목록 · 상세 · 내 챌린지 목록이 모두 같은 사진을 준다")
+    void allThreeResponsesAgree() {
         Challenge c = challenge();
         verification(c, "밀린것.jpg");
         ChallengeVerification top = verification(c, "1위.jpg");
         like(top, 2);
+        Member me = participant(c);
         em.flush();
         em.clear();
 
-        assertThat(coverOfListing(c))
-                .as("목록에서 본 카드와 들어가서 본 사진이 다르면 잘못 들어온 줄 안다")
-                .isEqualTo(coverOfDetail(c))
-                .isEqualTo("1위.jpg");
+        // 셋은 변환 경로가 따로다(Summary · Detail · MySummary). 한 군데만 보면 나머지가
+        // 비어 있어도 통과한다 — 같은 챌린지가 화면마다 다르게 보이는 것이 그 결과다.
+        assertAll(
+                () -> assertThat(coverOfListing(c)).isEqualTo("1위.jpg"),
+                () -> assertThat(coverOfDetail(c)).isEqualTo("1위.jpg"),
+                () -> assertThat(coverOfMyListing(me, c))
+                        .as("내 챌린지 카드도 같은 표지를 써야 한다")
+                        .isEqualTo("1위.jpg")
+        );
+    }
+
+    @Test
+    @DisplayName("내 챌린지 목록에도 운영 표지 우선과 null 규칙이 그대로 적용된다")
+    void myListingFollowsSameRules() {
+        Challenge operatorSet = challenge("운영표지.jpg");
+        ChallengeVerification top = verification(operatorSet, "인기인증.jpg");
+        like(top, 3);
+        Member me = participant(operatorSet);
+
+        Challenge empty = challenge();
+        em.persist(MemberChallenge.builder()
+                .member(me).challenge(empty)
+                .participationRound(1).currentStreak(0)
+                .joinedAt(LocalDateTime.now()).active(true).build());
+        em.flush();
+        em.clear();
+
+        assertAll(
+                () -> assertThat(coverOfMyListing(me, operatorSet)).isEqualTo("운영표지.jpg"),
+                () -> assertThat(coverOfMyListing(me, empty))
+                        .as("인증이 없으면 여기서도 null 이다")
+                        .isNull()
+        );
     }
 
     // ── 폴백 ──
