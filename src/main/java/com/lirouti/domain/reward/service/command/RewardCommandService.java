@@ -34,8 +34,13 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class RewardCommandService {
 
-    /** 챌린지 리워드는 파란 보석이다. 주황 보석은 업적에서 준다. */
-    private static final Currency REWARD_CURRENCY = Currency.GEM;
+    /**
+     * 챌린지 리워드는 <b>주황 보석({@link Currency#TOPAZ})</b>이다 — 무료 재화다.
+     *
+     * <p>파란 보석({@link Currency#GEM})은 현금으로만 얻는 유료 재화라 여기서 주면
+     * <b>인증만 하면 유료 재화가 공짜로 생긴다.</b> 실제로 그렇게 들어갔다가 되돌린 자리다.
+     */
+    private static final Currency REWARD_CURRENCY = Currency.TOPAZ;
 
     private final RewardGrantRepository rewardGrantRepository;
     private final WalletCommandService walletCommandService;
@@ -44,9 +49,9 @@ public class RewardCommandService {
     /**
      * 인증 한 건에 리워드를 준다.
      *
-     * <p><b>무상 잔액으로 넣는다.</b> 현금으로 산 것이 아니므로 환불 대상이 아니고, 차감이
-     * 무상부터 나가므로 <b>사용자가 산 재화보다 먼저 쓰인다</b> — 환불 요구가 오면 산 만큼은
-     * 그대로 남아 있다.
+     * <p><b>무상 잔액으로 넣는다.</b> {@code TOPAZ} 는 현금으로 사지 않으므로 유상 잔액이
+     * 없고, 이 지급도 환불 대상이 아니다. 유상·무상이 갈리는 것은 {@link Currency#GEM} 쪽이고,
+     * 두 재화는 서로를 대신하지 않으므로 이 지급이 사용자가 산 재화에 닿을 일은 없다.
      *
      * @return 지급했으면 {@code true}. 이미 지급된 인증이면 {@code false} 이고 아무것도 하지 않는다.
      */
