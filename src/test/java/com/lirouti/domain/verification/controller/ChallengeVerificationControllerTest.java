@@ -2,6 +2,7 @@ package com.lirouti.domain.verification.controller;
 
 import com.lirouti.domain.challenge.entity.Challenge;
 import com.lirouti.domain.verification.entity.ChallengeVerification;
+import com.lirouti.domain.verification.entity.ChallengeVerificationLike;
 import com.lirouti.domain.challenge.entity.MemberChallenge;
 import com.lirouti.domain.challenge.enums.ChallengeCategory;
 import com.lirouti.domain.member.entity.Member;
@@ -29,10 +30,15 @@ import static org.hamcrest.Matchers.matchesPattern;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.startsWith;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
@@ -242,7 +248,7 @@ class ChallengeVerificationControllerTest {
     }
 
     @Test
-    @DisplayName("신고하면 200과 reportId·verificationId를 돌려주고, 사유는 생략할 수 있다")
+    @DisplayName("사유를 고르면 200 — 기타가 아니면 직접 입력은 보내지 않는다")
     void report_Success() throws Exception {
         Member author = persistMember("verauthor");
         Member reporter = persistMember("verreporter");
@@ -253,11 +259,106 @@ class ChallengeVerificationControllerTest {
         mockMvc.perform(post("/api/challenges/{cid}/verifications/{vid}/reports", c.getId(), v.getId())
                         .with(user(principal(reporter)))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{}"))   // reason 생략 — 사유 없이 바로 신고할 수 있어야 한다
+                        .content("{\"reportType\": \"IRRELEVANT\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.isSuccess").value(true))
                 .andExpect(jsonPath("$.result.verificationId").value(v.getId()))
                 .andExpect(jsonPath("$.result.reportId").isNumber());
+    }
+
+    @Test
+    @DisplayName("사유를 안 고르면 400 — 예전에는 생략할 수 있었다")
+    void report_WithoutType_Returns400() throws Exception {
+        Member author = persistMember("verauthorA");
+        Member reporter = persistMember("verreporterA");
+        Challenge c = persistChallenge();
+        ChallengeVerification v = persistVerification(author, c);
+        em.flush();
+
+        mockMvc.perform(post("/api/challenges/{cid}/verifications/{vid}/reports", c.getId(), v.getId())
+                        .with(user(principal(reporter)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("기타인데 직접 입력이 없으면 400")
+    void report_EtcWithoutReason_Returns400() throws Exception {
+        Member author = persistMember("verauthorB");
+        Member reporter = persistMember("verreporterB");
+        Challenge c = persistChallenge();
+        ChallengeVerification v = persistVerification(author, c);
+        em.flush();
+
+        String url = "/api/challenges/" + c.getId() + "/verifications/" + v.getId() + "/reports";
+        // 아예 없는 경우와 공백만 있는 경우 둘 다 막아야 한다.
+        for (String body : new String[]{"{\"reportType\": \"ETC\"}",
+                                        "{\"reportType\": \"ETC\", \"reason\": \"   \"}"}) {
+            mockMvc.perform(post(url).with(user(principal(reporter)))
+                            .contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isBadRequest());
+        }
+    }
+
+    @Test
+    @DisplayName("기타에 직접 입력을 채우면 200")
+    void report_EtcWithReason_Succeeds() throws Exception {
+        Member author = persistMember("verauthorC");
+        Member reporter = persistMember("verreporterC");
+        Challenge c = persistChallenge();
+        ChallengeVerification v = persistVerification(author, c);
+        em.flush();
+
+        mockMvc.perform(post("/api/challenges/{cid}/verifications/{vid}/reports", c.getId(), v.getId())
+                        .with(user(principal(reporter)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reportType\": \"ETC\", \"reason\": \"광고 링크가 적혀 있어요\"}"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("직접 입력이 100자를 넘으면 400 — 화면이 100자라 서버도 같게 막는다")
+    void report_ReasonTooLong_Returns400() throws Exception {
+        Member author = persistMember("verauthorD");
+        Member reporter = persistMember("verreporterD");
+        Challenge c = persistChallenge();
+        ChallengeVerification v = persistVerification(author, c);
+        em.flush();
+
+        String tooLong = "가".repeat(101);
+        mockMvc.perform(post("/api/challenges/{cid}/verifications/{vid}/reports", c.getId(), v.getId())
+                        .with(user(principal(reporter)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reportType\": \"ETC\", \"reason\": \"" + tooLong + "\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("기타가 아닌데 직접 입력을 보내면 거절하지 않고 버린다")
+    void report_NonEtcReason_IsDroppedNotRejected() throws Exception {
+        Member author = persistMember("verauthorE");
+        Member reporter = persistMember("verreporterE");
+        Challenge c = persistChallenge();
+        ChallengeVerification v = persistVerification(author, c);
+        em.flush();
+
+        // 라디오를 바꿀 때 입력란 값을 안 지우고 보내는 실수 때문에 신고가 실패하면 더 나쁘다.
+        mockMvc.perform(post("/api/challenges/{cid}/verifications/{vid}/reports", c.getId(), v.getId())
+                        .with(user(principal(reporter)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reportType\": \"SPAM\", \"reason\": \"지워지지 않은 입력\"}"))
+                .andExpect(status().isOk());
+        em.flush();
+        em.clear();
+
+        // 다만 남기지도 않는다 — 화면에 없던 값이 DB 에 남으면 통계가 어긋난다.
+        Object stored = em.createQuery(
+                        "select r.reason from ChallengeVerificationReport r"
+                                + " where r.challengeVerification.id = :vid")
+                .setParameter("vid", v.getId())
+                .getSingleResult();
+        assertThat(stored).isNull();
     }
 
     @Test
@@ -270,12 +371,13 @@ class ChallengeVerificationControllerTest {
         em.flush();
 
         String url = "/api/challenges/" + c.getId() + "/verifications/" + v.getId() + "/reports";
+        String body = "{\"reportType\": \"SPAM\"}";
         mockMvc.perform(post(url).with(user(principal(reporter)))
-                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isOk());
 
         mockMvc.perform(post(url).with(user(principal(reporter)))
-                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("CHALLENGE409_4"));
     }
@@ -293,7 +395,7 @@ class ChallengeVerificationControllerTest {
         // 인증은 c에 속하는데 other 경로로 신고 → 404
         mockMvc.perform(post("/api/challenges/{cid}/verifications/{vid}/reports", other.getId(), v.getId())
                         .with(user(principal(reporter)))
-                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"reportType\": \"SPAM\"}"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("CHALLENGE404_2"));
     }
@@ -309,7 +411,7 @@ class ChallengeVerificationControllerTest {
 
         mockMvc.perform(post("/api/challenges/{cid}/verifications/{vid}/reports", c.getId(), v.getId())
                         .with(user(principal(reporter)))
-                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"reportType\": \"SPAM\"}"))
                 .andExpect(status().isOk());
 
         // 신고자에게는 빈 피드
@@ -417,4 +519,62 @@ class ChallengeVerificationControllerTest {
                         .content("{\"content\": \"%s\"}".formatted("가".repeat(256))))
                 .andExpect(status().isBadRequest());
     }
+
+    // ── 정렬 ──
+    @Test
+    @DisplayName("sort 를 생략하면 최신순이다 — 파라미터를 안 보내던 화면이 달라지면 안 된다")
+    void feed_SortOmitted_DefaultsToLatest() throws Exception {
+        // 작성자를 나눈다. 한 회원이 같은 챌린지에 참여 행을 둘 가질 수 없다.
+        Member viewer = persistMember("sortviewer");
+        Challenge c = persistChallenge();
+        ChallengeVerification older = persistVerification(persistMember("sortauthorA"), c);
+        ChallengeVerification newer = persistVerification(persistMember("sortauthorB"), c);
+        // 먼저 올린 것에 좋아요를 준다. 이게 없으면 두 정렬 결과가 같아져(둘 다 0개라
+        // 좋아요순도 id 로 갈린다) 기본값이 바뀌어도 이 테스트가 통과한다.
+        em.persist(ChallengeVerificationLike.builder()
+                .challengeVerification(older).member(viewer).build());
+        em.flush();
+
+        // 컨트롤러의 defaultValue 를 실제로 지나가야 이 값이 바뀌었을 때 잡힌다.
+        // 서비스에 LATEST 를 직접 넘기는 테스트로는 기본값이 검증되지 않는다.
+        mockMvc.perform(get("/api/challenges/{cid}/verifications", c.getId())
+                        .with(user(principal(viewer))))
+                .andExpect(status().isOk())
+                // 최신순이면 나중 것이 위다. 좋아요순이면 좋아요를 받은 older 가 위로 온다.
+                .andExpect(jsonPath("$.result.verifications[0].verificationId").value(newer.getId()))
+                .andExpect(jsonPath("$.result.verifications[1].verificationId").value(older.getId()));
+    }
+
+    @Test
+    @DisplayName("좋아요순은 커서 값을 둘 내려준다 — id 하나로는 좌표가 안 잡힌다")
+    void feed_LikesSort_ReturnsCompositeCursor() throws Exception {
+        Member viewer = persistMember("sortviewer2");
+        Challenge c = persistChallenge();
+        persistVerification(persistMember("sortauthorC"), c);
+        persistVerification(persistMember("sortauthorD"), c);
+        em.flush();
+
+        mockMvc.perform(get("/api/challenges/{cid}/verifications", c.getId())
+                        .param("sort", "LIKES").param("size", "1")
+                        .with(user(principal(viewer))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.hasNext").value(true))
+                .andExpect(jsonPath("$.result.nextCursor").isNumber())
+                // 좋아요 수가 0 이어도 값이 실려야 한다. 없으면 다음 페이지를 못 만든다.
+                .andExpect(jsonPath("$.result.nextCursorLikeCount").value(0));
+    }
+
+    @Test
+    @DisplayName("모르는 sort 값은 400 이다")
+    void feed_UnknownSort_Returns400() throws Exception {
+        Member viewer = persistMember("sortviewer3");
+        Challenge c = persistChallenge();
+        em.flush();
+
+        mockMvc.perform(get("/api/challenges/{cid}/verifications", c.getId())
+                        .param("sort", "POPULAR")
+                        .with(user(principal(viewer))))
+                .andExpect(status().isBadRequest());
+    }
+
 }

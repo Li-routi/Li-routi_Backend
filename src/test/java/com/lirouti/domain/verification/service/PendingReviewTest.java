@@ -1,5 +1,6 @@
 package com.lirouti.domain.verification.service;
 
+import com.lirouti.domain.verification.enums.ReportType;
 import com.lirouti.domain.verification.client.AnthropicVerificationReviewClient;
 import com.lirouti.domain.verification.client.ReviewRejection;
 import com.lirouti.domain.verification.client.VerificationReview;
@@ -227,7 +228,7 @@ class PendingReviewTest {
         // when & then
         assertThatThrownBy(() -> challengeVerificationService.report(
                 memberId, challengeId, verificationId,
-                new ChallengeVerificationReqDTO.Report(null)))
+                new ChallengeVerificationReqDTO.Report(ReportType.IRRELEVANT, null)))
                 .isInstanceOf(RuntimeException.class);
     }
 

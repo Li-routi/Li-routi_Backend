@@ -5,6 +5,8 @@ import com.lirouti.domain.challenge.entity.Challenge;
 import com.lirouti.domain.verification.dto.response.ChallengeVerificationResDTO;
 import com.lirouti.domain.verification.dto.request.ChallengeVerificationReqDTO;
 import com.lirouti.domain.verification.entity.ChallengeVerification;
+import com.lirouti.domain.verification.exception.VerificationException;
+import com.lirouti.domain.verification.exception.code.error.ChallengeVerificationErrorCode;
 import com.lirouti.domain.challenge.entity.MemberChallenge;
 import com.lirouti.domain.challenge.enums.ChallengeCategory;
 import com.lirouti.domain.challenge.exception.ChallengeException;
@@ -164,8 +166,8 @@ class ChallengeVerificationSaveTest {
 
     // ── 당일 재인증(덮어쓰기) ──
     @Test
-    @DisplayName("같은 날 다시 인증하면 행을 새로 만들지 않고 사진·코멘트를 덮어쓴다")
-    void verify_SameDayAgain_OverwritesInsteadOfInserting() {
+    @DisplayName("같은 날 또 인증하면 409 — 덮어쓰기는 없다")
+    void verify_SameDayAgain_IsRejected() {
         Member m = member();
         Challenge c = challenge(true);
         MemberChallenge mc = join(m, c, true, null, 0);
@@ -174,45 +176,70 @@ class ChallengeVerificationSaveTest {
         challengeVerificationService.verify(m.getId(), c.getId(), request(KEY_1, "처음"));
         String firstStoredKey = verificationsOf(mc).get(0).getImageUrl();
 
-        ChallengeVerificationResDTO.Verification second =
-                challengeVerificationService.verify(m.getId(), c.getId(), request(KEY_2, "바꿈"));
+        // 구간이 한 번 차면 끝이다. 사진을 바꾸고 싶으면 지우고 다시 올려야 한다
+        // (그때 리워드를 회수한다).
+        assertThatThrownBy(() ->
+                challengeVerificationService.verify(m.getId(), c.getId(), request(KEY_2, "바꿈")))
+                .isInstanceOf(VerificationException.class)
+                .hasFieldOrPropertyWithValue("code",
+                        ChallengeVerificationErrorCode.ALREADY_VERIFIED_TODAY);
 
-        assertThat(second.reverified()).isTrue();
-        assertThat(second.content()).isEqualTo("바꿈");
-
-        // 하루에 한 행이라는 사실이 유지되어야 한다.
         List<ChallengeVerification> rows = verificationsOf(mc);
         assertThat(rows).hasSize(1);
-
-        String storedKey = rows.get(0).getImageUrl();
-        assertThat(storedKey)
-                .as("저장되는 것은 승격된 공개 key 다")
-                .matches(PROMOTED_KEY)
-                .doesNotContain("-staging/")
-                // 승격이 UUID 를 새로 뽑았는지. 올린 key 를 그대로 쓰면 재승격이 공개본을 덮어쓴다.
-                .doesNotContain("22222222-2222-4222-8222-222222222222")
-                // 앞 인증의 공개본을 다시 쓰면 그 사진이 조용히 바뀐다. 대기 key 만 봐서는
-                // 이 경우를 못 잡으므로 앞서 저장된 공개 key 와도 대조한다.
-                .isNotEqualTo(firstStoredKey);
-        assertThat(second.imageUrl())
-                .as("응답의 주소는 저장된 key 로 조립된다")
-                .endsWith(storedKey);
+        assertThat(rows.get(0).getImageUrl())
+                .as("막혔으므로 사진도 코멘트도 그대로다")
+                .isEqualTo(firstStoredKey);
+        assertThat(rows.get(0).getContent()).isEqualTo("처음");
     }
 
     @Test
-    @DisplayName("당일 재인증은 스트릭을 올리지 않는다")
-    void verify_SameDayAgain_DoesNotIncrementStreak() {
+    @DisplayName("지우면 그 구간이 다시 열린다 — 삭제만이 예외다")
+    void verify_AfterDelete_IsAllowed() {
+        Member m = member();
+        Challenge c = challenge(true);
+        MemberChallenge mc = join(m, c, true, null, 0);
+        em.flush();
+
+        challengeVerificationService.verify(m.getId(), c.getId(), request(KEY_1, "처음"));
+        ChallengeVerification first = verificationsOf(mc).get(0);
+        String firstStoredKey = first.getImageUrl();
+
+        challengeVerificationService.deleteVerification(m.getId(), c.getId(), first.getId());
+        em.flush();
+
+        ChallengeVerificationResDTO.Verification again =
+                challengeVerificationService.verify(m.getId(), c.getId(), request(KEY_2, "다시"));
+
+        assertThat(again.reverified()).as("지운 행을 되살린 것이다").isTrue();
+        assertThat(again.content()).isEqualTo("다시");
+
+        List<ChallengeVerification> rows = verificationsOf(mc);
+        assertThat(rows).as("구간에 한 행이라는 사실은 그대로다").hasSize(1);
+        assertThat(rows.get(0).getDeletedAt()).as("되살아났다").isNull();
+        assertThat(rows.get(0).getImageUrl())
+                .as("새로 승격된 공개 key 다")
+                .matches(PROMOTED_KEY)
+                .isNotEqualTo(firstStoredKey);
+    }
+
+    @Test
+    @DisplayName("지우고 다시 인증해도 스트릭이 두 번 오르지 않는다")
+    void verify_AfterDelete_DoesNotIncrementStreakTwice() {
         Member m = member();
         Challenge c = challenge(true);
         MemberChallenge mc = join(m, c, true, today().minusDays(1), 5);
         em.flush();
 
         challengeVerificationService.verify(m.getId(), c.getId(), request(KEY_1, null));
-        ChallengeVerificationResDTO.Verification second =
+        ChallengeVerification first = verificationsOf(mc).get(0);
+        challengeVerificationService.deleteVerification(m.getId(), c.getId(), first.getId());
+        em.flush();
+
+        ChallengeVerificationResDTO.Verification again =
                 challengeVerificationService.verify(m.getId(), c.getId(), request(KEY_2, null));
 
-        // 어제 → 오늘로 한 번만 올라 6이어야 하고, 두 번째 인증으로 7이 되면 안 된다.
-        assertThat(second.currentStreak()).isEqualTo(6);
+        // 어제 → 오늘로 한 번만 올라 6이어야 한다. 지웠다 다시 올렸다고 7이 되면 안 된다.
+        assertThat(again.currentStreak()).isEqualTo(6);
         assertThat(mc.getCurrentStreak()).isEqualTo(6);
     }
 

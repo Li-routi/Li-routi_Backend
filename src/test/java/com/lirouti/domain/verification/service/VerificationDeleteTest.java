@@ -1,5 +1,6 @@
 package com.lirouti.domain.verification.service;
 
+import com.lirouti.domain.verification.enums.ReportType;
 import com.lirouti.domain.challenge.enums.RoutineCycle;
 import com.lirouti.domain.challenge.entity.Challenge;
 import com.lirouti.domain.challenge.entity.MemberChallenge;
@@ -13,6 +14,8 @@ import com.lirouti.domain.member.enums.SocialProvider;
 import com.lirouti.domain.verification.dto.request.ChallengeVerificationReqDTO;
 import com.lirouti.domain.verification.entity.ChallengeVerification;
 import com.lirouti.domain.verification.repository.ChallengeVerificationRepository;
+import com.lirouti.domain.verification.exception.VerificationException;
+import com.lirouti.domain.verification.exception.code.error.ChallengeVerificationErrorCode;
 import com.lirouti.global.util.TimeUtil;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -123,8 +126,8 @@ class VerificationDeleteTest {
     }
 
     @Test
-    @DisplayName("글은 내려가되 인증한 사실은 남는다 — 그날 버튼은 완료 그대로다")
-    void delete_KeepsTheFactOfVerification() {
+    @DisplayName("글을 내리면 그 구간이 다시 열린다 — 버튼도 함께 열려야 한다")
+    void delete_ReopensThePeriod() {
         // given
         ChallengeVerification v = verificationOn(today());
         participation.applyVerification(today(), RoutineCycle.DAILY);
@@ -138,8 +141,8 @@ class VerificationDeleteTest {
         assertThat(v.isDeleted()).isTrue();
         assertThat(challengeQueryService.getChallenge(challenge.getId(), me.getId())
                 .verifiedInCurrentPeriod())
-                .as("인증을 취소한 것이 아니므로 그날은 다시 못 한다")
-                .isTrue();
+                .as("서버가 재인증을 받아 주는데 버튼이 잠긴 채면 사용자가 거기 닿을 수 없다")
+                .isFalse();
     }
 
     @Test
@@ -245,7 +248,7 @@ class VerificationDeleteTest {
                 .as("되살아났을 때 엉뚱한 좋아요 수를 달고 나타나면 안 된다")
                 .isInstanceOf(RuntimeException.class);
         assertThatThrownBy(() -> challengeVerificationService.report(me.getId(), challenge.getId(), v.getId(),
-                new ChallengeVerificationReqDTO.Report(null)))
+                new ChallengeVerificationReqDTO.Report(ReportType.IRRELEVANT, null)))
                 .as("이미 내려간 글로 숨김 임계값을 채우면 안 된다")
                 .isInstanceOf(RuntimeException.class);
         assertThatThrownBy(() -> challengeVerificationService.updateMemo(me.getId(), challenge.getId(), v.getId(),
@@ -270,24 +273,27 @@ class VerificationDeleteTest {
     }
 
     @Test
-    @DisplayName("삭제 직전에 사진이 갈렸어도 현재 사진을 지운다 — 옛 key 만 지우면 지운 글의 사진이 남는다")
+    @DisplayName("지웠다 다시 올린 뒤 또 지우면 현재 사진을 지운다 — 옛 key 만 지우면 사진이 남는다")
     void delete_PhotoReplacedJustBefore_RemovesCurrentPhoto() {
-        // given: 오늘 인증이 있고, 그 사이 당일 재인증으로 사진이 갈렸다
+        // given: 인증 → 삭제 → 재인증(사진이 갈린다). 덮어쓰기가 없어져 이 경로로만 갈린다.
         ChallengeVerification v = verificationOn(today());
         participation.applyVerification(today(), RoutineCycle.DAILY);
         em.flush();
 
+        challengeVerificationService.deleteVerification(me.getId(), challenge.getId(), v.getId());
+        em.flush();
+
         challengeVerificationService.verify(me.getId(), challenge.getId(),
-                new ChallengeVerificationReqDTO.Verify(NEW_STAGING_KEY, "사진 교체"));
+                new ChallengeVerificationReqDTO.Verify(NEW_STAGING_KEY, "다시 올림"));
         em.flush();
         assertThat(v.getImageUrl()).isEqualTo(NEW_PUBLIC_KEY);
+        assertThat(v.getDeletedAt()).as("되살아났다").isNull();
 
         // when
         challengeVerificationService.deleteVerification(me.getId(), challenge.getId(), v.getId());
 
-        // then — 잠그고 다시 읽지 않으면 옛 key(PUBLIC_KEY)를 지워, 현재 사진이 공개 prefix 에 남는다.
+        // then — 잠그고 다시 읽지 않으면 옛 key 를 지워, 현재 사진이 공개 prefix 에 남는다.
         verify(mediaService).deleteQuietly(NEW_PUBLIC_KEY);
-        verify(mediaService, never()).deleteQuietly(PUBLIC_KEY);
     }
 
     @Test
@@ -318,4 +324,34 @@ class VerificationDeleteTest {
                 .as("행이 늘지 않는다 — 하루 한 건이 유지된다")
                 .isEqualTo(1L);
     }
+
+    @Test
+    @DisplayName("신고로 가려진 글은 지울 수도 다시 낼 수도 없다 — 그 구간은 닫힌 채로 끝난다")
+    void hidden_ClosesThePeriod() {
+        // given: 오늘 인증이 신고 누적으로 가려졌다
+        ChallengeVerification v = verificationOn(today());
+        participation.applyVerification(today(), RoutineCycle.DAILY);
+        v.hide(LocalDateTime.now(TimeUtil.KST));
+        em.flush();
+
+        // 지울 수 없다 — 지워서 신고 누적을 회피하는 길을 막는다
+        assertThatThrownBy(() ->
+                challengeVerificationService.deleteVerification(me.getId(), challenge.getId(), v.getId()))
+                .isInstanceOf(VerificationException.class)
+                .hasFieldOrPropertyWithValue("code",
+                        ChallengeVerificationErrorCode.VERIFICATION_NOT_FOUND);
+
+        // 다시 낼 수도 없다 — 지우지 않은 인증은 구간을 점유한다
+        assertThatThrownBy(() -> challengeVerificationService.verify(me.getId(), challenge.getId(),
+                new ChallengeVerificationReqDTO.Verify(NEW_STAGING_KEY, "다시 올림")))
+                .isInstanceOf(VerificationException.class)
+                .hasFieldOrPropertyWithValue("code",
+                        ChallengeVerificationErrorCode.ALREADY_VERIFIED_TODAY);
+
+        // 가려짐은 제재이므로 그 구간을 소진한 것으로 본다. 다시 열어 주면 신고를 받은
+        // 사람이 사진만 바꿔 계속 낼 수 있어 숨김이 힘을 잃는다.
+        assertThat(v.isDeleted()).isFalse();
+        assertThat(v.getImageUrl()).as("사진도 그대로다").isEqualTo(PUBLIC_KEY);
+    }
+
 }

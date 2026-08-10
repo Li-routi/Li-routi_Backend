@@ -34,6 +34,7 @@ import com.lirouti.domain.verification.dto.request.ChallengeVerificationReqDTO;
 import com.lirouti.domain.verification.dto.response.ChallengeVerificationResDTO;
 import com.lirouti.domain.verification.entity.ChallengeVerification;
 import com.lirouti.domain.verification.entity.ChallengeVerificationReport;
+import com.lirouti.domain.verification.enums.ReportType;
 import com.lirouti.domain.verification.enums.ReviewStatus;
 import com.lirouti.domain.verification.exception.VerificationException;
 import com.lirouti.domain.verification.exception.code.error.ChallengeVerificationErrorCode;
@@ -308,7 +309,12 @@ public class ChallengeVerificationService {
         ChallengeVerificationReport report = ChallengeVerificationReport.builder()
                 .challengeVerification(verification)
                 .reporter(reporter)
-                .reason(request.reason())
+                .reportType(request.reportType())
+                // ETC 가 아니면 직접 입력을 버린다. 400 으로 막지 않는 이유는 클라이언트가
+                // 라디오를 바꿀 때 입력란 값을 지우지 않고 보내는 것이 흔한 실수이고,
+                // 그것 때문에 신고 자체가 실패하는 편이 더 나쁘기 때문이다. 대신 남기지도
+                // 않는다 — 화면에 없던 값이 DB 에 남으면 나중에 통계가 어긋난다.
+                .reason(request.reportType() == ReportType.ETC ? request.reason() : null)
                 .build();
         ChallengeVerificationReport saved;
         try {

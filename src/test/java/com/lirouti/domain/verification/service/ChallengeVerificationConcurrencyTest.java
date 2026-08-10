@@ -1,5 +1,6 @@
 package com.lirouti.domain.verification.service;
 
+import com.lirouti.global.apiPayload.exception.GeneralException;
 import com.lirouti.domain.media.service.MediaImageLoad;
 import com.lirouti.domain.challenge.entity.Challenge;
 import com.lirouti.domain.challenge.entity.MemberChallenge;
@@ -130,8 +131,12 @@ class ChallengeVerificationConcurrencyTest {
                     challengeVerificationService.verify(
                             memberId, challengeId, new ChallengeVerificationReqDTO.Verify(mediaKey, "동시 인증"));
                     success.incrementAndGet();
-                } catch (ChallengeException e) {
-                    if (e.getCode() == ChallengeVerificationErrorCode.VERIFICATION_CONFLICT) {
+                } catch (GeneralException e) {
+                    // 진 쪽이 받는 코드가 둘이다. 참여 행 잠금 뒤에 읽어 이미 커밋된 인증을
+                    // 보면 ALREADY_VERIFIED_TODAY, 그보다 앞서 INSERT 까지 갔다가 유니크
+                    // 제약에 걸리면 VERIFICATION_CONFLICT 다. 어느 쪽이든 "졌다" 는 같다.
+                    if (e.getCode() == ChallengeVerificationErrorCode.VERIFICATION_CONFLICT
+                            || e.getCode() == ChallengeVerificationErrorCode.ALREADY_VERIFIED_TODAY) {
                         conflict.incrementAndGet();
                     } else {
                         unexpected.compareAndSet(null, e);

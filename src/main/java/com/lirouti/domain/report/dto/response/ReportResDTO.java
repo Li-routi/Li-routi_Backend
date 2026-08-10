@@ -91,8 +91,9 @@ public class ReportResDTO {
      *                               {@code completedCount / scheduledCount}를 구한 뒤
      *                               그 값이 0보다 큰 날만 모아 평균한다 — 예정된 루틴이
      *                               없거나 하나도 완료하지 못한 날은 평균에서 뺀다.
-     * @param completedChallengeCount 디자인상 챌린지에 "완료" 개념이 없어, 우선 대상 월
-     *                                기준으로 참여 중인 챌린지 개수를 대신 보여준다.
+     * @param completedChallengeCount 대상 월에 챌린지를 제출해 완료 처리된 횟수. 챌린지는
+     *                                하루 1회만 제출 가능하고 제출에 성공할 때마다 +1되며,
+     *                                다음 날이 되면 같은 챌린지에 다시 제출할 수 있다.
      * @param earnedCoinCount 상점·코인 기능이 아직 없어 항상 0이다.
      */
     @Builder

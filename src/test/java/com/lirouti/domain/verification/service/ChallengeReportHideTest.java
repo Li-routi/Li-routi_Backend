@@ -1,5 +1,7 @@
 package com.lirouti.domain.verification.service;
 
+import com.lirouti.domain.verification.enums.VerificationSort;
+import com.lirouti.domain.verification.enums.ReportType;
 import com.lirouti.domain.verification.service.query.ChallengeVerificationQueryService;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -107,7 +109,7 @@ class ChallengeReportHideTest {
         for (int i = 0; i < count; i++) {
             challengeVerificationService.report(
                     member().getId(), c.getId(), v.getId(),
-                    new ChallengeVerificationReqDTO.Report("부적절한 사진"));
+                    new ChallengeVerificationReqDTO.Report(ReportType.IRRELEVANT, null));
         }
         em.flush();
         em.clear();
@@ -127,7 +129,7 @@ class ChallengeReportHideTest {
         reportBy(reportProperties.getHideThreshold(), c, v);
 
         // then
-        assertThat(challengeVerificationQueryService.getVerificationFeed(c.getId(), viewer.getId(), null, BIG)
+        assertThat(challengeVerificationQueryService.getVerificationFeed(c.getId(), viewer.getId(), null, null, BIG, VerificationSort.LATEST)
                 .verifications())
                 .isEmpty();
     }
@@ -145,7 +147,7 @@ class ChallengeReportHideTest {
         reportBy(reportProperties.getHideThreshold() - 1, c, v);
 
         // then
-        assertThat(challengeVerificationQueryService.getVerificationFeed(c.getId(), viewer.getId(), null, BIG)
+        assertThat(challengeVerificationQueryService.getVerificationFeed(c.getId(), viewer.getId(), null, null, BIG, VerificationSort.LATEST)
                 .verifications())
                 .extracting(ChallengeVerificationResDTO.FeedItem::verificationId)
                 .containsExactly(v.getId());
@@ -164,7 +166,7 @@ class ChallengeReportHideTest {
         reportBy(reportProperties.getHideThreshold(), c, v);
 
         // then
-        assertThat(challengeVerificationQueryService.getMyVerifications(author.getId(), c.getId(), null, BIG, null)
+        assertThat(challengeVerificationQueryService.getMyVerifications(author.getId(), c.getId(), null, null, BIG, null, VerificationSort.LATEST)
                 .verifications())
                 .isEmpty();
     }

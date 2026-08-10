@@ -1,5 +1,6 @@
 package com.lirouti.domain.verification.service.query;
 
+import com.lirouti.domain.verification.enums.VerificationSort;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertAll;
 
@@ -92,7 +93,7 @@ class FeedMineFlagTest {
     /** 인증 id → 그 카드의 mine 값. */
     private Map<Long, Boolean> mineByVerificationId(Long challengeId, Long viewerId) {
         ChallengeVerificationResDTO.Feed feed =
-                challengeVerificationQueryService.getVerificationFeed(challengeId, viewerId, null, null);
+                challengeVerificationQueryService.getVerificationFeed(challengeId, viewerId, null, null, null, VerificationSort.LATEST);
         return feed.verifications().stream().collect(Collectors.toMap(
                 ChallengeVerificationResDTO.FeedItem::verificationId,
                 ChallengeVerificationResDTO.FeedItem::mine,
@@ -159,7 +160,7 @@ class FeedMineFlagTest {
 
         // when
         ChallengeVerificationResDTO.Feed feed =
-                challengeVerificationQueryService.getVerificationFeed(challenge.getId(), me.getId(), null, null);
+                challengeVerificationQueryService.getVerificationFeed(challenge.getId(), me.getId(), null, null, null, VerificationSort.LATEST);
         Map<Long, ChallengeVerificationResDTO.FeedItem> byId = feed.verifications().stream()
                 .collect(Collectors.toMap(ChallengeVerificationResDTO.FeedItem::verificationId,
                         Function.identity()));

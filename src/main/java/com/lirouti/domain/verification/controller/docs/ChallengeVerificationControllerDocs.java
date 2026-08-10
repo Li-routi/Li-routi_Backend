@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import com.lirouti.domain.verification.dto.response.ChallengeVerificationResDTO;
 import com.lirouti.domain.verification.enums.ReviewStatus;
+import com.lirouti.domain.verification.enums.VerificationSort;
 import com.lirouti.domain.verification.dto.request.ChallengeVerificationReqDTO;
 
 @Tag(name = "Challenge", description = "챌린지 인증 API")
@@ -26,15 +27,39 @@ public interface ChallengeVerificationControllerDocs {
 
                     **인증 횟수는 챌린지의 주기(`routineCycle`)를 따릅니다.**
 
-                    | 주기 | 몇 번 | 사진 교체 |
-                    | --- | --- | --- |
-                    | `DAILY` | 하루 1회 | **가능** — 그날 다시 올리면 덮어써집니다(reverified=true) |
-                    | `WEEKLY` | 그 주(일~토) 1회 | **불가** — `CHALLENGE409_6` |
-                    | `MONTHLY` | 그 달 1회 | **불가** — `CHALLENGE409_6` |
+                    | 주기 | 한 구간 |
+                    | --- | --- |
+                    | `DAILY` | 하루 |
+                    | `WEEKLY` | 그 주(일~토) |
+                    | `MONTHLY` | 그 달 |
 
-                    주간·월간에서 교체를 막는 이유는, 허용하면 사진은 수요일 것인데 인증일은
-                    월요일로 남아 날짜와 내용이 어긋나기 때문입니다. 덮어쓰기에서는 스트릭이
-                    오르지 않습니다.
+                    **한 구간에 한 번 내면 끝입니다.** 주기로 규칙이 갈리지 않습니다 — 주가
+                    지나지 않았으면 주간도 하루와 똑같이 "이미 낸 것"입니다.
+
+                    ### 사진을 바꾸려면 지우고 다시 올립니다
+
+                    **덮어쓰기는 없습니다.** 이미 낸 구간에 또 보내면 409입니다.
+                    사진을 바꾸려면 `DELETE /{verificationId}` 로 글을 내린 뒤 다시 인증하세요.
+                    ⚠️ **리워드 회수는 아직 붙지 않았습니다.** 붙으면 지울 때 그 인증으로
+                    받은 재화를 회수합니다. 그때까지는 회수 없이 다시 낼 수 있습니다.
+
+                    | 상황 | 결과 |
+                    | --- | --- |
+                    | 그 구간에 인증이 있다 | 409 |
+                    | 심사 보류(`PENDING`) 중이다 | 409 — 심사 중이어도 이미 낸 것입니다 |
+                    | 탈퇴 후 재참여했다 | 409 — 나가기로 횟수를 늘릴 수 없습니다 |
+                    | 신고 누적으로 가려졌다 | 409 — 아래 참고 |
+                    | **본인이 지웠다** | **다시 낼 수 있습니다** |
+
+                    **신고로 가려진 글이 있는 구간은 닫힌 채로 끝납니다.** 가려진 글은 지울 수
+                    없고(404), 지우지 않은 인증은 구간을 점유하므로 다시 낼 수도 없습니다(409).
+                    가려짐은 제재이므로 그 구간을 소진한 것으로 봅니다 — 다시 열어 주면 신고를
+                    받은 사람이 사진만 바꿔 계속 낼 수 있습니다.
+
+                    지운 뒤 다시 내면 보통 `reverified` 가 `true` 입니다(지운 행을 되살립니다).
+                    다만 **지운 것이 지난 참여 회차의 인증이면** 되살리지 않고 새로 만들어
+                    `false` 가 나갑니다 — 되살리면 회차가 옛 값으로 남기 때문입니다.
+                    스트릭은 이미 오른 구간이면 다시 오르지 않습니다.
 
                     **주기 1회는 참여 회차를 넘어 적용됩니다.** 인증한 뒤 챌린지를 나갔다
                     다시 들어와도 그 구간에는 더 인증할 수 없습니다.
@@ -42,7 +67,7 @@ public interface ChallengeVerificationControllerDocs {
 
                     | 코드 | 언제 |
                     | --- | --- |
-                    | `CHALLENGE409_5` | `DAILY` 인데 지난 회차에 오늘 인증이 있음 |
+                    | `CHALLENGE409_5` | `DAILY` 인데 오늘 이미 인증함 |
                     | `CHALLENGE409_6` | 주간·월간인데 이번 구간에 이미 인증함 |
 
                     두 코드를 나눈 것은 **문구가 달라야 하기 때문**입니다. 주간 챌린지에
@@ -103,11 +128,38 @@ public interface ChallengeVerificationControllerDocs {
     @Operation(
             summary = "최신 인증 피드 조회",
             description = """
-                    챌린지의 인증을 최신순으로 조회합니다. 인증이 필요합니다.
+                    챌린지의 인증을 조회합니다. 인증이 필요합니다.
 
                     무한 스크롤용 커서 페이지네이션입니다. 첫 요청은 cursor 없이 보내고,
                     응답의 nextCursor를 다음 요청의 cursor로 넘깁니다. hasNext가 false면 멈춥니다.
                     커서 값은 verificationId입니다.
+
+                    ### 정렬
+
+                    | `sort` | 뜻 | 다음 페이지에 보낼 것 |
+                    | --- | --- | --- |
+                    | `LATEST` (기본) | 최신순 | `cursor` |
+                    | `LIKES` | 좋아요순 | `cursor` **+ `cursorLikeCount`** |
+
+                    **둘 다 커서로 끝까지 넘길 수 있습니다.** `LIKES` 만 커서 값이 둘인데,
+                    좋아요 수는 0 이 많아 겹치므로 `cursor`(verificationId) 하나로는
+                    "어디까지 봤는지" 를 가릴 수 없기 때문입니다. 응답의 `nextCursor` 와
+                    `nextCursorLikeCount` 를 **함께** 되돌려 보내면 됩니다.
+                    (`LATEST` 에서는 `nextCursorLikeCount` 가 `null` 입니다.)
+
+                    같은 좋아요 수는 최신순으로 가릅니다.
+
+                    > ⚠️ **좋아요순은 근사 정렬입니다.** 스크롤하는 동안 누가 좋아요를 누르면
+                    > 그 인증의 순위가 바뀝니다. 그 항목이 커서 경계를 넘나들면 **이미 본 것이
+                    > 한 번 더 나오거나 한 건이 빠질 수 있습니다.** 정렬 키가 실시간으로 변하는
+                    > 데이터라 어떤 페이징 방식으로도 없앨 수 없고, 커서는 그 영향이 경계 근처로
+                    > 한정됩니다(offset 은 앞에서 하나만 움직여도 그 뒤 전체가 밀립니다).
+                    > 중복이 신경 쓰이면 클라이언트에서 `verificationId` 로 걸러 주세요.
+
+                    **`LATEST` 는 "사진을 마지막으로 올린 순서"가 아닙니다.** 인증 행이 만들어진
+                    순서이고, 지우고 다시 인증하면 원래 자리에 그대로 있습니다.
+
+                    좋아요 수는 정렬에도 화면에도 **같은 규칙**으로 셉니다(탈퇴 회원 제외).
 
                     탈퇴한 회원의 인증은 제외됩니다. 같은 날 그만뒀다 다시 참여해 인증한 경우는
                     별개의 인증이므로 둘 다 보입니다.
@@ -133,6 +185,7 @@ public interface ChallengeVerificationControllerDocs {
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "sort 가 LATEST·LIKES 가 아님"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "인증 필요(미인증)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "존재하지 않거나 비활성 챌린지")
     })
@@ -140,15 +193,27 @@ public interface ChallengeVerificationControllerDocs {
             CustomUserDetails userDetails,
             @Parameter(description = "챌린지 ID") Long challengeId,
             @Parameter(description = "이전 응답의 nextCursor. 첫 요청에서는 생략") Long cursor,
-            @Parameter(description = "페이지 크기(기본 20, 최대 50)") Integer size
+            @Parameter(description = "좋아요순 페이징에서만 씁니다. 직전 응답의 nextCursorLikeCount 를 cursor 와 함께 보냅니다")
+            Long cursorLikeCount,
+            @Parameter(description = "페이지 크기(기본 20, 최대 50)") Integer size,
+            @Parameter(description = "정렬. LATEST(기본, 최신순) · LIKES(좋아요순 상위 N개, 페이징 없음)")
+            VerificationSort sort
     );
 
     @Operation(
             summary = "내가 인증한 게시물만 조회",
             description = """
-                    그 챌린지에서 **내가 남긴 인증만** 최신순으로 조회합니다. 인증이 필요합니다.
+                    그 챌린지에서 **내가 남긴 인증만** 조회합니다. 인증이 필요합니다.
 
-                    커서 페이지네이션은 피드와 같습니다(커서 값은 verificationId).
+                    정렬 규약은 피드와 같습니다.
+
+                    | `sort` | 뜻 | 페이징 |
+                    | --- | --- | --- |
+                    | `LATEST` (기본) | 최신순 | `cursor`(verificationId) |
+                    | `LIKES` | 좋아요순 | `cursor` **+ `cursorLikeCount`** |
+
+                    둘 다 커서로 끝까지 넘길 수 있습니다. 좋아요순의 근사 오차는 피드 설명을
+                    참고하세요.
 
                     ### 전체 회차가 나옵니다
                     그만뒀다 다시 참여해도 **지난 참여의 인증이 그대로 보입니다.** 이탈은
@@ -187,6 +252,7 @@ public interface ChallengeVerificationControllerDocs {
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "sort 가 LATEST·LIKES 가 아님 / status 가 PENDING·APPROVED 가 아님"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "인증 필요(미인증)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "그 챌린지에 참여한 이력이 없음")
     })
@@ -194,9 +260,13 @@ public interface ChallengeVerificationControllerDocs {
             CustomUserDetails userDetails,
             @Parameter(description = "챌린지 ID") Long challengeId,
             @Parameter(description = "이전 응답의 nextCursor. 첫 요청에서는 생략") Long cursor,
+            @Parameter(description = "좋아요순 페이징에서만 씁니다. 직전 응답의 nextCursorLikeCount 를 cursor 와 함께 보냅니다")
+            Long cursorLikeCount,
             @Parameter(description = "페이지 크기(기본 20, 최대 50)") Integer size,
             @Parameter(description = "심사 상태로 좁힌다. 생략하면 전부. PENDING 이면 심사 중인 것만")
-            ReviewStatus status
+            ReviewStatus status,
+            @Parameter(description = "정렬. LATEST(기본, 최신순) · LIKES(좋아요순 상위 N개, 페이징 없음)")
+            VerificationSort sort
     );
 
     @Operation(
@@ -264,7 +334,25 @@ public interface ChallengeVerificationControllerDocs {
                     챌린지 상세의 인증 게시글 수에서도 빠집니다. 이때도 작성자의 스트릭과 인증
                     기록은 그대로입니다. 가려지는 것은 노출뿐입니다.
 
-                    reason(신고 사유)은 선택입니다. 사유 선택 없이 바로 신고할 수 있습니다.
+                    ### 사유 선택은 필수입니다
+
+                    | `reportType` | 화면 문구(참고) | `reason` |
+                    | --- | --- | --- |
+                    | `IRRELEVANT` | 실제 루틴 수행과 무관한 사진이에요 | 보내지 않습니다 |
+                    | `REUSED` | 예전에 인증했던 사진을 재사용했어요 | 보내지 않습니다 |
+                    | `STOLEN` | 타인의 사진을 도용한 것 같아요 | 보내지 않습니다 |
+                    | `SPAM` | 스팸 또는 광고성 콘텐츠예요 | 보내지 않습니다 |
+                    | `ETC` | 기타 | **필수** (1~100자) |
+
+                    **화면 문구는 클라이언트가 가집니다.** 서버가 내려주면 문구를 고칠 때마다
+                    서버 배포가 필요해집니다.
+
+                    `ETC` 가 아닌데 `reason` 을 함께 보내도 **거절하지 않고 버립니다.** 라디오를
+                    바꿀 때 입력란 값을 지우지 않고 보내는 실수 때문에 신고 자체가 실패하는 것이
+                    더 나쁘다고 봤습니다. 다만 저장하지도 않습니다.
+
+                    **사유는 숨김 판정에 쓰이지 않습니다.** 가려지는 기준은 그대로 신고 **건수**
+                    입니다. 사유는 우선 기록만 하고, 쌓인 뒤에 판단합니다.
 
                     같은 인증을 두 번 신고하면 409입니다. 신고 취소는 제공하지 않습니다.
 
@@ -273,7 +361,7 @@ public interface ChallengeVerificationControllerDocs {
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "신고 성공"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "신고 사유가 255자를 초과"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "reportType 누락 / ETC 인데 reason 없음 / reason 이 100자 초과"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "인증 필요(미인증)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "해당 챌린지에 그 인증이 없음"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "이미 신고한 인증")
@@ -338,12 +426,19 @@ public interface ChallengeVerificationControllerDocs {
                     남의 글, 없는 글, 경로의 챌린지와 다른 인증, 신고로 가려진 글은 **전부 같은
                     404** 입니다 — 존재 여부를 알려 주지 않습니다.
 
-                    **인증을 취소하는 것이 아니라 글을 내리는 것입니다.** "그날 인증했다" 는 사실은
-                    남아서, 지운 뒤에도 그날 버튼은 완료 상태 그대로입니다. 다시 올리면 그 자리가
-                    되살아납니다.
+                    **인증을 취소하는 것이 아니라 글을 내리는 것입니다.** 스트릭과 인증 기록은
+                    그대로 남습니다.
+
+                    다만 **그 구간은 다시 열립니다.** 지우면 상세의 `verifiedInCurrentPeriod` 가
+                    `false` 로 돌아와 버튼이 "인증하기" 로 바뀌고, 다시 인증하면 그 자리가
+                    되살아납니다. 사진을 바꾸는 유일한 방법이기도 합니다.
 
                     사진은 S3 에서도 지웁니다. 공개 주소라 조회에서 빼는 것만으로는 URL 을 아는
                     사람이 계속 볼 수 있기 때문입니다.
+
+                    **신고 누적으로 가려진 글은 지울 수 없습니다(404).** 지워서 신고 누적을
+                    회피하는 길을 막습니다. 그 구간은 다시 인증할 수도 없어(409) 닫힌 채로
+                    끝납니다 — 가려짐이 제재이기 때문입니다.
 
                     **스트릭은 그대로입니다.** 사진을 올려 심사를 통과했다면 루틴은 실제로 한 것이라,
                     공개를 원치 않아 내렸다고 "며칠째 이어왔다"까지 되돌리지는 않습니다.

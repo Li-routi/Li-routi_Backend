@@ -1,6 +1,7 @@
 package com.lirouti.domain.verification.entity;
 
 import com.lirouti.domain.member.entity.Member;
+import com.lirouti.domain.verification.enums.ReportType;
 import com.lirouti.global.entity.BaseEntity;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -42,7 +43,27 @@ public class ChallengeVerificationReport extends BaseEntity {
     @JoinColumn(name = "reporter_id", nullable = false)
     private Member reporter;
 
-    // 신고 사유. 화면에서 선택 없이 신고할 수 있어야 하므로 nullable이다(database-schema.md).
+    /**
+     * 신고 사유 종류. <b>이 컬럼이 NULL 인 것은 사유 선택을 도입하기 전에 들어온 신고다.</b>
+     *
+     * <p>새 신고는 요청 DTO 가 필수로 막으므로 반드시 값이 들어간다. 컬럼을 {@code NOT NULL} 로
+     * 두지 않은 것은 옛 행을 채울 방법이 마땅치 않아서다 — {@code ETC} 로 채우면 "사용자가
+     * 기타를 고른 것" 과 "그때는 사유가 없던 것" 이 통계에서 섞인다.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "report_type", length = 20)
+    private ReportType reportType;
+
+    /**
+     * 직접 입력한 사유. <b>{@link ReportType#ETC} 일 때만 채워진다.</b>
+     *
+     * <p>나머지 넷은 화면에 입력란이 없다. 컬럼이 nullable 인 것은 그 때문이기도 하고,
+     * 사유 선택 도입 전 신고가 비어 있기 때문이기도 하다.
+     *
+     * <p>컬럼은 255자지만 <b>요청 검증은 100자</b>다. 화면이 100자라 그보다 긴 값을 받아 주면
+     * 다른 경로로 들어온 글이 화면에서 잘려 보인다. 컬럼을 줄이는 마이그레이션은 얻는 것에
+     * 비해 위험해 그대로 둔다.
+     */
     @Column(length = 255)
     private String reason;
 
@@ -50,10 +71,12 @@ public class ChallengeVerificationReport extends BaseEntity {
     private ChallengeVerificationReport(
             ChallengeVerification challengeVerification,
             Member reporter,
+            ReportType reportType,
             String reason
     ) {
         this.challengeVerification = challengeVerification;
         this.reporter = reporter;
+        this.reportType = reportType;
         this.reason = reason;
     }
 }

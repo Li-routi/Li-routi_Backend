@@ -115,6 +115,7 @@ public final class ChallengeVerificationConverter {
             Set<Long> likedIds,
             Long viewerId,
             Long nextCursor,
+            Long nextCursorLikeCount,
             boolean hasNext
     ) {
         List<ChallengeVerificationResDTO.FeedItem> items = verifications.stream()
@@ -128,6 +129,7 @@ public final class ChallengeVerificationConverter {
         return ChallengeVerificationResDTO.Feed.builder()
                 .verifications(items)
                 .nextCursor(nextCursor)
+                .nextCursorLikeCount(nextCursorLikeCount)
                 .hasNext(hasNext)
                 .build();
     }
@@ -162,6 +164,7 @@ public final class ChallengeVerificationConverter {
             int currentStreak,
             int currentParticipationRound,
             Long nextCursor,
+            Long nextCursorLikeCount,
             boolean hasNext
     ) {
         List<ChallengeVerificationResDTO.MyVerificationItem> items = verifications.stream()
@@ -173,6 +176,7 @@ public final class ChallengeVerificationConverter {
                 .currentStreak(currentStreak)
                 .currentParticipationRound(currentParticipationRound)
                 .nextCursor(nextCursor)
+                .nextCursorLikeCount(nextCursorLikeCount)
                 .hasNext(hasNext)
                 .build();
     }

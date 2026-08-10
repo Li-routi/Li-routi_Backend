@@ -14,6 +14,7 @@ import com.lirouti.domain.challenge.exception.code.error.ChallengeErrorCode;
 import com.lirouti.domain.verification.repository.ChallengeVerificationRepository;
 import com.lirouti.domain.challenge.repository.MemberChallengeRepository;
 import com.lirouti.domain.media.service.MediaService;
+import com.lirouti.domain.reward.service.command.RewardCommandService;
 import com.lirouti.global.util.TimeUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -53,6 +54,7 @@ public class ChallengeVerificationCommandService {
     private final ChallengeVerificationRepository challengeVerificationRepository;
     // 저장된 key를 공개 URL로 조립하는 데만 쓴다. DB를 다루지 않는 유틸성 서비스다.
     private final MediaService mediaService;
+    private final RewardCommandService rewardCommandService;
 
     /**
      * 인증 저장과 스트릭 갱신. <b>DAILY</b> 에서 오늘 이미 인증했으면 행을 새로 만들지 않고
@@ -103,37 +105,44 @@ public class ChallengeVerificationCommandService {
         Optional<ChallengeVerification> periodVerification = challengeVerificationRepository
                 .findByMemberChallengeIdAndPeriodStart(memberChallenge.getId(), periodStart);
 
-        // 지난 회차에 이번 구간 인증이 있으면 덮어쓰지 않고 막는다.
+        // 이번 구간에 이미 인증이 있으면 막는다. <b>주기로 가르지 않는다</b> — 주가 지나지
+        // 않았으면 주간도 하루와 똑같이 "이미 낸 것" 이다.
         //
-        // 덮어쓰면 그 인증이 지난 참여의 기록인데 오늘 올린 사진으로 바뀌고, 회차와 내용이
-        // 어긋난다. 새로 만들면 한 구간에 두 건이 되어 애초에 막으려던 것이 된다. 남는 선택은
-        // 거절뿐이다 — 이미 했으므로 "다시 할 수 없다"가 맞다.
-        boolean fromPreviousRound = periodVerification
-                .filter(v -> v.getParticipationRound() < memberChallenge.getParticipationRound())
-                .isPresent();
-        if (fromPreviousRound) {
-            log.warn("지난 회차에 이번 구간 인증 이력이 있어 재인증을 막았습니다."
-                            + " memberId={}, challengeId={}, cycle={}, currentRound={}",
-                    memberId, challengeId, cycle, memberChallenge.getParticipationRound());
+        // 유일한 예외가 본인이 지운 경우다. 지우면 그 구간이 다시 열린다 — 대신 그때 리워드를
+        // 회수한다(재화 이슈). "올리고 기록만 챙긴 뒤 지우기" 를 막는 역할은 회수가 가져가고,
+        // 여기서는 막지 않는다.
+        //
+        // 보류(PENDING) 도 막는다. 심사 중이어도 이미 낸 것이고, 통과·반려는 서버가 알아서
+        // 정리한다(반려로 확정되면 행을 지우므로 그 시점에 자연히 다시 열린다).
+        //
+        // 신고로 가려진 글도 여기서 막힌다. 그리고 가려진 글은 지울 수도 없으므로
+        // (findMineInChallenge 가 hiddenAt is null 로 거른다) 그 구간은 닫힌 채로 끝난다.
+        // 의도한 것이다 — 다시 열어 주면 신고를 받은 사람이 사진만 바꿔 계속 낼 수 있어
+        // 숨김이 제재로서 힘을 잃는다.
+        //
+        // 지난 회차 것이어도 같다. 회차가 올라가도 그 구간에 인증한 사실은 남는다 —
+        // 나가기/들어오기로 인증 횟수를 늘릴 수 없다.
+        ChallengeVerification occupied = periodVerification
+                .filter(v -> !v.isDeleted())
+                .orElse(null);
+        if (occupied != null) {
+            log.info("이번 구간에 이미 인증이 있어 재인증을 막았습니다."
+                            + " memberId={}, challengeId={}, cycle={}, periodStart={}, round={}",
+                    memberId, challengeId, cycle, periodStart, occupied.getParticipationRound());
             throw new VerificationException(alreadyVerified(cycle));
         }
 
-        // 덮어쓰기(재인증)는 DAILY 에만 남긴다.
+        // 여기부터는 "지워진 행이 있거나, 아무것도 없거나" 둘 중 하나다.
         //
-        // 당일 재인증은 "오늘 올린 사진이 마음에 안 들어 바꾸는" 흐름인데, 주간·월간은 한 번
-        // 올리면 그 구간이 끝나는 성격이라 교체 욕구가 약하다. 그대로 두면 양쪽이 다 깨진다 —
-        // 사진은 수요일 것인데 verified_date 는 월요일로 남아 날짜와 내용이 어긋나고, 반대로
-        // verified_date 를 바꾸면 "그 구간의 인증일"이라는 뜻이 흔들린다.
-        if (periodVerification.isPresent() && cycle != RoutineCycle.DAILY) {
-            log.info("이번 구간에 이미 인증해 재인증을 막았습니다."
-                            + " memberId={}, challengeId={}, cycle={}, periodStart={}",
-                    memberId, challengeId, cycle, periodStart);
-            throw new VerificationException(alreadyVerified(cycle));
-        }
+        // 지워진 행이 <b>지난 회차</b> 것이면 되살리지 않고 새로 만든다. 되살리면 회차가 옛
+        // 값으로 남아 "이번 참여의 기록" 이라는 뜻이 어긋난다. 유니크 키에 회차가 들어 있어
+        // 새 행을 만들어도 부딪히지 않는다.
+        Optional<ChallengeVerification> revivable = periodVerification
+                .filter(v -> v.getParticipationRound().equals(memberChallenge.getParticipationRound()));
 
-        boolean reverified = periodVerification.isPresent();
+        boolean reverified = revivable.isPresent();
 
-        ChallengeVerification verification = periodVerification
+        ChallengeVerification verification = revivable
                 .map(existing -> {
                     existing.reverify(storedMediaKey, request.content(), verifiedAt,
                             reviewStatus, pendingSinceFor(reviewStatus, verifiedAt));
@@ -144,6 +153,22 @@ public class ChallengeVerificationCommandService {
 
         // 재인증이면 applyVerification 이 같은 구간임을 보고 스트릭을 그대로 둔다.
         memberChallenge.applyVerification(today, cycle);
+
+        // 심사를 통과한 인증에만 지급한다. 보류는 아직 통과한 것이 아니므로 여기서 주지 않고,
+        // 나중에 재심사가 승인할 때 그 시점에 준다 — 남의 서비스 장애로 보류된 사람만 리워드를
+        // 못 받는 상태가 되면 안 된다(스트릭을 그때도 올려 주기로 한 것과 같은 기준이다).
+        //
+        // 같은 트랜잭션이라야 한다. 갈리면 "인증은 저장됐는데 리워드가 없는" 상태가 조용히
+        // 남고, 사용자는 안 들어온 것만 알 뿐 서버는 이유를 모른다.
+        //
+        // 재인증(되살리기)이면 verification 의 id 가 그대로라, 이미 지급된 건은 유니크 제약과
+        // 사전 조회가 함께 막는다 — 사진만 갈아끼우고 또 받는 길이 없다.
+        if (!verification.isPending()) {
+            challengeVerificationRepository.flush();   // id 가 있어야 지급 대상을 가리킬 수 있다
+            rewardCommandService.grantForVerification(
+                    memberChallenge.getMember(), verification.getId(),
+                    memberChallenge.getChallenge().getReward());
+        }
 
         // 보류 건은 아직 대기 prefix 에 있어 공개 주소가 없다. 그 주소로 열면 403 이므로
         // 서명을 발급한다 — 본인이 방금 올린 사진이라 여기서 보여 주는 것은 문제가 없다.
@@ -262,6 +287,14 @@ public class ChallengeVerificationCommandService {
                         ChallengeVerificationErrorCode.VERIFICATION_NOT_FOUND));
 
         String imageKey = locked.getImageUrl();
+
+        // 회수를 먼저 한다. 모자라면 예외가 나가 삭제까지 함께 되돌아간다 — 재화만 빼앗기고
+        // 글은 남거나, 글은 지워졌는데 재화는 그대로인 중간 상태를 만들지 않는다.
+        //
+        // 이미 내려간 글을 다시 지우는 요청이면 지급 행이 첫 삭제 때 사라졌으므로 회수할
+        // 것이 없다. 두 번 걷히지 않는다.
+        rewardCommandService.clawbackForVerification(memberId, verificationId);
+
         return new DeleteResult(locked.softDelete(LocalDateTime.now(TimeUtil.KST)), imageKey);
     }
 

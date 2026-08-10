@@ -224,8 +224,8 @@ class RejoinDailyOnceTest {
     }
 
     @Test
-    @DisplayName("나가지 않고 같은 날 다시 인증하면 덮어쓴다 — 당일 재인증은 그대로다")
-    void sameRound_SameDay_Overwrites() {
+    @DisplayName("나가지 않아도 같은 날 다시 인증하면 막힌다 — 덮어쓰기는 없다")
+    void sameRound_SameDay_IsRejected() {
         // given
         Member me = member();
         Challenge c = challenge();
@@ -233,22 +233,18 @@ class RejoinDailyOnceTest {
         verify(me, c);
         em.flush();
 
-        // when: 회차가 그대로이므로 덮어쓰기다
-        ChallengeVerificationResDTO.Verification result =
-                challengeVerificationService.verify(me.getId(), c.getId(),
-                        new ChallengeVerificationReqDTO.Verify(STAGING_KEY, "고친 코멘트"));
-        em.flush();
-        em.clear();
+        // when & then: 회차가 그대로여도 이미 낸 것은 이미 낸 것이다
+        assertThatThrownBy(() -> challengeVerificationService.verify(me.getId(), c.getId(),
+                new ChallengeVerificationReqDTO.Verify(STAGING_KEY, "고친 코멘트")))
+                .isInstanceOf(VerificationException.class)
+                .hasFieldOrPropertyWithValue("code",
+                        ChallengeVerificationErrorCode.ALREADY_VERIFIED_TODAY);
 
-        // then
-        assertAll(
-                () -> assertThat(result.reverified()).isTrue(),
-                () -> assertThat(em.createQuery(
-                                "select count(v) from ChallengeVerification v"
-                                        + " where v.memberChallenge.id = :id", Long.class)
-                        .setParameter("id", mc.getId())
-                        .getSingleResult()).isEqualTo(1L)
-        );
+        assertThat(em.createQuery(
+                        "select count(v) from ChallengeVerification v"
+                                + " where v.memberChallenge.id = :id", Long.class)
+                .setParameter("id", mc.getId())
+                .getSingleResult()).isEqualTo(1L);
     }
 
 }

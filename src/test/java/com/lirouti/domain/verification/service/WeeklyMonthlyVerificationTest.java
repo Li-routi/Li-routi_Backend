@@ -219,8 +219,8 @@ class WeeklyMonthlyVerificationTest {
     }
 
     @Test
-    @DisplayName("DAILY 는 그대로 덮어쓴다 — 이 변경이 당일 재인증을 건드리지 않았다")
-    void daily_StillOverwrites() {
+    @DisplayName("DAILY 도 똑같이 막힌다 — 주기로 가르지 않는다")
+    void daily_IsBlockedToo() {
         LocalDate today = LocalDate.now(TimeUtil.KST);
 
         Member me = member();
@@ -228,10 +228,36 @@ class WeeklyMonthlyVerificationTest {
         MemberChallenge mc = join(me, c);
         seedVerification(mc, today, today);
 
-        // 막히지 않고 덮어쓴다. 예외가 나면 여기서 그대로 터진다.
-        challengeVerificationService.verify(me.getId(), c.getId(), request());
+        assertThatThrownBy(() ->
+                challengeVerificationService.verify(me.getId(), c.getId(), request()))
+                .isInstanceOf(VerificationException.class)
+                .hasFieldOrPropertyWithValue("code",
+                        ChallengeVerificationErrorCode.ALREADY_VERIFIED_TODAY);
 
-        // 행이 늘지 않는다 — 하루 한 행이라는 성질은 그대로다.
         assertThat(rowsOf(mc)).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("주간도 지우면 그 주에 다시 올릴 수 있다 — 삭제만이 예외다")
+    void weekly_AfterDelete_IsAllowed() {
+        LocalDate today = LocalDate.now(TimeUtil.KST);
+        LocalDate weekStart = RoutineCycle.WEEKLY.currentPeriodStart(today);
+
+        Member me = member();
+        Challenge c = challenge(RoutineCycle.WEEKLY);
+        MemberChallenge mc = join(me, c);
+        ChallengeVerification seeded = seedVerification(mc, seedDateIn(weekStart, today), weekStart);
+
+        challengeVerificationService.deleteVerification(me.getId(), c.getId(), seeded.getId());
+        em.flush();
+
+        // 지웠으므로 그 주가 다시 열린다.
+        challengeVerificationService.verify(me.getId(), c.getId(), request());
+        em.flush();
+        em.clear();
+
+        assertThat(rowsOf(mc)).as("구간에 한 행이라는 사실은 그대로다").hasSize(1);
+        assertThat(em.find(ChallengeVerification.class, seeded.getId()).getDeletedAt())
+                .as("되살아났다").isNull();
     }
 }
