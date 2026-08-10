@@ -78,6 +78,23 @@ class GroupControllerUnitTest {
     }
 
     @Test
+    @DisplayName("인증 회원 ID를 참여 그룹 목록 조회 서비스에 전달하고 성공 응답을 반환한다")
+    void getMyGroups_AuthenticatedMember_ReturnsMyGroupList() {
+        CustomUserDetails principal = new CustomUserDetails(MEMBER_ID, Role.ROLE_USER);
+        GroupResDTO.MyGroupList result = new GroupResDTO.MyGroupList(List.of(
+                new GroupResDTO.MyGroup(GROUP_ID, "아침 모임", 3L, 2L, 2L, 1L, 4, 50, 3L)
+        ));
+        when(groupQueryService.getMyGroups(MEMBER_ID)).thenReturn(result);
+
+        ApiResponse<GroupResDTO.MyGroupList> response = groupController.getMyGroups(principal);
+
+        assertThat(response.getIsSuccess()).isTrue();
+        assertThat(response.getCode()).isEqualTo(GroupSuccessCode.GROUP_MY_LIST_FETCH_SUCCESS.getCode());
+        assertThat(response.getResult()).isSameAs(result);
+        verify(groupQueryService).getMyGroups(MEMBER_ID);
+    }
+
+    @Test
     @DisplayName("그룹 카테고리 조회에 인증 회원 ID와 그룹 ID를 전달한다")
     void getCategories_AuthenticatedMember_ReturnsCategoryList() {
         // given
