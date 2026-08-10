@@ -19,6 +19,17 @@ public enum WalletErrorCode implements BaseErrorCode {
             "재화가 부족합니다.",
             "WALLET409_1"
     ),
+    /**
+     * 같은 멱등 키가 다른 종류의 거래로 다시 들어왔다. 호출부가 키를 잘못 만든 것이다.
+     *
+     * <p>조용히 되돌려주지 않는 이유는, 그러면 <b>차감이 안 됐는데 성공으로 보이기</b>
+     * 때문이다. 시끄럽게 실패하는 편이 돈이 새는 것보다 낫다.
+     */
+    IDEMPOTENCY_KEY_CONFLICT(
+            HttpStatus.CONFLICT,
+            "같은 요청 키가 다른 거래로 이미 사용되었습니다.",
+            "WALLET409_2"
+    ),
     INVALID_AMOUNT(
             HttpStatus.BAD_REQUEST,
             "재화 수량은 1 이상이어야 합니다.",

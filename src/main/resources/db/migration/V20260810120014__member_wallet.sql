@@ -19,7 +19,11 @@ CREATE TABLE `member_wallet`
     PRIMARY KEY (`id`),
     -- 한 회원의 한 재화에 지갑은 하나다. 동시에 두 요청이 지갑을 만들려 하면 하나만 통과한다.
     UNIQUE KEY `uk_member_wallet_member_currency` (`member_id`, `currency`),
-    CONSTRAINT `fk_member_wallet_member` FOREIGN KEY (`member_id`) REFERENCES `member` (`id`)
+    CONSTRAINT `fk_member_wallet_member` FOREIGN KEY (`member_id`) REFERENCES `member` (`id`),
+    -- 음수 방지를 애플리케이션에만 두지 않는다. 잠금과 검사로 막고 있지만, 나중에 잔액을
+    -- 건드리는 경로가 하나 더 생겼을 때 그 보증이 코드 리뷰에만 기대게 된다. MySQL 8.0.16
+    -- 이상은 CHECK 를 실제로 강제하므로 여기 두면 어느 경로로 들어와도 뚫리지 않는다.
+    CONSTRAINT `ck_member_wallet_non_negative` CHECK (`paid_balance` >= 0 AND `free_balance` >= 0)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci;
@@ -41,17 +45,21 @@ CREATE TABLE `wallet_transaction`
     -- 차감되거나 두 번 지급되면 그대로 돈 문제가 된다. 나중에 붙이면 그 사이 거래는
     -- 소급해서 보호되지 않으므로 처음부터 NOT NULL 로 둔다.
     --
-    -- 유니크는 (member_id, idempotency_key) 다. 전역 유니크로 두면 호출부가 자연스럽게
-    -- 만드는 키("아이템 7 구매")가 회원을 담지 않아, 다른 회원이 같은 아이템을 살 때
-    -- 이미 처리된 요청으로 취급되어 조용히 차감이 건너뛰어진다. 호출부는 성공으로 보고
-    -- 물건을 내주므로 돈만 새고 에러는 나지 않는다.
+    -- 유니크는 (member_id, currency, idempotency_key) 다. 전역으로 두면 호출부가 자연스럽게
+    -- 만드는 키("아이템 7 구매")가 회원을 담지 않아, 다른 회원이 같은 아이템을 살 때 이미
+    -- 처리된 요청으로 취급되어 조용히 차감이 건너뛰어진다. 호출부는 성공으로 보고 물건을
+    -- 내주므로 돈만 새고 에러는 나지 않는다.
+    --
+    -- 재화까지 넣는 이유는 교환 때문이다. 파란 보석을 빼고 주황 보석을 넣는 것은 한 사건이라
+    -- 호출부가 같은 키를 쓰는 것이 자연스러운데, 재화가 빠져 있으면 들어오는 쪽이 이미 처리된
+    -- 요청으로 취급된다. 사용자는 낸 것만 잃고 받지 못한다.
     `idempotency_key`     VARCHAR(150) NOT NULL,
     `reference_type`      VARCHAR(30)  NULL,
     `reference_id`        BIGINT       NULL,
     `created_at`          DATETIME(6)  NOT NULL,
     `updated_at`          DATETIME(6)  NOT NULL,
     PRIMARY KEY (`id`),
-    UNIQUE KEY `uk_wallet_transaction_idempotency` (`member_id`, `idempotency_key`),
+    UNIQUE KEY `uk_wallet_transaction_idempotency` (`member_id`, `currency`, `idempotency_key`),
     -- 회원별 거래 내역 조회는 위 유니크 키가 선두 컬럼(member_id)으로 덮는다.
     -- 같은 선두 컬럼의 인덱스를 하나 더 두면 쓰기마다 갱신 비용만 늘고 얻는 것이 없다.
     CONSTRAINT `fk_wallet_transaction_member` FOREIGN KEY (`member_id`) REFERENCES `member` (`id`)

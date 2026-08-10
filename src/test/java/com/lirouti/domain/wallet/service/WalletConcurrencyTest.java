@@ -181,7 +181,13 @@ class WalletConcurrencyTest {
                         .as("재시도가 겹쳐도 한 번만 빠져야 한다")
                         .isEqualTo(INITIAL_BALANCE - SPEND),
                 () -> assertThat(failed.get())
-                        .as("멱등 처리는 예외가 아니라 같은 결과를 돌려주는 것이다").isZero()
+                        .as("멱등 처리는 예외가 아니라 같은 결과를 돌려주는 것이다").isZero(),
+                () -> assertThat(walletTransactionRepository.findAll().stream()
+                        .filter(t -> t.getMember().getId().equals(memberId)
+                                && "conc-same-key".equals(t.getIdempotencyKey()))
+                        .count())
+                        .as("원장에도 한 행만 남아야 한다 — 잔액만 맞고 이력이 겹치면 안 된다")
+                        .isEqualTo(1)
         );
     }
 }

@@ -118,7 +118,17 @@ class WalletLedgerTest {
                 () -> assertThat(tx.freeBalance()).isEqualTo(50),
                 () -> assertThat(tx.applied())
                         .as("이번 호출이 실제로 잔액을 움직였다").isTrue(),
-                () -> assertThat(tx.transactionId()).isNotNull()
+                // 반환값과 잔액만 보면, 서비스가 잔액만 갱신하고 원장을 안 남겨도 통과한다.
+                // 원장이 이력의 기준이므로 저장된 행을 직접 읽어 본다.
+                () -> assertThat(walletTransactionRepository.findById(tx.transactionId()))
+                        .get()
+                        .satisfies(row -> assertAll(
+                                () -> assertThat(row.getPaidDelta()).isEqualTo(500),
+                                () -> assertThat(row.getFreeDelta()).isEqualTo(50),
+                                () -> assertThat(row.getPaidBalanceAfter()).isEqualTo(500),
+                                () -> assertThat(row.getFreeBalanceAfter()).isEqualTo(50),
+                                () -> assertThat(row.getTransactionType())
+                                        .isEqualTo(WalletTransactionType.TOPUP)))
         );
     }
 
@@ -154,10 +164,10 @@ class WalletLedgerTest {
                 () -> assertThat(walletOf(m).getPaidBalance())
                         .as("모자란 20 만 유상에서 뺀다").isEqualTo(80),
                 () -> assertThat(walletTransactionRepository
-                        .findByMemberIdAndIdempotencyKey(m.getId(), "buy:2").orElseThrow().getFreeDelta())
+                        .findByMemberIdAndCurrencyAndIdempotencyKey(m.getId(), Currency.GEM, "buy:2").orElseThrow().getFreeDelta())
                         .as("원장에도 어느 쪽이 얼마나 빠졌는지 남는다").isEqualTo(-30),
                 () -> assertThat(walletTransactionRepository
-                        .findByMemberIdAndIdempotencyKey(m.getId(), "buy:2").orElseThrow().getPaidDelta())
+                        .findByMemberIdAndCurrencyAndIdempotencyKey(m.getId(), Currency.GEM, "buy:2").orElseThrow().getPaidDelta())
                         .isEqualTo(-20),
                 () -> assertThat(tx.totalBalance()).isEqualTo(80)
         );
@@ -214,10 +224,15 @@ class WalletLedgerTest {
         Member m = member();
         walletService.grant(command(m, WalletTransactionType.TOPUP, "seed:4"), 0, 100);
 
+        long ledgerBefore = walletTransactionRepository.count();
         walletService.deduct(command(m, WalletTransactionType.PURCHASE, "buy:item:7"), 30);
         walletService.deduct(command(m, WalletTransactionType.PURCHASE, "buy:item:7"), 30);
 
-        assertThat(walletOf(m).totalBalance()).isEqualTo(70);
+        assertAll(
+                () -> assertThat(walletOf(m).totalBalance()).isEqualTo(70),
+                () -> assertThat(walletTransactionRepository.count())
+                        .as("원장에도 한 행만 남아야 한다").isEqualTo(ledgerBefore + 1)
+        );
     }
 
     @Test
@@ -244,7 +259,7 @@ class WalletLedgerTest {
                 () -> assertThat(bResult.applied())
                         .as("B 의 요청은 실제로 잔액을 움직여야 한다").isTrue(),
                 () -> assertThat(walletTransactionRepository
-                        .findByMemberIdAndIdempotencyKey(b.getId(), sharedKey))
+                        .findByMemberIdAndCurrencyAndIdempotencyKey(b.getId(), Currency.GEM, sharedKey))
                         .as("B 의 원장에 B 의 거래가 남아야 한다").isPresent()
         );
     }
@@ -268,6 +283,52 @@ class WalletLedgerTest {
                         .isEqualTo(75),
                 () -> assertThat(walletOf(m).totalBalance()).isEqualTo(75)
         );
+    }
+
+    @Test
+    @DisplayName("교환처럼 한 사건이 두 재화를 건드릴 때 같은 키를 써도 양쪽 다 반영된다")
+    void sameKeyAcrossCurrenciesBothApply() {
+        Member m = member();
+        walletService.grant(new WalletCommand(m.getId(), Currency.GEM,
+                WalletTransactionType.TOPUP, "seed:ex", null, null), 0, 100);
+        // 파란 보석을 빼고 주황 보석을 넣는 한 사건이다. 호출부가 같은 키를 쓰는 것이 자연스럽다.
+        String key = "exchange:88";
+
+        walletService.deduct(new WalletCommand(m.getId(), Currency.GEM,
+                WalletTransactionType.EXCHANGE_OUT, key, null, null), 20);
+        WalletResult in = walletService.grant(new WalletCommand(m.getId(), Currency.TOPAZ,
+                WalletTransactionType.EXCHANGE_IN, key, null, null), 0, 500);
+
+        assertAll(
+                () -> assertThat(walletOf(m).totalBalance())
+                        .as("낸 쪽은 빠져야 한다").isEqualTo(80),
+                () -> assertThat(in.applied())
+                        .as("""
+                                재화를 안 보면 들어오는 쪽이 이미 처리된 요청이 되어 \
+                                사용자는 낸 것만 잃고 받지 못한다.""")
+                        .isTrue(),
+                () -> assertThat(memberWalletRepository
+                        .findByMemberIdAndCurrency(m.getId(), Currency.TOPAZ))
+                        .get()
+                        .satisfies(w -> assertThat(w.totalBalance()).isEqualTo(500))
+        );
+    }
+
+    @Test
+    @DisplayName("같은 키를 다른 종류의 거래에 쓰면 조용히 넘어가지 않고 실패한다")
+    void sameKeyDifferentOperationFails() {
+        Member m = member();
+        walletService.grant(command(m, WalletTransactionType.TOPUP, "seed:conflict"), 0, 100);
+        walletService.grant(command(m, WalletTransactionType.CHALLENGE_REWARD, "dup"), 0, 10);
+
+        assertThatThrownBy(() -> walletService.deduct(
+                command(m, WalletTransactionType.PURCHASE, "dup"), 30))
+                .as("되돌려주면 차감이 안 됐는데 성공으로 보인다 — 시끄럽게 실패해야 한다")
+                .isInstanceOf(WalletException.class)
+                .extracting(e -> ((WalletException) e).getCode())
+                .isEqualTo(WalletErrorCode.IDEMPOTENCY_KEY_CONFLICT);
+
+        assertThat(walletOf(m).totalBalance()).isEqualTo(110);
     }
 
     // ── 재화 분리 ──

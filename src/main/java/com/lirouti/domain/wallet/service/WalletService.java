@@ -63,9 +63,17 @@ public class WalletService {
                     try {
                         return retry.get();
                     } catch (DataIntegrityViolationException retryFailure) {
-                        // 두 번 연달아 깨지는 것은 경합으로 설명되지 않는다. 삼키면 잔액이
-                        // 안 움직인 채 성공으로 보이므로 원래 예외를 그대로 올린다.
-                        throw original;
+                        // 여기까지 오는 흔한 경로는 경합이다 — 위 조회 시점에 이긴 트랜잭션이
+                        // 아직 커밋 전이라 비어 있었고, 재시도가 그 사이 커밋된 행과 다시
+                        // 부딪힌 것이다. 그렇다면 지금은 보인다. 한 번 더 확인한다.
+                        return walletCommandService.replayOf(command)
+                                .orElseThrow(() -> {
+                                    // 경합으로 설명되지 않는 상태다. 삼키면 잔액이 안 움직인 채
+                                    // 성공으로 보이므로 올린다. 두 번째 실패의 원인도 붙여
+                                    // 둔다 — 조사할 때 그것이 단서다.
+                                    original.addSuppressed(retryFailure);
+                                    return original;
+                                });
                     }
                 });
     }

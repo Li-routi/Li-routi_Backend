@@ -25,7 +25,7 @@ import lombok.NoArgsConstructor;
         name = "wallet_transaction",
         uniqueConstraints = @UniqueConstraint(
                 name = "uk_wallet_transaction_idempotency",
-                columnNames = {"member_id", "idempotency_key"}
+                columnNames = {"member_id", "currency", "idempotency_key"}
         )
 )
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -68,10 +68,14 @@ public class WalletTransaction extends BaseEntity {
      * 두 번 지급하는 길이 아예 없다. 네트워크가 끊겨 클라이언트가 재시도하는 것은 정상
      * 동작이고, 그때 두 번 반영되면 그대로 돈 문제가 된다.
      *
-     * <p><b>유니크는 회원 범위다</b>({@code member_id} + 이 값). 전역으로 두면 호출부가
-     * 자연스럽게 만드는 키("아이템 7 구매")가 회원을 담지 않아, <b>다른 회원이 같은 아이템을
-     * 살 때 이미 처리된 요청으로 취급되어 차감이 조용히 건너뛰어진다.</b> 호출부는 성공으로
-     * 보고 물건을 내주므로 돈만 새고 에러는 나지 않는다.
+     * <p><b>유니크는 회원·재화 범위다</b>({@code member_id} + {@code currency} + 이 값).
+     * 전역으로 두면 호출부가 자연스럽게 만드는 키("아이템 7 구매")가 회원을 담지 않아,
+     * <b>다른 회원이 같은 아이템을 살 때 이미 처리된 요청으로 취급되어 차감이 조용히
+     * 건너뛰어진다.</b> 호출부는 성공으로 보고 물건을 내주므로 돈만 새고 에러는 나지 않는다.
+     *
+     * <p>재화까지 넣는 것은 <b>교환</b> 때문이다. 한 재화를 빼고 다른 재화를 넣는 것은 한
+     * 사건이라 호출부가 같은 키를 쓰는 것이 자연스러운데, 재화가 빠져 있으면 들어오는 쪽이
+     * 이미 처리된 요청이 되어 <b>사용자는 낸 것만 잃고 받지 못한다.</b>
      *
      * <p>대신 <b>회원을 넘나드는 중복은 이 제약이 막지 못한다.</b> 같은 결제 영수증이 두
      * 계정에 쓰이는 것 같은 경우는 영수증 자체에 유니크를 거는 쪽(결제 기록)이 막아야 한다.

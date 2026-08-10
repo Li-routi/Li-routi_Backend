@@ -88,7 +88,9 @@ public class WalletCommandService {
     @Transactional(readOnly = true)
     public Optional<WalletResult> replayOf(WalletCommand command) {
         return walletTransactionRepository
-                .findByMemberIdAndIdempotencyKey(command.memberId(), command.idempotencyKey())
+                .findByMemberIdAndCurrencyAndIdempotencyKey(
+                        command.memberId(), command.currency(), command.idempotencyKey())
+                .map(tx -> requireSameOperation(tx, command))
                 .map(tx -> memberWalletRepository
                         .findByMemberIdAndCurrency(command.memberId(), command.currency())
                         .map(wallet -> toResult(wallet, tx, false))
@@ -96,6 +98,20 @@ public class WalletCommandService {
                         // 잔액으로 답한다 — 예외를 던지면 멱등이 실패로 뒤집힌다.
                         .orElseGet(() -> new WalletResult(tx.getId(), command.currency(),
                                 tx.getPaidBalanceAfter(), tx.getFreeBalanceAfter(), false)));
+    }
+
+    /**
+     * 되돌려주기 전에 <b>같은 사건이 맞는지</b> 확인한다.
+     *
+     * <p>회원·재화가 같은데 거래 종류가 다르면, 호출부가 서로 다른 일에 같은 키를 붙인 것이다.
+     * 그대로 되돌려주면 <b>차감이 안 됐는데 성공으로 보인다</b> — 조용히 돈이 새는 쪽이라
+     * 시끄럽게 실패시킨다.
+     */
+    private WalletTransaction requireSameOperation(WalletTransaction found, WalletCommand command) {
+        if (found.getTransactionType() != command.transactionType()) {
+            throw new WalletException(WalletErrorCode.IDEMPOTENCY_KEY_CONFLICT);
+        }
+        return found;
     }
 
     private WalletResult toResult(MemberWallet wallet, WalletTransaction tx, boolean applied) {
