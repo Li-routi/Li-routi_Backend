@@ -88,6 +88,7 @@ VALUES
     (9004, 9001, 9002, DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY), '19:00:00', '20:00:00', 'MISSED',    0, NOW(6), NOW(6))
     AS new_row
 ON DUPLICATE KEY UPDATE
+                     assigned_date = IF(group_routine_assignment.id >= 9000, new_row.assigned_date, group_routine_assignment.assigned_date),
                      status     = IF(group_routine_assignment.id >= 9000, new_row.status, group_routine_assignment.status),
                      updated_at = IF(group_routine_assignment.id >= 9000, NOW(6), group_routine_assignment.updated_at);
 
