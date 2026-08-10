@@ -34,8 +34,11 @@ import lombok.extern.slf4j.Slf4j;
 public class GeneralExceptionAdvice {
 
     /**
-     * 삭제가 재화 부족으로 거절된 경우. <b>GeneralException 처리기보다 먼저 잡아</b> 실패
-     * 응답에 "얼마가 모자란지" 를 함께 싣는다.
+     * 삭제가 재화 부족으로 거절된 경우. 실패 응답에 <b>"얼마가 모자란지" 를 함께 싣는다.</b>
+     *
+     * <p>{@code RewardClawbackException} 은 {@code GeneralException} 의 하위 타입인데, 스프링은
+     * <b>선언 순서가 아니라 예외 계층에서 더 구체적인 처리기</b>를 고른다. 그래서 이 메서드를
+     * 어디에 두든 아래 {@code handleGeneralException} 보다 먼저 선택된다.
      *
      * <p>{@code GeneralException} 은 코드만 들고 다니므로 이 값이 들어갈 자리가 없다. 메시지
      * 문자열에 숫자를 끼워 넣는 방법도 있지만, 그러면 클라이언트가 문구를 파싱하게 되고

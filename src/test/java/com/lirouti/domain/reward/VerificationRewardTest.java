@@ -17,6 +17,7 @@ import com.lirouti.domain.verification.dto.request.ChallengeVerificationReqDTO;
 import com.lirouti.domain.verification.entity.ChallengeVerification;
 import com.lirouti.domain.verification.enums.ReviewStatus;
 import com.lirouti.domain.verification.service.ChallengeVerificationService;
+import com.lirouti.domain.verification.service.command.ChallengeVerificationCommandService;
 import com.lirouti.domain.wallet.enums.Currency;
 import com.lirouti.domain.wallet.enums.WalletTransactionType;
 import com.lirouti.domain.wallet.repository.MemberWalletRepository;
@@ -36,6 +37,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -79,7 +81,7 @@ class VerificationRewardTest {
     @Autowired
     private WalletService walletService;
     @Autowired
-    private com.lirouti.domain.verification.service.command.ChallengeVerificationCommandService challengeVerificationCommandService;
+    private ChallengeVerificationCommandService challengeVerificationCommandService;
 
     @MockitoBean
     private MediaService mediaService;
@@ -148,7 +150,7 @@ class VerificationRewardTest {
                 .count();
     }
 
-    private java.util.Optional<RewardGrant> grantOf(ChallengeVerification v) {
+    private Optional<RewardGrant> grantOf(ChallengeVerification v) {
         return rewardGrantRepository.findByMemberIdAndReasonAndReferenceId(
                 me.getId(), RewardReason.VERIFICATION, v.getId());
     }
@@ -240,14 +242,14 @@ class VerificationRewardTest {
     @Test
     @DisplayName("보류로 저장된 인증에는 지급하지 않는다 — 아직 통과한 것이 아니다")
     void pendingVerification_IsNotGrantedYet() {
-        ChallengeVerification pending = challengeVerificationCommandService.save(
+        challengeVerificationCommandService.save(
                 me.getId(), challenge.getId(),
                 new ChallengeVerificationReqDTO.Verify(STAGING_KEY, "심사 중"),
-                STAGING_KEY, ReviewStatus.PENDING) != null
-                ? em.createQuery("select v from ChallengeVerification v where v.memberChallenge.id = :id",
+                STAGING_KEY, ReviewStatus.PENDING);
+        ChallengeVerification pending = em.createQuery(
+                        "select v from ChallengeVerification v where v.memberChallenge.id = :id",
                         ChallengeVerification.class)
-                    .setParameter("id", participation.getId()).getSingleResult()
-                : null;
+                .setParameter("id", participation.getId()).getSingleResult();
         em.flush();
 
         assertAll(
@@ -323,10 +325,13 @@ class VerificationRewardTest {
                                 .as("몇 개를 더 모으면 되는지 알아야 사용자가 행동할 수 있다")
                                 .isEqualTo(REWARD)));
 
+        // 아래 isDeleted 는 "롤백됐다" 가 아니라 "회수가 먼저 막혀 삭제까지 가지 못했다" 를
+        // 본다. 이 테스트는 @Transactional 이라 서비스가 바깥 트랜잭션에 참여하므로 실제
+        // 커밋·롤백 경계가 생기지 않는다. 회수를 삭제 앞에 두었다는 사실이 회귀로 깨지는 것을
+        // 잡는 값은 있어 남긴다.
         assertAll(
                 () -> assertThat(v.isDeleted())
-                        .as("회수가 막혔으면 글도 지워지지 않아야 한다 — 둘은 한 트랜잭션이다")
-                        .isFalse(),
+                        .as("회수가 먼저 막히므로 삭제 코드에 닿지 않는다").isFalse(),
                 () -> assertThat(grantOf(v))
                         .as("거절됐으므로 지급 행이 남아 있어야 한다").isPresent(),
                 () -> assertThat(balance()).isZero()

@@ -52,10 +52,16 @@ public class PendingReviewCommandService {
      *
      * <p>사진은 이미 공개 prefix 로 옮겨져 있고, 여기서는 <b>그 key 를 행에 심는다.</b>
      * 스트릭은 건드리지 않는다 — 보류 시점에 이미 올려 뒀다.
+     *
+     * <p><b>행을 잠그고 읽는다.</b> 같은 보류 건에 승격 결과가 둘 이상 도착할 수 있는데, 잠그지
+     * 않으면 둘 다 {@code PENDING} 을 보고 지나가 리워드를 두 번 지급하려 한다. 지급 자체는
+     * 유니크 제약이 막지만 <b>진 쪽은 제약 위반으로 트랜잭션째 롤백돼 서버 오류가 된다</b> —
+     * "이미 처리됐다" 는 뜻의 {@code false} 로 끝나야 할 요청이다. 잠그면 뒤에 온 쪽이 승인된
+     * 상태를 보고 {@code isPending} 에서 걸러진다.
      */
     @Transactional
     public boolean approve(Long verificationId, String reviewedKey, String publicKey) {
-        return challengeVerificationRepository.findById(verificationId)
+        return challengeVerificationRepository.findByIdForUpdate(verificationId)
                 .filter(ChallengeVerification::isPending)
                 // 심사를 시작할 때 보던 그 사진이어야 한다. 그 사이 당일 재인증이 들어오면
                 // 행의 사진이 새것으로 바뀌는데, 그대로 확정하면 옛 사진의 판정으로 새 사진을
