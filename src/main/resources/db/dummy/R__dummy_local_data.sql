@@ -143,3 +143,58 @@ ON DUPLICATE KEY UPDATE
   joined_at  = IF(group_member.id >= 9000, new_row.joined_at, group_member.joined_at),
   left_at    = IF(group_member.id >= 9000, new_row.left_at, group_member.left_at),
   updated_at = IF(group_member.id >= 9000, NOW(6), group_member.updated_at);
+
+-- 6) 규은dl123 (실제 소셜 로그인 회원) 챌린지 참여 + 인증 더미
+-- member_id는 하드코딩하지 않고 nickname으로 조회한다. 프론트 팀원 계정은
+-- 더미(9000번대)가 아니라 실제 소셜 로그인으로 생긴 행이라 id를 미리 알 수 없다.
+-- 이 팀원이 최소 1회 로그인해 member 행이 존재해야 아래가 채워진다(없으면 0건 INSERT).
+
+-- 6-1) 참여: 물 2L 마시기(9001) + 30분 걷기(9002)
+INSERT INTO member_challenge
+(id, member_id, challenge_id, active, current_streak, last_verified_date, participation_round, joined_at, created_at, updated_at)
+SELECT 9005, m.id, 9001, TRUE, 1, DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY), 1, NOW(), NOW(), NOW()
+FROM member m WHERE m.nickname = '규은dl123'
+    ON DUPLICATE KEY UPDATE
+                         member_id           = IF(member_challenge.id >= 9000, (SELECT id FROM member WHERE nickname = '규은dl123'), member_challenge.member_id),
+                         active               = IF(member_challenge.id >= 9000, TRUE, member_challenge.active),
+                         current_streak       = IF(member_challenge.id >= 9000, 1, member_challenge.current_streak),
+                         last_verified_date   = IF(member_challenge.id >= 9000, DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY), member_challenge.last_verified_date),
+                         participation_round  = IF(member_challenge.id >= 9000, 1, member_challenge.participation_round),
+                         updated_at           = IF(member_challenge.id >= 9000, NOW(), member_challenge.updated_at);
+
+INSERT INTO member_challenge
+(id, member_id, challenge_id, active, current_streak, last_verified_date, participation_round, joined_at, created_at, updated_at)
+SELECT 9006, m.id, 9002, TRUE, 0, NULL, 1, NOW(), NOW(), NOW()
+FROM member m WHERE m.nickname = '규은dl123'
+    ON DUPLICATE KEY UPDATE
+                         member_id           = IF(member_challenge.id >= 9000, (SELECT id FROM member WHERE nickname = '규은dl123'), member_challenge.member_id),
+                         active               = IF(member_challenge.id >= 9000, TRUE, member_challenge.active),
+                         current_streak       = IF(member_challenge.id >= 9000, 0, member_challenge.current_streak),
+                         last_verified_date   = IF(member_challenge.id >= 9000, NULL, member_challenge.last_verified_date),
+                         participation_round  = IF(member_challenge.id >= 9000, 1, member_challenge.participation_round),
+                         updated_at           = IF(member_challenge.id >= 9000, NOW(), member_challenge.updated_at);
+
+-- 6-2) 인증: 어제(승인) + 오늘(승인) + 오늘 다른 챌린지(심사 대기)
+-- GET /api/members/me/verifications 의 date·status 필터를 모두 확인할 수 있도록 구성.
+INSERT INTO challenge_verification
+(id, member_challenge_id, participation_round, verified_date, period_start_date,
+ verified_at, image_url, content, review_status, review_attempts, pending_since,
+ created_at, updated_at)
+VALUES
+    (9005, 9005, 1, DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY), DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY), NOW(),
+     'challenge-verifications/00000000-0000-4000-8000-000000009005.jpg', '규은 어제 인증', 'APPROVED', 0, NULL, NOW(), NOW()),
+    (9006, 9005, 1, CURRENT_DATE(), CURRENT_DATE(), NOW(),
+     'challenge-verifications/00000000-0000-4000-8000-000000009006.jpg', '규은 오늘 인증', 'APPROVED', 0, NULL, NOW(), NOW()),
+    (9007, 9006, 1, CURRENT_DATE(), CURRENT_DATE(), NOW(),
+     'challenge-verifications/pending/00000000-0000-4000-8000-000000009007.jpg', '규은 검수 대기중', 'PENDING', 0, NOW(), NOW(), NOW())
+    AS new_row
+ON DUPLICATE KEY UPDATE
+                     verified_date     = IF(challenge_verification.id >= 9000, new_row.verified_date, challenge_verification.verified_date),
+                     period_start_date = IF(challenge_verification.id >= 9000, new_row.period_start_date, challenge_verification.period_start_date),
+                     verified_at       = IF(challenge_verification.id >= 9000, new_row.verified_at, challenge_verification.verified_at),
+                     image_url         = IF(challenge_verification.id >= 9000, new_row.image_url, challenge_verification.image_url),
+                     content           = IF(challenge_verification.id >= 9000, new_row.content, challenge_verification.content),
+                     review_status     = IF(challenge_verification.id >= 9000, new_row.review_status, challenge_verification.review_status),
+                     review_attempts   = IF(challenge_verification.id >= 9000, new_row.review_attempts, challenge_verification.review_attempts),
+                     pending_since     = IF(challenge_verification.id >= 9000, new_row.pending_since, challenge_verification.pending_since),
+                     updated_at        = IF(challenge_verification.id >= 9000, NOW(), challenge_verification.updated_at);
