@@ -31,5 +31,8 @@ public enum WalletTransactionType {
     REFUND,
 
     /** 운영 보정. */
-    ADMIN_ADJUST
+    ADMIN_ADJUST,
+
+    /** 업적 보상 지급. */
+    ACHIEVEMENT_REWARD
 }

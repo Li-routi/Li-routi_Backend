@@ -1,6 +1,5 @@
 package com.lirouti.domain.report.service.query;
 
-import com.lirouti.domain.challenge.repository.MemberChallengeRepository;
 import com.lirouti.domain.group.dto.projection.DailyScheduleAndCompletion;
 import com.lirouti.domain.group.repository.GroupRoutineAssignmentRepository;
 import com.lirouti.domain.report.dto.response.ReportResDTO;
@@ -8,6 +7,7 @@ import com.lirouti.domain.routine.entity.MemberRoutine;
 import com.lirouti.domain.routine.entity.MemberRoutineSchedule;
 import com.lirouti.domain.routine.repository.MemberRoutineRepository;
 import com.lirouti.domain.verification.dto.projection.DailyCompletionCount;
+import com.lirouti.domain.verification.repository.ChallengeVerificationRepository;
 import com.lirouti.domain.verification.repository.MemberRoutineVerificationRepository;
 import com.lirouti.global.util.TimeUtil;
 import lombok.RequiredArgsConstructor;
@@ -31,7 +31,7 @@ public class ReportQueryService {
     private final MemberRoutineRepository memberRoutineRepository;
     private final MemberRoutineVerificationRepository memberRoutineVerificationRepository;
     private final GroupRoutineAssignmentRepository groupRoutineAssignmentRepository;
-    private final MemberChallengeRepository memberChallengeRepository;
+    private final ChallengeVerificationRepository challengeVerificationRepository;
 
     private static final int PLACEHOLDER_EARNED_COIN = 0; // 상점 및 코인 기능 개발 전 임시로 0
 
@@ -113,9 +113,12 @@ public class ReportQueryService {
                 .average().orElse(0.0);
         int averageCompletionRate = (int) Math.round(averageRate * 100);
 
-        LocalDate nextMonthStart = yearMonth.plusMonths(1).atDay(1);
-        long completedChallengeCount = memberChallengeRepository
-                .countByMemberIdAndActiveTrueAndJoinedAtBefore(memberId, nextMonthStart.atStartOfDay());
+        // 챌린지는 하루 1회 제출 가능하고, 제출(=성공)마다 "완료" +1로 센다(다음 날 다시 제출 가능).
+        // 그래서 "참여 중인 챌린지 수"가 아니라 그 달의 제출(인증) 성공 건수를 그대로 쓴다.
+        LocalDate monthStart = yearMonth.atDay(1);
+        LocalDate monthEnd = yearMonth.atEndOfMonth();
+        long completedChallengeCount = challengeVerificationRepository
+                .countByMemberAndDateBetween(memberId, monthStart, monthEnd);
 
         return ReportResDTO.ActivityStats.builder()
                 .completedRoutineCount(Math.toIntExact(completedRoutineCount))
