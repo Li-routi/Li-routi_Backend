@@ -17,6 +17,30 @@ public final class GroupResDTO {
     private GroupResDTO() {
     }
 
+    /** 로그인 회원이 현재 참여 중인 그룹의 요약 목록이다. */
+    @Builder
+    @Schema(name = "MyGroupList", description = "로그인 회원의 참여 그룹 목록")
+    public record MyGroupList(
+            List<MyGroup> groups
+    ) {
+    }
+
+    /** 참여 그룹 하나의 구성원·루틴·오늘·월간 활동 요약이다. */
+    @Builder
+    @Schema(name = "MyGroup", description = "로그인 회원의 참여 그룹 요약")
+    public record MyGroup(
+            Long groupId,
+            String groupName,
+            long activeMemberCount,
+            long activeRoutineCount,
+            long todayAssignedRoutineCount,
+            long todayCompletedRoutineCount,
+            int currentStreak,
+            int monthlyAchievementRate,
+            long todayGroupVerificationCount
+    ) {
+    }
+
     /** 그룹에서 사용할 수 있는 카테고리와 추가 가능 개수다. */
     @Builder
     @Schema(name = "GroupRoutineCategoryList", description = "그룹 루틴 카테고리 목록")

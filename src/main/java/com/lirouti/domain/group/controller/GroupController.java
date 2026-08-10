@@ -44,6 +44,16 @@ public class GroupController implements GroupControllerDocs {
         return ApiResponse.onSuccess(GroupSuccessCode.GROUP_CREATE_SUCCESS, result);
     }
 
+    /** 로그인 회원이 ACTIVE 상태로 참여 중인 그룹의 활동 요약 목록을 조회한다. */
+    @Override
+    @GetMapping
+    public ApiResponse<GroupResDTO.MyGroupList> getMyGroups(
+            @AuthenticationPrincipal CustomUserDetails userDetails
+    ) {
+        GroupResDTO.MyGroupList result = groupQueryService.getMyGroups(userDetails.getMemberId());
+        return ApiResponse.onSuccess(GroupSuccessCode.GROUP_MY_LIST_FETCH_SUCCESS, result);
+    }
+
     /** ACTIVE OWNER가 그룹과 그룹에 종속된 데이터를 Hard Delete한다. */
     @Override
     @DeleteMapping("/{groupId}")
