@@ -15,7 +15,7 @@ public interface AchievementControllerDocs {
             summary = "업적 목록 조회",
             description = """
                     마이 > 업적 화면에 필요한 데이터를 통합 조회합니다.
-                    카테고리(시작·달성·스페셜)별로 묶인 전체 업적 목록과, 획득/진행 중 개수를 담은
+                    카테고리(rare, epic, unique)별로 묶인 전체 업적 목록과, 획득/진행 중 개수를 담은
                     상단 요약을 함께 내려줍니다. 아직 진행도가 없는 업적도 목록에 포함되며,
                     이 경우 진행 상태는 IN_PROGRESS·진행도 0으로 표시됩니다.
                     """
