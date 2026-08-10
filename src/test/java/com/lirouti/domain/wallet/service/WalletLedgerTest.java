@@ -5,7 +5,6 @@ import com.lirouti.domain.member.enums.Role;
 import com.lirouti.domain.member.enums.SocialProvider;
 import com.lirouti.domain.wallet.dto.response.WalletResDTO;
 import com.lirouti.domain.wallet.entity.MemberWallet;
-import com.lirouti.domain.wallet.entity.WalletTransaction;
 import com.lirouti.domain.wallet.enums.Currency;
 import com.lirouti.domain.wallet.enums.WalletTransactionType;
 import com.lirouti.domain.wallet.exception.WalletException;
@@ -108,17 +107,18 @@ class WalletLedgerTest {
     void grantIncreasesBalanceAndRecordsLedger() {
         Member m = member();
 
-        WalletTransaction tx = walletService.grant(
+        WalletResult tx = walletService.grant(
                 command(m, WalletTransactionType.TOPUP, "topup:1"), 500, 50);
 
         assertAll(
                 () -> assertThat(walletOf(m).getPaidBalance()).isEqualTo(500),
                 () -> assertThat(walletOf(m).getFreeBalance()).isEqualTo(50),
                 () -> assertThat(walletOf(m).totalBalance()).isEqualTo(550),
-                () -> assertThat(tx.getPaidDelta()).isEqualTo(500),
-                () -> assertThat(tx.getFreeDelta()).isEqualTo(50),
-                () -> assertThat(tx.getPaidBalanceAfter()).isEqualTo(500),
-                () -> assertThat(tx.getFreeBalanceAfter()).isEqualTo(50)
+                () -> assertThat(tx.paidBalance()).isEqualTo(500),
+                () -> assertThat(tx.freeBalance()).isEqualTo(50),
+                () -> assertThat(tx.applied())
+                        .as("이번 호출이 실제로 잔액을 움직였다").isTrue(),
+                () -> assertThat(tx.transactionId()).isNotNull()
         );
     }
 
@@ -146,16 +146,20 @@ class WalletLedgerTest {
         Member m = member();
         walletService.grant(command(m, WalletTransactionType.TOPUP, "seed:2"), 100, 30);
 
-        WalletTransaction tx = walletService.deduct(
+        WalletResult tx = walletService.deduct(
                 command(m, WalletTransactionType.PURCHASE, "buy:2"), 50);
 
         assertAll(
                 () -> assertThat(walletOf(m).getFreeBalance()).isZero(),
                 () -> assertThat(walletOf(m).getPaidBalance())
                         .as("모자란 20 만 유상에서 뺀다").isEqualTo(80),
-                () -> assertThat(tx.getFreeDelta())
+                () -> assertThat(walletTransactionRepository
+                        .findByMemberIdAndIdempotencyKey(m.getId(), "buy:2").orElseThrow().getFreeDelta())
                         .as("원장에도 어느 쪽이 얼마나 빠졌는지 남는다").isEqualTo(-30),
-                () -> assertThat(tx.getPaidDelta()).isEqualTo(-20)
+                () -> assertThat(walletTransactionRepository
+                        .findByMemberIdAndIdempotencyKey(m.getId(), "buy:2").orElseThrow().getPaidDelta())
+                        .isEqualTo(-20),
+                () -> assertThat(tx.totalBalance()).isEqualTo(80)
         );
     }
 
@@ -188,16 +192,18 @@ class WalletLedgerTest {
         Member m = member();
         long ledgerBefore = walletTransactionRepository.count();
 
-        WalletTransaction first = walletService.grant(
+        WalletResult first = walletService.grant(
                 command(m, WalletTransactionType.CHALLENGE_REWARD, "reward:verification:1"), 0, 10);
-        WalletTransaction second = walletService.grant(
+        WalletResult second = walletService.grant(
                 command(m, WalletTransactionType.CHALLENGE_REWARD, "reward:verification:1"), 0, 10);
 
         assertAll(
                 () -> assertThat(walletOf(m).totalBalance())
                         .as("재시도로 두 번 지급되면 그대로 돈 문제가 된다").isEqualTo(10),
-                () -> assertThat(second.getId())
-                        .as("두 번째는 처음 거래를 그대로 돌려준다").isEqualTo(first.getId()),
+                () -> assertThat(second.transactionId())
+                        .as("두 번째는 처음 거래를 그대로 돌려준다").isEqualTo(first.transactionId()),
+                () -> assertThat(second.applied())
+                        .as("되돌려준 것이지 다시 움직인 것이 아니다").isFalse(),
                 () -> assertThat(walletTransactionRepository.count()).isEqualTo(ledgerBefore + 1)
         );
     }
@@ -212,6 +218,56 @@ class WalletLedgerTest {
         walletService.deduct(command(m, WalletTransactionType.PURCHASE, "buy:item:7"), 30);
 
         assertThat(walletOf(m).totalBalance()).isEqualTo(70);
+    }
+
+    @Test
+    @DisplayName("다른 회원이 같은 멱등 키를 써도 각자 정상 처리된다")
+    void idempotencyKeyIsScopedToMember() {
+        Member a = member();
+        Member b = member();
+        // 호출부가 자연스럽게 만드는 키다 — 회원이 들어 있지 않다.
+        String sharedKey = "buy:item:7";
+        walletService.grant(command(a, WalletTransactionType.TOPUP, "seed:a"), 0, 100);
+        walletService.grant(command(b, WalletTransactionType.TOPUP, "seed:b"), 0, 100);
+
+        walletService.deduct(command(a, WalletTransactionType.PURCHASE, sharedKey), 30);
+        WalletResult bResult = walletService.deduct(
+                command(b, WalletTransactionType.PURCHASE, sharedKey), 30);
+
+        assertAll(
+                () -> assertThat(walletOf(a).totalBalance()).isEqualTo(70),
+                () -> assertThat(walletOf(b).totalBalance())
+                        .as("""
+                                키가 전역이면 B 의 차감이 A 의 거래로 취급돼 조용히 건너뛴다. \
+                                호출부는 성공으로 보고 물건을 내주므로 돈만 새고 에러는 안 난다.""")
+                        .isEqualTo(70),
+                () -> assertThat(bResult.applied())
+                        .as("B 의 요청은 실제로 잔액을 움직여야 한다").isTrue(),
+                () -> assertThat(walletTransactionRepository
+                        .findByMemberIdAndIdempotencyKey(b.getId(), sharedKey))
+                        .as("B 의 원장에 B 의 거래가 남아야 한다").isPresent()
+        );
+    }
+
+    @Test
+    @DisplayName("멱등으로 되돌려준 결과에도 지금 잔액이 실린다 — 트랜잭션 밖에서 터지지 않는다")
+    void replayCarriesCurrentBalance() {
+        Member m = member();
+        walletService.grant(command(m, WalletTransactionType.TOPUP, "seed:replay"), 0, 100);
+        walletService.deduct(command(m, WalletTransactionType.PURCHASE, "buy:once"), 30);
+        // 그 사이에 다른 거래가 하나 더 일어난다.
+        walletService.grant(command(m, WalletTransactionType.CHALLENGE_REWARD, "reward:x"), 0, 5);
+
+        WalletResult replay = walletService.deduct(
+                command(m, WalletTransactionType.PURCHASE, "buy:once"), 30);
+
+        assertAll(
+                () -> assertThat(replay.applied()).isFalse(),
+                () -> assertThat(replay.totalBalance())
+                        .as("거래 당시(70)가 아니라 지금(75) 잔액이어야 화면이 안 어긋난다")
+                        .isEqualTo(75),
+                () -> assertThat(walletOf(m).totalBalance()).isEqualTo(75)
+        );
     }
 
     // ── 재화 분리 ──

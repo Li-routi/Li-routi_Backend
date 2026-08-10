@@ -1,7 +1,5 @@
 package com.lirouti.domain.wallet.service;
 
-import com.lirouti.domain.wallet.entity.WalletTransaction;
-import com.lirouti.domain.wallet.repository.WalletTransactionRepository;
 import com.lirouti.domain.wallet.service.command.WalletCommandService;
 import com.lirouti.domain.wallet.service.command.WalletCommandService.WalletCommand;
 import lombok.RequiredArgsConstructor;
@@ -31,9 +29,8 @@ import org.springframework.stereotype.Service;
 public class WalletService {
 
     private final WalletCommandService walletCommandService;
-    private final WalletTransactionRepository walletTransactionRepository;
 
-    public WalletTransaction grant(WalletCommand command, int paidAmount, int freeAmount) {
+    public WalletResult grant(WalletCommand command, int paidAmount, int freeAmount) {
         try {
             return walletCommandService.grant(command, paidAmount, freeAmount);
         } catch (DataIntegrityViolationException e) {
@@ -41,7 +38,7 @@ public class WalletService {
         }
     }
 
-    public WalletTransaction deduct(WalletCommand command, int amount) {
+    public WalletResult deduct(WalletCommand command, int amount) {
         try {
             return walletCommandService.deduct(command, amount);
         } catch (DataIntegrityViolationException e) {
@@ -56,12 +53,12 @@ public class WalletService {
      * 먼저 쓴 쪽이 이미 잔액을 움직였는데 다시 시도하면 두 번 반영된다. 키가 이미 있다면
      * 그것이 답이다.
      */
-    private WalletTransaction recover(
+    private WalletResult recover(
             WalletCommand command,
             DataIntegrityViolationException original,
-            java.util.function.Supplier<WalletTransaction> retry
+            java.util.function.Supplier<WalletResult> retry
     ) {
-        return walletTransactionRepository.findByIdempotencyKey(command.idempotencyKey())
+        return walletCommandService.replayOf(command)
                 .orElseGet(() -> {
                     try {
                         return retry.get();
