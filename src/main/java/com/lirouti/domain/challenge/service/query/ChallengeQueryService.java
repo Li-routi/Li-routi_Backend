@@ -62,9 +62,10 @@ public class ChallengeQueryService {
         List<Long> ids = page.rows().stream().map(Challenge::getId).toList();
         Map<Long, Long> participantCounts = challengeRepository.countActiveParticipantsByChallengeIds(ids);
         Map<Long, Long> verificationCounts = challengeRepository.countVerificationPostsByChallengeIds(ids);
+        Map<Long, String> coverImages = challengeRepository.coverImagesByChallengeIds(ids);
 
-        return ChallengeConverter.toListing(
-                page.rows(), participantCounts, verificationCounts, page.nextCursor(), page.hasNext());
+        return ChallengeConverter.toListing(page.rows(), participantCounts, verificationCounts,
+                coverImages, page.nextCursor(), page.hasNext());
     }
 
     /** size + 1로 받아온 행에서 현재 페이지·다음 커서·다음 페이지 여부를 뽑아낸 결과. */
@@ -93,7 +94,8 @@ public class ChallengeQueryService {
     ) {
         List<Challenge> challenges =
                 memberChallengeRepository.findMyActiveChallenges(memberId, category, keyword);
-        return ChallengeConverter.toMyListing(challenges);
+        return ChallengeConverter.toMyListing(challenges, challengeRepository.coverImagesByChallengeIds(
+                challenges.stream().map(Challenge::getId).toList()));
     }
 
     // memberId는 조회자. 상세도 인증이 필요하므로 컨트롤러에서 null이 오지 않는다.
@@ -116,8 +118,12 @@ public class ChallengeQueryService {
 
         long participantCount = challengeRepository.countActiveParticipants(challengeId);
         long verificationPostCount = challengeRepository.countVerificationPosts(challengeId);
+        // 목록과 같은 쿼리를 한 건짜리로 부른다. 상세용을 따로 만들면 둘의 규칙이 갈라져,
+        // 목록에서 본 표지와 들어가서 본 표지가 달라지는 사고가 난다.
+        String coverImage = challengeRepository.coverImagesByChallengeIds(List.of(challengeId))
+                .get(challengeId);
         return ChallengeConverter.toDetail(challenge, participating, verifiedInCurrentPeriod,
-                participantCount, verificationPostCount);
+                participantCount, verificationPostCount, coverImage);
     }
 
     /**
