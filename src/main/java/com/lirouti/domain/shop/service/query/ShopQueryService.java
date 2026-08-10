@@ -36,24 +36,13 @@ public class ShopQueryService {
     public ShopResDTO.Items getItems(Long memberId, AvatarSlot slot, boolean ownedOnly) {
         Set<Long> ownedIds = Set.copyOf(memberAvatarItemRepository.findOwnedItemIds(memberId));
 
-        if (ownedOnly) {
-            // 보유한 것만 볼 때는 판매 여부를 보지 않는다 — 이미 산 것이다.
-            List<AvatarItem> owned = ownedIds.isEmpty()
-                    ? List.of()
-                    : avatarItemRepository.findAllById(ownedIds).stream()
-                            .filter(item -> slot == null || item.getSlot() == slot)
-                            .sorted(java.util.Comparator
-                                    .comparing(AvatarItem::getSlot)
-                                    .thenComparingInt(AvatarItem::getSortOrder)
-                                    .thenComparing(AvatarItem::getId))
-                            .toList();
-            return ShopConverter.toItems(owned, ownedIds);
-        }
-
-        // 판매 중인 것 + 보유한 것. 보유했는데 판매가 내려간 아이템이 빠지면, 착장 저장이
-        // 전체 목록을 받으므로 화면에서 고를 수 없어 조용히 벗겨진다.
-        List<AvatarItem> items = avatarItemRepository.findForShop(
-                slot, ownedIds.isEmpty() ? List.of(-1L) : ownedIds);
+        // 정렬은 두 경로 모두 쿼리에서 한다. 한쪽만 자바에서 하면 같은 화면인데 순서가 갈린다.
+        List<AvatarItem> items = ownedOnly
+                // 보유한 것만 볼 때는 판매 여부를 보지 않는다 — 이미 산 것이다.
+                ? avatarItemRepository.findOwnedForShop(slot, ownedIds)
+                // 판매 중인 것 + 보유한 것. 보유했는데 판매가 내려간 아이템이 빠지면, 착장
+                // 저장이 전체 목록을 받으므로 화면에서 고를 수 없어 조용히 벗겨진다.
+                : avatarItemRepository.findForShop(slot, ownedIds);
         return ShopConverter.toItems(items, ownedIds);
     }
 

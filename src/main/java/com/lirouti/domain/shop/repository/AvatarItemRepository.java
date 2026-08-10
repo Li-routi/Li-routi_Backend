@@ -28,4 +28,18 @@ public interface AvatarItemRepository extends JpaRepository<AvatarItem, Long> {
             """)
     List<AvatarItem> findForShop(@Param("slot") AvatarSlot slot,
                                  @Param("ownedIds") Collection<Long> ownedIds);
+
+    /**
+     * 보유한 것만 보기.
+     *
+     * <p><b>판매 여부를 보지 않는다</b> — 이미 산 것이라 판매가 내려갔어도 목록에 남아야 한다.
+     */
+    @Query("""
+            select i from AvatarItem i
+            where i.id in :ownedIds
+              and (:slot is null or i.slot = :slot)
+            order by i.slot asc, i.sortOrder asc, i.id asc
+            """)
+    List<AvatarItem> findOwnedForShop(@Param("slot") AvatarSlot slot,
+                                      @Param("ownedIds") Collection<Long> ownedIds);
 }
