@@ -5,6 +5,7 @@ import com.lirouti.domain.achievement.entity.Achievement;
 import com.lirouti.domain.achievement.entity.AchievementCondition;
 import com.lirouti.domain.achievement.entity.MemberAchievement;
 import com.lirouti.domain.achievement.entity.MemberAchievementCondition;
+import com.lirouti.domain.achievement.enums.AchievementCategory;
 import com.lirouti.domain.achievement.enums.AchievementProgressType;
 import com.lirouti.domain.achievement.enums.MemberAchievementStatus;
 
@@ -47,7 +48,60 @@ public final class AchievementConverter {
                         .build())
                 .toList();
 
-        return AchievementResDTO.Achievements.builder().categories(categories).build();
+        AchievementResDTO.Summary summary =
+                toSummary(allAchievements, memberAchievementByAchievementId);
+
+        return AchievementResDTO.Achievements.builder()
+                .summary(summary)
+                .categories(categories)
+                .build();
+    }
+
+    /**
+     * 상단 요약 카드. 획득/전체, 진행 중, 스페셜(UNIQUE 카테고리) 획득/전체를 센다.
+     *
+     * <p>"진행 중"은 아직 미달성이면서 진행도가 0보다 큰 업적만 센다. COMPOSITE 업적은
+     * {@code currentProgress} 컬럼을 쓰지 않으므로 member_achievement 행이 있다는 것
+     * 자체를 "손을 댄 적 있다"로 보고 진행 중에 포함한다.
+     */
+    private static AchievementResDTO.Summary toSummary(
+            List<Achievement> allAchievements,
+            Map<Long, MemberAchievement> memberAchievementByAchievementId
+    ) {
+        int acquired = 0;
+        int inProgress = 0;
+        int specialTotal = 0;
+        int specialAcquired = 0;
+
+        for (Achievement achievement : allAchievements) {
+            MemberAchievement memberAchievement = memberAchievementByAchievementId.get(achievement.getId());
+            boolean isSpecial = achievement.getCategory() == AchievementCategory.UNIQUE;
+            if (isSpecial) {
+                specialTotal++;
+            }
+
+            if (memberAchievement == null) {
+                continue;
+            }
+            MemberAchievementStatus status = memberAchievement.getStatus();
+            if (status == MemberAchievementStatus.ACHIEVED || status == MemberAchievementStatus.CLAIMED) {
+                acquired++;
+                if (isSpecial) {
+                    specialAcquired++;
+                }
+            } else if (achievement.getProgressType() == AchievementProgressType.COMPOSITE
+                    || memberAchievement.getCurrentProgress() > 0) {
+                inProgress++;
+            }
+        }
+
+        return AchievementResDTO.Summary.builder()
+                .acquiredCount(acquired)
+                .totalCount(allAchievements.size())
+                .inProgressCount(inProgress)
+                .specialAcquiredCount(specialAcquired)
+                .specialTotalCount(specialTotal)
+                .build();
     }
 
     private static AchievementResDTO.AchievementItem toItem(
