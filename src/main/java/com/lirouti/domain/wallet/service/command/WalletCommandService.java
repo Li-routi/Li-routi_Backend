@@ -1,0 +1,138 @@
+package com.lirouti.domain.wallet.service.command;
+
+import com.lirouti.domain.member.entity.Member;
+import com.lirouti.domain.member.repository.MemberRepository;
+import com.lirouti.domain.wallet.entity.MemberWallet;
+import com.lirouti.domain.wallet.entity.WalletTransaction;
+import com.lirouti.domain.wallet.enums.Currency;
+import com.lirouti.domain.wallet.enums.WalletTransactionType;
+import com.lirouti.domain.wallet.exception.WalletException;
+import com.lirouti.domain.wallet.exception.code.error.WalletErrorCode;
+import com.lirouti.domain.wallet.repository.MemberWalletRepository;
+import com.lirouti.domain.wallet.repository.WalletTransactionRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Optional;
+
+/**
+ * 잔액을 실제로 움직이는 자리. <b>트랜잭션 경계가 여기에 있다.</b>
+ *
+ * <p>지갑 잠금 · 잔액 갱신 · 원장 기록이 한 트랜잭션 안에서 끝나야 한다. 하나라도 밖으로
+ * 나가면 잔액과 원장이 서로 다른 말을 하는 순간이 생긴다.
+ *
+ * <p>멱등 충돌과 지갑 생성 충돌의 <b>복구</b>는 여기서 하지 않는다 — 제약 위반이 나면 이
+ * 트랜잭션은 이미 롤백 대상이라 같은 트랜잭션 안에서 되살릴 수 없다. 그 처리는 트랜잭션
+ * 밖에 있는 {@code WalletService} 가 맡는다.
+ */
+@Service
+@RequiredArgsConstructor
+public class WalletCommandService {
+
+    private final MemberWalletRepository memberWalletRepository;
+    private final WalletTransactionRepository walletTransactionRepository;
+    private final MemberRepository memberRepository;
+
+    /**
+     * 지급. 유상·무상을 나눠 받는다 — 충전은 결제분과 보너스가 함께 들어오므로 한 번의
+     * 지급이 양쪽을 동시에 올릴 수 있다.
+     */
+    @Transactional
+    public WalletTransaction grant(WalletCommand command, int paidAmount, int freeAmount) {
+        if (paidAmount < 0 || freeAmount < 0 || paidAmount + freeAmount <= 0) {
+            throw new WalletException(WalletErrorCode.INVALID_AMOUNT);
+        }
+        Optional<WalletTransaction> already = walletTransactionRepository
+                .findByIdempotencyKey(command.idempotencyKey());
+        if (already.isPresent()) {
+            return already.get();
+        }
+
+        MemberWallet wallet = lockOrCreate(command.memberId(), command.currency());
+        wallet.grant(paidAmount, freeAmount);
+        return record(wallet, command, paidAmount, freeAmount);
+    }
+
+    /**
+     * 차감. 무상부터 쓰고 모자란 만큼만 유상에서 뺀다.
+     *
+     * <p>잔액이 모자라면 아무것도 바꾸지 않고 예외를 던진다 — 부분 차감은 없다.
+     */
+    @Transactional
+    public WalletTransaction deduct(WalletCommand command, int amount) {
+        if (amount <= 0) {
+            throw new WalletException(WalletErrorCode.INVALID_AMOUNT);
+        }
+        Optional<WalletTransaction> already = walletTransactionRepository
+                .findByIdempotencyKey(command.idempotencyKey());
+        if (already.isPresent()) {
+            return already.get();
+        }
+
+        MemberWallet wallet = lockOrCreate(command.memberId(), command.currency());
+        if (!wallet.canAfford(amount)) {
+            throw new WalletException(WalletErrorCode.INSUFFICIENT_BALANCE);
+        }
+        MemberWallet.Deduction deduction = wallet.deduct(amount);
+        return record(wallet, command, -deduction.fromPaid(), -deduction.fromFree());
+    }
+
+    /**
+     * 지갑 행을 잠근 채로 가져온다. 없으면 만든다.
+     *
+     * <p>가입 시점에 미리 만들지 않는 이유는 둘이다 — 재화가 하나 늘 때마다 기존 회원 전부에게
+     * 백필해야 하고, 가입 흐름(다른 도메인)을 건드려야 한다.
+     *
+     * <p>만드는 순간에는 잠글 행이 없으므로 <b>동시에 두 요청이 만들 수 있다.</b> 그것은
+     * 유니크 제약이 막고, 진 쪽은 트랜잭션 밖에서 한 번 다시 시도한다.
+     */
+    private MemberWallet lockOrCreate(Long memberId, Currency currency) {
+        return memberWalletRepository.findForUpdate(memberId, currency)
+                .orElseGet(() -> {
+                    Member member = memberRepository.findById(memberId)
+                            .orElseThrow(() -> new WalletException(WalletErrorCode.MEMBER_NOT_FOUND));
+                    return memberWalletRepository.saveAndFlush(
+                            MemberWallet.builder().member(member).currency(currency).build());
+                });
+    }
+
+    private WalletTransaction record(
+            MemberWallet wallet,
+            WalletCommand command,
+            int paidDelta,
+            int freeDelta
+    ) {
+        return walletTransactionRepository.saveAndFlush(WalletTransaction.builder()
+                .member(wallet.getMember())
+                .currency(wallet.getCurrency())
+                .transactionType(command.transactionType())
+                .paidDelta(paidDelta)
+                .freeDelta(freeDelta)
+                .paidBalanceAfter(wallet.getPaidBalance())
+                .freeBalanceAfter(wallet.getFreeBalance())
+                .idempotencyKey(command.idempotencyKey())
+                .referenceType(command.referenceType())
+                .referenceId(command.referenceId())
+                .build());
+    }
+
+    /**
+     * 거래 한 건의 공통 입력.
+     *
+     * <p>인자를 늘어놓지 않고 묶는 이유는 {@code Long}·{@code String} 이 연달아 오면 호출부에서
+     * 순서가 바뀌어도 컴파일이 통과하기 때문이다. 재화가 오가는 자리에서 그 실수는 비싸다.
+     *
+     * @param idempotencyKey 호출부가 뜻이 담기게 만든다. 같은 사건에는 같은 키가 나와야
+     *                       재시도가 두 번 반영되지 않는다.
+     */
+    public record WalletCommand(
+            Long memberId,
+            Currency currency,
+            WalletTransactionType transactionType,
+            String idempotencyKey,
+            String referenceType,
+            Long referenceId
+    ) {
+    }
+}
