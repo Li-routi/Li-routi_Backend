@@ -139,7 +139,7 @@ class VerificationRewardTest {
     }
 
     private int balance() {
-        return memberWalletRepository.findByMemberIdAndCurrency(me.getId(), Currency.GEM)
+        return memberWalletRepository.findByMemberIdAndCurrency(me.getId(), Currency.TOPAZ)
                 .map(w -> w.totalBalance())
                 .orElse(0);
     }
@@ -183,11 +183,32 @@ class VerificationRewardTest {
 
         assertAll(
                 () -> assertThat(memberWalletRepository
-                        .findByMemberIdAndCurrency(me.getId(), Currency.GEM).orElseThrow().getFreeBalance())
+                        .findByMemberIdAndCurrency(me.getId(), Currency.TOPAZ).orElseThrow().getFreeBalance())
                         .isEqualTo(REWARD),
                 () -> assertThat(memberWalletRepository
-                        .findByMemberIdAndCurrency(me.getId(), Currency.GEM).orElseThrow().getPaidBalance())
+                        .findByMemberIdAndCurrency(me.getId(), Currency.TOPAZ).orElseThrow().getPaidBalance())
                         .as("현금으로 산 것이 아니므로 환불 대상이 아니다").isZero()
+        );
+    }
+
+    @Test
+    @DisplayName("리워드는 무료 재화로 준다 — 유료 재화 지갑은 만들어지지도 않는다")
+    void grant_UsesFreeCurrencyOnly() {
+        // 여기가 실제로 틀렸던 자리다. 리워드를 GEM 으로 주는 코드가 들어가 배포까지 됐다 —
+        // 인증만 하면 현금으로만 얻어야 할 재화가 공짜로 생기는 상태였다. 재화 성격은 문서에서
+        // 두 번 뒤집혔으므로, 다음에 또 뒤집히면 이 테스트가 먼저 빨간불을 내야 한다.
+        ChallengeVerification v = verificationToday();
+
+        rewardCommandService.grantForVerification(me, v.getId(), REWARD);
+        em.flush();
+
+        assertAll(
+                () -> assertThat(memberWalletRepository
+                        .findByMemberIdAndCurrency(me.getId(), Currency.TOPAZ))
+                        .as("무료 재화로 들어간다").isPresent(),
+                () -> assertThat(memberWalletRepository
+                        .findByMemberIdAndCurrency(me.getId(), Currency.GEM))
+                        .as("유료 재화는 현금으로만 얻는다 — 지갑이 생길 이유가 없다").isEmpty()
         );
     }
 
@@ -311,7 +332,7 @@ class VerificationRewardTest {
         rewardCommandService.grantForVerification(me, v.getId(), REWARD);
         em.flush();
         // 받은 것을 아이템 사는 데 다 써 버렸다.
-        walletService.deduct(new WalletCommand(me.getId(), Currency.GEM,
+        walletService.deduct(new WalletCommand(me.getId(), Currency.TOPAZ,
                 WalletTransactionType.PURCHASE, "spend-all", null, null), REWARD);
         em.flush();
 

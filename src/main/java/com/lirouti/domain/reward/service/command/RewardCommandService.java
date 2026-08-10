@@ -34,8 +34,13 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class RewardCommandService {
 
-    /** 챌린지 리워드는 파란 보석이다. 주황 보석은 업적에서 준다. */
-    private static final Currency REWARD_CURRENCY = Currency.GEM;
+    /**
+     * 챌린지 리워드는 <b>주황 보석({@link Currency#TOPAZ})</b>이다 — 무료 재화다.
+     *
+     * <p>파란 보석({@link Currency#GEM})은 현금으로만 얻는 유료 재화라 여기서 주면
+     * <b>인증만 하면 유료 재화가 공짜로 생긴다.</b> 실제로 그렇게 들어갔다가 되돌린 자리다.
+     */
+    private static final Currency REWARD_CURRENCY = Currency.TOPAZ;
 
     private final RewardGrantRepository rewardGrantRepository;
     private final WalletCommandService walletCommandService;
