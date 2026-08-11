@@ -212,11 +212,21 @@ rate-limit:
   # 오탐으로 정상 사용자가 막히거나 Redis 문제가 생겼을 때의 탈출구.
   enabled: ${RATE_LIMIT_ENABLED:true}
   policies:
-    # presigned URL 발급. 발급 한 건이 최대 10MB 업로드를 허용하므로 이 값이 곧 시간당 상한이 된다
-    # (20건 × 10MB = 200MB/시간). 실사용은 챌린지 인증 몇 건 + 재시도 정도라 넉넉한 편이다.
+    # presigned URL 발급. 발급 한 건이 최대 10MB 업로드를 허용하므로 이 값이 곧 용량 상한이 된다
+    # (30건 × 10MB = 창당 300MB, 연속으로 채우면 1.8GB/시간).
+    #
+    # 창을 1시간이 아니라 10분으로 둔 이유는 회복 시간이다. 고정 창이라 만료는 창의 첫 요청
+    # 시각을 기준으로 걸린다. 창이 길면 한도를 소진한 사용자가 그만큼 오래 잠기는데, 실제로
+    # 1시간 창에서 정상 사용자가 막혀 몇 분을 기다려도 풀리지 않는다는 제보가 있었다.
+    #
+    # 한 번의 인증이 발급 한 건으로 끝나지 않는 점도 값에 반영했다. presigned URL 유효 시간이
+    # 5분이라 사진을 고르다 지체하거나 업로드가 끊기거나 사진을 바꾸면 재발급이 필요하고,
+    # 그때마다 한 건씩 깎인다. 소진 시점이 "인증 성공"이 아니라 "발급 시도"다.
+    # 챌린지·그룹 루틴·개인 루틴·프로필이 이 버킷 하나를 공유하는 것도 같은 이유로 부담이다.
+    # 용도별로 나누는 작업은 따로 진행한다.
     media-presign:
-      limit: ${RATE_LIMIT_MEDIA_PRESIGN_LIMIT:20}
-      window: ${RATE_LIMIT_MEDIA_PRESIGN_WINDOW:PT1H}
+      limit: ${RATE_LIMIT_MEDIA_PRESIGN_LIMIT:30}
+      window: ${RATE_LIMIT_MEDIA_PRESIGN_WINDOW:PT10M}
 
 ---
 # 로컬 개발 전용 오버라이드.
