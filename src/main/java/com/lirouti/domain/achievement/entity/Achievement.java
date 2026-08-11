@@ -54,15 +54,25 @@ public class Achievement extends BaseEntity {
      * 예: ROUTINE_COMPLETE_COUNT, LIKE_COUNT, ROOM_JOIN_COUNT.
      *
      * <p>COMPOSITE 는 이 컬럼을 쓰지 않고 {@link AchievementCondition} 의 개별
-     * conditionKey 들을 쓴다 — {@code AchievementProgressService} 가 이벤트를 매칭할 때
-     * progressType 에 따라 어느 쪽을 볼지 분기한다.
+     * conditionKey 들을 쓴다.
      */
     @Column(name = "condition_key", length = 30)
     private String conditionKey;
 
-    /** 카테고리 시작 업적만 사용. 예: EXERCISE, HEALTH. */
-    @Column(name = "routine_category_filter", length = 20)
-    private String routineCategoryFilter;
+    /**
+     * 카테고리 시작 업적만 사용. {@link com.lirouti.domain.routine.entity.RoutineCategory}
+     * 의 고정 카테고리(owner == null) id 를 가리킨다 — R__seed_routine.sql 이 시드하는
+     * 1(운동)~6(취미).
+     *
+     * <p>문자열 코드(EXERCISE 등)가 아니라 FK 로 두는 이유: 카테고리 이름은 자유
+     * 텍스트라 바뀔 수 있고, 사용자 카테고리도 같은 테이블에 섞여 있어 이름만으로는
+     * 고정 카테고리를 안정적으로 특정할 수 없다.
+     *
+     * <p>null 이면 카테고리 무관 — 이 값이 있는 업적만 이벤트의 카테고리와 매칭해서
+     * 반영한다({@code AchievementProgressService} 참고).
+     */
+    @Column(name = "routine_category_id")
+    private Long routineCategoryId;
 
     @Column(name = "topaz_reward", nullable = false)
     private int topazReward;
@@ -85,7 +95,7 @@ public class Achievement extends BaseEntity {
     @Builder
     private Achievement(String code, AchievementCategory category, String name,
                         String conditionDesc, AchievementProgressType progressType,
-                        Integer targetCount, String routineCategoryFilter,
+                        Integer targetCount, String conditionKey, Long routineCategoryId,
                         int topazReward, boolean badgeYn, boolean limitedOutfitYn,
                         int sortOrder, boolean active) {
         this.code = code;
@@ -95,7 +105,7 @@ public class Achievement extends BaseEntity {
         this.progressType = progressType;
         this.targetCount = targetCount;
         this.conditionKey = conditionKey;
-        this.routineCategoryFilter = routineCategoryFilter;
+        this.routineCategoryId = routineCategoryId;
         this.topazReward = topazReward;
         this.badgeYn = badgeYn;
         this.limitedOutfitYn = limitedOutfitYn;
