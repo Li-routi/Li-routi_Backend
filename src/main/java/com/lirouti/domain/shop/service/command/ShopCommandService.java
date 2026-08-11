@@ -107,19 +107,22 @@ public class ShopCommandService {
     public ShopResDTO.Avatar equip(Long memberId, List<Long> itemIds) {
         Member member = lockMember(memberId);
 
-        List<Long> requested = itemIds == null ? List.of() : itemIds;
-        List<AvatarItem> items = requested.isEmpty()
+        // 같은 아이템을 두 번 보내는 것은 막지 않는다 — 한 번 입히면 되는 요청이라 뜻이
+        // 분명하다. 아래 비교가 전부 이 집합을 기준으로 하므로 한 번만 만든다.
+        Set<Long> requestedIds = Set.copyOf(itemIds == null ? List.of() : itemIds);
+
+        List<AvatarItem> items = requestedIds.isEmpty()
                 ? List.of()
-                : avatarItemRepository.findAllById(Set.copyOf(requested));
-        if (items.size() != Set.copyOf(requested).size()) {
+                : avatarItemRepository.findAllById(requestedIds);
+        if (items.size() != requestedIds.size()) {
             throw new ShopException(ShopErrorCode.ITEM_NOT_FOUND);
         }
 
         // 하나라도 미보유면 전체를 거절한다. 미보유 착용은 구매를 건너뛰는 길이 된다.
         if (!items.isEmpty()) {
             Set<Long> owned = Set.copyOf(
-                    memberAvatarItemRepository.findOwnedItemIdsIn(memberId, Set.copyOf(requested)));
-            if (owned.size() != Set.copyOf(requested).size()) {
+                    memberAvatarItemRepository.findOwnedItemIdsIn(memberId, requestedIds));
+            if (owned.size() != requestedIds.size()) {
                 throw new ShopException(ShopErrorCode.ITEM_NOT_OWNED);
             }
         }

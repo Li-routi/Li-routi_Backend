@@ -23,6 +23,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -69,6 +71,8 @@ class AvatarPurchaseConcurrencyTest {
 
     private Long memberId;
     private Long itemId;
+    /** 이 테스트가 만든 아이템만 지운다. 이름으로 지우면 다른 테스트 것까지 가져간다. */
+    private final List<Long> createdItemIds = new ArrayList<>();
 
     @BeforeEach
     void setUp() {
@@ -85,6 +89,7 @@ class AvatarPurchaseConcurrencyTest {
                 .name("동시성 아이템").imageUrl("https://img/conc")
                 .sortOrder(1).active(true).build());
         itemId = item.getId();
+        createdItemIds.add(itemId);
 
         walletService.grant(new WalletCommand(memberId, Currency.TOPAZ,
                 WalletTransactionType.CHALLENGE_REWARD, "avconc-seed-" + memberId, null, null), 0, BALANCE);
@@ -102,8 +107,8 @@ class AvatarPurchaseConcurrencyTest {
                 .filter(t -> t.getMember().getId().equals(memberId)).toList());
         memberWalletRepository.findByMemberIdAndCurrency(memberId, Currency.TOPAZ)
                 .ifPresent(memberWalletRepository::delete);
-        avatarItemRepository.deleteAll(avatarItemRepository.findAll().stream()
-                .filter(i -> i.getName().startsWith("동시")).toList());
+        avatarItemRepository.deleteAllById(createdItemIds);
+        createdItemIds.clear();
         memberRepository.deleteById(memberId);
     }
 
@@ -184,6 +189,7 @@ class AvatarPurchaseConcurrencyTest {
                     .name("동시착용" + i).imageUrl("https://img/eq" + i)
                     .sortOrder(1).active(true).build());
             itemIds[i] = item.getId();
+            createdItemIds.add(item.getId());
             shopCommandService.purchase(memberId, item.getId());
         }
 
@@ -198,7 +204,7 @@ class AvatarPurchaseConcurrencyTest {
                 try {
                     ready.countDown();
                     start.await();
-                    shopCommandService.equip(memberId, java.util.List.of(only));
+                    shopCommandService.equip(memberId, List.of(only));
                 } catch (InterruptedException ignored) {
                     Thread.currentThread().interrupt();
                 } catch (RuntimeException ignored) {
