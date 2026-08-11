@@ -94,7 +94,6 @@ public class ChargeCommandService {
      * 먼저 보고, 없으면 포트원을 부르지도 않는다.
      */
     public ChargeResDTO.Started complete(Long memberId, String paymentId) {
-        requireEnabled();
         settlementCommandService.requireOwnedBy(memberId, paymentId);
         return settle(paymentId, false);
     }
@@ -109,7 +108,6 @@ public class ChargeCommandService {
      * 웹훅 주소는 공개되어 있어 아무나 위조한 본문을 보낼 수 있다.
      */
     public void handleWebhook(String paymentId) {
-        requireEnabled();
         settle(paymentId, true);
     }
 
@@ -210,6 +208,14 @@ public class ChargeCommandService {
      *
      * <p>끄면 <b>검증을 건너뛰는 것이 아니라 아예 받지 않는다.</b> AI 심사와 달리 fail-open 이
      * 아니다 — 검증 없이 지급하면 재화가 공짜가 된다.
+     */
+    /**
+     * 충전 스위치. <b>새 결제만 막는다.</b>
+     *
+     * <p>지급(완료 요청·웹훅)에는 걸지 않는다. 스위치를 내리는 시점에도 <b>이미 시작된 결제는
+     * 남아 있고</b>, 그 사람들은 곧 돈을 낸다. 지급까지 막으면 그 웹훅을 거절하게 되고,
+     * 포트원은 몇 번 재시도하다 포기한다 — <b>돈은 빠져나갔는데 재화가 안 들어간다.</b>
+     * 끄는 목적은 새로 받는 것을 멈추는 것이지, 이미 받은 돈을 떼먹는 것이 아니다.
      */
     private void requireEnabled() {
         if (!portOneProperties.isEnabled()) {

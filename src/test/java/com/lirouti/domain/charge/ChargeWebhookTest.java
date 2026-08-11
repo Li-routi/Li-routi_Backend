@@ -13,7 +13,6 @@ import com.lirouti.domain.member.repository.MemberRepository;
 import com.lirouti.domain.wallet.enums.Currency;
 import com.lirouti.domain.wallet.repository.MemberWalletRepository;
 import com.lirouti.domain.wallet.repository.WalletTransactionRepository;
-import com.lirouti.domain.wallet.repository.MemberWalletRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
