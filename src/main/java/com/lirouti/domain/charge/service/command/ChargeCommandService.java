@@ -19,6 +19,7 @@ import com.lirouti.domain.wallet.enums.WalletTransactionType;
 import com.lirouti.domain.wallet.service.WalletResult;
 import com.lirouti.domain.wallet.service.WalletService;
 import com.lirouti.domain.wallet.service.command.WalletCommandService.WalletCommand;
+import com.lirouti.global.properties.PortOneProperties;
 import com.lirouti.global.util.TimeUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -45,6 +46,7 @@ public class ChargeCommandService {
     private final ChargePaymentRepository chargePaymentRepository;
     private final WalletService walletService;
     private final PortOneClient portOneClient;
+    private final PortOneProperties portOneProperties;
 
     /**
      * 결제를 시작한다. <b>돈은 아직 오가지 않는다.</b>
@@ -74,7 +76,7 @@ public class ChargeCommandService {
                 .requestedAt(LocalDateTime.now(TimeUtil.KST))
                 .build());
 
-        return ChargeConverter.toStarted(payment, orderNameOf(product));
+        return started(payment, orderNameOf(product));
     }
 
     /**
@@ -123,7 +125,7 @@ public class ChargeCommandService {
 
         if (payment.isPaid()) {
             // 완료 요청과 웹훅이 둘 다 오는 것이 정상이다. 나중 것은 조용히 끝낸다.
-            return ChargeConverter.toStarted(payment, "");
+            return started(payment, "");
         }
 
         PortOneClient.PortOnePayment actual = portOneClient.getPayment(paymentId)
@@ -145,7 +147,7 @@ public class ChargeCommandService {
         // 상태 전이가 먼저다. 이 호출이 false 면 남이 이미 처리한 것이므로 지급하지 않는다.
         if (!payment.markPaid(actual.transactionId(), actual.totalAmount(),
                 LocalDateTime.now(TimeUtil.KST))) {
-            return ChargeConverter.toStarted(payment, "");
+            return started(payment, "");
         }
 
         // 지급은 결제 시작 때 굳힌 값으로 한다. 상품을 다시 읽으면 그 사이 바뀐 값이 나온다.
@@ -155,7 +157,7 @@ public class ChargeCommandService {
                         "charge:" + payment.getId(), "CHARGE_PAYMENT", payment.getId()),
                 payment.getRewardAmount(), payment.getBonusAmount());
 
-        return ChargeConverter.toStarted(payment, "");
+        return started(payment, "");
     }
 
     /**
@@ -201,8 +203,19 @@ public class ChargeCommandService {
         return "charge_" + UUID.randomUUID().toString().replace("-", "");
     }
 
+    private ChargeResDTO.Started started(ChargePayment payment, String orderName) {
+        return ChargeConverter.toStarted(payment, orderName,
+                portOneProperties.getStoreId(), portOneProperties.getChannelKey());
+    }
+
+    /**
+     * 주문명. <b>카드 명세서와 결제 내역에 찍힌다.</b>
+     *
+     * <p>재화 이름을 쓰지 않는다 — 화면 문구는 클라이언트가 정한다는 규칙 때문이기도 하고,
+     * 명세서에 "GEM" 이 찍히면 사용자가 무엇을 샀는지 알아보기 어렵다.
+     */
     private String orderNameOf(ChargeProduct product) {
         int total = product.getRewardAmount() + product.getBonusAmount();
-        return product.getRewardCurrency().name() + " " + total;
+        return "리라우티 재화 충전 " + total;
     }
 }

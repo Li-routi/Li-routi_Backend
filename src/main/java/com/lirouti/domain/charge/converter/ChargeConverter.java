@@ -41,10 +41,20 @@ public final class ChargeConverter {
                 .build();
     }
 
-    public static ChargeResDTO.Started toStarted(ChargePayment payment, String orderName) {
+    /**
+     * 결제창을 열 때 필요한 값을 <b>전부</b> 내린다.
+     *
+     * <p>프론트가 상점 아이디·채널 키를 따로 들고 있으면 채널을 바꿀 때 프론트도 다시
+     * 배포해야 한다. 서버가 내리면 설정만 고치면 된다.
+     */
+    public static ChargeResDTO.Started toStarted(ChargePayment payment, String orderName,
+                                                 String storeId, String channelKey) {
         return ChargeResDTO.Started.builder()
+                .storeId(storeId)
+                .channelKey(channelKey)
                 .paymentId(payment.getPaymentId())
                 .amount(payment.getExpectedAmount())
+                .currency("CURRENCY_KRW")
                 .orderName(orderName)
                 .build();
     }

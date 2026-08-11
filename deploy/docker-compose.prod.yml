@@ -97,6 +97,7 @@ services:
       # 여기서 막히는 편이 낫다: 검증 없이 지급되면 재화가 공짜가 되므로 fail-open 이 아니다.
       PORTONE_API_SECRET: ${PORTONE_API_SECRET}
       PORTONE_STORE_ID: ${PORTONE_STORE_ID}
+      PORTONE_CHANNEL_KEY: ${PORTONE_CHANNEL_KEY}
       PORTONE_ENABLED: ${PORTONE_ENABLED:-true}
       # 신고 누적 자동 숨김 임계값
       CHALLENGE_REPORT_HIDE_THRESHOLD: ${CHALLENGE_REPORT_HIDE_THRESHOLD:-3}

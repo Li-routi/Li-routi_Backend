@@ -159,6 +159,8 @@ portone:
   # 진짜 비밀값이라 기본값을 두지 않는다. 미주입이면 형식 검증에서 부팅이 막힌다.
   api-secret: ${PORTONE_API_SECRET}
   store-id: ${PORTONE_STORE_ID}
+  # 클라이언트가 결제창을 열 때 쓴다. 서버가 결제 시작 응답에 실어 내린다.
+  channel-key: ${PORTONE_CHANNEL_KEY}
   base-url: ${PORTONE_BASE_URL:https://api.portone.io}
 
 ai:

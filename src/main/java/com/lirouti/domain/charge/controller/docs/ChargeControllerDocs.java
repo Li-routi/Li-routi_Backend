@@ -37,6 +37,18 @@ public interface ChargeControllerDocs {
                     **돈은 아직 오가지 않는다.** 서버가 결제 식별자(`paymentId`)와 금액을 기록하고
                     내려준다. 클라이언트는 이 값으로 포트원 결제창을 연다.
 
+                    응답을 **그대로 포트원 SDK 에 넘기면 된다.** 결제창에 필요한 값이 전부 실려
+                    있어 프론트가 상점 아이디·채널 키를 따로 관리하지 않아도 된다 — 채널을 바꿔도
+                    서버 설정만 고치면 된다.
+
+                    ```js
+                    const res = await PortOne.requestPayment({
+                      storeId, channelKey, paymentId, orderName,
+                      totalAmount: amount, currency,
+                      payMethod: "CARD",
+                    });
+                    ```
+
                     응답의 `amount` 는 **화면 표시용**이다 — 검증은 서버가 저장한 값으로 하므로
                     이 값을 고쳐 보내도 통과하지 않는다.
 

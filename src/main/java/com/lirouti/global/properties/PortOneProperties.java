@@ -52,6 +52,19 @@ public class PortOneProperties {
     @NotBlank(message = "포트원 상점 아이디는 필수입니다. PORTONE_STORE_ID 환경변수를 주입하세요.")
     private String storeId;
 
+    /**
+     * 채널 키. <b>클라이언트가 결제창을 열 때 쓴다.</b>
+     *
+     * <p>서버는 이 값을 호출에 쓰지 않지만 <b>결제 시작 응답에 실어 내린다.</b> 프론트가
+     * 따로 관리하면 채널을 바꿀 때마다 프론트도 다시 배포해야 하는데, 서버가 내리면
+     * <b>설정만 고치면 된다.</b>
+     *
+     * <p>노출되어도 되는 값이다 — 포트원 문서의 예시부터 클라이언트 코드에 직접 적는다.
+     * 그래도 시크릿과 함께 관리하는 이유는 <b>채널을 바꾸면 둘이 같이 바뀌기</b> 때문이다.
+     */
+    @NotBlank(message = "포트원 채널 키는 필수입니다. PORTONE_CHANNEL_KEY 환경변수를 주입하세요.")
+    private String channelKey;
+
     /** API 서버 주소. 바꿀 일이 거의 없으므로 기본값을 둔다. */
     @NotBlank
     private String baseUrl = "https://api.portone.io";
