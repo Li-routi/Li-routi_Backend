@@ -27,6 +27,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -47,6 +48,7 @@ public class ChargeCommandService {
     private final WalletService walletService;
     private final PortOneClient portOneClient;
     private final PortOneProperties portOneProperties;
+    private final ChargeSettlementCommandService settlementCommandService;
 
     /**
      * 결제를 시작한다. <b>돈은 아직 오가지 않는다.</b>
@@ -82,20 +84,15 @@ public class ChargeCommandService {
     /**
      * 결제를 검증하고 재화를 지급한다.
      *
-     * <p><b>요청 본문의 값으로 판단하지 않는다.</b> 결제 식별자로 <b>인증된 회원의</b> 행을
-     * 찾고, 없으면 거절한다 — 회원을 안 보면 남의 식별자를 알아낸 사람이 자기 계정으로 이것을
-     * 불러 <b>남의 결제로 자기 재화를 채울 수 있다.</b>
+     * <p><b>이 메서드에는 트랜잭션이 없다.</b> 포트원 조회가 중간에 있어서다 — 트랜잭션 안에서
+     * 부르면 DB 커넥션과 행 잠금을 외부 왕복 시간만큼 붙잡는다(service_convention). DB 변경은
+     * {@link ChargeSettlementCommandService} 가 각자의 트랜잭션으로 한다.
      *
-     * <p>지급은 <b>결제 시작 때 굳혀 둔 스냅샷</b>으로 한다. 상품을 다시 읽으면 그 사이 운영이
-     * 고친 값이 나온다.
-     *
-     * <p>이미 지급된 결제면 <b>조용히 통과한다.</b> 완료 요청과 웹훅이 둘 다 오는 것이 정상이다.
+     * <p>요청 본문의 값으로 판단하지 않는다. 결제 식별자로 <b>인증된 회원의</b> 행이 있는지
+     * 먼저 보고, 없으면 포트원을 부르지도 않는다.
      */
-    @Transactional
     public ChargeResDTO.Started complete(Long memberId, String paymentId) {
-        // 회원으로 좁혀 확인한다. 여기서 걸러야 남의 결제를 쓰는 길이 막힌다.
-        chargePaymentRepository.findByPaymentIdAndMemberId(paymentId, memberId)
-                .orElseThrow(() -> new ChargeException(ChargeErrorCode.PAYMENT_NOT_FOUND));
+        settlementCommandService.requireOwnedBy(memberId, paymentId);
         return settle(paymentId);
     }
 
@@ -108,7 +105,6 @@ public class ChargeCommandService {
      * <p><b>웹훅 payload 는 믿지 않는다.</b> 거기 실린 식별자로 포트원에 다시 물어본다 —
      * 웹훅 주소는 공개되어 있어 아무나 위조한 본문을 보낼 수 있다.
      */
-    @Transactional
     public void handleWebhook(String paymentId) {
         settle(paymentId);
     }
@@ -116,16 +112,15 @@ public class ChargeCommandService {
     /**
      * 검증과 지급. 완료 요청과 웹훅이 같은 길을 쓴다.
      *
-     * <p><b>행을 잠그고 상태를 본다.</b> 둘이 동시에 들어오면 하나만 지급해야 하는데, 읽고 나서
-     * 쓰면 둘 다 통과한다.
+     * <p>순서가 중요하다 — <b>외부 조회를 잠금 밖에서</b> 끝내고, 그 결과만 들고 잠금 안으로
+     * 들어간다.
      */
     private ChargeResDTO.Started settle(String paymentId) {
-        ChargePayment payment = chargePaymentRepository.findByPaymentIdForUpdate(paymentId)
-                .orElseThrow(() -> new ChargeException(ChargeErrorCode.PAYMENT_NOT_FOUND));
-
-        if (payment.isPaid()) {
-            // 완료 요청과 웹훅이 둘 다 오는 것이 정상이다. 나중 것은 조용히 끝낸다.
-            return started(payment, "");
+        // 이미 끝난 결제로 포트원을 다시 부르지 않는다. 완료 요청과 웹훅이 둘 다 오는 것이
+        // 정상이므로 이 경우가 드물지 않다.
+        Optional<ChargeResDTO.Started> settled = settlementCommandService.alreadySettled(paymentId);
+        if (settled.isPresent()) {
+            return settled.get();
         }
 
         PortOneClient.PortOnePayment actual = portOneClient.getPayment(paymentId)
@@ -136,28 +131,16 @@ public class ChargeCommandService {
             // 실패로 확정하지 않는다. 나중에 웹훅이 다시 온다.
             throw new ChargeException(ChargeErrorCode.PAYMENT_NOT_COMPLETED);
         }
-        if (actual.totalAmount() != payment.getExpectedAmount()) {
-            // 금액 조작을 여기서 막는다. 결제 시작 때 기록해 두지 않았다면 대조할 기준이 없다.
-            payment.markFailed("결제 금액 불일치", LocalDateTime.now(TimeUtil.KST));
-            log.error("결제 금액이 다릅니다. paymentId={}, 기대={}, 실제={}",
-                    paymentId, payment.getExpectedAmount(), actual.totalAmount());
-            throw new ChargeException(ChargeErrorCode.AMOUNT_MISMATCH);
+
+        try {
+            return settlementCommandService.apply(paymentId, actual);
+        } catch (ChargeException e) {
+            if (e.getCode() == ChargeErrorCode.AMOUNT_MISMATCH) {
+                // 별도 트랜잭션으로 남긴다. apply 안에서 기록하면 그 예외가 기록까지 되돌린다.
+                settlementCommandService.markFailed(paymentId, "결제 금액 불일치");
+            }
+            throw e;
         }
-
-        // 상태 전이가 먼저다. 이 호출이 false 면 남이 이미 처리한 것이므로 지급하지 않는다.
-        if (!payment.markPaid(actual.transactionId(), actual.totalAmount(),
-                LocalDateTime.now(TimeUtil.KST))) {
-            return started(payment, "");
-        }
-
-        // 지급은 결제 시작 때 굳힌 값으로 한다. 상품을 다시 읽으면 그 사이 바뀐 값이 나온다.
-        walletService.grant(new WalletCommand(
-                        payment.getMember().getId(), payment.getRewardCurrency(),
-                        WalletTransactionType.TOPUP,
-                        "charge:" + payment.getId(), "CHARGE_PAYMENT", payment.getId()),
-                payment.getRewardAmount(), payment.getBonusAmount());
-
-        return started(payment, "");
     }
 
     /**
