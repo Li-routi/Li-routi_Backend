@@ -66,7 +66,7 @@ local 프로파일에서만 `health`, `metrics`, `prometheus` endpoint를 노출
 
 | 파일 | 역할 |
 | --- | --- |
-| `run.sh` | `secrets|check|up|status|logs|down` 실제 실행 로직 |
+| `run.sh` | `secrets`, `check`, `up`, `status`, `logs`, `down` 실제 실행 로직 |
 | `docker-compose.yml` | Prometheus·Grafana image, port, volume과 read-only mount |
 | `prometheus.yml` | 5초 scrape, JWT credentials file과 Spring Boot target |
 | `secrets/actuator-token` | Prometheus가 Actuator에 보낼 JWT. 자동 생성·Git 제외 |

@@ -96,9 +96,9 @@ test.html
 ### JMeter ###
 # 실제 인증 데이터와 로컬 부하 테스트 결과는 저장소에 포함하지 않는다.
 /performance/jmeter/users.csv
-!/performance/jmeter/users.csv.example
 /performance/jmeter/*.jtl
 /performance/jmeter/*.csv
+!/performance/jmeter/users.csv.example
 /performance/jmeter/*.log
 /performance/jmeter/*.html
 /performance/jmeter/results/
