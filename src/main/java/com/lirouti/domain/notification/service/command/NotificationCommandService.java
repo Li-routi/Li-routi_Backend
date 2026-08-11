@@ -2,6 +2,8 @@ package com.lirouti.domain.notification.service.command;
 
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.repository.MemberRepository;
+import com.lirouti.domain.notification.converter.NotificationConverter;
+import com.lirouti.domain.notification.dto.request.NotificationReqDTO;
 import com.lirouti.domain.notification.dto.response.NotificationResDTO;
 import com.lirouti.domain.notification.entity.FcmDevice;
 import com.lirouti.domain.notification.entity.Notification;
@@ -46,6 +48,25 @@ public class NotificationCommandService {
         return new NotificationResDTO.DeviceRegistration(false);
     }
 
+    /** 전달된 항목만 변경하도록 회원 행을 잠그고 변경 후 전체 설정을 반환한다. */
+    @Transactional
+    public NotificationResDTO.Settings updateSettings(
+            Long memberId,
+            NotificationReqDTO.UpdateSettings request
+    ) {
+        Member member = memberRepository.findByIdForUpdate(memberId)
+                .orElseThrow(() -> new GeneralException(GeneralErrorCode.NOT_FOUND));
+        member.updateNotificationSettings(
+                request.routineDeadlineEnabled(),
+                request.newVerificationEnabled(),
+                request.verificationReactionEnabled(),
+                request.pokeEnabled(),
+                request.newChatEnabled(),
+                request.likeEnabled()
+        );
+        return NotificationConverter.toSettings(member);
+    }
+
     /** 다른 회원의 알림 ID는 존재 여부를 노출하지 않고 404로 처리한다. */
     @Transactional
     public void markRead(Long memberId, Long notificationId) {
@@ -60,4 +81,5 @@ public class NotificationCommandService {
         return new NotificationResDTO.ReadAll(
                 notificationRepository.markAllRead(memberId, LocalDateTime.now(clock)));
     }
+
 }

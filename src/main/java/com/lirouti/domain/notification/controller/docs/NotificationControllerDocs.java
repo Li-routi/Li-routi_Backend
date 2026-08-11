@@ -13,8 +13,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 @Tag(
         name = "알림",
         description = """
-                알림 행 저장은 실제 Push 전송 성공 여부와 무관하게 항상 이뤄집니다. 실제 Push(FCM)는
-                `fcm.enabled=true` + 유효한 Firebase 자격증명 + 진짜 FCM 토큰이 모두 있어야 나갑니다.
+                사용자 설정 대상 알림은 수신이 활성화된 경우에만 저장·전송됩니다.
+                필수 알림은 설정과 무관하며, 실제 Push 전송에는 올바른 FCM 설정과 토큰이 필요합니다.
                 """
 )
 public interface NotificationControllerDocs {
@@ -118,6 +118,68 @@ public interface NotificationControllerDocs {
     ApiResponse<NotificationResDTO.DeviceRegistration> unregisterDevice(
             @Parameter(hidden = true) CustomUserDetails user,
             NotificationReqDTO.UnregisterDevice request
+    );
+
+    /**
+     * 사용자 알림 설정 조회 API 명세다.
+     *
+     * @param user 인증 회원 정보
+     * @return 여섯 알림 설정의 현재 상태
+     */
+    @Operation(
+            summary = "알림 설정 조회",
+            description = """
+                    인증 회원의 루틴 마감, 새 인증, 내 인증 반응, 콕콕, 새 채팅, 좋아요 알림
+                    수신 여부를 조회합니다. 신규 회원과 기존 회원의 초기값은 모두 true입니다.
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200", description = "알림 설정 조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401", description = "유효하지 않거나 만료된 인증 토큰"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404", description = "인증 토큰이 참조하는 회원을 찾을 수 없음")
+    })
+    ApiResponse<NotificationResDTO.Settings> getSettings(
+            @Parameter(hidden = true) CustomUserDetails user
+    );
+
+    /**
+     * 사용자 알림 설정 부분 변경 API 명세다.
+     *
+     * @param user 인증 회원 정보
+     * @param request 변경할 설정만 담은 요청
+     * @return 변경 후 여섯 알림 설정 전체
+     */
+    @Operation(
+            summary = "알림 설정 변경",
+            description = """
+                    요청에 포함된 알림 설정만 변경하고, 생략된 항목은 기존 값을 유지합니다.
+                    빈 JSON 객체도 변경 없이 현재 설정을 반환하므로 멱등하게 호출할 수 있습니다.
+
+                    설정을 끄면 이후 해당 유형의 앱 내 알림 행과 FCM Push가 모두 생성되지 않습니다.
+                    이미 생성된 과거 알림은 최근 7일 목록에 그대로 유지됩니다. 챌린지 심사 결과·제한,
+                    그룹 가입·루틴 변경 같은 중요 알림은 여섯 설정과 무관하게 항상 제공됩니다.
+
+                    ### 요청 예시
+
+                    ```json
+                    { "newChatEnabled": false, "pokeEnabled": true }
+                    ```
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200", description = "알림 설정 변경 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401", description = "유효하지 않거나 만료된 인증 토큰"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404", description = "인증 토큰이 참조하는 회원을 찾을 수 없음")
+    })
+    ApiResponse<NotificationResDTO.Settings> updateSettings(
+            @Parameter(hidden = true) CustomUserDetails user,
+            NotificationReqDTO.UpdateSettings request
     );
 
     /**

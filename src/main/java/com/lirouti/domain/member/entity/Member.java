@@ -59,6 +59,24 @@ public class Member extends BaseEntity {
     @Column(name = "profile_image_key")
     private String profileImageKey; // null = 기본 회색 아바타 (기본 아바타는 프론트에서 처리)
 
+    @Column(name = "routine_deadline_notification_enabled", nullable = false)
+    private boolean routineDeadlineNotificationEnabled;
+
+    @Column(name = "new_verification_notification_enabled", nullable = false)
+    private boolean newVerificationNotificationEnabled;
+
+    @Column(name = "verification_reaction_notification_enabled", nullable = false)
+    private boolean verificationReactionNotificationEnabled;
+
+    @Column(name = "poke_notification_enabled", nullable = false)
+    private boolean pokeNotificationEnabled;
+
+    @Column(name = "new_chat_notification_enabled", nullable = false)
+    private boolean newChatNotificationEnabled;
+
+    @Column(name = "like_notification_enabled", nullable = false)
+    private boolean likeNotificationEnabled;
+
     @Builder
     private Member(
             String email,
@@ -75,6 +93,12 @@ public class Member extends BaseEntity {
         this.onboardingCompleted = false;
         this.isActive = true;
         this.deletedAt = null;
+        this.routineDeadlineNotificationEnabled = true;
+        this.newVerificationNotificationEnabled = true;
+        this.verificationReactionNotificationEnabled = true;
+        this.pokeNotificationEnabled = true;
+        this.newChatNotificationEnabled = true;
+        this.likeNotificationEnabled = true;
     }
 
     // 회원이 서비스에 접근할 수 있는 활성 상태인지 확인
@@ -102,5 +126,43 @@ public class Member extends BaseEntity {
         this.nickname = nickname;
         this.profileImageKey = profileImageKey;
         this.onboardingCompleted = true;
+    }
+
+    /**
+     * 전달된 알림 설정만 변경하고, 생략된 설정은 기존 값을 유지한다.
+     *
+     * @param routineDeadlineEnabled 루틴 마감·리마인드 알림 설정
+     * @param newVerificationEnabled 그룹원의 새 인증 알림 설정
+     * @param verificationReactionEnabled 내 그룹 인증 반응 알림 설정
+     * @param pokeEnabled 콕콕 알림 설정
+     * @param newChatEnabled 새 그룹 채팅 알림 설정
+     * @param likeEnabled 챌린지 인증 좋아요 알림 설정
+     */
+    public void updateNotificationSettings(
+            Boolean routineDeadlineEnabled,
+            Boolean newVerificationEnabled,
+            Boolean verificationReactionEnabled,
+            Boolean pokeEnabled,
+            Boolean newChatEnabled,
+            Boolean likeEnabled
+    ) {
+        if (routineDeadlineEnabled != null) {
+            this.routineDeadlineNotificationEnabled = routineDeadlineEnabled;
+        }
+        if (newVerificationEnabled != null) {
+            this.newVerificationNotificationEnabled = newVerificationEnabled;
+        }
+        if (verificationReactionEnabled != null) {
+            this.verificationReactionNotificationEnabled = verificationReactionEnabled;
+        }
+        if (pokeEnabled != null) {
+            this.pokeNotificationEnabled = pokeEnabled;
+        }
+        if (newChatEnabled != null) {
+            this.newChatNotificationEnabled = newChatEnabled;
+        }
+        if (likeEnabled != null) {
+            this.likeNotificationEnabled = likeEnabled;
+        }
     }
 }
