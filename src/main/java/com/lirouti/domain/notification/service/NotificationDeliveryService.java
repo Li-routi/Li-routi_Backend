@@ -35,10 +35,19 @@ public class NotificationDeliveryService {
      * 안 거쳐 트랜잭션이 안 걸리므로, 짧은 트랜잭션은 전부 repository 호출로만 구성한다.)
      */
     public void deliver(Long notificationId) {
+        int claimed = notificationRepository.claimPendingDelivery(
+                notificationId,
+                PushStatus.PENDING,
+                PushStatus.SENDING
+        );
+        if (claimed == 0) {
+            return;
+        }
+
         Notification notification = notificationRepository.findById(notificationId).orElse(null);
-        if (notification == null) return;
-        // 재전달 호출(예: 향후 재시도 로직)에서 이미 처리된 알림을 다시 보내지 않는다.
-        if (notification.getPushStatus() != PushStatus.PENDING) return;
+        if (notification == null) {
+            return;
+        }
 
         List<FcmDevice> devices = deviceRepository.findAllByMemberIdAndActiveTrue(
                 notification.getMember().getId());

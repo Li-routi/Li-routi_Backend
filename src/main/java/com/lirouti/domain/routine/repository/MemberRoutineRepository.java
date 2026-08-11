@@ -126,18 +126,17 @@ public interface MemberRoutineRepository extends JpaRepository<MemberRoutine, Lo
         """)
     List<MemberRoutine> findActiveWithSchedulesByMemberId(@Param("memberId") Long memberId);
 
-    /** 현재 분에 알람 또는 마감 임박 경계가 온 오늘의 활성 개인 루틴을 조회한다. */
+    /** 지정한 분에 알람 또는 마감 경계가 온 활성 개인 루틴을 조회한다. */
     @Query("""
             select distinct routine from MemberRoutine routine
             join fetch routine.member
             where routine.active = true
               and exists (select schedule.id from MemberRoutineSchedule schedule
                           where schedule.memberRoutine = routine and schedule.repeatDay = :day)
-              and ((:deadline = false and routine.alarmTime >= :from and routine.alarmTime < :to)
-                or (:deadline = true and routine.endTime >= :from and routine.endTime < :to))
+              and ((:deadline = false and routine.alarmTime = :time)
+                or (:deadline = true and routine.endTime = :time))
             """)
     List<MemberRoutine> findDueForNotification(@Param("day") DayOfWeek day,
-                                               @Param("from") LocalTime from,
-                                               @Param("to") LocalTime to,
+                                               @Param("time") LocalTime time,
                                                @Param("deadline") boolean deadline);
 }

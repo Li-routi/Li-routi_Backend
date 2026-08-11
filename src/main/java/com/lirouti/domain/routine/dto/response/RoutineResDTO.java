@@ -190,7 +190,7 @@ public final class RoutineResDTO {
             LocalTime alarmTime,
 
             @Schema(
-                    description = "오늘 이 루틴을 인증했는지. 루틴 생성 응답에서는 항상 false다",
+                    description = "오늘 이 루틴을 인증했는지. 루틴 생성 응답에서만 항상 false다",
                     example = "false"
             )
             boolean completedToday

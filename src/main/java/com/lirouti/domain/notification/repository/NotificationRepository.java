@@ -2,11 +2,13 @@ package com.lirouti.domain.notification.repository;
 
 import com.lirouti.domain.notification.entity.Notification;
 import com.lirouti.domain.notification.enums.NotificationCategory;
+import com.lirouti.domain.notification.enums.PushStatus;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -29,6 +31,24 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
                                 Pageable pageable);
 
     Optional<Notification> findByIdAndMemberId(Long id, Long memberId);
+
+    /**
+     * 아직 처리되지 않은 알림 한 건을 배송 작업이 원자적으로 선점한다.
+     * 동시에 여러 호출이 들어와도 한 호출만 1을 반환해 중복 Push를 막는다.
+     */
+    @Modifying(clearAutomatically = true)
+    @Transactional
+    @Query("""
+            update Notification notification
+            set notification.pushStatus = :sending
+            where notification.id = :notificationId
+              and notification.pushStatus = :pending
+            """)
+    int claimPendingDelivery(
+            @Param("notificationId") Long notificationId,
+            @Param("pending") PushStatus pending,
+            @Param("sending") PushStatus sending
+    );
 
     @Modifying(clearAutomatically = true)
     @Query("""

@@ -5,7 +5,6 @@ import com.lirouti.domain.member.repository.MemberRepository;
 import com.lirouti.domain.notification.converter.NotificationConverter;
 import com.lirouti.domain.notification.dto.request.NotificationReqDTO;
 import com.lirouti.domain.notification.dto.response.NotificationResDTO;
-import com.lirouti.domain.notification.entity.FcmDevice;
 import com.lirouti.domain.notification.entity.Notification;
 import com.lirouti.domain.notification.repository.FcmDeviceRepository;
 import com.lirouti.domain.notification.repository.NotificationRepository;
@@ -30,21 +29,21 @@ public class NotificationCommandService {
     /** 토큰이 재발급되거나 다른 계정으로 로그인돼도 전역 유일 행 하나를 재사용한다. */
     @Transactional
     public NotificationResDTO.DeviceRegistration registerDevice(Long memberId, String token) {
-        Member member = memberRepository.findById(memberId)
+        memberRepository.findById(memberId)
                 .orElseThrow(() -> new GeneralException(GeneralErrorCode.NOT_FOUND));
         LocalDateTime now = LocalDateTime.now(clock);
-        FcmDevice device = fcmDeviceRepository.findByToken(token)
-                .orElseGet(() -> new FcmDevice(member, token, now));
-        device.activateFor(member, now);
-        fcmDeviceRepository.save(device);
+        fcmDeviceRepository.upsertActive(memberId, token, now);
         return new NotificationResDTO.DeviceRegistration(true);
     }
 
     /** 현재 회원 소유 토큰만 비활성화한다. 이미 비활성 또는 없는 요청은 멱등 성공한다. */
     @Transactional
     public NotificationResDTO.DeviceRegistration unregisterDevice(Long memberId, String token) {
-        fcmDeviceRepository.findByTokenAndMemberId(token, memberId)
-                .ifPresent(device -> device.deactivate(LocalDateTime.now(clock)));
+        fcmDeviceRepository.deactivateOwnedToken(
+                memberId,
+                token,
+                LocalDateTime.now(clock)
+        );
         return new NotificationResDTO.DeviceRegistration(false);
     }
 

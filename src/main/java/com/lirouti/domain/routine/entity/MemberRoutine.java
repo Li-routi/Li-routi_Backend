@@ -169,11 +169,6 @@ public class MemberRoutine extends BaseEntity {
         repeatDays.forEach(this::addSchedule);
     }
 
-    /** 반복 일정 전체 교체 전에 기존 행을 먼저 삭제할 수 있도록 컬렉션을 비운다. */
-    public void clearSchedules() {
-        this.schedules.clear();
-    }
-
     /**
      * 개인 루틴을 비활성화한다.
      * 원본 참조를 해제해 같은 기본 루틴을 다시 등록할 수 있게 하고 반복 일정도 정리한다.
@@ -181,7 +176,7 @@ public class MemberRoutine extends BaseEntity {
     public void deactivate() {
         this.active = false;
         this.template = null;
-        clearSchedules();
+        this.schedules.clear();
     }
 
     /**
