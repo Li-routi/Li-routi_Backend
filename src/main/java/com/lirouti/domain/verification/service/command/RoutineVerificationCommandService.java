@@ -3,6 +3,8 @@ package com.lirouti.domain.verification.service.command;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
+import com.lirouti.domain.achievement.event.AchievementProgressEvent;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -31,17 +33,33 @@ import lombok.extern.slf4j.Slf4j;
  *
  * <p>챌린지 인증과 나란한 위치지만 <b>덮어쓰기를 허용하지 않는다.</b> 챌린지의 재인증은
  * "이미 통과한 인증의 사진 교체"인데 루틴에는 그럴 이유가 없다.
+ *
+ * <p><b>{@code AchievementProgressEvent} 발행.</b> 개인 루틴 인증이 이 트랜잭션에서
+ * 저장되는 시점이 곧 achievement 도메인이 구독하는 "루틴 완료" 사건이다. 이벤트 발행은
+ * 저장과 같은 트랜잭션 안에서 호출하되, achievement 쪽 리스너가
+ * {@code TransactionPhase.AFTER_COMMIT} 이라 이 트랜잭션이 실제로 커밋된 뒤에만
+ * 반영된다 — 인증 저장이 롤백되면 업적 진행도도 따라 롤백된다.
+ *
+ * <p>그룹 루틴 인증({@code saveGroupRoutineAndComplete})은 현재 이 이벤트를 발행하지
+ * 않는다. "개인 체크 또는 사진 인증으로 루틴 첫 완료"라는 업적 조건 문구가 그룹 루틴
+ * 완료까지 포함하는지 기획 확인이 필요해서, 확인 전까지는 개인 루틴만 반영한다.
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class RoutineVerificationCommandService {
 
+    /** achievement 도메인이 구독하는 루틴 완료 이벤트의 condition key */
+    private static final String CONDITION_KEY_ROUTINE_COMPLETE_COUNT = "ROUTINE_COMPLETE_COUNT";
+    private static final String SOURCE_TYPE_MEMBER_ROUTINE_VERIFICATION = "MEMBER_ROUTINE_VERIFICATION";
+
     private final GroupRoutineVerificationRepository groupRoutineVerificationRepository;
     private final GroupRoutineAssignmentRepository groupRoutineAssignmentRepository;
     private final GroupRoutineAssignmentCommandService assignmentCommandService;
     private final GroupValidationService groupValidationService;
     private final MemberRoutineVerificationRepository memberRoutineVerificationRepository;
+
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * 그룹 루틴 인증의 DB 구간을 하나의 트랜잭션으로 처리한다.
@@ -126,6 +144,31 @@ public class RoutineVerificationCommandService {
                 .content(content)
                 .build();
         return save(() -> memberRoutineVerificationRepository.saveAndFlush(verification));
+    }
+
+    /**
+     * 개인 루틴 완료를 achievement 도메인에 알린다.
+     *
+     * <p>{@code sourceId} 로 이번에 저장된 인증 행의 id를 쓴다 — 한 회원이 같은 루틴을
+     * 같은 날 두 번 인증할 수 없으므로(유니크 제약) 이 값은 자연히 "그 회원의 그날 그
+     * 루틴 완료 1건"을 가리키는 안정적인 키다.
+     *
+     * <p>{@code routine.getCategory().getId()} 는 지연 로딩 프록시라도 FK 값이라 별도
+     * 쿼리 없이 읽힌다 — 프록시 초기화(실제 엔티티 로딩)가 필요한 건 id 외의 필드에 접근할
+     * 때뿐이다.
+     */
+    private void publishRoutineCompleteEvent(MemberRoutine routine, MemberRoutineVerification saved) {
+        if (eventPublisher == null) {
+            return; // 단위 테스트가 이 서비스를 직접 생성한 경로 - 알림 발행과 같은 가드
+        }
+        eventPublisher.publishEvent(new AchievementProgressEvent(
+                routine.getMember().getId(),
+                CONDITION_KEY_ROUTINE_COMPLETE_COUNT,
+                1,
+                SOURCE_TYPE_MEMBER_ROUTINE_VERIFICATION,
+                saved.getId(),
+                routine.getCategory().getId()
+        ));
     }
 
     /**
