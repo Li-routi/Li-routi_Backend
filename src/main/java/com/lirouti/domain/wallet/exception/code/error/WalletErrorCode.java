@@ -35,6 +35,18 @@ public enum WalletErrorCode implements BaseErrorCode {
             "재화 수량은 1 이상이어야 합니다.",
             "WALLET400_1"
     ),
+    /**
+     * 무료 재화에 유상 잔액을 만들려 했다. <b>호출부의 잘못이지 사용자의 잘못이 아니다.</b>
+     *
+     * <p>막는 이유는 리워드 회수가 무료 재화에서 일어나기 때문이다. 그 재화에 유상 잔액이
+     * 생기면 <b>회수가 환불 대상 재화를 깎는다</b> — 무상분을 다 쓴 사용자가 글을 지우면
+     * 현금으로 산 몫에서 빠진다.
+     */
+    PAID_BALANCE_NOT_ALLOWED(
+            HttpStatus.BAD_REQUEST,
+            "무료 재화에는 유상 잔액을 만들 수 없습니다.",
+            "WALLET400_2"
+    ),
     MEMBER_NOT_FOUND(
             HttpStatus.NOT_FOUND,
             "회원 조회에 실패하였습니다.",
