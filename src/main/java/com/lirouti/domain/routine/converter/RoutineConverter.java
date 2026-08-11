@@ -122,8 +122,22 @@ public final class RoutineConverter {
     }
 
     public static RoutineResDTO.RoutineList toRoutineListResponse(List<MemberRoutine> routines) {
+        return toRoutineListResponse(routines, Set.of());
+    }
+
+    /**
+     * 오늘 완료 여부를 포함한 개인 루틴 전체 목록 응답을 만든다.
+     *
+     * @param routines 노출 순서대로 정렬된 개인 루틴
+     * @param completedRoutineIds 오늘 인증을 완료한 개인 루틴 ID
+     * @return 완료 여부가 채워진 개인 루틴 목록 응답
+     */
+    public static RoutineResDTO.RoutineList toRoutineListResponse(
+            List<MemberRoutine> routines,
+            Set<Long> completedRoutineIds
+    ) {
         return RoutineResDTO.RoutineList.builder()
-                .routines(routines.stream().map(RoutineConverter::toRoutine).toList())
+                .routines(toRoutineList(routines, completedRoutineIds))
                 .build();
     }
 
