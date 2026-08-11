@@ -11,11 +11,15 @@ import lombok.NoArgsConstructor;
  * {@link com.lirouti.domain.achievement.event.AchievementProgressEvent} 처리 이력.
  *
  * <p>같은 사건(예: 루틴 체크 로그 1건)에 대한 이벤트가 API 재시도 등으로 중복 발행돼도,
- * {@code (sourceType, sourceId, conditionKey)} unique 제약 덕분에 두 번째 insert 는
- * 제약 위반으로 실패한다. {@code AchievementProgressService} 는 이 실패를 "이미 반영됨"
- * 신호로 보고 진행도 갱신을 건너뛴다 — 조회 후 분기가 아니라 insert 실패를 신호로 쓰는
- * 이유는, 조회-확인-삽입 사이에 동시 요청이 끼어드는 레이스를 DB 제약으로 원천 차단하기
- * 위해서다.
+ * {@code (sourceType, sourceId, conditionKey, memberId)} unique 제약 덕분에 두 번째
+ * insert 는 제약 위반으로 실패한다. {@code AchievementProgressService} 는 이 실패를
+ * "이미 반영됨" 신호로 보고 진행도 갱신을 건너뛴다.
+ *
+ * <p>{@code memberId} 를 키에 포함하는 이유: sourceId 가 항상 한 회원에게만 속하는 것은
+ * 아니다 — 예를 들어 "좋아요" 이벤트의 sourceId 는 좋아요가 눌린 게시물 id인데, 이는 여러
+ * 회원이 공유하는 값이다. memberId 없이 (sourceType, sourceId, conditionKey) 만으로
+ * unique 를 걸면 회원 A의 좋아요를 기록한 뒤 회원 B가 같은 게시물에 좋아요를 눌러도
+ * "이미 처리됨"으로 오판해 B의 진행도가 누락된다.
  */
 @Entity
 @Getter
@@ -23,7 +27,7 @@ import lombok.NoArgsConstructor;
         name = "achievement_progress_event_log",
         uniqueConstraints = @UniqueConstraint(
                 name = "uk_achievement_progress_event_log",
-                columnNames = {"source_type", "source_id", "condition_key"}
+                columnNames = {"source_type", "source_id", "condition_key", "member_id"}
         )
 )
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
