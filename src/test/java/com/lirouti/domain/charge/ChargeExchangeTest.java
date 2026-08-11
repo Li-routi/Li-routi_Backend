@@ -177,7 +177,7 @@ class ChargeExchangeTest {
         giveGem(10, 0);
 
         ChargeResDTO.ExchangeResult result =
-                chargeCommandService.exchange(me.getId(), exchange.getId());
+                chargeCommandService.exchange(me.getId(), exchange.getId(), "k1");
         em.flush();
 
         assertAll(
@@ -196,7 +196,7 @@ class ChargeExchangeTest {
     void exchange_RejectsWhenInsufficient() {
         giveGem(2, 0);   // 3 이 필요하다
 
-        assertThatThrownBy(() -> chargeCommandService.exchange(me.getId(), exchange.getId()))
+        assertThatThrownBy(() -> chargeCommandService.exchange(me.getId(), exchange.getId(), "k1"))
                 .isInstanceOf(WalletException.class);
 
         assertAll(
@@ -212,13 +212,31 @@ class ChargeExchangeTest {
     void exchange_CanRepeatSameProduct() {
         giveGem(10, 0);
 
-        chargeCommandService.exchange(me.getId(), exchange.getId());
-        chargeCommandService.exchange(me.getId(), exchange.getId());
+        chargeCommandService.exchange(me.getId(), exchange.getId(), "k1");
+        chargeCommandService.exchange(me.getId(), exchange.getId(), "k2");
         em.flush();
 
         assertAll(
                 () -> assertThat(balance(Currency.GEM)).isEqualTo(4),
                 () -> assertThat(balance(Currency.TOPAZ)).isEqualTo(200)
+        );
+    }
+
+    @Test
+    @DisplayName("같은 키로 다시 보내면 두 번 차감되지 않는다 — 응답이 유실된 재시도다")
+    void exchange_SameKeyIsNotChargedTwice() {
+        giveGem(10, 0);
+
+        chargeCommandService.exchange(me.getId(), exchange.getId(), "retry-1");
+        // 클라이언트가 응답을 못 받아 같은 키로 다시 보낸다.
+        chargeCommandService.exchange(me.getId(), exchange.getId(), "retry-1");
+        em.flush();
+
+        assertAll(
+                () -> assertThat(balance(Currency.GEM))
+                        .as("한 번만 빠져야 한다").isEqualTo(7),
+                () -> assertThat(balance(Currency.TOPAZ))
+                        .as("한 번만 들어와야 한다").isEqualTo(100)
         );
     }
 

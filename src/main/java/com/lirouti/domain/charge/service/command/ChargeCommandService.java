@@ -82,16 +82,18 @@ public class ChargeCommandService {
      * 잔액이 모자라면 지갑이 예외를 던지고 둘 다 되돌아간다.
      */
     @Transactional
-    public ChargeResDTO.ExchangeResult exchange(Long memberId, Long productId) {
+    public ChargeResDTO.ExchangeResult exchange(Long memberId, Long productId,
+                                                String idempotencyKey) {
         ExchangeProduct product = exchangeProductRepository.findById(productId)
                 .orElseThrow(() -> new ChargeException(ChargeErrorCode.PRODUCT_NOT_FOUND));
         if (!product.isActive()) {
             throw new ChargeException(ChargeErrorCode.PRODUCT_NOT_ON_SALE);
         }
 
-        // 멱등 키를 요청마다 다르게 만든다. 교환은 같은 상품을 여러 번 살 수 있으므로
-        // 상품 id 로 만들면 두 번째부터 조용히 건너뛰어진다.
-        String key = "exchange:" + UUID.randomUUID();
+        // 멱등 키는 클라이언트가 준다. 서버가 매번 새로 만들면 응답이 유실돼 재시도했을 때
+        // 두 번 차감되고, 상품 id 로 만들면 같은 묶음을 두 번째 살 때 건너뛰어진다.
+        // "이 사용자 동작 하나" 를 가리키는 값은 클라이언트만 안다.
+        String key = "exchange:" + idempotencyKey;
 
         WalletResult from = walletService.deduct(new WalletCommand(
                 memberId, product.getFromCurrency(), WalletTransactionType.EXCHANGE_OUT,

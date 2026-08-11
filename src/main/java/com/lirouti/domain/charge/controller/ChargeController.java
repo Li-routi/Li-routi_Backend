@@ -55,7 +55,8 @@ public class ChargeController implements ChargeControllerDocs {
             @AuthenticationPrincipal CustomUserDetails userDetails
     ) {
         ChargeResDTO.ExchangeResult result =
-                chargeCommandService.exchange(userDetails.getMemberId(), request.productId());
+                chargeCommandService.exchange(
+                        userDetails.getMemberId(), request.productId(), request.idempotencyKey());
         return ApiResponse.onSuccess(ChargeSuccessCode.EXCHANGE_SUCCESS, result);
     }
 }

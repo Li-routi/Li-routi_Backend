@@ -7,6 +7,14 @@
 --
 -- ⚠️ reward_currency 를 GEM 이 아닌 값으로 바꾸지 말 것. CHECK 제약이 막지만, 애초에
 --    무료 재화를 현금으로 팔면 결제는 성공하고 지급만 실패한다.
+--
+-- 판매를 내릴 때는 아래 목록에서 줄을 지우지 말고 active 를 0 으로 바꾼다. upsert 는 추가·
+-- 수정만 하므로 줄을 지워도 DB 에서는 사라지지 않고, 아무도 관리하지 않는 행이 운영에 계속
+-- 노출된다. R__seed_challenge.sql 과 같은 규칙이다 — 이 파일이 마스터다.
+--
+-- 그래서 active 도 갱신 목록에 있다. DB 에서 직접 내리면 다음 배포가 되살리므로, 긴급히
+-- 내려야 하는 경우에도 이 파일을 함께 고쳐야 한다. 가격 오류처럼 돈이 걸린 상황에서 특히
+-- 중요하다.
 
 INSERT INTO `charge_product` (`id`, `reward_currency`, `reward_amount`, `bonus_amount`,
                               `price_krw`, `popular`, `sort_order`, `active`,
