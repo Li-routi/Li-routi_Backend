@@ -9,6 +9,7 @@ import org.springframework.context.annotation.Configuration;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * {@link MediaPurpose} 가 가리키는 레이트 리밋 정책이 설정에 실제로 있는지 부팅 때 확인한다.
@@ -41,8 +42,7 @@ public class MediaRateLimitPolicyValidator {
         if (!missing.isEmpty()) {
             String detail = missing.stream()
                     .map(purpose -> "%s -> %s".formatted(purpose, purpose.getRateLimitPolicy()))
-                    .reduce((left, right) -> left + ", " + right)
-                    .orElseThrow();
+                    .collect(Collectors.joining(", "));
             throw new IllegalStateException(
                     "MediaPurpose 가 가리키는 레이트 리밋 정책이 rate-limit.policies 에 없습니다: "
                             + detail);
