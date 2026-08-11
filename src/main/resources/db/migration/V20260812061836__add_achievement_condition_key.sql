@@ -5,6 +5,7 @@ ALTER TABLE achievement
 
 -- AchievementProgressEvent 처리 이력. 같은 원본 사건(source_type, source_id)에 대해
 -- 이벤트가 재시도/중복 발행돼도 unique 제약으로 두 번째 반영을 막는다.
+-- 여러 회원이 같은 source_id(예: 게시물 좋아요)를 공유할 수 있으므로 member_id를 unique 키에 포함하여 회원별 독립 판정.
 CREATE TABLE achievement_progress_event_log
 (
     id            BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -14,5 +15,5 @@ CREATE TABLE achievement_progress_event_log
     source_id     BIGINT      NOT NULL,     -- 원본 레코드 PK
     created_at    DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at    DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    CONSTRAINT uk_achievement_progress_event_log UNIQUE (source_type, source_id, condition_key)
+    CONSTRAINT uk_achievement_progress_event_log UNIQUE (source_type, source_id, condition_key, member_id)
 );
