@@ -71,6 +71,12 @@ public class MemberWallet extends BaseEntity {
         if (paidAmount < 0 || freeAmount < 0) {
             throw new IllegalArgumentException("지급 수량은 음수일 수 없습니다.");
         }
+        // 무료 재화에는 유상 잔액이 생길 수 없다. 생기면 리워드 회수가 환불 대상 재화를
+        // 깎기 시작한다 — 무상분을 다 쓴 사용자가 글을 지우면 현금으로 산 몫에서 빠진다.
+        if (paidAmount > 0 && !currency.isPaidBalanceAllowed()) {
+            throw new IllegalArgumentException(
+                    "무료 재화에는 유상 잔액을 만들 수 없습니다. currency=" + currency);
+        }
         this.paidBalance += paidAmount;
         this.freeBalance += freeAmount;
     }
