@@ -105,6 +105,17 @@ public class RateLimitGuard {
     }
 
     /**
+     * 그 이름의 정책이 설정에 있는지 확인한다.
+     *
+     * <p><b>부팅 시 검증용이다.</b> {@link #enforce} 는 없는 정책을 만나면 통과시키므로(fail-open),
+     * 정책 이름을 문자열로 들고 있는 쪽이 오타를 내면 <b>제한이 조용히 사라진다.</b> 로그는
+     * 남지만 아무도 안 본다. 그래서 이름을 하드코딩하는 쪽이 부팅 때 스스로 확인할 수 있게 연다.
+     */
+    public boolean hasPolicy(String policyName) {
+        return properties.getPolicies().containsKey(policyName);
+    }
+
+    /**
      * Redis 경로가 죽었다는 사실을 남긴다. 간격 안에 다시 불리면 조용히 지나간다.
      *
      * <p>시각은 {@link System#currentTimeMillis()}를 쓴다. 로그 빈도 조절이 목적이라
