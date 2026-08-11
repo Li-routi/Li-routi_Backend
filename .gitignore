@@ -92,3 +92,18 @@ docs/roadmap/
 docs/plan/
 
 test.html
+
+### JMeter ###
+# 실제 인증 데이터와 로컬 부하 테스트 결과는 저장소에 포함하지 않는다.
+/performance/jmeter/users.csv
+/performance/jmeter/*.jtl
+/performance/jmeter/*.csv
+!/performance/jmeter/users.csv.example
+/performance/jmeter/*.log
+/performance/jmeter/*.html
+/performance/jmeter/results/
+/performance/jmeter/report/
+
+### Performance Monitoring ###
+# Prometheus에는 이 경로를 외부 mount해 실제 자격 증명이 추적 파일에 섞이지 않게 한다.
+/performance/monitoring/secrets/

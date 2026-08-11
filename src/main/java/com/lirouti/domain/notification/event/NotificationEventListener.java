@@ -1,10 +1,8 @@
 package com.lirouti.domain.notification.event;
 
-import com.lirouti.domain.notification.service.NotificationCreationService;
-import com.lirouti.domain.notification.service.NotificationDeliveryService;
 import com.lirouti.domain.notification.enums.NotificationType;
+import com.lirouti.domain.notification.service.NotificationDispatchService;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.stereotype.Component;
@@ -15,17 +13,14 @@ import org.springframework.transaction.event.TransactionalEventListener;
 @Slf4j
 @Component
 public class NotificationEventListener {
-    private final NotificationCreationService creationService;
-    private final ObjectProvider<NotificationDeliveryService> deliveryProvider;
+    private final NotificationDispatchService dispatchService;
     private final TaskExecutor notificationTaskExecutor;
 
     public NotificationEventListener(
-            NotificationCreationService creationService,
-            ObjectProvider<NotificationDeliveryService> deliveryProvider,
+            NotificationDispatchService dispatchService,
             @Qualifier("notificationTaskExecutor") TaskExecutor notificationTaskExecutor
     ) {
-        this.creationService = creationService;
-        this.deliveryProvider = deliveryProvider;
+        this.dispatchService = dispatchService;
         this.notificationTaskExecutor = notificationTaskExecutor;
     }
 
@@ -52,11 +47,9 @@ public class NotificationEventListener {
     /** 기존 notification type이 사용하던 저장·배송 처리 경로다. */
     private void process(NotificationRequestedEvent event) {
         try {
-            Long id = creationService.create(event.memberId(), event.category(), event.type(),
+            dispatchService.dispatch(event.memberId(), event.category(), event.type(),
                     event.title(), event.body(), event.groupId(), event.referenceId(),
                     event.referenceType(), event.deduplicationKey());
-            NotificationDeliveryService delivery = deliveryProvider.getIfAvailable();
-            if (id != null && delivery != null) delivery.deliver(id);
         } catch (RuntimeException exception) {
             log.error("업무 커밋 후 알림 처리에 실패했습니다. key={}", event.deduplicationKey(), exception);
         }

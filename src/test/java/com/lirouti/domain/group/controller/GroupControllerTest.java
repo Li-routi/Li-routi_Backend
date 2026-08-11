@@ -48,6 +48,72 @@ class GroupControllerTest {
     private EntityManager em;
 
     @Test
+    @DisplayName("인증 회원의 참여 그룹 요약을 공통 응답 형식으로 반환한다")
+    void getMyGroups_AuthenticatedMember_ReturnsSummary() throws Exception {
+        Group group = group("GQ19901");
+        Member member = member();
+        membership(member, group, GroupMemberRole.MEMBER);
+        GroupRoutineCategory category = category(true);
+        GroupRoutine routine = routine(group, category, "목록 루틴");
+        assignment(routine, member, LocalTime.of(9, 0), LocalTime.of(10, 0),
+                GroupRoutineAssignmentStatus.COMPLETED);
+        em.flush();
+        em.clear();
+
+        mockMvc.perform(get("/api/groups").with(user(principal(member))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.isSuccess").value(true))
+                .andExpect(jsonPath("$.code").value("GROUP200_16"))
+                .andExpect(jsonPath("$.result.groups.length()").value(1))
+                .andExpect(jsonPath("$.result.groups[0].groupId").value(group.getId()))
+                .andExpect(jsonPath("$.result.groups[0].groupName").value(group.getName()))
+                .andExpect(jsonPath("$.result.groups[0].activeMemberCount").value(1))
+                .andExpect(jsonPath("$.result.groups[0].activeRoutineCount").value(1))
+                .andExpect(jsonPath("$.result.groups[0].todayAssignedRoutineCount").value(1))
+                .andExpect(jsonPath("$.result.groups[0].todayCompletedRoutineCount").value(1))
+                .andExpect(jsonPath("$.result.groups[0].monthlyAchievementRate").value(100))
+                .andExpect(jsonPath("$.result.groups[0].todayGroupVerificationCount").value(0));
+    }
+
+    @Test
+    @DisplayName("참여 그룹이 없는 인증 회원은 빈 그룹 목록을 받는다")
+    void getMyGroups_NoActiveGroups_ReturnsEmptyList() throws Exception {
+        Member member = member();
+        em.flush();
+
+        mockMvc.perform(get("/api/groups").with(user(principal(member))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.isSuccess").value(true))
+                .andExpect(jsonPath("$.code").value("GROUP200_16"))
+                .andExpect(jsonPath("$.result.groups").isArray())
+                .andExpect(jsonPath("$.result.groups").isEmpty());
+    }
+
+    @Test
+    @DisplayName("OpenAPI 문서의 참여 그룹 목록 응답은 실제 MyGroup DTO 필드를 가리킨다")
+    void openApi_MyGroupList_ResponseSchemaMatchesDto() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$['paths']['/api/groups']['get']['responses']['200']"
+                        + "['content']['*/*']['schema']['$ref']")
+                        .value("#/components/schemas/ApiResponseMyGroupList"))
+                .andExpect(jsonPath("$['components']['schemas']['ApiResponseMyGroupList']"
+                        + "['properties']['result']['$ref']")
+                        .value("#/components/schemas/MyGroupList"))
+                .andExpect(jsonPath("$.components.schemas.MyGroupList.properties.groups.items.$ref")
+                        .value("#/components/schemas/MyGroup"))
+                .andExpect(jsonPath("$.components.schemas.MyGroup.properties.groupId").exists())
+                .andExpect(jsonPath("$.components.schemas.MyGroup.properties.groupName").exists())
+                .andExpect(jsonPath("$.components.schemas.MyGroup.properties.activeMemberCount").exists())
+                .andExpect(jsonPath("$.components.schemas.MyGroup.properties.activeRoutineCount").exists())
+                .andExpect(jsonPath("$.components.schemas.MyGroup.properties.todayAssignedRoutineCount").exists())
+                .andExpect(jsonPath("$.components.schemas.MyGroup.properties.todayCompletedRoutineCount").exists())
+                .andExpect(jsonPath("$.components.schemas.MyGroup.properties.currentStreak").exists())
+                .andExpect(jsonPath("$.components.schemas.MyGroup.properties.monthlyAchievementRate").exists())
+                .andExpect(jsonPath("$.components.schemas.MyGroup.properties.todayGroupVerificationCount").exists());
+    }
+
+    @Test
     @DisplayName("인증 회원의 오늘 그룹 루틴을 공통 응답 형식으로 반환한다")
     void getTodayRoutines_AuthenticatedMember_ReturnsAssignments() throws Exception {
         // given

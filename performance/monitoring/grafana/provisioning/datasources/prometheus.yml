@@ -1,0 +1,21 @@
+apiVersion: 1
+
+# 파일에서 제거한 datasource도 Grafana DB에서 정리해 선언 상태와 맞춘다.
+prune: true
+
+datasources:
+  - name: Prometheus
+    # Dashboard JSON은 표시 이름이 아니라 이 UID를 참조하므로 고정한다.
+    uid: prometheus
+    type: prometheus
+    # 브라우저가 아니라 Grafana 서버가 Compose DNS의 prometheus 서비스에 질의한다.
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    # UI 변경과 Git의 provisioning 원본이 서로 어긋나지 않게 한다.
+    editable: false
+    version: 1
+    jsonData:
+      httpMethod: POST
+      # Dashboard query 간격을 Prometheus의 5초 scrape 주기보다 촘촘하게 만들지 않는다.
+      timeInterval: 5s

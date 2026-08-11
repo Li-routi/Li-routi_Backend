@@ -8,6 +8,7 @@ import com.lirouti.domain.group.exception.code.error.GroupErrorCode;
 import com.lirouti.domain.group.repository.GroupRoutineAssignmentRepository;
 import com.lirouti.domain.group.repository.GroupRoutineCategoryRepository;
 import com.lirouti.domain.group.repository.GroupDetailQueryRepository;
+import com.lirouti.domain.group.repository.GroupListQueryRepository;
 import com.lirouti.domain.group.service.GroupValidationService;
 import com.lirouti.domain.member.service.query.MemberQueryService;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,6 +33,7 @@ class GroupCategoryQueryServiceTest {
 
     @Mock private GroupRoutineAssignmentRepository assignmentRepository;
     @Mock private GroupDetailQueryRepository groupDetailQueryRepository;
+    @Mock private GroupListQueryRepository groupListQueryRepository;
     @Mock private GroupRoutineCategoryRepository categoryRepository;
     @Mock private GroupValidationService validationService;
     @Mock private MemberQueryService memberQueryService;
@@ -43,6 +45,7 @@ class GroupCategoryQueryServiceTest {
         queryService = new GroupQueryService(
                 assignmentRepository,
                 groupDetailQueryRepository,
+                groupListQueryRepository,
                 categoryRepository,
                 validationService,
                 memberQueryService,

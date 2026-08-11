@@ -231,3 +231,17 @@ spring:
   # 더미는 회원·참여·인증처럼 원래 사용자가 만드는 데이터라 운영에는 들어가면 안 된다.
   flyway:
     locations: classpath:db/migration,classpath:db/dummy
+
+server:
+  tomcat:
+    mbeanregistry:
+      enabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,prometheus
+  metrics:
+    tags:
+      application: lirouti

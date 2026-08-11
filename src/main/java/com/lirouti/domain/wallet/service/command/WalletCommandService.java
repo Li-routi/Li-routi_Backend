@@ -44,6 +44,11 @@ public class WalletCommandService {
         if (paidAmount < 0 || freeAmount < 0 || paidAmount + freeAmount <= 0) {
             throw new WalletException(WalletErrorCode.INVALID_AMOUNT);
         }
+        // 지갑 행을 만들거나 잠그기 전에 막는다. 엔티티에도 같은 검사가 있지만 그것은
+        // IllegalArgumentException 이라 응답이 500 이 된다 — 호출부의 잘못을 400 으로 알린다.
+        if (paidAmount > 0 && !command.currency().isPaidBalanceAllowed()) {
+            throw new WalletException(WalletErrorCode.PAID_BALANCE_NOT_ALLOWED);
+        }
         Optional<WalletResult> already = replayOf(command);
         if (already.isPresent()) {
             return already.get();

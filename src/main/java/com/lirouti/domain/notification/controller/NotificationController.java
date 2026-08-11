@@ -42,6 +42,25 @@ public class NotificationController implements NotificationControllerDocs {
                 commandService.unregisterDevice(user.getMemberId(), request.token()));
     }
 
+    /** 현재 회원의 알림 설정 여섯 항목을 조회한다. */
+    @Override
+    @GetMapping("/settings")
+    public ApiResponse<NotificationResDTO.Settings> getSettings(
+            @AuthenticationPrincipal CustomUserDetails user) {
+        return ApiResponse.onSuccess(GeneralSuccessCode.OK,
+                queryService.getSettings(user.getMemberId()));
+    }
+
+    /** 전달된 알림 설정만 변경하고 변경 후 전체 설정을 반환한다. */
+    @Override
+    @PatchMapping("/settings")
+    public ApiResponse<NotificationResDTO.Settings> updateSettings(
+            @AuthenticationPrincipal CustomUserDetails user,
+            @Valid @RequestBody NotificationReqDTO.UpdateSettings request) {
+        return ApiResponse.onSuccess(GeneralSuccessCode.OK,
+                commandService.updateSettings(user.getMemberId(), request));
+    }
+
     /** 전체 또는 한 분류의 최근 알림을 ID 커서로 나눠 조회한다. */
     @Override
     @GetMapping

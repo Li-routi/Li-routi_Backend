@@ -13,6 +13,28 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 public interface GroupControllerDocs {
 
     @Operation(
+            summary = "참여 그룹 목록 조회",
+            description = """
+                    로그인 회원이 ACTIVE 상태로 참여 중인 ACTIVE 그룹을 최근 가입 순으로 조회합니다.
+                    각 그룹에는 ACTIVE 구성원·활성 루틴 수, 오늘 할당·완료 수, 현재 스트릭,
+                    이번 달 달성률과 오늘 그룹 전체 인증 수가 포함됩니다. 참여 그룹이 없으면 빈 목록을 반환합니다.
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200", description = "참여 그룹 목록 조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401", description = "유효하지 않거나 만료된 인증 토큰"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "403", description = "탈퇴하거나 비활성화된 회원"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404", description = "존재하지 않는 회원 (MEMBER404_1)")
+    })
+    ApiResponse<GroupResDTO.MyGroupList> getMyGroups(
+            @Parameter(hidden = true) CustomUserDetails userDetails
+    );
+
+    @Operation(
             summary = "그룹 구성원 찌르기",
             description = """
                     ACTIVE 그룹 구성원이 같은 그룹의 다른 ACTIVE 구성원을 찌릅니다.
