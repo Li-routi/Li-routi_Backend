@@ -165,7 +165,11 @@ class ChargeExchangeTest {
 
         assertAll(
                 () -> assertThat(a.paymentId()).isNotEqualTo(b.paymentId()),
-                () -> assertThat(a.paymentId()).doesNotContain(String.valueOf(me.getId()))
+                // 모양으로 본다. 처음에는 "회원 id 를 포함하지 않는다" 로 썼는데, 32자리
+                // 16진수는 한 자리 숫자를 거의 항상 포함하므로 회원 id 가 작은 환경(새 DB)
+                // 에서만 깨졌다 — 로컬은 id 가 커서 통과했다. 검증하려던 것은 "순번이
+                // 아니다" 이므로 형식을 보는 것이 맞다.
+                () -> assertThat(a.paymentId()).matches("charge_[0-9a-f]{32}")
         );
     }
 
