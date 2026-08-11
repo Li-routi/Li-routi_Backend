@@ -49,6 +49,27 @@ public class ChargeController implements ChargeControllerDocs {
     }
 
     @Override
+    @PostMapping("/charges/{paymentId}/complete")
+    public ApiResponse<ChargeResDTO.Started> completeCharge(
+            @PathVariable String paymentId,
+            @AuthenticationPrincipal CustomUserDetails userDetails
+    ) {
+        ChargeResDTO.Started result =
+                chargeCommandService.complete(userDetails.getMemberId(), paymentId);
+        return ApiResponse.onSuccess(ChargeSuccessCode.CHARGE_COMPLETE_SUCCESS, result);
+    }
+
+    /**
+     * 포트원이 부른다. <b>인증이 없다</b> — 대신 본문을 믿지 않고 결제 식별자로 다시 조회한다.
+     */
+    @Override
+    @PostMapping("/charges/webhook")
+    public ApiResponse<Void> webhook(@RequestBody ChargeReqDTO.Webhook request) {
+        chargeCommandService.handleWebhook(request.paymentId());
+        return ApiResponse.onSuccess(ChargeSuccessCode.CHARGE_WEBHOOK_SUCCESS, null);
+    }
+
+    @Override
     @PostMapping("/exchanges")
     public ApiResponse<ChargeResDTO.ExchangeResult> exchange(
             @Valid @RequestBody ChargeReqDTO.Exchange request,

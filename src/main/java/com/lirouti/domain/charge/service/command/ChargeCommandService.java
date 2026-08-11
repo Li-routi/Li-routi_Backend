@@ -1,5 +1,6 @@
 package com.lirouti.domain.charge.service.command;
 
+import com.lirouti.domain.charge.client.PortOneClient;
 import com.lirouti.domain.charge.converter.ChargeConverter;
 import com.lirouti.domain.charge.dto.response.ChargeResDTO;
 import com.lirouti.domain.charge.entity.ChargePayment;
@@ -43,6 +44,7 @@ public class ChargeCommandService {
     private final ExchangeProductRepository exchangeProductRepository;
     private final ChargePaymentRepository chargePaymentRepository;
     private final WalletService walletService;
+    private final PortOneClient portOneClient;
 
     /**
      * 결제를 시작한다. <b>돈은 아직 오가지 않는다.</b>
@@ -73,6 +75,87 @@ public class ChargeCommandService {
                 .build());
 
         return ChargeConverter.toStarted(payment, orderNameOf(product));
+    }
+
+    /**
+     * 결제를 검증하고 재화를 지급한다.
+     *
+     * <p><b>요청 본문의 값으로 판단하지 않는다.</b> 결제 식별자로 <b>인증된 회원의</b> 행을
+     * 찾고, 없으면 거절한다 — 회원을 안 보면 남의 식별자를 알아낸 사람이 자기 계정으로 이것을
+     * 불러 <b>남의 결제로 자기 재화를 채울 수 있다.</b>
+     *
+     * <p>지급은 <b>결제 시작 때 굳혀 둔 스냅샷</b>으로 한다. 상품을 다시 읽으면 그 사이 운영이
+     * 고친 값이 나온다.
+     *
+     * <p>이미 지급된 결제면 <b>조용히 통과한다.</b> 완료 요청과 웹훅이 둘 다 오는 것이 정상이다.
+     */
+    @Transactional
+    public ChargeResDTO.Started complete(Long memberId, String paymentId) {
+        // 회원으로 좁혀 확인한다. 여기서 걸러야 남의 결제를 쓰는 길이 막힌다.
+        chargePaymentRepository.findByPaymentIdAndMemberId(paymentId, memberId)
+                .orElseThrow(() -> new ChargeException(ChargeErrorCode.PAYMENT_NOT_FOUND));
+        return settle(paymentId);
+    }
+
+    /**
+     * 웹훅으로 들어온 결제를 처리한다.
+     *
+     * <p>완료 요청은 <b>클라이언트가 불러 준다.</b> 결제 직후 앱이 죽거나 네트워크가 끊기면
+     * <b>돈은 나갔는데 재화가 없는</b> 상태가 남으므로 웹훅이 그것을 메운다.
+     *
+     * <p><b>웹훅 payload 는 믿지 않는다.</b> 거기 실린 식별자로 포트원에 다시 물어본다 —
+     * 웹훅 주소는 공개되어 있어 아무나 위조한 본문을 보낼 수 있다.
+     */
+    @Transactional
+    public void handleWebhook(String paymentId) {
+        settle(paymentId);
+    }
+
+    /**
+     * 검증과 지급. 완료 요청과 웹훅이 같은 길을 쓴다.
+     *
+     * <p><b>행을 잠그고 상태를 본다.</b> 둘이 동시에 들어오면 하나만 지급해야 하는데, 읽고 나서
+     * 쓰면 둘 다 통과한다.
+     */
+    private ChargeResDTO.Started settle(String paymentId) {
+        ChargePayment payment = chargePaymentRepository.findByPaymentIdForUpdate(paymentId)
+                .orElseThrow(() -> new ChargeException(ChargeErrorCode.PAYMENT_NOT_FOUND));
+
+        if (payment.isPaid()) {
+            // 완료 요청과 웹훅이 둘 다 오는 것이 정상이다. 나중 것은 조용히 끝낸다.
+            return ChargeConverter.toStarted(payment, "");
+        }
+
+        PortOneClient.PortOnePayment actual = portOneClient.getPayment(paymentId)
+                .orElseThrow(() -> new ChargeException(ChargeErrorCode.PAYMENT_NOT_COMPLETED));
+
+        if (!actual.isPaid()) {
+            // 아직 돈이 들어오지 않았다. 가상계좌 발급이나 대기 상태가 여기로 온다 —
+            // 실패로 확정하지 않는다. 나중에 웹훅이 다시 온다.
+            throw new ChargeException(ChargeErrorCode.PAYMENT_NOT_COMPLETED);
+        }
+        if (actual.totalAmount() != payment.getExpectedAmount()) {
+            // 금액 조작을 여기서 막는다. 결제 시작 때 기록해 두지 않았다면 대조할 기준이 없다.
+            payment.markFailed("결제 금액 불일치", LocalDateTime.now(TimeUtil.KST));
+            log.error("결제 금액이 다릅니다. paymentId={}, 기대={}, 실제={}",
+                    paymentId, payment.getExpectedAmount(), actual.totalAmount());
+            throw new ChargeException(ChargeErrorCode.AMOUNT_MISMATCH);
+        }
+
+        // 상태 전이가 먼저다. 이 호출이 false 면 남이 이미 처리한 것이므로 지급하지 않는다.
+        if (!payment.markPaid(actual.transactionId(), actual.totalAmount(),
+                LocalDateTime.now(TimeUtil.KST))) {
+            return ChargeConverter.toStarted(payment, "");
+        }
+
+        // 지급은 결제 시작 때 굳힌 값으로 한다. 상품을 다시 읽으면 그 사이 바뀐 값이 나온다.
+        walletService.grant(new WalletCommand(
+                        payment.getMember().getId(), payment.getRewardCurrency(),
+                        WalletTransactionType.TOPUP,
+                        "charge:" + payment.getId(), "CHARGE_PAYMENT", payment.getId()),
+                payment.getRewardAmount(), payment.getBonusAmount());
+
+        return ChargeConverter.toStarted(payment, "");
     }
 
     /**

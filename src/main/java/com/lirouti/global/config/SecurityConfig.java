@@ -30,7 +30,11 @@ public class SecurityConfig {
             "/api/auth/**",
             "/swagger-ui/**",
             "/v3/api-docs/**",
-            "/health"
+            "/health",
+            // 포트원이 부르는 자리라 JWT 를 붙일 수 없다. 대신 본문을 믿지 않는다 —
+            // 거기 실린 결제 식별자로 포트원에 다시 물어보고, 그 답으로만 지급한다.
+            // 위조한 본문을 보내도 포트원이 모르는 결제면 아무 일도 일어나지 않는다.
+            "/api/shop/charges/webhook"
     };
     private static final String ADMIN_CHAT_EMOTICON_URI = "/api/admin/chat/emoticons/**";
 

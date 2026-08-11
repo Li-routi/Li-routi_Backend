@@ -148,6 +148,19 @@ server:
   forward-headers-strategy: framework
 
 # 인증 사진 AI 심사. 사진이 그 챌린지의 의도에 맞는지 Claude 에게 묻는다.
+# 재화 충전 결제(포트원 V2).
+#
+# PG 사(토스페이먼츠)의 키는 여기 없다 — 포트원 콘솔에만 있고, 서버는 포트원에만 말한다.
+# 그래서 PG 를 바꿔도 이 설정과 코드는 그대로다.
+portone:
+  # 끄면 충전이 막힌다. AI 심사와 달리 fail-open 이 아니다 —
+  # 검증을 건너뛰고 지급하면 재화가 공짜가 된다.
+  enabled: ${PORTONE_ENABLED:true}
+  # 진짜 비밀값이라 기본값을 두지 않는다. 미주입이면 형식 검증에서 부팅이 막힌다.
+  api-secret: ${PORTONE_API_SECRET}
+  store-id: ${PORTONE_STORE_ID}
+  base-url: ${PORTONE_BASE_URL:https://api.portone.io}
+
 ai:
   review:
     # 끄면 자가인증으로 되돌아간다(사진만 올리면 통과). 모델이 오작동해 정상 인증을 무더기로

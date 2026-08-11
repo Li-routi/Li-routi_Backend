@@ -24,6 +24,16 @@ public enum ChargeSuccessCode implements BaseSuccessCode {
             "결제 준비에 성공했습니다.",
             "CHARGE200_3"
     ),
+    CHARGE_COMPLETE_SUCCESS(
+            HttpStatus.OK,
+            "결제 검증과 지급에 성공했습니다.",
+            "CHARGE200_5"
+    ),
+    CHARGE_WEBHOOK_SUCCESS(
+            HttpStatus.OK,
+            "웹훅 처리에 성공했습니다.",
+            "CHARGE200_6"
+    ),
     EXCHANGE_SUCCESS(
             HttpStatus.OK,
             "재화 교환에 성공했습니다.",
