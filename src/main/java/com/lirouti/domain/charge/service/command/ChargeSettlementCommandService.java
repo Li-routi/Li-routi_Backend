@@ -4,6 +4,7 @@ import com.lirouti.domain.charge.client.PortOneClient;
 import com.lirouti.domain.charge.converter.ChargeConverter;
 import com.lirouti.domain.charge.dto.response.ChargeResDTO;
 import com.lirouti.domain.charge.entity.ChargePayment;
+import com.lirouti.domain.charge.enums.ChargePaymentStatus;
 import com.lirouti.domain.charge.exception.ChargeException;
 import com.lirouti.domain.charge.exception.code.error.ChargeErrorCode;
 import com.lirouti.domain.charge.repository.ChargePaymentRepository;
@@ -50,29 +51,29 @@ public class ChargeSettlementCommandService {
     }
 
     /**
-     * 이미 지급이 끝났으면 그 결과를 돌려준다.
+     * 지금 상태를 본다. <b>잠그지 않는다.</b>
      *
-     * <p>완료 요청과 웹훅이 <b>둘 다 오는 것이 정상</b>이다. 여기서 걸러야 이미 끝난 결제로
-     * 포트원을 다시 부르지 않는다.
+     * <p>포트원을 부르기 전에 <b>우리가 아는 결제인지</b>부터 가른다. 모르는 식별자에 외부
+     * 조회를 내보내면, 공개된 웹훅 주소로 아무 값이나 보내는 것만으로 <b>우리가 포트원 API 를
+     * 대신 두들기게 된다.</b>
+     *
+     * <p>이미 끝난 결제(지급·실패)도 여기서 걸러 다시 묻지 않는다 — 완료 요청과 웹훅이 둘 다
+     * 오는 것이 정상이라 이 경우가 드물지 않고, 실패는 다시 물어도 결과가 달라지지 않는다.
+     *
+     * @return 우리가 모르는 결제면 비어 있다
      */
     @Transactional(readOnly = true)
-    public Optional<ChargeResDTO.Started> alreadySettled(String paymentId) {
+    public Optional<ChargePaymentStatus> statusOf(String paymentId) {
         return chargePaymentRepository.findByPaymentIdForRead(paymentId)
-                .filter(ChargePayment::isPaid)
-                .map(this::toStarted);
+                .map(ChargePayment::getStatus);
     }
 
-    /**
-     * 이미 실패로 확정됐는가.
-     *
-     * <p><b>{@code PAID} 만 종료로 보면 안 된다.</b> 금액 불일치로 실패한 결제에 웹훅이 다시
-     * 오면 매번 포트원을 조회하고 매번 같은 예외를 던진다 — 결과가 달라질 수 없는데도 그렇다.
-     */
+    /** 이미 지급이 끝난 결제의 결과. */
     @Transactional(readOnly = true)
-    public boolean alreadyFailed(String paymentId) {
+    public ChargeResDTO.Started settledResult(String paymentId) {
         return chargePaymentRepository.findByPaymentIdForRead(paymentId)
-                .map(ChargePayment::isFailed)
-                .orElse(false);
+                .map(this::toStarted)
+                .orElseThrow(() -> new ChargeException(ChargeErrorCode.PAYMENT_NOT_FOUND));
     }
 
     /**

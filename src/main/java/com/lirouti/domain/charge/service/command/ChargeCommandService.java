@@ -6,6 +6,7 @@ import com.lirouti.domain.charge.dto.response.ChargeResDTO;
 import com.lirouti.domain.charge.entity.ChargePayment;
 import com.lirouti.domain.charge.entity.ChargeProduct;
 import com.lirouti.domain.charge.entity.ExchangeProduct;
+import com.lirouti.domain.charge.enums.ChargePaymentStatus;
 import com.lirouti.domain.charge.exception.ChargeException;
 import com.lirouti.domain.charge.exception.code.error.ChargeErrorCode;
 import com.lirouti.domain.charge.repository.ChargePaymentRepository;
@@ -119,15 +120,26 @@ public class ChargeCommandService {
      * 들어간다.
      */
     private ChargeResDTO.Started settle(String paymentId, boolean fromWebhook) {
+        Optional<ChargePaymentStatus> status = settlementCommandService.statusOf(paymentId);
+
+        // 우리가 모르는 결제다. 웹훅 주소는 공개라 아무나 아무 식별자나 보낼 수 있으므로,
+        // 여기서 끊지 않으면 그것만으로 우리가 포트원 API 를 대신 두들기게 된다.
+        if (status.isEmpty()) {
+            if (fromWebhook) {
+                log.info("모르는 결제의 웹훅을 흘립니다. paymentId={}", paymentId);
+                return null;
+            }
+            throw new ChargeException(ChargeErrorCode.PAYMENT_NOT_FOUND);
+        }
+
         // 이미 끝난 결제로 포트원을 다시 부르지 않는다. 완료 요청과 웹훅이 둘 다 오는 것이
         // 정상이므로 이 경우가 드물지 않다.
-        Optional<ChargeResDTO.Started> settled = settlementCommandService.alreadySettled(paymentId);
-        if (settled.isPresent()) {
-            return settled.get();
+        if (status.get() == ChargePaymentStatus.PAID) {
+            return settlementCommandService.settledResult(paymentId);
         }
         // 실패도 종료 상태다. 다시 물어봐도 결과가 달라질 수 없다 — 웹훅에는 조용히 성공으로
         // 답해 재시도를 멈추고, 사람이 부른 완료 요청에는 이유를 알린다.
-        if (settlementCommandService.alreadyFailed(paymentId)) {
+        if (status.get() == ChargePaymentStatus.FAILED) {
             if (fromWebhook) {
                 return null;
             }

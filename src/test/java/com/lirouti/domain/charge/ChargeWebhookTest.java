@@ -139,4 +139,17 @@ class ChargeWebhookTest {
 
         verify(portOneClient, never()).getPayment(any());
     }
+
+    @Test
+    @DisplayName("모르는 결제 식별자는 포트원에 묻지 않는다 — 공개 주소라 아무나 보낼 수 있다")
+    void webhook_DoesNotCallPortOneForUnknownPayment() throws Exception {
+        // 이 주소는 인증이 없다. 여기서 끊지 않으면 아무 값이나 보내는 것만으로
+        // 우리가 포트원 API 를 대신 두들기게 된다.
+        mockMvc.perform(post("/api/shop/charges/webhook")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"type\":\"Transaction.Paid\",\"data\":{\"paymentId\":\"charge_이런건없다\"}}"))
+                .andExpect(status().isOk());
+
+        verify(portOneClient, never()).getPayment(any());
+    }
 }
