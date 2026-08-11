@@ -53,9 +53,12 @@ public final class ChargeResDTO {
     @Schema(name = "ChargeStarted", description = "결제 준비 결과")
     @Builder
     public record Started(
+            @Schema(description = "포트원 상점 아이디") String storeId,
+            @Schema(description = "채널 키. 어느 PG 로 결제할지를 가른다") String channelKey,
             @Schema(description = "서버가 만든 결제 식별자. 포트원 V2 의 paymentId") String paymentId,
             @Schema(description = "결제 금액(원)") int amount,
-            @Schema(description = "주문명") String orderName
+            @Schema(description = "화폐. 포트원 형식이다") String currency,
+            @Schema(description = "주문명. 카드 명세서에 찍힌다") String orderName
     ) {
     }
 

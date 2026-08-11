@@ -19,6 +19,7 @@ public interface ChargePaymentRepository extends JpaRepository<ChargePayment, Lo
      */
     Optional<ChargePayment> findByPaymentIdAndMemberId(String paymentId, Long memberId);
 
+
     /**
      * 웹훅용. 회원을 모르므로 결제 식별자로만 찾는다.
      *
@@ -28,6 +29,10 @@ public interface ChargePaymentRepository extends JpaRepository<ChargePayment, Lo
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from ChargePayment p where p.paymentId = :paymentId")
     Optional<ChargePayment> findByPaymentIdForUpdate(@Param("paymentId") String paymentId);
+
+    /** 잠금 없이 상태만 본다. 이미 끝난 결제로 포트원을 다시 부르지 않으려는 용도다. */
+    @Query("select p from ChargePayment p where p.paymentId = :paymentId")
+    Optional<ChargePayment> findByPaymentIdForRead(@Param("paymentId") String paymentId);
 
     boolean existsByTxId(String txId);
 }

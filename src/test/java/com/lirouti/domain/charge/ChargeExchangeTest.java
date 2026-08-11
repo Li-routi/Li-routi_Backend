@@ -35,8 +35,8 @@ import static org.junit.jupiter.api.Assertions.assertAll;
 /**
  * 재화 충전(결제 시작)과 교환.
  *
- * <p><b>검증·지급은 아직 없다</b> — 포트원 자격증명을 받은 뒤에 붙인다. 여기서는 그 앞 단계,
- * 즉 <b>대조 기준을 남기는 것</b>과 <b>재화끼리 바꾸는 것</b>을 본다.
+ * <p>여기서는 <b>대조 기준을 남기는 것</b>과 <b>재화끼리 바꾸는 것</b>만 본다. 검증·지급은
+ * {@code ChargeCompletionTest}, 웹훅 수신은 {@code ChargeWebhookTest} 가 따로 맡는다.
  */
 @SpringBootTest
 @Transactional

@@ -1,5 +1,6 @@
 package com.lirouti.domain.charge.dto.request;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -14,6 +15,46 @@ public final class ChargeReqDTO {
             @NotNull(message = "상품 id 는 필수입니다.")
             Long productId
     ) {
+    }
+
+    /**
+     * 포트원 V2 웹훅.
+     *
+     * <p><b>구조를 문서에서 확인했다.</b> 최상위는 {@code type}·{@code timestamp}·{@code data}
+     * 셋이고 <b>결제 식별자는 {@code data} 안에 있다.</b> 처음에는 최상위로 받았는데, 그러면
+     * 실제 웹훅에서 {@code null} 이 되어 아무 결제도 처리되지 않는다.
+     *
+     * <p><b>여기 담긴 값을 믿지 않는다.</b> 웹훅 주소는 공개되어 있어 아무나 위조한 본문을
+     * 보낼 수 있다. 결제 식별자만 꺼내 <b>포트원에 다시 물어보고</b> 그 답으로만 지급한다.
+     * 그래서 금액이나 상태를 받지 않는다 — 받아도 쓰지 않을 값이다.
+     */
+    public record Webhook(
+            @NotBlank(message = "이벤트 종류는 필수입니다.")
+            String type,
+
+            String timestamp,
+
+            @NotNull(message = "이벤트 내용은 필수입니다.")
+            @Valid
+            Data data
+    ) {
+        public record Data(
+                @NotBlank(message = "결제 식별자는 필수입니다.")
+                String paymentId,
+                String storeId,
+                String transactionId
+        ) {
+        }
+
+        /**
+         * 결제가 끝났다는 통지인가.
+         *
+         * <p>포트원은 준비·실패·취소·가상계좌 발급 등 여러 종류를 같은 주소로 보낸다.
+         * <b>지급은 이것 하나에만 반응한다</b> — 나머지는 조용히 흘린다.
+         */
+        public boolean isPaid() {
+            return "Transaction.Paid".equals(type);
+        }
     }
 
     /**
