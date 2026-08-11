@@ -41,9 +41,12 @@ public interface GroupMemberRepository extends JpaRepository<GroupMember, Long> 
                 groupMember.id
             )
             from GroupMember groupMember
+            join groupMember.member member
             where groupMember.group.id = :groupId
               and groupMember.member.id in :memberIds
               and groupMember.status = com.lirouti.domain.group.enums.GroupMemberStatus.ACTIVE
+              and member.isActive = true
+              and member.deletedAt is null
             order by groupMember.id asc
             """)
     List<GroupMemberLockCandidate> findActiveMembershipLockCandidatesByGroupIdAndMemberIds(

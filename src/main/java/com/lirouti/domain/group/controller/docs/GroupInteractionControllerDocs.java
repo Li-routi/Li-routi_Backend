@@ -116,8 +116,13 @@ public interface GroupInteractionControllerDocs {
      * @return 찌르기 결과
      */
     @Operation(
-            summary = "그룹원 찌르기",
+            summary = "그룹원 찌르기 (Deprecated)",
+            deprecated = true,
             description = """
+                    **Deprecated:** 클라이언트는 누적형 표준 API
+                    `POST /api/groups/{groupId}/members/{targetMemberId}/pokes`로 전환해야 합니다.
+                    이 API는 클라이언트 전환 완료 전까지 호환성을 위해 유지됩니다.
+
                     아직 루틴을 수행하지 않은 그룹원을 독려하기 위해 '찌르기' 알림을 보냅니다.
                     수신자에게 `GROUP_MEMBER_POKED` 알림이 전송됩니다.
 
@@ -156,6 +161,7 @@ public interface GroupInteractionControllerDocs {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
                     responseCode = "409", description = "오늘 이미 같은 상대를 찌름")
     })
+    @Deprecated
     ApiResponse<GroupInteractionResDTO.Poke> poke(
             @Parameter(hidden = true) CustomUserDetails user,
             @Parameter(description = "그룹 ID", example = "1") Long groupId,

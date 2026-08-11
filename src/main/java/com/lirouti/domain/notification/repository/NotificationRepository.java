@@ -33,21 +33,60 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     Optional<Notification> findByIdAndMemberId(Long id, Long memberId);
 
     /**
-     * 아직 처리되지 않은 알림 한 건을 배송 작업이 원자적으로 선점한다.
-     * 동시에 여러 호출이 들어와도 한 호출만 1을 반환해 중복 Push를 막는다.
+     * 아직 처리되지 않았거나 lease가 만료된 알림 한 건을 배송 작업이 원자적으로 선점한다.
+     * 동시에 여러 호출이 들어와도 한 호출만 1을 반환하며 선점 시각이 후속 완료 작업의 fencing token이 된다.
      */
     @Modifying(clearAutomatically = true)
     @Transactional
     @Query("""
             update Notification notification
-            set notification.pushStatus = :sending
+            set notification.pushStatus = :sending,
+                notification.lastPushAttemptAt = :claimedAt
             where notification.id = :notificationId
-              and notification.pushStatus = :pending
+              and (notification.pushStatus = :pending
+                   or (notification.pushStatus = :sending
+                       and notification.lastPushAttemptAt <= :expiredBefore))
             """)
     int claimPendingDelivery(
             @Param("notificationId") Long notificationId,
             @Param("pending") PushStatus pending,
-            @Param("sending") PushStatus sending
+            @Param("sending") PushStatus sending,
+            @Param("claimedAt") LocalDateTime claimedAt,
+            @Param("expiredBefore") LocalDateTime expiredBefore
+    );
+
+    /** lease가 만료되어 다시 배송해야 하는 SENDING 알림 ID를 오래된 순서로 조회한다. */
+    @Query("""
+            select notification.id from Notification notification
+            where notification.pushStatus = :sending
+              and notification.lastPushAttemptAt <= :expiredBefore
+            order by notification.lastPushAttemptAt asc, notification.id asc
+            """)
+    List<Long> findExpiredDeliveryIds(
+            @Param("sending") PushStatus sending,
+            @Param("expiredBefore") LocalDateTime expiredBefore,
+            Pageable pageable
+    );
+
+    /** 현재 worker의 lease가 여전히 유효할 때만 배송 결과를 기록한다. */
+    @Modifying(clearAutomatically = true)
+    @Transactional
+    @Query("""
+            update Notification notification
+            set notification.pushStatus = :resultStatus,
+                notification.pushAttempts = notification.pushAttempts + :attemptIncrement,
+                notification.lastPushAttemptAt = :completedAt
+            where notification.id = :notificationId
+              and notification.pushStatus = :sending
+              and notification.lastPushAttemptAt = :claimedAt
+            """)
+    int completeClaimedDelivery(
+            @Param("notificationId") Long notificationId,
+            @Param("sending") PushStatus sending,
+            @Param("claimedAt") LocalDateTime claimedAt,
+            @Param("resultStatus") PushStatus resultStatus,
+            @Param("completedAt") LocalDateTime completedAt,
+            @Param("attemptIncrement") int attemptIncrement
     );
 
     @Modifying(clearAutomatically = true)

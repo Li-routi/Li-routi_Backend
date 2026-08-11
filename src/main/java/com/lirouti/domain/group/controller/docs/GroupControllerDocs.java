@@ -39,6 +39,8 @@ public interface GroupControllerDocs {
             description = """
                     ACTIVE 그룹 구성원이 같은 그룹의 다른 ACTIVE 구성원을 찌릅니다.
                     성공할 때마다 대상의 누적 찔림 수가 1 증가하며, 횟수 제한과 찌르기 이력은 없습니다.
+                    커밋 후 대상에게 `GROUP_MEMBER_POKED` 알림 처리를 비동기로 요청하며,
+                    알림 처리 실패는 찌르기 성공 결과에 영향을 주지 않습니다.
 
                     ### 에러 코드
 

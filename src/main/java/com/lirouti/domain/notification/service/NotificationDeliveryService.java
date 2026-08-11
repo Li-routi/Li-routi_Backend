@@ -9,10 +9,13 @@ import com.lirouti.domain.notification.repository.NotificationRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 
@@ -22,6 +25,9 @@ import java.util.Map;
 @RequiredArgsConstructor
 @ConditionalOnBean(FirebaseMessaging.class)
 public class NotificationDeliveryService {
+    private static final Duration DELIVERY_LEASE = Duration.ofMinutes(5);
+    private static final int RECOVERY_BATCH_SIZE = 100;
+
     private final FirebaseMessaging firebaseMessaging;
     private final FcmDeviceRepository deviceRepository;
     private final NotificationRepository notificationRepository;
@@ -35,10 +41,13 @@ public class NotificationDeliveryService {
      * 안 거쳐 트랜잭션이 안 걸리므로, 짧은 트랜잭션은 전부 repository 호출로만 구성한다.)
      */
     public void deliver(Long notificationId) {
+        LocalDateTime claimedAt = now();
         int claimed = notificationRepository.claimPendingDelivery(
                 notificationId,
                 PushStatus.PENDING,
-                PushStatus.SENDING
+                PushStatus.SENDING,
+                claimedAt,
+                claimedAt.minus(DELIVERY_LEASE)
         );
         if (claimed == 0) {
             return;
@@ -51,10 +60,9 @@ public class NotificationDeliveryService {
 
         List<FcmDevice> devices = deviceRepository.findAllByMemberIdAndActiveTrue(
                 notification.getMember().getId());
-        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime completedAt = now();
         if (devices.isEmpty()) {
-            notification.markSkipped(now);
-            notificationRepository.save(notification);
+            complete(notificationId, claimedAt, PushStatus.SKIPPED, completedAt, 0);
             return;
         }
 
@@ -69,21 +77,49 @@ public class NotificationDeliveryService {
                 .build();
         try {
             BatchResponse response = firebaseMessaging.sendEachForMulticast(message);
-            deactivateInvalidTokens(devices, response, now);
+            deactivateInvalidTokens(devices, response, completedAt);
             deviceRepository.saveAll(devices);
             // 배치에 실패 항목이 섞여 있어도 항상 SENT로 남기면, 실제로 못 받은 기기까지
             // 성공으로 기록된다. 최소 한 기기라도 성공했을 때만 SENT로 본다.
             if (response.getSuccessCount() > 0) {
-                notification.markSent(now);
+                complete(notificationId, claimedAt, PushStatus.SENT, completedAt, 1);
             } else {
-                notification.markFailed(now);
+                complete(notificationId, claimedAt, PushStatus.FAILED, completedAt, 1);
             }
-            notificationRepository.save(notification);
         } catch (FirebaseMessagingException exception) {
-            notification.markFailed(now);
-            notificationRepository.save(notification);
+            complete(notificationId, claimedAt, PushStatus.FAILED, completedAt, 1);
             log.warn("FCM 전송에 실패했습니다. notificationId={}", notificationId, exception);
         }
+    }
+
+    /** 프로세스 종료 등으로 lease가 만료된 SENDING 알림을 다시 선점해 배송한다. */
+    public void recoverExpiredDeliveries() {
+        LocalDateTime expiredBefore = now().minus(DELIVERY_LEASE);
+        List<Long> expiredIds = notificationRepository.findExpiredDeliveryIds(
+                PushStatus.SENDING,
+                expiredBefore,
+                PageRequest.of(0, RECOVERY_BATCH_SIZE)
+        );
+        expiredIds.forEach(this::deliver);
+    }
+
+    private void complete(Long notificationId, LocalDateTime claimedAt, PushStatus resultStatus,
+                          LocalDateTime completedAt, int attemptIncrement) {
+        int updated = notificationRepository.completeClaimedDelivery(
+                notificationId,
+                PushStatus.SENDING,
+                claimedAt,
+                resultStatus,
+                completedAt,
+                attemptIncrement
+        );
+        if (updated == 0) {
+            log.info("만료된 알림 lease의 배송 결과를 무시합니다. notificationId={}", notificationId);
+        }
+    }
+
+    private LocalDateTime now() {
+        return LocalDateTime.now(clock).truncatedTo(ChronoUnit.MICROS);
     }
 
     private Map<String, String> data(Notification n) {
