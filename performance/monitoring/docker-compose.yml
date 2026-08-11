@@ -1,0 +1,48 @@
+# 다른 저장소의 일반적인 monitoring network·volume과 이름이 겹치지 않게 고정한다.
+name: lirouti-monitoring
+
+services:
+  prometheus:
+    image: prom/prometheus:v3.13.1
+    container_name: lirouti-prometheus
+    ports:
+      # 지표와 query UI는 로컬 성능 측정에만 쓰므로 외부 인터페이스에 노출하지 않는다.
+      - "127.0.0.1:9090:9090"
+    extra_hosts:
+      # Linux Docker에서도 컨테이너가 호스트에서 실행 중인 Spring Boot를 같은 주소로 찾는다.
+      - "host.docker.internal:host-gateway"
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+    volumes:
+      # JWT는 추적 설정에 넣지 않고 Git에서 제외된 파일을 읽기 전용으로 주입한다.
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./secrets/actuator-token:/etc/prometheus/secrets/actuator-token:ro
+      # 컨테이너를 다시 만들어도 7일 비교 데이터는 named volume에 유지한다.
+      - prometheus-data:/prometheus
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:13.1.1
+    container_name: lirouti-grafana
+    ports:
+      # 관리자 화면도 로컬 브라우저에서만 접근하게 한다.
+      - "127.0.0.1:3000:3000"
+    environment:
+      # 비밀번호 값을 환경변수나 Compose 출력에 펼치지 않고 파일에서 직접 읽는다.
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana-admin-password
+    volumes:
+      - ./secrets/grafana-admin-password:/run/secrets/grafana-admin-password:ro
+      # Git의 provisioning 파일을 원본으로 유지하고 UI가 host 파일을 덮어쓰지 못하게 한다.
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      # 사용자·세션 등 Grafana 내부 DB는 컨테이너 교체 뒤에도 유지한다.
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+volumes:
+  prometheus-data:
+  grafana-data:

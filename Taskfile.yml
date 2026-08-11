@@ -62,6 +62,58 @@ tasks:
     cmds:
       - '{{.GRADLEW}} bootRun'
 
+  performance-smoke:
+    desc: JMeter Smoke Test 실행 (1명, 20초)
+    cmds:
+      - ./performance/jmeter/run.sh smoke
+
+  performance-token:
+    desc: 로컬 테스트 회원의 개발 토큰 발급 (기본 memberId=9001)
+    env:
+      PERFORMANCE_MEMBER_ID: '{{if .MEMBER_ID}}{{.MEMBER_ID}}{{else}}9001{{end}}'
+    cmds:
+      - '{{.GRADLEW}} issuePerformanceToken'
+
+  performance-load:
+    desc: JMeter Load Test 실행 (5명, 120초)
+    cmds:
+      - ./performance/jmeter/run.sh load
+
+  performance-spike:
+    desc: JMeter Spike Test 실행 (30명, 60초)
+    cmds:
+      - ./performance/jmeter/run.sh spike
+
+  monitoring-secrets:
+    desc: 로컬 모니터링용 Actuator token·Grafana 비밀번호 파일 준비
+    cmds:
+      - ./performance/monitoring/run.sh secrets
+
+  monitoring-check:
+    desc: 모니터링 secret·Compose·Prometheus 설정 검사
+    cmds:
+      - ./performance/monitoring/run.sh check
+
+  monitoring-up:
+    desc: Prometheus·Grafana 설정 검사 후 기동
+    cmds:
+      - ./performance/monitoring/run.sh up
+
+  monitoring-status:
+    desc: Prometheus·Grafana 컨테이너 상태 확인
+    cmds:
+      - ./performance/monitoring/run.sh status
+
+  monitoring-logs:
+    desc: Prometheus·Grafana 최근 로그와 새 로그 확인
+    cmds:
+      - ./performance/monitoring/run.sh logs
+
+  monitoring-down:
+    desc: Prometheus·Grafana 중지 (7일 지표와 Grafana 데이터 보존)
+    cmds:
+      - ./performance/monitoring/run.sh down
+
   docker-up:
     desc: 로컬 MySQL·Redis 컨테이너 기동 (백그라운드)
     cmds:
