@@ -49,6 +49,17 @@ public class Achievement extends BaseEntity {
     @Column(name = "target_count")
     private Integer targetCount;
 
+    /**
+     * 단일 조건 업적(NONE·CUMULATIVE_COUNT·DISTINCT_ROOM_COUNT)이 반응할 이벤트 키.
+     * 예: ROUTINE_COMPLETE_COUNT, LIKE_COUNT, ROOM_JOIN_COUNT.
+     *
+     * <p>COMPOSITE 는 이 컬럼을 쓰지 않고 {@link AchievementCondition} 의 개별
+     * conditionKey 들을 쓴다 — {@code AchievementProgressService} 가 이벤트를 매칭할 때
+     * progressType 에 따라 어느 쪽을 볼지 분기한다.
+     */
+    @Column(name = "condition_key", length = 30)
+    private String conditionKey;
+
     /** 카테고리 시작 업적만 사용. 예: EXERCISE, HEALTH. */
     @Column(name = "routine_category_filter", length = 20)
     private String routineCategoryFilter;
@@ -83,6 +94,7 @@ public class Achievement extends BaseEntity {
         this.conditionDesc = conditionDesc;
         this.progressType = progressType;
         this.targetCount = targetCount;
+        this.conditionKey = conditionKey;
         this.routineCategoryFilter = routineCategoryFilter;
         this.topazReward = topazReward;
         this.badgeYn = badgeYn;
