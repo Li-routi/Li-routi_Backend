@@ -14,8 +14,10 @@ import com.lirouti.domain.routine.enums.RoutineCategoryColor;
 import com.lirouti.domain.routine.exception.RoutineException;
 import com.lirouti.domain.routine.exception.code.error.RoutineErrorCode;
 import com.lirouti.domain.routine.repository.MemberRoutineRepository;
+import com.lirouti.domain.routine.repository.MemberRoutineScheduleRepository;
 import com.lirouti.domain.routine.repository.RoutineCategoryRepository;
 import com.lirouti.domain.routine.repository.RoutineTemplateRepository;
+import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -24,7 +26,9 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.dao.DataIntegrityViolationException;
 
+import java.sql.SQLException;
 import java.time.DayOfWeek;
 import java.time.LocalTime;
 import java.util.List;
@@ -57,6 +61,8 @@ class RoutineCommandServiceTest {
     private RoutineTemplateRepository routineTemplateRepository;
     @Mock
     private MemberRoutineRepository memberRoutineRepository;
+    @Mock
+    private MemberRoutineScheduleRepository memberRoutineScheduleRepository;
 
     @InjectMocks
     private RoutineCommandService routineCommandService;
@@ -140,7 +146,39 @@ class RoutineCommandServiceTest {
                 () -> assertThat(result.repeatDays())
                         .containsExactly(DayOfWeek.WEDNESDAY, DayOfWeek.FRIDAY)
         );
-        verify(memberRoutineRepository, times(2)).flush();
+        verify(memberRoutineScheduleRepository).deleteAllByMemberRoutineId(10L);
+        verify(memberRoutineRepository, times(2))
+                .findByIdAndMemberIdAndActiveTrue(10L, MEMBER_ID);
+        verify(memberRoutineRepository).flush();
+    }
+
+    @Test
+    @DisplayName("개인 루틴 수정의 반복 요일 오류는 일정 삭제 전에 거부한다")
+    void updateRoutine_DuplicateRepeatDays_RejectsBeforeDeletingSchedules() {
+        givenActiveMember();
+        MemberRoutine routine = MemberRoutine.builder()
+                .member(member)
+                .category(health)
+                .name("물 마시기")
+                .build();
+        routine.addSchedule(DayOfWeek.MONDAY);
+        when(memberRoutineRepository.findByIdAndMemberIdAndActiveTrue(10L, MEMBER_ID))
+                .thenReturn(Optional.of(routine));
+        RoutineReqDTO.UpdateRoutine request = new RoutineReqDTO.UpdateRoutine(
+                "물 마시기",
+                LocalTime.of(21, 0),
+                List.of(DayOfWeek.MONDAY, DayOfWeek.MONDAY),
+                null
+        );
+
+        assertThatThrownBy(() -> routineCommandService.updateRoutine(MEMBER_ID, 10L, request))
+                .isInstanceOf(RoutineException.class)
+                .extracting("code")
+                .isEqualTo(RoutineErrorCode.INVALID_ROUTINE_UPDATE);
+        assertThat(routine.getSchedules())
+                .extracting("repeatDay")
+                .containsExactly(DayOfWeek.MONDAY);
+        verify(memberRoutineScheduleRepository, never()).deleteAllByMemberRoutineId(anyLong());
     }
 
     @Test
@@ -241,6 +279,25 @@ class RoutineCommandServiceTest {
                 .extracting("code")
                 .isEqualTo(RoutineErrorCode.DUPLICATE_ROUTINE_TEMPLATE);
         verify(memberRoutineRepository, never()).saveAll(anyCollection());
+    }
+
+    @Test
+    @DisplayName("JPA가 감싼 기본 루틴 UNIQUE 위반을 중복 도메인 예외로 변환한다")
+    void createRoutines_DataIntegrityViolation_MapsTemplateConstraint() {
+        givenActiveMember();
+        givenExistingRoutines(0, List.of());
+        givenCategories(health);
+        givenTemplates(water);
+        doThrow(uniqueViolation("uk_member_routine_member_template"))
+                .when(memberRoutineRepository).flush();
+        RoutineReqDTO.CreateRoutines request = new RoutineReqDTO.CreateRoutines(List.of(
+                item(HEALTH_CATEGORY_ID, WATER_TEMPLATE_ID, WATER_TEMPLATE_NAME, null, null)
+        ));
+
+        assertThatThrownBy(() -> routineCommandService.createRoutines(MEMBER_ID, request))
+                .isInstanceOf(RoutineException.class)
+                .extracting("code")
+                .isEqualTo(RoutineErrorCode.DUPLICATE_ROUTINE_TEMPLATE);
     }
 
     @Test
@@ -387,6 +444,23 @@ class RoutineCommandServiceTest {
                 .extracting("code")
                 .isEqualTo(RoutineErrorCode.DUPLICATE_ROUTINE_CATEGORY_NAME);
         verify(routineCategoryRepository, never()).saveAndFlush(any(RoutineCategory.class));
+    }
+
+    @Test
+    @DisplayName("JPA가 감싼 카테고리 이름 UNIQUE 위반을 중복 도메인 예외로 변환한다")
+    void createCategory_DataIntegrityViolation_MapsNameConstraint() {
+        givenActiveMember();
+        when(routineCategoryRepository.countByOwnerIdAndActiveTrue(MEMBER_ID)).thenReturn(0L);
+        when(routineCategoryRepository.existsUsableName(MEMBER_ID, "아침")).thenReturn(false);
+        doThrow(uniqueViolation("uk_routine_category_member_name"))
+                .when(routineCategoryRepository).saveAndFlush(any(RoutineCategory.class));
+
+        assertThatThrownBy(() -> routineCommandService.createCategory(
+                MEMBER_ID,
+                new RoutineReqDTO.CreateCategory("아침", null)
+        )).isInstanceOf(RoutineException.class)
+                .extracting("code")
+                .isEqualTo(RoutineErrorCode.DUPLICATE_ROUTINE_CATEGORY_NAME);
     }
 
     @Test
@@ -579,5 +653,16 @@ class RoutineCommandServiceTest {
                 .category(category).name(name).displayOrder(1).active(true).build();
         ReflectionTestUtils.setField(created, "id", id);
         return created;
+    }
+
+    private DataIntegrityViolationException uniqueViolation(String constraintName) {
+        SQLException sqlException = new SQLException("duplicate", "23000", 1062);
+        ConstraintViolationException constraintViolation = new ConstraintViolationException(
+                "duplicate",
+                sqlException,
+                ConstraintViolationException.ConstraintKind.UNIQUE,
+                constraintName
+        );
+        return new DataIntegrityViolationException("duplicate", constraintViolation);
     }
 }

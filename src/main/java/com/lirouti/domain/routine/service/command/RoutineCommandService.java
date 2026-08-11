@@ -12,11 +12,12 @@ import com.lirouti.domain.routine.entity.RoutineTemplate;
 import com.lirouti.domain.routine.exception.RoutineException;
 import com.lirouti.domain.routine.exception.code.error.RoutineErrorCode;
 import com.lirouti.domain.routine.repository.MemberRoutineRepository;
+import com.lirouti.domain.routine.repository.MemberRoutineScheduleRepository;
 import com.lirouti.domain.routine.repository.RoutineCategoryRepository;
 import com.lirouti.domain.routine.repository.RoutineTemplateRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.dao.DuplicateKeyException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,6 +40,7 @@ public class RoutineCommandService {
     private final RoutineCategoryRepository routineCategoryRepository;
     private final RoutineTemplateRepository routineTemplateRepository;
     private final MemberRoutineRepository memberRoutineRepository;
+    private final MemberRoutineScheduleRepository memberRoutineScheduleRepository;
 
     /**
      * 루틴 추가 화면에서 선택·작성한 루틴들을 한 트랜잭션으로 등록한다.
@@ -187,19 +189,14 @@ public class RoutineCommandService {
         memberQueryService.getActiveMember(memberId);
         MemberRoutine routine = findOwnedActiveRoutine(memberId, routineId);
         String name = normalizedRoutineName(memberId, request.name());
+        validateRoutineUpdate(memberId, routineId, request);
 
-        try {
-            // 같은 요일을 유지하는 수정에서는 새 일정 INSERT가 기존 일정 DELETE보다 먼저
-            // 실행되면 (member_routine_id, repeat_day) 유니크 키가 충돌한다.
-            // orphanRemoval 삭제를 먼저 확정한 뒤 새 일정을 추가한다.
-            routine.clearSchedules();
-            memberRoutineRepository.flush();
-            routine.update(name, request.endTime(), request.alarmTime(), request.repeatDays());
-        } catch (IllegalArgumentException e) {
-            log.warn("개인 루틴 수정 요청 검증에 실패했습니다. memberId={}, routineId={}",
-                    memberId, routineId);
-            throw new RoutineException(RoutineErrorCode.INVALID_ROUTINE_UPDATE);
-        }
+        // 같은 요일을 유지하는 수정에서는 새 일정 INSERT가 기존 일정 DELETE보다 먼저
+        // 실행되면 (member_routine_id, repeat_day) 유니크 키가 충돌한다. 벌크 DELETE가
+        // 영속성 컨텍스트를 비우므로, 루틴을 다시 조회해 새 일정만 연결한다.
+        memberRoutineScheduleRepository.deleteAllByMemberRoutineId(routineId);
+        routine = findOwnedActiveRoutine(memberId, routineId);
+        routine.update(name, request.endTime(), request.alarmTime(), request.repeatDays());
 
         memberRoutineRepository.flush();
         log.info("개인 루틴을 수정했습니다. memberId={}, routineId={}", memberId, routineId);
@@ -462,6 +459,35 @@ public class RoutineCommandService {
     }
 
     /**
+     * 개인 루틴 수정 요청에서 이름 이외의 필수 설정을 검증한다.
+     *
+     * <p>이름은 {@link #normalizedRoutineName(Long, String)}에서 별도의 오류 코드로 처리한다.
+     * 마감 시각과 반복 요일 규칙만 이 메서드가 담당해 엔티티의 방어 검증이 어떤 항목에서
+     * 실패하더라도 잘못된 메시지로 합쳐지지 않게 한다.
+     *
+     * @param memberId 요청 회원 ID
+     * @param routineId 수정 대상 개인 루틴 ID
+     * @param request 검증할 수정 요청
+     * @throws RoutineException 마감 시각 또는 반복 요일 규칙을 위반한 경우
+     */
+    private void validateRoutineUpdate(
+            Long memberId,
+            Long routineId,
+            RoutineReqDTO.UpdateRoutine request
+    ) {
+        List<java.time.DayOfWeek> repeatDays = request.repeatDays();
+        if (request.endTime() == null
+                || repeatDays == null
+                || repeatDays.isEmpty()
+                || repeatDays.stream().anyMatch(Objects::isNull)
+                || new HashSet<>(repeatDays).size() != repeatDays.size()) {
+            log.warn("개인 루틴 시간·반복 요일 검증에 실패했습니다. memberId={}, routineId={}",
+                    memberId, routineId);
+            throw new RoutineException(RoutineErrorCode.INVALID_ROUTINE_UPDATE);
+        }
+    }
+
+    /**
      * 카테고리 이름을 앞뒤 공백을 제거한 형태로 정규화하고 길이와 줄바꿈을 검증한다.
      *
      * @param memberId 요청 회원 ID
@@ -504,8 +530,9 @@ public class RoutineCommandService {
         try {
             memberRoutineRepository.saveAll(routines);
             memberRoutineRepository.flush();
-        } catch (DuplicateKeyException e) {
-            if (!violates(e, UK_MEMBER_ROUTINE_TEMPLATE)) {
+        } catch (DataIntegrityViolationException e) {
+            if (!RoutineConstraintViolationInspector.isUniqueConstraintViolation(
+                    e, UK_MEMBER_ROUTINE_TEMPLATE)) {
                 throw e;
             }
             log.warn("이미 등록된 기본 제공 루틴을 동시에 저장하려 했습니다. memberId={}", memberId);
@@ -523,8 +550,9 @@ public class RoutineCommandService {
     private void saveCategory(Long memberId, RoutineCategory category) {
         try {
             routineCategoryRepository.saveAndFlush(category);
-        } catch (DuplicateKeyException e) {
-            if (!violates(e, UK_ROUTINE_CATEGORY_MEMBER_NAME)) {
+        } catch (DataIntegrityViolationException e) {
+            if (!RoutineConstraintViolationInspector.isUniqueConstraintViolation(
+                    e, UK_ROUTINE_CATEGORY_MEMBER_NAME)) {
                 throw e;
             }
             log.warn("같은 이름의 카테고리를 동시에 저장하려 했습니다. memberId={}, name={}",
@@ -533,34 +561,4 @@ public class RoutineCommandService {
         }
     }
 
-    /**
-     * 무결성 예외가 특정 유니크 제약 때문인지 확인한다.
-     *
-     * <p>제약 이름으로 판별하는 이유는, 한 저장 경로에서 걸릴 수 있는 제약이 여럿이기 때문이다.
-     * 예를 들어 루틴 저장은 cascade로 반복 요일까지 함께 넣으므로
-     * {@code uk_member_routine_schedule_day}에도 걸릴 수 있는데, 그것까지 "이미 등록한 기본
-     * 제공 루틴입니다"로 응답하면 클라이언트가 엉뚱한 안내를 하게 된다. 해당 제약이 아니면
-     * 원래 예외를 그대로 올려 전역 예외 처리기가 500으로 다루게 둔다 — 우리가 예상하지 못한
-     * 무결성 위반은 사용자 입력 문제가 아니라 버그이므로 조용히 409로 덮으면 안 된다.
-     *
-     * <p>MySQL은 중복 키 메시지에 제약 이름을 담는다
-     * ({@code Duplicate entry '...' for key 'member_routine.uk_...'}). 예외 원인 사슬 전체를
-     * 훑는 것은 Spring이 드라이버 예외를 감싸면서 메시지를 다시 쓰기 때문이다.
-     *
-     * @param exception 저장 중 발생한 중복 키 예외
-     * @param constraintName 확인할 유니크 제약 이름
-     * @return 그 제약 위반이면 {@code true}
-     */
-    private static boolean violates(DuplicateKeyException exception, String constraintName) {
-        for (Throwable cause = exception; cause != null; cause = cause.getCause()) {
-            String message = cause.getMessage();
-            if (message != null && message.contains(constraintName)) {
-                return true;
-            }
-            if (cause.getCause() == cause) {
-                break;
-            }
-        }
-        return false;
-    }
 }
