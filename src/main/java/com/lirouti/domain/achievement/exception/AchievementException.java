@@ -1,16 +1,11 @@
 package com.lirouti.domain.achievement.exception;
 
 import com.lirouti.domain.achievement.exception.code.error.AchievementErrorCode;
+import com.lirouti.global.apiPayload.exception.GeneralException;
 
-public class AchievementException extends RuntimeException {
-    private final AchievementErrorCode errorCode;
+public class AchievementException extends GeneralException {
 
     public AchievementException(AchievementErrorCode errorCode) {
-        super(errorCode.name());
-        this.errorCode = errorCode;
-    }
-
-    public AchievementErrorCode getErrorCode() {
-        return errorCode;
+        super(errorCode);
     }
 }

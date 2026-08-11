@@ -1,9 +1,11 @@
 package com.lirouti.domain.achievement.enums;
 
+import com.lirouti.domain.achievement.entity.MemberAchievement;
+
 /**
  * 진행도 계산 방식.
  *
- * <p>단일 조건 업적은 {@link com.lirouti.domain.achievement.entity.MemberAchievement#currentProgress}
+ * <p>단일 조건 업적은 {@link MemberAchievement#getCurrentProgress()}
  * 하나로 충분하지만, {@code COMPOSITE} 는 조건이 여러 개라 각각 따로 세야 한다
  * ({@link com.lirouti.domain.achievement.entity.MemberAchievementCondition}).
  */
