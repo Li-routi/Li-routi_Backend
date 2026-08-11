@@ -22,8 +22,6 @@ UPDATE achievement SET condition_key = 'ROOM_DISTINCT_COUNT' WHERE code = 'ACH-S
 
 -- 카테고리 시작 업적 (NONE + routine_category_filter)
 -- 주의: 전부 동일한 ROUTINE_COMPLETE_COUNT 키를 쓰지만 routine_category_filter 로 서로 구분된다.
--- AchievementProgressService 가 아직 이 필터를 검사하지 않으므로, 이 값만으로는
--- "운동 루틴 완료" 이벤트가 잘못 6개 전부를 달성 처리할 수 있다 (코드 쪽 추가 작업 필요, 아래 설명 참고).
 UPDATE achievement SET condition_key = 'ROUTINE_COMPLETE_COUNT' WHERE code = 'ACH-ST-015'; -- 운동 시작
 UPDATE achievement SET condition_key = 'ROUTINE_COMPLETE_COUNT' WHERE code = 'ACH-ST-016'; -- 건강 시작
 UPDATE achievement SET condition_key = 'ROUTINE_COMPLETE_COUNT' WHERE code = 'ACH-ST-017'; -- 자기계발 시작
