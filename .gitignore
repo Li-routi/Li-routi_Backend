@@ -103,3 +103,7 @@ test.html
 /performance/jmeter/*.html
 /performance/jmeter/results/
 /performance/jmeter/report/
+
+### Performance Monitoring ###
+# Prometheus에는 이 경로를 외부 mount해 실제 자격 증명이 추적 파일에 섞이지 않게 한다.
+/performance/monitoring/secrets/

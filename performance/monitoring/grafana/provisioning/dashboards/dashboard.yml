@@ -1,0 +1,17 @@
+apiVersion: 1
+
+providers:
+  - name: Li-routi Load Test
+    orgId: 1
+    folder: Li-routi
+    folderUid: lirouti
+    type: file
+    disableDeletion: false
+    # Docker bind mount는 파일 변경 이벤트를 놓칠 수 있어, 10초보다 큰 값으로 polling을 강제한다.
+    updateIntervalSeconds: 30
+    # Git의 JSON을 단일 원본으로 유지하고 Grafana UI 저장이 원본과 갈라지는 것을 막는다.
+    allowUiUpdates: false
+    options:
+      # dashboard 파일은 file provisioning과 호환되는 Classic JSON model을 유지한다.
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

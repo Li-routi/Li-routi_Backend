@@ -54,6 +54,10 @@ dependencies {
     // webmvc
 	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
 
+    // local performance monitoring
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
+
     // websocket / STOMP
 	implementation 'org.springframework.boot:spring-boot-starter-websocket'
 
