@@ -18,6 +18,23 @@ public final class NotificationResDTO {
             boolean active
     ) {}
 
+    /** Figma 알림 설정 화면의 사용자별 여섯 토글 상태다. */
+    @Schema(name = "NotificationSettingsResult", description = "사용자 알림 설정")
+    public record Settings(
+            @Schema(description = "루틴 마감·리마인드 알림 수신 여부", example = "true")
+            boolean routineDeadlineEnabled,
+            @Schema(description = "그룹원의 새 인증 알림 수신 여부", example = "true")
+            boolean newVerificationEnabled,
+            @Schema(description = "내 그룹 인증의 좋아요·아쉬워요 알림 수신 여부", example = "true")
+            boolean verificationReactionEnabled,
+            @Schema(description = "콕콕 알림 수신 여부", example = "true")
+            boolean pokeEnabled,
+            @Schema(description = "새 그룹 채팅 알림 수신 여부", example = "true")
+            boolean newChatEnabled,
+            @Schema(description = "챌린지 인증 좋아요 알림 수신 여부", example = "true")
+            boolean likeEnabled
+    ) {}
+
     /** 알림센터의 한 항목이다. */
     @Schema(name = "NotificationItem", description = "알림센터 목록의 한 항목")
     public record Item(
