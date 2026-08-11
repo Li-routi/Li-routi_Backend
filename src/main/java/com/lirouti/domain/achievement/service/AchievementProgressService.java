@@ -57,6 +57,10 @@ public class AchievementProgressService {
     }
 
     private void applyProgress(Achievement achievement, AchievementProgressEvent event) {
+        if (!routineCategoryMatches(achievement, event)) {
+            return; // 카테고리 시작 업적인데 이벤트의 루틴 카테고리가 다르다 - 무관한 이벤트
+        }
+
         MemberAchievement memberAchievement = getOrCreate(achievement, event.memberId());
 
         switch (achievement.getProgressType()) {
@@ -65,6 +69,23 @@ public class AchievementProgressService {
             case CUMULATIVE_COUNT, DISTINCT_ROOM_COUNT ->
                     memberAchievement.increaseProgress(event.amount(), requireTargetCount(achievement));
         }
+    }
+
+    /**
+     * 카테고리 시작 업적(예: 운동 시작, 건강 시작)이 자신의 카테고리와 무관한 루틴
+     * 완료 이벤트까지 달성 처리하지 않도록 막는다.
+     *
+     * <p>{@code achievement.getRoutineCategoryId()} 가 null 이면 카테고리 무관 업적이라
+     * 항상 true. 그 값이 있으면 이벤트의 {@code routineCategoryId} 와 정확히 같아야
+     * true — 좋아요/쿡쿡처럼 카테고리 개념이 없는 이벤트(routineCategoryId == null)는
+     * 이 조건을 절대 통과하지 못하므로 안전하다.
+     */
+    private boolean routineCategoryMatches(Achievement achievement, AchievementProgressEvent event) {
+        Long requiredCategoryId = achievement.getRoutineCategoryId();
+        if (requiredCategoryId == null) {
+            return true;
+        }
+        return requiredCategoryId.equals(event.routineCategoryId());
     }
 
     /**

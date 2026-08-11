@@ -26,6 +26,22 @@ public record AchievementProgressEvent(
         String sourceType,
 
         /** 원본 레코드의 PK. 예: 루틴 체크 로그 ID. 중복 반영 방지의 유일 키로 쓰인다. */
-        Long sourceId
+        Long sourceId,
+
+        /**
+         * 루틴 완료 이벤트일 때만 채운다 — 완료된 루틴이 속한
+         * {@link com.lirouti.domain.routine.entity.RoutineCategory} id (고정 카테고리
+         * 기준, 1=운동 ~ 6=취미). 루틴과 무관한 이벤트(좋아요, 쿡쿡 등)는 null.
+         *
+         * <p>{@code Achievement.routineCategoryId} 가 채워진 업적(카테고리 시작 업적)은
+         * 이 값이 일치할 때만 반영된다 — null 이면 매칭 자체가 안 돼 아무 업적도
+         * 잘못 달성 처리되지 않는다.
+         */
+        Long routineCategoryId
 ) {
+    /** 루틴 카테고리와 무관한 이벤트(좋아요, 쿡쿡, 방 생성 등)용 편의 생성자. */
+    public AchievementProgressEvent(Long memberId, String conditionKey, int amount,
+                                    String sourceType, Long sourceId) {
+        this(memberId, conditionKey, amount, sourceType, sourceId, null);
+    }
 }
