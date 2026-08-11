@@ -38,6 +38,18 @@ public enum ChargeErrorCode implements BaseErrorCode {
             "결제 금액이 일치하지 않습니다.",
             "CHARGE409_2"
     ),
+    /** 이미 실패로 확정된 결제. <b>다시 검증하지 않는다</b> — 결과가 달라질 수 없다. */
+    PAYMENT_ALREADY_FAILED(
+            HttpStatus.CONFLICT,
+            "이미 실패로 처리된 결제입니다.",
+            "CHARGE409_4"
+    ),
+    /** 충전 기능을 내린 상태. <b>검증을 건너뛰는 것이 아니라 아예 받지 않는다.</b> */
+    CHARGE_DISABLED(
+            HttpStatus.SERVICE_UNAVAILABLE,
+            "재화 충전을 일시적으로 사용할 수 없습니다.",
+            "CHARGE503_1"
+    ),
     PAYMENT_NOT_COMPLETED(
             HttpStatus.CONFLICT,
             "아직 완료되지 않은 결제입니다.",

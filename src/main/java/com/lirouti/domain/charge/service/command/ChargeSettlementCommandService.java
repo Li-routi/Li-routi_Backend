@@ -63,6 +63,19 @@ public class ChargeSettlementCommandService {
     }
 
     /**
+     * 이미 실패로 확정됐는가.
+     *
+     * <p><b>{@code PAID} 만 종료로 보면 안 된다.</b> 금액 불일치로 실패한 결제에 웹훅이 다시
+     * 오면 매번 포트원을 조회하고 매번 같은 예외를 던진다 — 결과가 달라질 수 없는데도 그렇다.
+     */
+    @Transactional(readOnly = true)
+    public boolean alreadyFailed(String paymentId) {
+        return chargePaymentRepository.findByPaymentIdForRead(paymentId)
+                .map(ChargePayment::isFailed)
+                .orElse(false);
+    }
+
+    /**
      * 검증 결과를 적용한다. <b>여기서만 잠근다.</b>
      *
      * <p>포트원 조회는 이미 끝난 뒤이므로 잠금이 외부 왕복을 기다리지 않는다.

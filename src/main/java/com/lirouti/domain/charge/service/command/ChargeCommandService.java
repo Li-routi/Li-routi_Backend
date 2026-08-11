@@ -60,6 +60,7 @@ public class ChargeCommandService {
      */
     @Transactional
     public ChargeResDTO.Started startCharge(Long memberId, Long productId) {
+        requireEnabled();
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new MemberException(MemberErrorCode.MEMBER_NOT_FOUND));
 
@@ -92,8 +93,9 @@ public class ChargeCommandService {
      * 먼저 보고, 없으면 포트원을 부르지도 않는다.
      */
     public ChargeResDTO.Started complete(Long memberId, String paymentId) {
+        requireEnabled();
         settlementCommandService.requireOwnedBy(memberId, paymentId);
-        return settle(paymentId);
+        return settle(paymentId, false);
     }
 
     /**
@@ -106,7 +108,8 @@ public class ChargeCommandService {
      * 웹훅 주소는 공개되어 있어 아무나 위조한 본문을 보낼 수 있다.
      */
     public void handleWebhook(String paymentId) {
-        settle(paymentId);
+        requireEnabled();
+        settle(paymentId, true);
     }
 
     /**
@@ -115,12 +118,20 @@ public class ChargeCommandService {
      * <p>순서가 중요하다 — <b>외부 조회를 잠금 밖에서</b> 끝내고, 그 결과만 들고 잠금 안으로
      * 들어간다.
      */
-    private ChargeResDTO.Started settle(String paymentId) {
+    private ChargeResDTO.Started settle(String paymentId, boolean fromWebhook) {
         // 이미 끝난 결제로 포트원을 다시 부르지 않는다. 완료 요청과 웹훅이 둘 다 오는 것이
         // 정상이므로 이 경우가 드물지 않다.
         Optional<ChargeResDTO.Started> settled = settlementCommandService.alreadySettled(paymentId);
         if (settled.isPresent()) {
             return settled.get();
+        }
+        // 실패도 종료 상태다. 다시 물어봐도 결과가 달라질 수 없다 — 웹훅에는 조용히 성공으로
+        // 답해 재시도를 멈추고, 사람이 부른 완료 요청에는 이유를 알린다.
+        if (settlementCommandService.alreadyFailed(paymentId)) {
+            if (fromWebhook) {
+                return null;
+            }
+            throw new ChargeException(ChargeErrorCode.PAYMENT_ALREADY_FAILED);
         }
 
         PortOneClient.PortOnePayment actual = portOneClient.getPayment(paymentId)
@@ -182,6 +193,18 @@ public class ChargeCommandService {
      *
      * <p>회원 확인이 그것을 막지만, 식별자 자체가 순번이면 남의 결제가 몇 건인지가 새어 나간다.
      */
+    /**
+     * 충전을 받을 수 있는 상태인가.
+     *
+     * <p>끄면 <b>검증을 건너뛰는 것이 아니라 아예 받지 않는다.</b> AI 심사와 달리 fail-open 이
+     * 아니다 — 검증 없이 지급하면 재화가 공짜가 된다.
+     */
+    private void requireEnabled() {
+        if (!portOneProperties.isEnabled()) {
+            throw new ChargeException(ChargeErrorCode.CHARGE_DISABLED);
+        }
+    }
+
     private String newPaymentId() {
         return "charge_" + UUID.randomUUID().toString().replace("-", "");
     }

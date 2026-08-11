@@ -112,6 +112,10 @@ public class ChargePayment extends BaseEntity {
         return status == ChargePaymentStatus.PAID;
     }
 
+    public boolean isFailed() {
+        return status == ChargePaymentStatus.FAILED;
+    }
+
     /**
      * 검증을 통과해 지급까지 끝났다.
      *

@@ -11,6 +11,8 @@ import com.lirouti.domain.member.enums.Role;
 import com.lirouti.domain.member.enums.SocialProvider;
 import com.lirouti.domain.member.repository.MemberRepository;
 import com.lirouti.domain.wallet.enums.Currency;
+import com.lirouti.domain.wallet.repository.MemberWalletRepository;
+import com.lirouti.domain.wallet.repository.WalletTransactionRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -44,6 +46,8 @@ class ChargeFailurePersistenceTest {
     @Autowired private ChargePaymentRepository chargePaymentRepository;
     @Autowired private ChargeProductRepository chargeProductRepository;
     @Autowired private MemberRepository memberRepository;
+    @Autowired private WalletTransactionRepository walletTransactionRepository;
+    @Autowired private MemberWalletRepository memberWalletRepository;
     @MockitoBean private PortOneClient portOneClient;
 
     private Long memberId;
@@ -67,6 +71,9 @@ class ChargeFailurePersistenceTest {
     void tearDown() {
         chargePaymentRepository.deleteAll(chargePaymentRepository.findAll().stream()
                 .filter(p -> p.getMember().getId().equals(memberId)).toList());
+        walletTransactionRepository.deleteAll(walletTransactionRepository.findAll().stream()
+                .filter(t -> t.getMember().getId().equals(memberId)).toList());
+        memberWalletRepository.findAllByMemberId(memberId).forEach(memberWalletRepository::delete);
         chargeProductRepository.deleteById(productId);
         memberRepository.deleteById(memberId);
     }

@@ -61,11 +61,16 @@ public class ChargeController implements ChargeControllerDocs {
 
     /**
      * 포트원이 부른다. <b>인증이 없다</b> — 대신 본문을 믿지 않고 결제 식별자로 다시 조회한다.
+     *
+     * <p><b>결제 완료 통지에만 반응한다.</b> 포트원은 준비·실패·취소·가상계좌 발급 등을 같은
+     * 주소로 보내므로, 나머지는 성공으로 답하고 흘린다 — 실패로 답하면 포트원이 재시도한다.
      */
     @Override
     @PostMapping("/charges/webhook")
-    public ApiResponse<Void> webhook(@RequestBody ChargeReqDTO.Webhook request) {
-        chargeCommandService.handleWebhook(request.paymentId());
+    public ApiResponse<Void> webhook(@Valid @RequestBody ChargeReqDTO.Webhook request) {
+        if (request.isPaid()) {
+            chargeCommandService.handleWebhook(request.data().paymentId());
+        }
         return ApiResponse.onSuccess(ChargeSuccessCode.CHARGE_WEBHOOK_SUCCESS, null);
     }
 

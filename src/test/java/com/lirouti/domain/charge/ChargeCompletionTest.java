@@ -169,11 +169,11 @@ class ChargeCompletionTest {
         assertThatThrownBy(() -> chargeCommandService.complete(me.getId(), paymentId))
                 .isInstanceOf(ChargeException.class);
 
-        assertAll(
-                () -> assertThat(balance()).isZero(),
-                () -> assertThat(stored().getStatus())
-                        .as("금액 불일치는 실패로 확정한다").isEqualTo(ChargePaymentStatus.FAILED)
-        );
+        // 실패로 "확정" 되는지는 여기서 보지 않는다. 이 테스트는 @Transactional 이라
+        // 바깥 트랜잭션에 참여하므로 별도 트랜잭션의 커밋을 검증할 수 없다 —
+        // 여기서 FAILED 를 단언하면 통과하지만 그것은 같은 영속성 컨텍스트의 값일 뿐이다.
+        // 영속성은 ChargeFailurePersistenceTest 가 트랜잭션 없이 본다.
+        assertThat(balance()).as("지급이 일어나지 않는다").isZero();
     }
 
     @Test
