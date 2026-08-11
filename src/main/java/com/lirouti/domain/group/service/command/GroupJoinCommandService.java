@@ -1,5 +1,6 @@
 package com.lirouti.domain.group.service.command;
 
+import com.lirouti.domain.achievement.event.AchievementProgressEvent;
 import com.lirouti.domain.group.dto.request.GroupReqDTO;
 import com.lirouti.domain.group.dto.response.GroupResDTO;
 import com.lirouti.domain.group.entity.Group;
@@ -36,6 +37,16 @@ public class GroupJoinCommandService {
     private final GroupRoutineAssignmentCommandService assignmentCommandService;
     private final Clock clock;
     private final ApplicationEventPublisher eventPublisher;
+
+    /**
+     * ACH-ST-004(첫 초대 참여)와 ACH-ST-014(방 참여 2개)의 conditionKey.
+     * ROOM_DISTINCT_COUNT 의 sourceType/sourceId 규칙은 GroupCreationAttemptService 와
+     * 동일하게 맞춘다 - 방 생성이든 초대 참여든 같은 방(group id)이면 한 번만 카운트된다.
+     */
+    private static final String ROOM_JOIN_CONDITION_KEY = "ROOM_JOIN_COUNT";
+    private static final String ROOM_JOIN_SOURCE_TYPE = "ROOM_JOIN";
+    private static final String ROOM_DISTINCT_CONDITION_KEY = "ROOM_DISTINCT_COUNT";
+    private static final String ROOM_DISTINCT_SOURCE_TYPE = "ROOM_PARTICIPATION";
 
     @Transactional
     public GroupResDTO.JoinResult join(Long memberId, GroupReqDTO.JoinGroup request) {
@@ -82,6 +93,11 @@ public class GroupJoinCommandService {
                         lockedGroup.getId(), memberId, "GROUP_MEMBER",
                         "group-joined:" + lockedGroup.getId() + ":" + memberId + ":" + joinedAt)));
 
+        eventPublisher.publishEvent(new AchievementProgressEvent(
+                memberId, ROOM_JOIN_CONDITION_KEY, 1, ROOM_JOIN_SOURCE_TYPE, memberId));
+        eventPublisher.publishEvent(new AchievementProgressEvent(
+                memberId, ROOM_DISTINCT_CONDITION_KEY, 1, ROOM_DISTINCT_SOURCE_TYPE, lockedGroup.getId()));
+
         log.info("초대코드 기반 그룹 가입을 완료했습니다. groupId={}, memberId={}",
                 lockedGroup.getId(), lockedMember.getId());
         return new GroupResDTO.JoinResult(
@@ -107,7 +123,7 @@ public class GroupJoinCommandService {
             GroupMember existingMembership,
             Group group,
             Member member,
-        LocalDateTime joinedAt
+            LocalDateTime joinedAt
     ) {
         if (existingMembership == null) {
             return GroupMember.createActive(
