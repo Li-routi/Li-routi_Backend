@@ -6,6 +6,8 @@ import com.lirouti.domain.media.enums.MediaPurpose;
 import com.lirouti.domain.media.exception.MediaException;
 import com.lirouti.domain.media.exception.code.error.MediaErrorCode;
 import com.lirouti.global.properties.S3Properties;
+import com.lirouti.global.ratelimit.RateLimitExceededException;
+import com.lirouti.global.ratelimit.RateLimitGuard;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -62,6 +64,7 @@ class MediaServiceTest {
 
     private S3Properties s3Properties;
     private MediaService mediaService;
+    private RateLimitGuard rateLimitGuard;
 
     @BeforeEach
     void setUp() {
@@ -73,7 +76,8 @@ class MediaServiceTest {
         s3Properties.setPublicBaseUrl(PUBLIC_BASE_URL);
         s3Properties.setViewUrlExpiration(VIEW_EXPIRATION);
 
-        mediaService = new MediaService(s3Presigner, s3Client, s3Properties);
+        rateLimitGuard = mock(RateLimitGuard.class);
+        mediaService = new MediaService(s3Presigner, s3Client, s3Properties, rateLimitGuard);
     }
 
     private void mockPresign() {
@@ -222,6 +226,61 @@ class MediaServiceTest {
                         "code",
                         MediaErrorCode.CONTENT_TYPE_NOT_ALLOWED_FOR_PURPOSE
                 );
+
+        verify(s3Presigner, never()).presignPutObject(any(PutObjectPresignRequest.class));
+    }
+
+    @Test
+    @DisplayName("인증 사진과 프로필은 서로 다른 정책으로 센다 — 프로필을 바꿨다고 인증이 막히지 않게")
+    void issuePresignedUrl_CountsUnderPurposePolicy() {
+        // given
+        mockPresign();
+
+        // when
+        mediaService.issuePresignedUrl(new MediaReqDTO.PresignedUrl(
+                MediaPurpose.CHALLENGE_VERIFICATION, "image/jpeg", 1024L));
+        mediaService.issuePresignedUrl(new MediaReqDTO.PresignedUrl(
+                MediaPurpose.GROUP_ROUTINE_VERIFICATION, "image/jpeg", 1024L));
+        mediaService.issuePresignedUrl(new MediaReqDTO.PresignedUrl(
+                MediaPurpose.PROFILE, "image/jpeg", 1024L));
+
+        // then: 인증 셋은 한 정책을 나눠 쓰고 프로필만 따로 센다
+        verify(rateLimitGuard, times(2)).enforce("media-presign-verification");
+        verify(rateLimitGuard).enforce("media-presign-profile");
+    }
+
+    @Test
+    @DisplayName("검증에서 걸린 요청은 한도를 깎지 않는다 — 인터셉터에 있을 때는 400도 한 건을 소진했다")
+    void issuePresignedUrl_InvalidRequest_DoesNotConsumeLimit() {
+        // given: 형식이 지원되지 않는 요청
+        MediaReqDTO.PresignedUrl unsupported = new MediaReqDTO.PresignedUrl(
+                MediaPurpose.CHALLENGE_VERIFICATION, "application/pdf", 1024L);
+        // given: 용량이 상한을 넘는 요청
+        MediaReqDTO.PresignedUrl tooLarge = new MediaReqDTO.PresignedUrl(
+                MediaPurpose.CHALLENGE_VERIFICATION, "image/jpeg", MAX_IMAGE_SIZE + 1);
+
+        // when
+        assertThatThrownBy(() -> mediaService.issuePresignedUrl(unsupported))
+                .isInstanceOf(MediaException.class);
+        assertThatThrownBy(() -> mediaService.issuePresignedUrl(tooLarge))
+                .isInstanceOf(MediaException.class);
+
+        // then
+        verifyNoInteractions(rateLimitGuard);
+    }
+
+    @Test
+    @DisplayName("한도를 넘기면 URL을 발급하지 않는다")
+    void issuePresignedUrl_OverLimit_DoesNotPresign() {
+        // given
+        doThrow(new RateLimitExceededException(600))
+                .when(rateLimitGuard).enforce("media-presign-verification");
+        MediaReqDTO.PresignedUrl request = new MediaReqDTO.PresignedUrl(
+                MediaPurpose.CHALLENGE_VERIFICATION, "image/jpeg", 1024L);
+
+        // when & then
+        assertThatThrownBy(() -> mediaService.issuePresignedUrl(request))
+                .isInstanceOf(RateLimitExceededException.class);
 
         verify(s3Presigner, never()).presignPutObject(any(PutObjectPresignRequest.class));
     }
