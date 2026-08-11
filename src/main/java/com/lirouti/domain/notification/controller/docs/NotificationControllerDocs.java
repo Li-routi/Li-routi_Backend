@@ -13,8 +13,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 @Tag(
         name = "알림",
         description = """
-                사용자가 켠 종류의 알림만 앱 내 목록에 저장되고 Push 전송 대상이 됩니다. 실제 Push(FCM)는
-                `fcm.enabled=true` + 유효한 Firebase 자격증명 + 진짜 FCM 토큰이 모두 있어야 나갑니다.
+                사용자 설정 대상 알림은 수신이 활성화된 경우에만 저장·전송됩니다.
+                필수 알림은 설정과 무관하며, 실제 Push 전송에는 올바른 FCM 설정과 토큰이 필요합니다.
                 """
 )
 public interface NotificationControllerDocs {
