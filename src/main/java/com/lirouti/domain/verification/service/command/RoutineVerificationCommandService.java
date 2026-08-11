@@ -143,7 +143,9 @@ public class RoutineVerificationCommandService {
                 .imageUrl(mediaKey)
                 .content(content)
                 .build();
-        return save(() -> memberRoutineVerificationRepository.saveAndFlush(verification));
+        MemberRoutineVerification saved = save(() -> memberRoutineVerificationRepository.saveAndFlush(verification));
+        publishRoutineCompleteEvent(routine, saved);
+        return saved;
     }
 
     /**

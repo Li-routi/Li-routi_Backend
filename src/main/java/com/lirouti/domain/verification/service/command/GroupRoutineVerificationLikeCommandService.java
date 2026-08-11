@@ -57,6 +57,7 @@ public class GroupRoutineVerificationLikeCommandService {
         }
         int inserted = groupRoutineVerificationLikeRepository.insertIfAbsent(verificationId, memberId);
         if (inserted == 1) {
+            publishLikeCountEvent(memberId, verificationId);
             AuthorVerificationContext author = authorContext(verification);
             GroupMember authorMembership = lockAuthorMembership(groupId, author.memberId());
             groupMemberRepository.incrementTotalLikeCountForCurrentActiveMembership(
