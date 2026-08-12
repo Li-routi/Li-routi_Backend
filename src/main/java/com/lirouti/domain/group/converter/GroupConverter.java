@@ -14,6 +14,8 @@ import com.lirouti.domain.group.repository.GroupRoutineAssignmentRepositoryCusto
 import com.lirouti.domain.group.repository.GroupDetailQueryRepository.GroupMemberDetailProjection;
 import com.lirouti.domain.group.repository.GroupDetailQueryRepository.TodayMemberProgressProjection;
 import com.lirouti.domain.group.repository.GroupListQueryRepository.MyGroupProjection;
+import com.lirouti.domain.group.repository.GroupRoutineQueryRepository.GroupRoutineProjection;
+import com.lirouti.domain.group.repository.GroupRoutineQueryRepository.RoutineScheduleProjection;
 import com.lirouti.domain.routine.enums.RoutineCategoryColor;
 
 import java.util.Comparator;
@@ -341,6 +343,43 @@ public final class GroupConverter {
                 .startTime(schedule.getStartTime())
                 .endTime(schedule.getEndTime())
                 .build();
+    }
+
+    /** 루틴과 일정의 분리 projection을 목록 응답으로 조립한다. */
+    public static GroupResDTO.GroupRoutineList toGroupRoutineList(
+            List<GroupRoutineProjection> routines,
+            List<RoutineScheduleProjection> schedules
+    ) {
+        Map<Long, List<RoutineScheduleProjection>> schedulesByRoutineId = schedules.stream()
+                .collect(Collectors.groupingBy(RoutineScheduleProjection::routineId));
+
+        return GroupResDTO.GroupRoutineList.builder()
+                .routines(routines.stream()
+                        .map(routine -> GroupResDTO.GroupRoutineItem.builder()
+                                .routineId(routine.routineId())
+                                .categoryId(routine.categoryId())
+                                .categoryName(routine.categoryName())
+                                .title(routine.title())
+                                .description(routine.description())
+                                .schedules(toRoutineSchedules(
+                                        schedulesByRoutineId.getOrDefault(routine.routineId(), List.of())))
+                                .build())
+                        .toList())
+                .build();
+    }
+
+    /** DB 반환 순서와 무관하게 월요일부터 일요일까지 반복 일정을 정렬한다. */
+    private static List<GroupResDTO.RoutineSchedule> toRoutineSchedules(
+            List<RoutineScheduleProjection> schedules
+    ) {
+        return schedules.stream()
+                .sorted(Comparator.comparingInt(schedule -> schedule.repeatDay().getValue()))
+                .map(schedule -> GroupResDTO.RoutineSchedule.builder()
+                        .repeatDay(schedule.repeatDay())
+                        .startTime(schedule.startTime())
+                        .endTime(schedule.endTime())
+                        .build())
+                .toList();
     }
 
     /**

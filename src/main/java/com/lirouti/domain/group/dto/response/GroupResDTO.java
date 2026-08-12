@@ -199,6 +199,27 @@ public final class GroupResDTO {
     ) {
     }
 
+    /** ACTIVE OWNER가 관리할 수 있는 그룹의 활성 루틴 목록이다. */
+    @Builder
+    @Schema(name = "GroupRoutineList", description = "그룹의 활성 루틴 목록")
+    public record GroupRoutineList(
+            List<GroupRoutineItem> routines
+    ) {
+    }
+
+    /** 그룹 루틴 목록의 한 항목이다. 그룹은 요청 경로로 이미 특정되므로 포함하지 않는다. */
+    @Builder
+    @Schema(name = "GroupRoutineItem", description = "그룹 활성 루틴 항목")
+    public record GroupRoutineItem(
+            Long routineId,
+            Long categoryId,
+            String categoryName,
+            String title,
+            String description,
+            List<RoutineSchedule> schedules
+    ) {
+    }
+
     /**
      * 그룹 루틴의 요일별 수행 시간 범위를 전달한다.
      *

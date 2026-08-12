@@ -21,6 +21,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.*;
@@ -192,6 +193,106 @@ class GroupControllerTest {
         mockMvc.perform(get("/api/groups/routines/today")
                         .with(user(principal(member))))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.routines").isEmpty());
+    }
+
+    @Test
+    @DisplayName("ACTIVE OWNER는 그룹의 활성 루틴과 월요일부터 정렬된 일정을 조회한다")
+    void getGroupRoutines_ActiveOwner_ReturnsActiveRoutines() throws Exception {
+        // given
+        Group group = group("GRL0001");
+        Member owner = member();
+        membership(owner, group, GroupMemberRole.OWNER);
+        GroupRoutineCategory category = category(true);
+        GroupRoutine routine = routine(group, category, "물 마시기");
+        routine.addSchedule(DayOfWeek.SUNDAY, LocalTime.of(18, 0), LocalTime.of(19, 0));
+        routine.addSchedule(DayOfWeek.MONDAY, LocalTime.of(9, 0), LocalTime.of(10, 0));
+        GroupRoutine deletedRoutine = routine(group, category, "삭제된 루틴");
+        deletedRoutine.delete();
+        em.flush();
+        em.clear();
+
+        // when & then
+        mockMvc.perform(get("/api/groups/{groupId}/routines", group.getId())
+                        .with(user(principal(owner))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.isSuccess").value(true))
+                .andExpect(jsonPath("$.code").value("GROUP200_17"))
+                .andExpect(jsonPath("$.result.routines.length()").value(1))
+                .andExpect(jsonPath("$.result.routines[0].routineId").value(routine.getId()))
+                .andExpect(jsonPath("$.result.routines[0].categoryId").value(category.getId()))
+                .andExpect(jsonPath("$.result.routines[0].categoryName").value(category.getName()))
+                .andExpect(jsonPath("$.result.routines[0].title").value("물 마시기"))
+                .andExpect(jsonPath("$.result.routines[0].description").value("그룹 루틴 설명입니다."))
+                .andExpect(jsonPath("$.result.routines[0].groupId").doesNotExist())
+                .andExpect(jsonPath("$.result.routines[0].assignmentCount").doesNotExist())
+                .andExpect(jsonPath("$.result.routines[0].schedules[0].repeatDay").value("MONDAY"))
+                .andExpect(jsonPath("$.result.routines[0].schedules[1].repeatDay").value("SUNDAY"));
+    }
+
+    @Test
+    @DisplayName("ACTIVE OWNER의 루틴 목록은 생성 최신순과 동일 생성 시 ID 내림차순을 유지한다")
+    void getGroupRoutines_ActiveOwner_ReturnsRoutinesInStableCreatedOrder() throws Exception {
+        // given
+        Group group = group("GRL0004");
+        Member owner = member();
+        membership(owner, group, GroupMemberRole.OWNER);
+        GroupRoutineCategory category = category(true);
+        GroupRoutine older = routine(group, category, "먼저 생성된 루틴");
+        GroupRoutine sameCreatedEarlier = routine(group, category, "같은 시각 먼저 생성된 루틴");
+        GroupRoutine sameCreatedLater = routine(group, category, "같은 시각 나중 생성된 루틴");
+        em.flush();
+        ReflectionTestUtils.setField(older, "createdAt", LocalDateTime.of(2026, 8, 1, 9, 0));
+        ReflectionTestUtils.setField(
+                sameCreatedEarlier, "createdAt", LocalDateTime.of(2026, 8, 2, 9, 0));
+        ReflectionTestUtils.setField(
+                sameCreatedLater, "createdAt", LocalDateTime.of(2026, 8, 2, 9, 0));
+        em.flush();
+        Long olderId = older.getId();
+        Long sameCreatedEarlierId = sameCreatedEarlier.getId();
+        Long sameCreatedLaterId = sameCreatedLater.getId();
+        em.clear();
+
+        // when & then
+        mockMvc.perform(get("/api/groups/{groupId}/routines", group.getId())
+                        .with(user(principal(owner))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.routines[0].routineId").value(sameCreatedLaterId))
+                .andExpect(jsonPath("$.result.routines[1].routineId").value(sameCreatedEarlierId))
+                .andExpect(jsonPath("$.result.routines[2].routineId").value(olderId));
+    }
+
+    @Test
+    @DisplayName("ACTIVE MEMBER는 그룹 활성 루틴을 조회할 수 없다")
+    void getGroupRoutines_ActiveMember_ReturnsOwnerAccessDenied() throws Exception {
+        // given
+        Group group = group("GRL0002");
+        Member member = member();
+        membership(member, group, GroupMemberRole.MEMBER);
+        em.flush();
+
+        // when & then
+        mockMvc.perform(get("/api/groups/{groupId}/routines", group.getId())
+                        .with(user(principal(member))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("GROUP403_3"));
+    }
+
+    @Test
+    @DisplayName("ACTIVE OWNER에게 활성 루틴이 없으면 빈 배열을 반환한다")
+    void getGroupRoutines_NoActiveRoutines_ReturnsEmptyList() throws Exception {
+        // given
+        Group group = group("GRL0003");
+        Member owner = member();
+        membership(owner, group, GroupMemberRole.OWNER);
+        em.flush();
+
+        // when & then
+        mockMvc.perform(get("/api/groups/{groupId}/routines", group.getId())
+                        .with(user(principal(owner))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("GROUP200_17"))
+                .andExpect(jsonPath("$.result.routines").isArray())
                 .andExpect(jsonPath("$.result.routines").isEmpty());
     }
 
