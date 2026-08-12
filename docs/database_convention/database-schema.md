@@ -814,44 +814,93 @@ DAILY  월·수 인증 (period_start_date 가 각각 다름)     → 통과
 WEEKLY 로 다시 계산하면 둘 다 그 주 일요일이 된다      → 유니크 키 위반
 ```
 
-그래서 **접히는 행이 있는지 먼저 확인하고, 남길 행을 정한 뒤** 갱신한다.
+그래서 **접히는 행이 있는지 먼저 확인하고, 남길 행만 갱신한다.**
+
+##### 남기지 못한 행을 지우지는 않는다
+
+`challenge_verification`은 **신고와 좋아요가 외래 키로 참조한다.**
+
+```
+challenge_verification_report.challenge_verification_id  → challenge_verification.id
+challenge_verification_like.challenge_verification_id    → challenge_verification.id
+```
+
+물리 삭제는 그 제약에 걸린다. 그래서 접힌 행은 `deleted_at`을 채워 소프트 삭제한다.
+
+**다만 소프트 삭제한 행의 `period_start_date`는 건드리지 않는다.** 유니크 키에 `deleted_at`이 없어 지운 행도 키를 차지하므로, 같이 새 구간으로 옮기면 **여전히 충돌한다.** 옛 값으로 두면 새 구간과 겹치지 않는다 — 그 자리가 이 절차의 핵심이다.
 
 ##### 절차
 
-**1) 접히는 행 확인** (`WEEKLY`로 바꾸는 경우)
+아래 `:periodExpr`는 새 주기의 구간 첫날 계산식이다. **충돌 확인과 백필이 반드시 같은 식을 써야 한다.**
+
+| 새 주기 | `:periodExpr` |
+| --- | --- |
+| `DAILY` | `cv.verified_date` |
+| `WEEKLY` | `DATE_SUB(cv.verified_date, INTERVAL DAYOFWEEK(cv.verified_date) - 1 DAY)` |
+| `MONTHLY` | `DATE_FORMAT(cv.verified_date, '%Y-%m-01')` |
+
+> `DAILY`로 **좁히는** 방향은 구간이 잘게 나뉘므로 접히는 행이 생기지 않는다. 그래도 1번은 돌려서 확인한다 — 전제를 확인 없이 믿지 않는다.
+
+**0) 쓰기를 멈춘다.** 절차가 도는 동안 그 챌린지에 인증이 들어오면 방금 계산한 보존 대상이 어긋난다. 인증 저장은 참여 행을 비관 잠금으로 잡으므로, 대상 `member_challenge`를 같은 방식으로 잠근 채 1~4를 한 트랜잭션에서 끝내거나, 그게 어려우면 `challenge.active = FALSE`로 잠시 내려 새 인증을 막는다.
+
+**1) 접히는 행 확인**
 
 ```sql
 SELECT cv.member_challenge_id, cv.participation_round,
-       DATE_SUB(cv.verified_date, INTERVAL DAYOFWEEK(cv.verified_date) - 1 DAY) AS new_period,
-       COUNT(*) AS cnt
+       :periodExpr AS new_period, COUNT(*) AS cnt
 FROM challenge_verification cv
 JOIN member_challenge mc ON mc.id = cv.member_challenge_id
 WHERE mc.challenge_id = :challengeId
+  AND cv.deleted_at IS NULL
 GROUP BY 1, 2, 3
 HAVING cnt > 1;
 ```
 
-**2) 남길 행을 정한다.** 결과가 비어 있지 않으면 정책 판단이 필요하다 — 구간별로 어느 인증을 남길지(가장 이른 것 / 가장 늦은 것), 나머지는 `deleted_at`을 채울지 물리 삭제할지. **소프트 삭제만으로는 키가 비지 않는다**는 점에 주의한다.
-
-**3) 백필**
+**2) 보존할 행을 id로 확정한다.** 구간별로 어느 인증을 남길지는 정책 판단이다. 아래는 **가장 이른 것을 남기는** 예다.
 
 ```sql
--- WEEKLY: 그 주 일요일
-UPDATE challenge_verification cv
+CREATE TEMPORARY TABLE keep_ids AS
+SELECT MIN(cv.id) AS id
+FROM challenge_verification cv
 JOIN member_challenge mc ON mc.id = cv.member_challenge_id
-SET cv.period_start_date =
-        DATE_SUB(cv.verified_date, INTERVAL DAYOFWEEK(cv.verified_date) - 1 DAY)
-WHERE mc.challenge_id = :challengeId;
-
--- MONTHLY: 그 달 1일
---   SET cv.period_start_date = DATE_FORMAT(cv.verified_date, '%Y-%m-01')
--- DAILY: 인증일과 같다
---   SET cv.period_start_date = cv.verified_date
+WHERE mc.challenge_id = :challengeId
+  AND cv.deleted_at IS NULL
+GROUP BY cv.member_challenge_id, cv.participation_round, :periodExpr;
 ```
 
-**4) 스트릭 정리.** `current_streak`의 단위가 바뀌므로 그대로 두면 과장된 숫자가 표시된다. 이력을 되짚어 정확히 다시 세려면 인증 행 전체를 순회해야 하므로, **얼마나 정확히 복원할지는 그때 정한다.** 가장 단순한 선택은 해당 챌린지 참여 행의 `current_streak`을 초기화하는 것이다.
+**3) 보존하지 않은 행을 소프트 삭제한다.** `period_start_date`는 그대로 둔다.
 
-**5) 검증.** 1번 쿼리를 다시 돌려 결과가 비어 있는지, 그리고 새 주기로 이번 구간에 인증이 두 건 들어가지 않는지 확인한다.
+```sql
+UPDATE challenge_verification cv
+JOIN member_challenge mc ON mc.id = cv.member_challenge_id
+SET cv.deleted_at = NOW(6)
+WHERE mc.challenge_id = :challengeId
+  AND cv.deleted_at IS NULL
+  AND cv.id NOT IN (SELECT id FROM keep_ids);
+```
+
+**4) 보존 행만 백필한다.**
+
+```sql
+UPDATE challenge_verification cv
+JOIN member_challenge mc ON mc.id = cv.member_challenge_id
+SET cv.period_start_date = :periodExpr
+WHERE mc.challenge_id = :challengeId
+  AND cv.id IN (SELECT id FROM keep_ids);
+```
+
+**5) 스트릭을 함께 정리한다.** `current_streak`만 손대면 안 된다. `MemberChallenge.applyVerification()`이 **`last_verified_date`를 새 주기로 비교**하므로(`isSamePeriod` / `isPreviousPeriod`), 그 값을 그대로 두면 주기 변경 직후의 인증이 "이번 구간에 이미 인증됨"으로 판정되어 스트릭이 오르지 않거나 엉뚱하게 이어진다.
+
+```sql
+UPDATE member_challenge mc
+SET mc.current_streak = 0,
+    mc.last_verified_date = NULL
+WHERE mc.challenge_id = :challengeId;
+```
+
+이력을 되짚어 정확히 다시 세려면 인증 행 전체를 순회해야 한다. **어디까지 복원할지는 그때 정한다** — 위는 가장 단순한 선택(초기화)이다.
+
+**6) 쓰기를 재개하고 검증한다.** 1번 쿼리를 다시 돌려 결과가 비어 있는지, 그리고 새 주기로 이번 구간에 인증이 두 건 들어가지 않는지 확인한다.
 
 > **이 절차는 아직 쓰인 적이 없다.** 지금까지 주기를 바꾼 챌린지가 없기 때문이지, 주기가 하나뿐이어서가 아니다 — 운영에는 `WEEKLY` 15개와 `MONTHLY` 13개가 이미 나가 있다. 그중 하나의 주기를 바꾸는 순간 위가 필요해진다.
 - **피드의 정렬·커서 키는 `verified_at`이 아니라 `id`(내림차순)다.** 당일 재인증이 `verified_at`을 덮어쓰기 때문에, `verified_at`을 커서로 쓰면 페이지를 넘기는 도중 항목이 위로 점프해 중복·누락이 생긴다. `id`는 한 번 부여되면 변하지 않아 커서가 안정적이고, 하루 1건 제약상 오늘 인증은 어차피 상단에 온다. 따라서 `(member_challenge_id, verified_at)` 인덱스는 두지 않는다.
