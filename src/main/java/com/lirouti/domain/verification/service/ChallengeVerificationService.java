@@ -1,6 +1,7 @@
 package com.lirouti.domain.verification.service;
 
 import java.time.LocalDateTime;
+import java.time.LocalDate;
 import java.util.List;
 
 import org.springframework.context.ApplicationEventPublisher;
@@ -11,6 +12,7 @@ import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.lirouti.domain.challenge.entity.Challenge;
+import com.lirouti.domain.challenge.enums.RoutineCycle;
 import com.lirouti.domain.challenge.entity.MemberChallenge;
 import com.lirouti.domain.challenge.exception.ChallengeException;
 import com.lirouti.domain.challenge.exception.code.error.ChallengeErrorCode;
@@ -113,9 +115,35 @@ public class ChallengeVerificationService {
         //    여기서는 잠금을 걸지 않는다. 경합 판정은 ⑤의 잠금 조회가 그대로 맡는다.
         //    이 조회는 "부를 가치가 있는 요청인지" 거르는 용도라 그 사이 상태가 바뀌어도
         //    최종 판정이 틀어지지 않는다.
-        memberChallengeRepository.findByMemberIdAndChallengeId(memberId, challengeId)
+        MemberChallenge participation = memberChallengeRepository
+                .findByMemberIdAndChallengeId(memberId, challengeId)
                 .filter(MemberChallenge::isParticipating)
                 .orElseThrow(() -> new ChallengeException(ChallengeErrorCode.NOT_PARTICIPATING));
+
+        // ③-1 이번 구간에 이미 인증이 있으면 여기서 끊는다. ③ 과 같은 이유이고, 값은 더 크다.
+        //
+        //     아래 ④ 심사는 유료 외부 호출이고 ⑤ 승격은 사진을 <b>공개 prefix 로 옮긴다.</b>
+        //     어차피 ⑥ 에서 거절될 요청에 그 둘을 다 치르면, 아무 인증도 참조하지 않는 사진이
+        //     공개된 채 남는다 — 미참조 정리가 결국 가져가지만 그전까지는 주소를 아는 사람이
+        //     열 수 있고, 승격을 "심사를 통과한 것만 공개한다" 는 장치로 둔 취지와 어긋난다.
+        //
+        //     하루짜리 챌린지만 있던 동안에는 이 경로가 거의 안 열렸다. 주간·월간이 들어오면
+        //     "이번 주에 이미 냈다" 가 흔한 응답이 되므로 그만큼 자주 일어난다.
+        //
+        //     ③ 과 같은 성격의 선검사라 잠그지 않는다. 최종 판정은 ⑥ 의 잠금 조회가 그대로
+        //     맡는다 — 여기서 놓친 동시 요청은 거기서 유니크 제약에 걸린다.
+        //     지워진 인증은 막지 않는다. 지우면 그 구간이 다시 열리는 것이 저장 쪽 규칙이다.
+        RoutineCycle cycle = challengeRepository.findById(challengeId)
+                .map(Challenge::getRoutineCycle)
+                .orElseThrow(() -> new ChallengeException(ChallengeErrorCode.CHALLENGE_NOT_FOUND));
+        LocalDate periodStart = cycle.currentPeriodStart(LocalDate.now(TimeUtil.KST));
+        challengeVerificationRepository
+                .findByMemberChallengeIdAndPeriodStart(participation.getId(), periodStart)
+                .filter(v -> !v.isDeleted())
+                .ifPresent(v -> {
+                    throw new VerificationException(
+                            ChallengeVerificationErrorCode.alreadyVerified(cycle));
+                });
 
         // ④ 사진이 챌린지 의도에 맞는지 심사한다. ②와 같은 트랜잭션 밖 구간이다.
         //    통과하지 못하면 저장도 스트릭도 없다. 심사기가 답을 못 주면 통과시킨다(아래 참고).
