@@ -13,6 +13,9 @@ import com.lirouti.domain.group.repository.GroupListQueryRepository.AssignmentCo
 import com.lirouti.domain.group.repository.GroupListQueryRepository.GroupCountProjection;
 import com.lirouti.domain.group.repository.GroupListQueryRepository.GroupScheduleCountProjection;
 import com.lirouti.domain.group.repository.GroupListQueryRepository.MyGroupProjection;
+import com.lirouti.domain.group.repository.GroupRoutineQueryRepository;
+import com.lirouti.domain.group.repository.GroupRoutineQueryRepository.GroupRoutineProjection;
+import com.lirouti.domain.group.repository.GroupRoutineQueryRepository.RoutineScheduleProjection;
 import com.lirouti.domain.group.service.GroupValidationService;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.exception.MemberException;
@@ -45,6 +48,8 @@ class GroupQueryServiceTest {
     @Mock
     private GroupListQueryRepository groupListQueryRepository;
     @Mock
+    private GroupRoutineQueryRepository groupRoutineQueryRepository;
+    @Mock
     private GroupRoutineCategoryRepository categoryRepository;
     @Mock
     private GroupValidationService groupValidationService;
@@ -65,6 +70,7 @@ class GroupQueryServiceTest {
                 assignmentRepository,
                 groupDetailQueryRepository,
                 groupListQueryRepository,
+                groupRoutineQueryRepository,
                 categoryRepository,
                 groupValidationService,
                 memberQueryService,
@@ -121,6 +127,80 @@ class GroupQueryServiceTest {
         assertThatThrownBy(() -> groupQueryService.getGroupDetail(groupId, MEMBER_ID))
                 .isSameAs(exception);
         verifyNoInteractions(groupDetailQueryRepository);
+    }
+
+    @Test
+    @DisplayName("ACTIVE OWNER의 활성 루틴 projection과 일정을 월요일부터 조립한다")
+    void getGroupRoutines_ActiveOwner_ReturnsRoutinesWithOrderedSchedules() {
+        // given
+        Long groupId = 301L;
+        List<GroupRoutineProjection> routines = List.of(
+                new GroupRoutineProjection(202L, 402L, "건강", "물 마시기", "하루 2L"),
+                new GroupRoutineProjection(201L, 401L, "청소", "거실 정리", "거실을 정리합니다.")
+        );
+        when(groupRoutineQueryRepository.findActiveRoutinesByGroupId(groupId)).thenReturn(routines);
+        when(groupRoutineQueryRepository.findSchedulesByRoutineIds(List.of(202L, 201L)))
+                .thenReturn(List.of(
+                        new RoutineScheduleProjection(
+                                202L, DayOfWeek.SUNDAY, LocalTime.of(18, 0), LocalTime.of(19, 0)),
+                        new RoutineScheduleProjection(
+                                202L, DayOfWeek.MONDAY, LocalTime.of(9, 0), LocalTime.of(10, 0)),
+                        new RoutineScheduleProjection(
+                                201L, DayOfWeek.WEDNESDAY, LocalTime.of(12, 0), LocalTime.of(13, 0))
+                ));
+
+        // when
+        GroupResDTO.GroupRoutineList result = groupQueryService.getGroupRoutines(groupId, MEMBER_ID);
+
+        // then
+        verify(groupValidationService).validateGroupOwner(groupId, MEMBER_ID);
+        verify(groupRoutineQueryRepository).findActiveRoutinesByGroupId(groupId);
+        verify(groupRoutineQueryRepository).findSchedulesByRoutineIds(List.of(202L, 201L));
+        assertThat(result.routines()).containsExactly(
+                new GroupResDTO.GroupRoutineItem(
+                        202L, 402L, "건강", "물 마시기", "하루 2L",
+                        List.of(
+                                new GroupResDTO.RoutineSchedule(
+                                        DayOfWeek.MONDAY, LocalTime.of(9, 0), LocalTime.of(10, 0)),
+                                new GroupResDTO.RoutineSchedule(
+                                        DayOfWeek.SUNDAY, LocalTime.of(18, 0), LocalTime.of(19, 0))
+                        )),
+                new GroupResDTO.GroupRoutineItem(
+                        201L, 401L, "청소", "거실 정리", "거실을 정리합니다.",
+                        List.of(new GroupResDTO.RoutineSchedule(
+                                DayOfWeek.WEDNESDAY, LocalTime.of(12, 0), LocalTime.of(13, 0))))
+        );
+    }
+
+    @Test
+    @DisplayName("ACTIVE OWNER에게 활성 루틴이 없으면 일정 조회 없이 빈 목록을 반환한다")
+    void getGroupRoutines_NoActiveRoutines_ReturnsEmptyList() {
+        // given
+        Long groupId = 301L;
+        when(groupRoutineQueryRepository.findActiveRoutinesByGroupId(groupId)).thenReturn(List.of());
+
+        // when
+        GroupResDTO.GroupRoutineList result = groupQueryService.getGroupRoutines(groupId, MEMBER_ID);
+
+        // then
+        assertThat(result.routines()).isEmpty();
+        verify(groupValidationService).validateGroupOwner(groupId, MEMBER_ID);
+        verify(groupRoutineQueryRepository).findActiveRoutinesByGroupId(groupId);
+        verify(groupRoutineQueryRepository, never()).findSchedulesByRoutineIds(anyList());
+    }
+
+    @Test
+    @DisplayName("OWNER 검증에 실패하면 루틴 조회를 수행하지 않는다")
+    void getGroupRoutines_AccessDenied_DoesNotQueryRoutines() {
+        // given
+        Long groupId = 301L;
+        GroupException exception = new GroupException(GroupErrorCode.GROUP_OWNER_ACCESS_DENIED);
+        doThrow(exception).when(groupValidationService).validateGroupOwner(groupId, MEMBER_ID);
+
+        // when & then
+        assertThatThrownBy(() -> groupQueryService.getGroupRoutines(groupId, MEMBER_ID))
+                .isSameAs(exception);
+        verifyNoInteractions(groupRoutineQueryRepository);
     }
 
     @Test
@@ -275,6 +355,7 @@ class GroupQueryServiceTest {
                 assignmentRepository,
                 groupDetailQueryRepository,
                 groupListQueryRepository,
+                groupRoutineQueryRepository,
                 categoryRepository,
                 groupValidationService,
                 memberQueryService,

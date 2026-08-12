@@ -157,6 +157,29 @@ public interface GroupControllerDocs {
     );
 
     @Operation(
+            summary = "그룹 활성 루틴 목록 조회",
+            description = """
+                    ACTIVE OWNER만 특정 ACTIVE 그룹의 활성 루틴 전체와 반복 일정을 조회할 수 있습니다.
+                    삭제된 루틴은 제외하며, 루틴은 최신 생성순, 일정은 월요일부터 일요일 순으로 반환합니다.
+                    활성 루틴이 없으면 빈 목록을 반환합니다.
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200", description = "그룹 활성 루틴 목록 조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401", description = "유효하지 않거나 만료된 인증 토큰"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "403", description = "비활성 그룹·구성원이거나 ACTIVE OWNER가 아님"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404", description = "그룹 또는 회원을 찾을 수 없음")
+    })
+    ApiResponse<GroupResDTO.GroupRoutineList> getGroupRoutines(
+            @Parameter(hidden = true) CustomUserDetails userDetails,
+            @Parameter(description = "그룹 ID", required = true, example = "1") Long groupId
+    );
+
+    @Operation(
             summary = "그룹 루틴 카테고리 추가",
             description = """
                     ACTIVE OWNER만 그룹 전용 사용자 카테고리를 추가할 수 있습니다.

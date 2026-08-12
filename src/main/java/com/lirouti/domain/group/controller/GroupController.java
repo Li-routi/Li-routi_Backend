@@ -141,6 +141,20 @@ public class GroupController implements GroupControllerDocs {
         );
     }
 
+    /** ACTIVE OWNER가 관리 중인 그룹의 활성 루틴과 반복 일정을 조회한다. */
+    @Override
+    @GetMapping("/{groupId}/routines")
+    public ApiResponse<GroupResDTO.GroupRoutineList> getGroupRoutines(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long groupId
+    ) {
+        GroupResDTO.GroupRoutineList result = groupQueryService.getGroupRoutines(
+                groupId,
+                userDetails.getMemberId()
+        );
+        return ApiResponse.onSuccess(GroupSuccessCode.GROUP_ROUTINE_LIST_FETCH_SUCCESS, result);
+    }
+
     /** ACTIVE 그룹 구성원의 그룹방 진입 화면 정보를 조회한다. */
     @Override
     @GetMapping("/{groupId}")

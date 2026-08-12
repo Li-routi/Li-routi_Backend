@@ -13,6 +13,9 @@ import com.lirouti.domain.group.repository.GroupListQueryRepository.AssignmentCo
 import com.lirouti.domain.group.repository.GroupListQueryRepository.GroupCountProjection;
 import com.lirouti.domain.group.repository.GroupListQueryRepository.GroupScheduleCountProjection;
 import com.lirouti.domain.group.repository.GroupListQueryRepository.MyGroupProjection;
+import com.lirouti.domain.group.repository.GroupRoutineQueryRepository;
+import com.lirouti.domain.group.repository.GroupRoutineQueryRepository.GroupRoutineProjection;
+import com.lirouti.domain.group.repository.GroupRoutineQueryRepository.RoutineScheduleProjection;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.service.query.MemberQueryService;
 import lombok.RequiredArgsConstructor;
@@ -37,6 +40,7 @@ public class GroupQueryService {
     private final GroupRoutineAssignmentRepository groupRoutineAssignmentRepository;
     private final GroupDetailQueryRepository groupDetailQueryRepository;
     private final GroupListQueryRepository groupListQueryRepository;
+    private final GroupRoutineQueryRepository groupRoutineQueryRepository;
     private final GroupRoutineCategoryRepository groupRoutineCategoryRepository;
     private final GroupValidationService groupValidationService;
     private final MemberQueryService memberQueryService;
@@ -125,6 +129,26 @@ public class GroupQueryService {
         log.debug("그룹 상세 정보를 조회했습니다. groupId={}, memberId={}, memberCount={}",
                 groupId, memberId, memberDetails.size());
         return GroupConverter.toGroupDetail(memberDetails, progresses);
+    }
+
+    /** ACTIVE OWNER가 관리 중인 ACTIVE 그룹의 활성 루틴과 반복 일정을 조회한다. */
+    @Transactional(readOnly = true)
+    public GroupResDTO.GroupRoutineList getGroupRoutines(Long groupId, Long memberId) {
+        groupValidationService.validateGroupOwner(groupId, memberId);
+
+        List<GroupRoutineProjection> routines = groupRoutineQueryRepository
+                .findActiveRoutinesByGroupId(groupId);
+        if (routines.isEmpty()) {
+            return GroupConverter.toGroupRoutineList(List.of(), List.of());
+        }
+
+        List<Long> routineIds = routines.stream().map(GroupRoutineProjection::routineId).toList();
+        List<RoutineScheduleProjection> schedules = groupRoutineQueryRepository
+                .findSchedulesByRoutineIds(routineIds);
+
+        log.debug("그룹 활성 루틴 목록을 조회했습니다. groupId={}, memberId={}, routineCount={}",
+                groupId, memberId, routines.size());
+        return GroupConverter.toGroupRoutineList(routines, schedules);
     }
 
     /**
