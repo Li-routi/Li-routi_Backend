@@ -62,6 +62,28 @@ public final class ChargeResDTO {
     ) {
     }
 
+    /**
+     * 결제 검증·지급 결과.
+     *
+     * <p><b>{@link Started} 와 나눠 둔다.</b> 그쪽은 결제창을 여는 데 필요한 값 묶음이라
+     * 상점 아이디·채널 키가 들어 있는데, 지급이 끝난 시점에는 쓸 데가 없다. 반대로 여기서
+     * 필요한 지급 수량과 잔액이 그쪽에는 없다.
+     *
+     * <p>잔액을 함께 내리는 것은 <b>클라이언트가 잔액 조회를 한 번 더 부르지 않게</b> 하려는
+     * 것이다. 지급 직후의 값을 서버가 이미 알고 있다.
+     */
+    @Builder
+    @Schema(name = "ChargeSettled", description = "결제 검증·지급 결과")
+    public record Settled(
+            @Schema(description = "서버가 만든 결제 식별자") String paymentId,
+            @Schema(description = "지급된 재화") Currency currency,
+            @Schema(description = "유상으로 들어간 수량") int rewardAmount,
+            @Schema(description = "무상으로 들어간 보너스") int bonusAmount,
+            @Schema(description = "지급 후 유상 잔액") int paidBalance,
+            @Schema(description = "지급 후 무상 잔액") int freeBalance
+    ) {
+    }
+
     @Schema(name = "ExchangeResult", description = "교환 결과")
     @Builder
     public record ExchangeResult(

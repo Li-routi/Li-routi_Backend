@@ -9,9 +9,10 @@ import com.lirouti.domain.charge.exception.ChargeException;
 import com.lirouti.domain.charge.exception.code.error.ChargeErrorCode;
 import com.lirouti.domain.charge.repository.ChargePaymentRepository;
 import com.lirouti.domain.wallet.enums.WalletTransactionType;
+import com.lirouti.domain.wallet.repository.MemberWalletRepository;
+import com.lirouti.domain.wallet.service.WalletResult;
 import com.lirouti.domain.wallet.service.WalletService;
 import com.lirouti.domain.wallet.service.command.WalletCommandService.WalletCommand;
-import com.lirouti.global.properties.PortOneProperties;
 import com.lirouti.global.util.TimeUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,7 +37,7 @@ public class ChargeSettlementCommandService {
 
     private final ChargePaymentRepository chargePaymentRepository;
     private final WalletService walletService;
-    private final PortOneProperties portOneProperties;
+    private final MemberWalletRepository memberWalletRepository;
 
     /**
      * <b>내 결제가 맞는지</b>만 본다. 포트원을 부르기 전에 걸러 남의 결제로 조회를 만들지 않는다.
@@ -70,10 +71,31 @@ public class ChargeSettlementCommandService {
 
     /** 이미 지급이 끝난 결제의 결과. */
     @Transactional(readOnly = true)
-    public ChargeResDTO.Started settledResult(String paymentId) {
+    public ChargeResDTO.Settled settledResult(String paymentId) {
         return chargePaymentRepository.findByPaymentIdForRead(paymentId)
-                .map(this::toStarted)
+                .map(this::toSettled)
                 .orElseThrow(() -> new ChargeException(ChargeErrorCode.PAYMENT_NOT_FOUND));
+    }
+
+    /**
+     * 이미 지급이 끝난 결제의 잔액을 지갑에서 읽어 응답을 만든다.
+     *
+     * <p>방금 지급한 경로와 달리 {@code grant()} 를 타지 않아 {@link WalletResult} 가 없다.
+     * 완료 요청과 웹훅이 둘 다 오는 것이 정상이라 이 경로는 드물지 않다.
+     */
+    private ChargeResDTO.Settled toSettled(ChargePayment payment) {
+        return memberWalletRepository
+                .findByMemberIdAndCurrency(payment.getMember().getId(), payment.getRewardCurrency())
+                .map(wallet -> ChargeConverter.toSettled(
+                        payment, wallet.getPaidBalance(), wallet.getFreeBalance()))
+                .orElseGet(() -> {
+                    // 지급이 끝났다면 지갑이 있어야 한다. 없다면 데이터가 어긋난 것이므로
+                    // 조용히 넘기지 않고 남긴다. 다만 이 응답 하나 때문에 완료를 실패로
+                    // 되돌리지는 않는다 — 재화는 이미 들어갔다.
+                    log.error("지급된 결제인데 지갑이 없습니다. paymentId={}, currency={}",
+                            payment.getPaymentId(), payment.getRewardCurrency());
+                    return ChargeConverter.toSettled(payment, 0, 0);
+                });
     }
 
     /**
@@ -84,12 +106,12 @@ public class ChargeSettlementCommandService {
      * <p>잠근 뒤 <b>상태를 다시 본다.</b> 조회하는 동안 웹훅이 먼저 처리했을 수 있다.
      */
     @Transactional
-    public ChargeResDTO.Started apply(String paymentId, PortOneClient.PortOnePayment actual) {
+    public ChargeResDTO.Settled apply(String paymentId, PortOneClient.PortOnePayment actual) {
         ChargePayment payment = chargePaymentRepository.findByPaymentIdForUpdate(paymentId)
                 .orElseThrow(() -> new ChargeException(ChargeErrorCode.PAYMENT_NOT_FOUND));
 
         if (payment.isPaid()) {
-            return toStarted(payment);
+            return toSettled(payment);
         }
         // 우리가 물어본 결제가 맞는지 확인한다. 조회에 우리 식별자를 넘기므로 어긋날 일이
         // 거의 없지만, 어긋났다면 그 답으로 지급해서는 안 된다.
@@ -107,17 +129,19 @@ public class ChargeSettlementCommandService {
         if (!payment.markPaid(actual.transactionId(), actual.totalAmount(),
                 LocalDateTime.now(TimeUtil.KST))) {
             // 잠금을 기다리는 사이 남이 처리했다.
-            return toStarted(payment);
+            return toSettled(payment);
         }
 
         // 지급은 결제 시작 때 굳힌 값으로 한다. 상품을 다시 읽으면 그 사이 바뀐 값이 나온다.
-        walletService.grant(new WalletCommand(
+        WalletResult granted = walletService.grant(new WalletCommand(
                         payment.getMember().getId(), payment.getRewardCurrency(),
                         WalletTransactionType.TOPUP,
                         "charge:" + payment.getId(), "CHARGE_PAYMENT", payment.getId()),
                 payment.getRewardAmount(), payment.getBonusAmount());
 
-        return toStarted(payment);
+        // 지급 결과에 잔액이 실려 온다. 지갑을 다시 읽지 않는다.
+        return ChargeConverter.toSettled(
+                payment, granted.paidBalance(), granted.freeBalance());
     }
 
     /**
@@ -130,10 +154,5 @@ public class ChargeSettlementCommandService {
     public void markFailed(String paymentId, String reason) {
         chargePaymentRepository.findByPaymentIdForUpdate(paymentId)
                 .ifPresent(p -> p.markFailed(reason, LocalDateTime.now(TimeUtil.KST)));
-    }
-
-    private ChargeResDTO.Started toStarted(ChargePayment payment) {
-        return ChargeConverter.toStarted(payment, "",
-                portOneProperties.getStoreId(), portOneProperties.getChannelKey());
     }
 }
