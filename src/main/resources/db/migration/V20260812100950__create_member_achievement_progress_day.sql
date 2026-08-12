@@ -16,5 +16,15 @@ CREATE TABLE member_achievement_progress_day
         FOREIGN KEY (member_achievement_id) REFERENCES member_achievement (id)
 );
 
+-- routine_category_id 스칼라 컬럼을 조인 테이블로 완전히 대체하기 전에, 지금 이 컬럼에
+-- 값이 남아있는 업적(카테고리 시작 업적 ACH-ST-015~020: 운동~취미 시작, 각 카테고리 1개씩)의
+-- 연결 정보를 achievement_routine_category 로 먼저 옮긴다.
+-- 이 INSERT 없이 컬럼만 지우면 이 6개 업적이 카테고리 필터를 완전히 잃어서, "운동 시작"이
+-- 운동 루틴이 아닌 아무 루틴 완료에나 달성 처리되는 회귀 버그가 생긴다.
+INSERT INTO achievement_routine_category (achievement_id, routine_category_id)
+SELECT id, routine_category_id
+FROM achievement
+WHERE routine_category_id IS NOT NULL;
+
 ALTER TABLE achievement DROP FOREIGN KEY fk_achievement_routine_category;
 ALTER TABLE achievement DROP COLUMN routine_category_id;

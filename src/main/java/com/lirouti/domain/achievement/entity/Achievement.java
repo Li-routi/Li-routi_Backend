@@ -62,28 +62,19 @@ public class Achievement extends BaseEntity {
     private String conditionKey;
 
     /**
-     * 카테고리 시작 업적(운동 시작 등, 카테고리 1개)만 사용하는 단일 FK.
-     * {@link com.lirouti.domain.routine.entity.RoutineCategory} 의 고정 카테고리(owner == null)
-     * id 를 가리킨다 — R__seed_routine.sql 이 시드하는 1(운동)~6(취미).
+     * 카테고리 한정 업적이 참조하는 카테고리 목록. {@code achievement_routine_category}
+     * 조인 테이블 그대로 매핑한다. 카테고리 1개짜리(운동 시작 등)든 여러 개짜리(건강한
+     * 땀방울 = 운동·건강, 루틴 탐험가 = 6개 전부)든 전부 이 컬렉션 하나로 표현한다 — 예전엔
+     * 단일 카테고리를 스칼라 FK 컬럼(routine_category_id)으로 따로 뒀었는데, 그 컬럼은
+     * {@code V20260812100950} 마이그레이션에서 제거되고 조인 테이블로 완전히 대체됐다.
      *
-     * <p>문자열 코드(EXERCISE 등)가 아니라 FK 로 두는 이유: 카테고리 이름은 자유
-     * 텍스트라 바뀔 수 있고, 사용자 카테고리도 같은 테이블에 섞여 있어 이름만으로는
-     * 고정 카테고리를 안정적으로 특정할 수 없다.
+     * <p>{@link com.lirouti.domain.routine.entity.RoutineCategory} 의 고정 카테고리
+     * (owner == null) id 를 가리킨다 — R__seed_routine.sql 이 시드하는 1(운동)~6(취미).
      *
-     * <p>null 이면 카테고리 무관. 카테고리가 2개 이상 걸치거나(예: 건강한 땀방울 = 운동
-     * 또는 건강) 6개 전부를 요구하는(루틴 탐험가) 업적은 이 컬럼이 아니라
-     * {@link #routineCategoryIds}(조인 테이블)를 쓴다 — 이 둘은 서로 배타적으로 쓰인다.
-     */
-    @Column(name = "routine_category_id")
-    private Long routineCategoryId;
-
-    /**
-     * 카테고리가 여러 개 걸치는 업적용 (예: 건강한 땀방울 = 운동·건강, 루틴 탐험가 = 6개 전부).
-     * {@code achievement_routine_category} 조인 테이블 그대로 매핑한다.
-     *
-     * <p>{@link #routineCategoryId}(단일 FK)와 이 컬렉션은 서로 다른 업적이 각각 하나씩만
-     * 쓴다 — 같은 업적이 둘 다 채우는 경우는 없다. {@code AchievementProgressService} 의
-     * 카테고리 매칭 로직은 두 경로를 모두 확인한다.
+     * <p>비어 있으면 카테고리 무관 업적. 값이 있으면 이벤트의 routineCategoryId 가 이
+     * 집합에 포함될 때만 반영한다({@code AchievementProgressService.routineCategoryMatches}
+     * 참고) — "전부 다 커버해야" 하는 CATEGORY_COVERAGE_COUNT(루틴 탐험가)는 이 게이트를
+     * 통과한 이후, 진행도 반영 단계에서 별도로 "몇 개나 커버했는지"를 판정한다.
      */
     @ElementCollection(fetch = FetchType.LAZY)
     @CollectionTable(
@@ -108,23 +99,15 @@ public class Achievement extends BaseEntity {
     @Column(name = "active", nullable = false)
     private boolean active;
 
-    /**
-     * 히든 업적(일찍 일어난 새 / 자정의 방문자 / 딱 1분 남았어!) 여부.
-     * true 면 달성 전까지 이름·조건·진행률을 응답에서 감추고 잠금 표시만 노출해야 한다 —
-     * 이 판단은 이 필드 하나로 API 계층에서 분기한다.
-     */
-    @Column(name = "hidden_yn", nullable = false)
-    private boolean hiddenYn;
-
     @OneToMany(mappedBy = "achievement", fetch = FetchType.LAZY)
     private List<AchievementCondition> conditions = new ArrayList<>();
 
     @Builder
     private Achievement(String code, AchievementCategory category, String name,
                         String conditionDesc, AchievementProgressType progressType,
-                        Integer targetCount, String conditionKey, Long routineCategoryId,
+                        Integer targetCount, String conditionKey,
                         int topazReward, boolean badgeYn, boolean limitedOutfitYn,
-                        int sortOrder, boolean active, boolean hiddenYn) {
+                        int sortOrder, boolean active) {
         this.code = code;
         this.category = category;
         this.name = name;
@@ -132,12 +115,10 @@ public class Achievement extends BaseEntity {
         this.progressType = progressType;
         this.targetCount = targetCount;
         this.conditionKey = conditionKey;
-        this.routineCategoryId = routineCategoryId;
         this.topazReward = topazReward;
         this.badgeYn = badgeYn;
         this.limitedOutfitYn = limitedOutfitYn;
         this.sortOrder = sortOrder;
         this.active = active;
-        this.hiddenYn = hiddenYn;
     }
 }

@@ -186,7 +186,8 @@ public class RoutineVerificationCommandService {
                 1,
                 SOURCE_TYPE_MEMBER_ROUTINE_VERIFICATION,
                 saved.getId(),
-                routine.getCategory().getId()
+                routine.getCategory().getId(),
+                saved.getVerifiedAt()
         ));
     }
 

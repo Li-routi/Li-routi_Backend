@@ -7,9 +7,9 @@ import com.lirouti.domain.achievement.entity.MemberAchievementCondition;
 import com.lirouti.domain.achievement.event.AchievementProgressEvent;
 import com.lirouti.domain.achievement.repository.AchievementRepository;
 import com.lirouti.domain.achievement.repository.MemberAchievementConditionRepository;
-import com.lirouti.domain.achievement.repository.MemberAchievementProgressCategoryRepository;
 import com.lirouti.domain.achievement.repository.MemberAchievementProgressDayRepository;
 import com.lirouti.domain.achievement.repository.MemberAchievementRepository;
+import com.lirouti.domain.achievement.entity.MemberAchievementProgressDay;
 import com.lirouti.domain.member.repository.MemberRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -40,7 +40,7 @@ import java.util.stream.Collectors;
  * 업적이 두 개일 때 두 번째 업적은 "이미 처리됨"으로 오판해 스킵되는 버그가 생긴다.
  *
  * <p>같은 conditionKey 를 여러 업적이 공유할 수 있으므로(예: ROUTINE_COMPLETE_COUNT 를
- * CUMULATIVE_COUNT 업적과 DISTINCT_DAY_COUNT 업적이 함께 참조), {@code handle}
+ * CUMULATIVE_COUNT 업적과 아직 미구현인 DISTINCT_DAY_COUNT 업적이 함께 참조), {@code handle}
  * 은 업적 하나씩을 try-catch 로 격리해 처리한다 — 한 업적의 반영이 실패해도(예: 미구현
  * progressType) 형제 업적의 진행도 갱신까지 막히지 않는다.
  */
@@ -54,8 +54,6 @@ public class AchievementProgressService {
     private final MemberAchievementConditionRepository memberAchievementConditionRepository;
     private final MemberAchievementProgressDayRepository memberAchievementProgressDayRepository;
     private final MemberAchievementProgressDayService memberAchievementProgressDayService;
-    private final MemberAchievementProgressCategoryRepository memberAchievementProgressCategoryRepository;
-    private final MemberAchievementProgressCategoryService memberAchievementProgressCategoryService;
     private final MemberRepository memberRepository;
     private final AchievementProgressEventLogService achievementProgressEventLogService;
 
@@ -70,6 +68,10 @@ public class AchievementProgressService {
 
         List<Achievement> targets = achievementRepository.findAllActiveByConditionKey(event.conditionKey());
         for (Achievement achievement : targets) {
+            // 같은 conditionKey 를 여러 업적이 공유한다 (예: ROUTINE_COMPLETE_COUNT 를
+            // CUMULATIVE_COUNT 업적과 아직 미구현인 DISTINCT_DAY_COUNT 업적이 함께 쓴다).
+            // 업적 하나가 실패(예: 미구현 progressType)해도 나머지 형제 업적의 진행도
+            // 갱신까지 통째로 막히면 안 되므로 업적 단위로 격리한다.
             try {
                 applyProgress(achievement, event);
             } catch (RuntimeException e) {
@@ -96,10 +98,19 @@ public class AchievementProgressService {
                     memberAchievement, achievement, event, this::weekRangeOf);
             case MONTHLY_DISTINCT_DAY_COUNT -> applyPeriodDistinctDayCount(
                     memberAchievement, achievement, event, this::monthRangeOf);
-            // STREAK_DAYS: event.amount()에 담긴 "현재시점 연속 일수" 절대값으로 진행도를 갱신(syncProgress)한다.
-            // 결석 등으로 스트릭이 초기화되었을 때 진행도도 함께 내려가야 하므로 increaseProgress(더하기) 대신 syncProgress를 사용한다.
+            // ROUTINE_STREAK_DAYS 발행부(MemberRoutineStreakCommandService)가 event.amount() 에
+            // "이번에 늘어난 양"이 아니라 "지금 시점의 절대 스트릭 값"을 담아 보낸다 - 그래서
+            // increaseProgress(누적 가산)가 아니라 syncProgress(절대값 덮어쓰기)를 쓴다. 스트릭이
+            // 끊기면 다음 완료 이벤트가 더 작은 값을 보내올 수 있는데, syncProgress는 IN_PROGRESS
+            // 상태에서만 값을 바꾸므로 이미 ACHIEVED/CLAIMED 된 이후엔 끊긴 스트릭이 되돌리지 못한다.
             case STREAK_DAYS -> memberAchievement.syncProgress(event.amount(), requireTargetCount(achievement));
-            case CATEGORY_COVERAGE_COUNT -> applyCategoryCoverageCount(memberAchievement, achievement, event);
+            // TODO: 다음 단계에서 구현. 지금은 조회 API가 죽지 않도록(enum 매핑) 값만 정의해 두고,
+            // 실제 반영 로직은 아직 없다 - handle() 의 per-achievement try-catch 가 이 스텁으로 인한
+            // 실패를 형제 업적에 전파되지 않게 막아 준다.
+            case CATEGORY_COVERAGE_COUNT -> notImplementedYet(achievement);
+            // GROUP_* 는 이 업적들이 condition_key 를 비워 두므로 findAllActiveByConditionKey 의
+            // 결과에 애초에 포함되지 않는다 - 여기 도달한다면 조회 쿼리 또는 마이그레이션 데이터가
+            // 잘못된 것이므로 조용히 넘기지 않고 바로 알아챌 수 있게 예외로 방어한다.
             case GROUP_CUMULATIVE_COUNT, GROUP_DISTINCT_DAY_COUNT ->
                     throw new IllegalStateException(
                             "업적 " + achievement.getCode() + "(" + achievement.getProgressType()
@@ -125,6 +136,11 @@ public class AchievementProgressService {
 
     /**
      * WEEKLY_DISTINCT_DAY_COUNT·MONTHLY_DISTINCT_DAY_COUNT 공통 처리.
+     *
+     * <p>날짜 dedup 자체는 DISTINCT_DAY_COUNT 와 같은 테이블·같은 방식을 쓴다(날짜 하나는
+     * 전역적으로 한 번만 기록됨 — "이번 주"인지 "이번 달"인지는 나중에 세는 쪽에서 구분한다).
+     * 새 날짜가 생겼을 때만 현재 기간 범위로 다시 세어 {@code syncProgress}(절대값 갱신)로
+     * 반영한다 — 주/월이 바뀌면 지난 기간의 날짜는 범위 밖으로 밀려나 자연히 줄어든다.
      */
     private void applyPeriodDistinctDayCount(MemberAchievement memberAchievement, Achievement achievement,
                                              AchievementProgressEvent event,
@@ -140,34 +156,10 @@ public class AchievementProgressService {
         memberAchievement.syncProgress((int) countInRange, requireTargetCount(achievement));
     }
 
-    /**
-     * CATEGORY_COVERAGE_COUNT(루틴 탐험가) 처리.
-     *
-     * <p>{@link #routineCategoryMatches} 가 이미 "achievement.routineCategoryIds 안에
-     * 속하는 카테고리인지"를 걸러줬으므로, 여기서는 그 카테고리를 이 업적에 대해 처음
-     * 커버하는 것인지만 확정하고(mark 성공 시에만) 지금까지 커버한 서로 다른 카테고리
-     * 총 개수로 다시 세어 덮어쓴다. DISTINCT_DAY_COUNT 와 동일한 이유로 syncProgress 를
-     * 쓴다 - 같은 카테고리를 반복 완료해도 진행도가 중복으로 늘지 않는다.
-     */
-    private void applyCategoryCoverageCount(MemberAchievement memberAchievement, Achievement achievement,
-                                            AchievementProgressEvent event) {
-        if (event.routineCategoryId() == null) {
-            return; // 카테고리 정보 없는 이벤트 - 커버리지 판정 불가
-        }
-        boolean isNewCategory = memberAchievementProgressCategoryService
-                .tryMarkCategory(memberAchievement, event.routineCategoryId());
-        if (!isNewCategory) {
-            return; // 이미 커버한 카테고리 - 진행도 변화 없음
-        }
-        long coveredCount = memberAchievementProgressCategoryRepository
-                .countByMemberAchievementId(memberAchievement.getId());
-        memberAchievement.syncProgress((int) coveredCount, requireTargetCount(achievement));
-    }
-
-    /** 이벤트 발생일이 속한 주(일요일 - 월요일)의 [시작, 끝]. */
+    /** 이벤트 발생일이 속한 주(월요일~일요일)의 [시작, 끝]. */
     private LocalDate[] weekRangeOf(LocalDate date) {
-        LocalDate start = date.with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY));
-        LocalDate end = date.with(TemporalAdjusters.nextOrSame(DayOfWeek.MONDAY));
+        LocalDate start = date.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+        LocalDate end = date.with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY));
         return new LocalDate[]{start, end};
     }
 
@@ -185,38 +177,50 @@ public class AchievementProgressService {
     }
 
     /**
-     * 카테고리 시작 업적(예: 운동 시작, 건강 시작)이나 카테고리 한정 EGG 업적, 그리고
-     * CATEGORY_COVERAGE_COUNT(루틴 탐험가)가 자신과 무관한 루틴 완료 이벤트까지 반영하지
-     * 않도록 막는다.
+     * 아직 반영 로직이 없는 progress_type 용 스텁.
      *
-     * <p>카테고리 조건은 두 경로 중 하나로 걸린다 — 같은 업적이 둘 다 쓰지는 않는다:
-     * <ul>
-     *   <li>{@code achievement.routineCategoryId}(단일 FK): 카테고리 시작 업적처럼 정확히
-     *   카테고리 1개만 요구할 때.</li>
-     *   <li>{@code achievement.routineCategoryIds}({@code achievement_routine_category}
-     *   조인 테이블): 카테고리 2개 이상 중 아무거나 해당하면 되는 경우(예: 건강한 땀방울 =
-     *   운동 또는 건강), 또는 전부 다 커버해야 하는 경우(루틴 탐험가 = 6개 전부). "아무거나
-     *   해당"과 "전부 다"의 구분은 이 메서드가 아니라 progressType 별 처리기
-     *   ({@link #applyCategoryCoverageCount})가 담당한다 — 여기서는 "이 이벤트가 이 업적과
-     *   관련은 있는 카테고리인지"만 1차로 거른다.</li>
-     * </ul>
-     * 둘 다 비어 있으면 카테고리 무관 업적이라 항상 true. 좋아요/쿡쿡처럼 카테고리 개념이
-     * 없는 이벤트(routineCategoryId == null)는 두 경로 모두 통과하지 못하므로 안전하다.
+     * <p>CATEGORY_COVERAGE_COUNT 는 {@link com.lirouti.domain.achievement.enums.AchievementProgressType}
+     * 에 값만 정의된 상태고, 실제 진행도 반영은 후속 작업이다. 예외를 던져 로그로 남기되,
+     * 호출부({@code handle})가 업적 단위로 격리해 처리하므로 다른 업적에는 영향을 주지 않는다.
      */
-    private boolean routineCategoryMatches(Achievement achievement, AchievementProgressEvent event) {
-        Long requiredCategoryId = achievement.getRoutineCategoryId();
-        if (requiredCategoryId != null) {
-            return requiredCategoryId.equals(event.routineCategoryId());
-        }
-
-        Set<Long> requiredCategoryIds = achievement.getRoutineCategoryIds();
-        if (!requiredCategoryIds.isEmpty()) {
-            return event.routineCategoryId() != null && requiredCategoryIds.contains(event.routineCategoryId());
-        }
-
-        return true; // 카테고리 무관 업적
+    private void notImplementedYet(Achievement achievement) {
+        throw new UnsupportedOperationException(
+                "progressType=" + achievement.getProgressType() + " (업적 " + achievement.getCode()
+                        + ") 은 아직 진행도 반영 로직이 구현되지 않았습니다.");
     }
 
+    /**
+     * 카테고리 시작 업적(예: 운동 시작, 건강 시작)이나 카테고리 한정 EGG 업적(예: 배움이
+     * 차곡차곡, 건강한 땀방울)이 자신과 무관한 루틴 완료 이벤트까지 반영하지 않도록 막는다.
+     *
+     * <p>{@code achievement.routineCategoryIds}({@code achievement_routine_category} 조인
+     * 테이블) 하나로 통일돼 있다 — 예전엔 카테고리 1개짜리(운동 시작 등)만 스칼라 FK 컬럼을
+     * 따로 썼는데, 그 컬럼이 {@code V20260812100950} 마이그레이션에서 제거되면서 이제
+     * 카테고리 1개든 여러 개든 전부 이 조인 테이블 경로 하나만 본다.
+     *
+     * <p>비어 있으면 카테고리 무관 업적이라 항상 true. 값이 있으면 이벤트의
+     * {@code routineCategoryId} 가 그 집합에 포함될 때만 true — 좋아요/쿡쿡처럼 카테고리
+     * 개념이 없는 이벤트(routineCategoryId == null)는 이 조건을 절대 통과하지 못하므로
+     * 안전하다. "전부 다 커버해야" 하는 CATEGORY_COVERAGE_COUNT(루틴 탐험가)는 이 게이트를
+     * 통과한 이후 progress 반영 단계에서 별도로 커버리지를 판정한다(TODO, 아직 미구현).
+     */
+    private boolean routineCategoryMatches(Achievement achievement, AchievementProgressEvent event) {
+        Set<Long> requiredCategoryIds = achievement.getRoutineCategoryIds();
+        if (requiredCategoryIds.isEmpty()) {
+            return true; // 카테고리 무관 업적
+        }
+        return event.routineCategoryId() != null && requiredCategoryIds.contains(event.routineCategoryId());
+    }
+
+    /**
+     * 회원이 이 업적에 처음 손을 대는 순간이면 IN_PROGRESS·progress 0 행을 만들어 둔다.
+     * 화면(AchievementQueryService)은 행이 없어도 IN_PROGRESS·0 으로 보여주지만, 진행도를
+     * 실제로 쌓으려면 이 시점부터는 행이 있어야 한다.
+     *
+     * <p>{@code findForUpdate} 로 조회하는 이유: 같은 회원의 같은 업적에 대해 이벤트가
+     * 거의 동시에 두 번 들어와도(예: 짧은 시간에 두 번의 루틴 완료) 비관적 락으로 순차
+     * 처리되게 하기 위해서다.
+     */
     private MemberAchievement getOrCreate(Achievement achievement, Long memberId) {
         return memberAchievementRepository
                 .findForUpdate(memberId, achievement.getId())
@@ -254,6 +258,7 @@ public class AchievementProgressService {
         }
     }
 
+    /** 방금 갱신한 조건을 포함해, 이 업적의 모든 하위 조건이 목표치를 채웠는지 확인한다. */
     private boolean allConditionsMet(MemberAchievement memberAchievement, Achievement achievement) {
         Map<String, Integer> currentByKey = memberAchievementConditionRepository
                 .findAllByMemberAchievementId(memberAchievement.getId()).stream()
@@ -266,6 +271,10 @@ public class AchievementProgressService {
                 .allMatch(c -> currentByKey.getOrDefault(c.getConditionKey(), 0) >= c.getTargetCount());
     }
 
+    /**
+     * CUMULATIVE_COUNT·DISTINCT_ROOM_COUNT 업적은 targetCount 가 반드시 있어야 한다.
+     * null 이면 데이터 정의 오류이므로(스키마상 nullable 이라 막히지 않는다) 여기서 방어한다.
+     */
     private int requireTargetCount(Achievement achievement) {
         if (achievement.getTargetCount() == null) {
             throw new IllegalStateException(
