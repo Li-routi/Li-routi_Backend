@@ -115,6 +115,19 @@ class GroupControllerTest {
     }
 
     @Test
+    @DisplayName("OpenAPI 문서의 그룹 활성 루틴 조회 응답은 전용 DTO를 가리킨다")
+    void openApi_GroupRoutineList_ResponseSchemaMatchesDto() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$['paths']['/api/groups/{groupId}/routines']"
+                        + "['get']['responses']['200']['content']['*/*']['schema']['$ref']")
+                        .value("#/components/schemas/ApiResponseGroupRoutineList"))
+                .andExpect(jsonPath("$['components']['schemas']['ApiResponseGroupRoutineList']"
+                        + "['properties']['result']['$ref']")
+                        .value("#/components/schemas/GroupRoutineList"));
+    }
+
+    @Test
     @DisplayName("인증 회원의 오늘 그룹 루틴을 공통 응답 형식으로 반환한다")
     void getTodayRoutines_AuthenticatedMember_ReturnsAssignments() throws Exception {
         // given
