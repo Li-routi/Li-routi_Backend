@@ -51,8 +51,9 @@
 -- 다음 배포에 그대로 반영된다. id는 유지하고 name/description/category만 바꾸는 편이
 -- 안전하다 — 이미 참여한 회원의 member_challenge가 id로 이 행을 가리키기 때문이다.
 --
--- routine_cycle은 전부 DAILY다. 스트릭 셈법이 DAILY 기준으로만 구현되어 있어
--- (RoutineCycle 주석 참고) WEEKLY·MONTHLY 챌린지는 그 규칙이 정의된 뒤에 추가한다.
+-- routine_cycle 분포: DAILY 38 / WEEKLY 15 / MONTHLY 13.
+-- 스트릭은 주기 단위로 센다 — DAILY 면 연속 며칠, WEEKLY 면 연속 몇 주다. 셈법은
+-- RoutineCycle 의 currentPeriodStart·previousPeriodStart 가 주기별로 각각 구현한다.
 --
 -- ⚠️ 이미 인증이 쌓인 챌린지의 routine_cycle을 바꾸려면 백필이 함께 필요하다.
 --
@@ -72,11 +73,11 @@
 -- 절차는 database-schema.md 의 [주기를 바꿀 때는 백필이 함께 필요하다] 를 따른다.
 -- 단순 UPDATE 로 끝나지 않는다 — 여러 행이 같은 구간으로 접히면서 유니크 키에 걸린다.
 --
--- reward는 일단 전부 10으로 둔다. 재화 적립·챌린지 성공 판정이 아직 미구현이라
--- (Challenge 엔티티 주석) 값을 차등하는 근거가 없다. 상점·재화 정책이 정해지면 조정한다.
+-- reward는 주기에 맞춰 DAILY 10 / WEEKLY 30 / MONTHLY 100 으로 둔다. 한 번 인증하기까지의
+-- 무게가 다르므로 같은 값을 줄 수 없다. 상점·재화 정책이 정해지면 다시 조정한다.
 --
--- 카테고리 분포: HEALTH 3 / EXERCISE 3 / STUDY 2 / LIFE 2 / HOBBY 2.
--- 화면 필터 칩 5개가 모두 비지 않게 하려는 의도다.
+-- 카테고리 분포(총 66): MIND 13 / LIFE 12 / HOBBY 11 / EXERCISE 10 / HEALTH 10 / STUDY 10.
+-- 화면 필터 칩 6개가 모두 비지 않게 하려는 의도다.
 
 INSERT INTO challenge (id, name, description, category, routine_cycle, reward, active, created_at, updated_at)
 VALUES
