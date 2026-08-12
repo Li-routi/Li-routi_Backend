@@ -14,6 +14,7 @@ import com.lirouti.domain.member.enums.SocialProvider;
 import com.lirouti.domain.member.repository.MemberRepository;
 import com.lirouti.domain.verification.dto.request.ChallengeVerificationReqDTO;
 import com.lirouti.domain.verification.exception.code.error.ChallengeVerificationErrorCode;
+import com.lirouti.domain.verification.entity.ChallengeVerification;
 import com.lirouti.domain.verification.repository.ChallengeVerificationRepository;
 import com.lirouti.global.apiPayload.exception.GeneralException;
 import com.lirouti.global.util.TimeUtil;
@@ -27,6 +28,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -107,10 +109,21 @@ class WeeklyVerificationConcurrencyTest {
         memberChallengeId = mc.getId();
     }
 
+    /**
+     * 이 참여의 인증을 <b>상태와 무관하게</b> 모은다.
+     *
+     * <p>{@code findFeedByCursor} 는 피드용이라 숨김 처리된 행을 걸러 낸다. 정리와 단정에 그것을
+     * 쓰면 걸러진 행을 못 보고 지나가, 남은 행이 다음 테스트의 유니크 키를 막는다.
+     */
+    private List<ChallengeVerification> allRows() {
+        return challengeVerificationRepository.findAll().stream()
+                .filter(v -> memberChallengeId.equals(v.getMemberChallenge().getId()))
+                .toList();
+    }
+
     @AfterEach
     void tearDown() {
-        challengeVerificationRepository.deleteAll(
-                challengeVerificationRepository.findFeedByCursor(challengeId, null, null, 100));
+        challengeVerificationRepository.deleteAll(allRows());
         memberChallengeRepository.deleteById(memberChallengeId);
         challengeRepository.deleteById(challengeId);
         memberRepository.deleteById(memberId);
@@ -165,8 +178,7 @@ class WeeklyVerificationConcurrencyTest {
         assertThat(success.get()).as("한 건만 통과한다").isEqualTo(1);
         assertThat(conflict.get()).as("나머지 하나는 진다").isEqualTo(1);
 
-        assertThat(challengeVerificationRepository
-                .findFeedByCursor(challengeId, null, null, 100))
+        assertThat(allRows())
                 .as("그 주에 남는 인증은 한 건이다")
                 .hasSize(1);
     }
@@ -175,12 +187,16 @@ class WeeklyVerificationConcurrencyTest {
     @DisplayName("저장된 구간 첫날은 그 주 일요일이다 — 동시 경합을 이긴 쪽도 마찬가지")
     void concurrentWeeklyVerify_WinnerStoresSundayPeriodStart() throws InterruptedException {
         ExecutorService pool = Executors.newFixedThreadPool(2);
+        CountDownLatch ready = new CountDownLatch(2);
         CountDownLatch start = new CountDownLatch(1);
         CountDownLatch done = new CountDownLatch(2);
 
         for (String mediaKey : new String[]{KEY_A, KEY_B}) {
             pool.submit(() -> {
                 try {
+                    // 둘 다 게이트 앞에 선 뒤 함께 출발시킨다. 이것이 없으면 한쪽이 먼저
+                    // 끝나 버려 경합이 아니라 순차 실행을 보게 된다.
+                    ready.countDown();
                     start.await();
                     challengeVerificationService.verify(memberId, challengeId,
                             new ChallengeVerificationReqDTO.Verify(mediaKey, "주간 동시 인증"));
@@ -194,13 +210,13 @@ class WeeklyVerificationConcurrencyTest {
             });
         }
 
+        assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
         start.countDown();
         assertThat(done.await(20, TimeUnit.SECONDS)).isTrue();
         pool.shutdownNow();
 
         LocalDate expected = RoutineCycle.WEEKLY.currentPeriodStart(LocalDate.now(TimeUtil.KST));
-        assertThat(challengeVerificationRepository
-                .findFeedByCursor(challengeId, null, null, 100))
+        assertThat(allRows())
                 .singleElement()
                 .satisfies(v -> assertThat(v.getPeriodStartDate()).isEqualTo(expected));
     }

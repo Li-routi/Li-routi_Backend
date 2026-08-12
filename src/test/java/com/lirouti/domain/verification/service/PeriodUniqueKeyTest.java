@@ -10,12 +10,16 @@ import com.lirouti.domain.member.enums.SocialProvider;
 import com.lirouti.domain.verification.dto.request.ChallengeVerificationReqDTO;
 import com.lirouti.domain.verification.entity.ChallengeVerification;
 import com.lirouti.global.util.TimeUtil;
+import com.lirouti.domain.media.service.MediaImageLoad;
+import com.lirouti.domain.media.service.MediaService;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceException;
 import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
@@ -25,6 +29,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.when;
 
 /**
  * <b>주기 1회를 DB 가 보장한다</b>는 주장을 실제로 검증한다.
@@ -52,6 +60,13 @@ class PeriodUniqueKeyTest {
     private static final String KEY =
             "challenge-verifications-staging/44444444-4444-4444-8444-444444444444.jpg";
 
+    /**
+     * 저장 경로가 S3 와 심사를 부른다. 이 테스트의 관심사가 아니라 목으로 끊는다 —
+     * 끊지 않으면 구간 계산을 보려던 테스트가 외부 사정으로 흔들린다.
+     */
+    @MockitoBean
+    private MediaService mediaService;
+
     @Autowired
     private ChallengeVerificationService challengeVerificationService;
 
@@ -59,6 +74,17 @@ class PeriodUniqueKeyTest {
     private EntityManager em;
 
     private final AtomicInteger seq = new AtomicInteger(0);
+
+    @org.junit.jupiter.api.BeforeEach
+    void stubMedia() {
+        doNothing().when(mediaService).validateMediaKey(any(), any());
+        doNothing().when(mediaService).validateUploadedBytes(any(), any());
+        // "못 읽음" 으로 두면 심사를 건너뛰고 통과한다. 스텁이 없으면 record 기본값이 null 이라 NPE 다.
+        when(mediaService.loadForReview(any(), anyInt())).thenReturn(MediaImageLoad.readFailed());
+        when(mediaService.promote(any(), any(), any()))
+                .thenReturn("challenge-verifications/55555555-5555-4555-8555-555555555555.jpg");
+        when(mediaService.resolvePublicUrl(any())).thenReturn("https://cdn.example.com/x.jpg");
+    }
 
     private Member member() {
         int n = seq.incrementAndGet();
@@ -129,7 +155,7 @@ class PeriodUniqueKeyTest {
 
     @Test
     @DisplayName("같은 구간이면 날짜가 달라도 두 번째 INSERT 가 막힌다 — 선검사가 아니라 DB 가")
-    void sameePeriodDifferentDate_SecondInsertViolatesUniqueKey() {
+    void samePeriodDifferentDate_SecondInsertViolatesUniqueKey() {
         Member m = member();
         Challenge c = challenge(RoutineCycle.WEEKLY);
         MemberChallenge mc = join(m, c, 1);
@@ -145,7 +171,7 @@ class PeriodUniqueKeyTest {
         assertThatThrownBy(() ->
                 em.persist(verificationRow(mc, weekStart.plusDays(1), weekStart)))
                 .as("유니크 키가 (참여, 회차, 구간 첫날) 이라 같은 구간의 둘째 행은 못 들어간다")
-                .isInstanceOf(Exception.class);
+                .isInstanceOf(PersistenceException.class);
     }
 
     @Test
