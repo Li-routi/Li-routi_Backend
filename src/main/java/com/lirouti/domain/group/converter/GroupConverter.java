@@ -126,7 +126,8 @@ public final class GroupConverter {
     public static GroupResDTO.Detail toGroupDetail(
             List<GroupMemberDetailProjection> memberDetails,
             List<TodayMemberProgressProjection> progresses,
-            Map<Long, GroupResDTO.Avatar> avatarsByMemberId
+            Map<Long, GroupResDTO.Avatar> avatarsByMemberId,
+            GroupMemberRole myRole
     ) {
         GroupMemberDetailProjection group = memberDetails.getFirst();
         Map<Long, TodayMemberProgressProjection> progressByMemberId = progresses.stream()
@@ -139,6 +140,7 @@ public final class GroupConverter {
                 .groupId(group.groupId())
                 .groupName(group.groupName())
                 .inviteCode(group.inviteCode())
+                .myRole(myRole)
                 .members(memberDetails.stream()
                         .map(member -> toMemberActivity(
                                 member,

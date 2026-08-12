@@ -2,6 +2,7 @@ package com.lirouti.domain.group.dto.response;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.lirouti.domain.group.enums.GroupJoinUnavailableReason;
+import com.lirouti.domain.group.enums.GroupMemberRole;
 import com.lirouti.domain.group.enums.GroupMemberStatus;
 import com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus;
 import com.lirouti.domain.routine.enums.RoutineCategoryColor;
@@ -69,6 +70,7 @@ public final class GroupResDTO {
             Long groupId,
             String groupName,
             String inviteCode,
+            @Schema(description = "로그인 회원의 해당 그룹 내 권한") GroupMemberRole myRole,
             List<MemberActivity> members
     ) {
     }

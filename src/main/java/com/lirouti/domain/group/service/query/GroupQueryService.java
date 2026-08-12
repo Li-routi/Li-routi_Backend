@@ -2,6 +2,7 @@ package com.lirouti.domain.group.service.query;
 
 import com.lirouti.domain.group.converter.GroupConverter;
 import com.lirouti.domain.group.dto.response.GroupResDTO;
+import com.lirouti.domain.group.entity.GroupMember;
 import com.lirouti.domain.group.entity.GroupRoutineCategory;
 import com.lirouti.domain.group.repository.GroupRoutineCategoryRepository;
 import com.lirouti.domain.group.service.GroupValidationService;
@@ -120,7 +121,8 @@ public class GroupQueryService {
     /** ACTIVE 구성원이 그룹방 진입에 필요한 기본 정보와 구성원별 활동 현황을 조회한다. */
     @Transactional(readOnly = true)
     public GroupResDTO.Detail getGroupDetail(Long groupId, Long memberId) {
-        groupValidationService.validateActiveGroupMember(groupId, memberId);
+        GroupMember currentMembership = groupValidationService
+                .validateActiveGroupMember(groupId, memberId);
 
         LocalDate today = LocalDate.now(clock);
         List<GroupDetailQueryRepository.GroupMemberDetailProjection> memberDetails =
@@ -140,7 +142,12 @@ public class GroupQueryService {
 
         log.debug("그룹 상세 정보를 조회했습니다. groupId={}, memberId={}, memberCount={}",
                 groupId, memberId, memberDetails.size());
-        return GroupConverter.toGroupDetail(memberDetails, progresses, avatarsByMemberId);
+        return GroupConverter.toGroupDetail(
+                memberDetails,
+                progresses,
+                avatarsByMemberId,
+                currentMembership.getRole()
+        );
     }
 
     /** ACTIVE OWNER가 관리 중인 ACTIVE 그룹의 활성 루틴과 반복 일정을 조회한다. */

@@ -1,6 +1,8 @@
 package com.lirouti.domain.group.service.query;
 
 import com.lirouti.domain.group.dto.response.GroupResDTO;
+import com.lirouti.domain.group.entity.GroupMember;
+import com.lirouti.domain.group.enums.GroupMemberRole;
 import com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus;
 import com.lirouti.domain.group.exception.GroupException;
 import com.lirouti.domain.group.exception.code.error.GroupErrorCode;
@@ -90,6 +92,10 @@ class GroupQueryServiceTest {
     void getGroupDetail_ActiveMember_ReturnsDetailAndDailyProgress() {
         // given
         Long groupId = 301L;
+        GroupMember currentMembership = mock(GroupMember.class);
+        when(currentMembership.getRole()).thenReturn(GroupMemberRole.MEMBER);
+        when(groupValidationService.validateActiveGroupMember(groupId, MEMBER_ID))
+                .thenReturn(currentMembership);
         when(groupDetailQueryRepository.findActiveMemberDetails(groupId)).thenReturn(List.of(
                 new GroupDetailQueryRepository.GroupMemberDetailProjection(
                         groupId, "우리 집", "DETAIL1", MEMBER_ID, "리루티",
@@ -124,6 +130,7 @@ class GroupQueryServiceTest {
         assertThat(result.groupId()).isEqualTo(groupId);
         assertThat(result.groupName()).isEqualTo("우리 집");
         assertThat(result.inviteCode()).isEqualTo("DETAIL1");
+        assertThat(result.myRole()).isEqualTo(GroupMemberRole.MEMBER);
         assertThat(result.members()).containsExactly(
                 new GroupResDTO.MemberActivity(
                         MEMBER_ID, "리루티", new GroupResDTO.Avatar(List.of(

@@ -72,7 +72,7 @@ public interface GroupControllerDocs {
     @Operation(
             summary = "그룹방 상세 조회",
             description = """
-                    ACTIVE 그룹 구성원만 그룹명, 초대코드와 ACTIVE 구성원별 활동 현황 및 현재 조합 아바타를 조회할 수 있습니다.
+                    ACTIVE 그룹 구성원만 그룹명, 초대코드, 로그인 회원의 그룹 내 권한과 ACTIVE 구성원별 활동 현황 및 현재 조합 아바타를 조회할 수 있습니다.
                     금일 진행도는 완료한 그룹 루틴 할당 수와 전체 할당 수이며, 할당이 없는 구성원은 0/0입니다.
                     """
     )
