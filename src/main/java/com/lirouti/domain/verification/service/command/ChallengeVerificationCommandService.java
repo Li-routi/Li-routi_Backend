@@ -1,7 +1,6 @@
 package com.lirouti.domain.verification.service.command;
 
-import com.lirouti.domain.challenge.converter.ChallengeConverter;
-import com.lirouti.domain.challenge.dto.response.ChallengeResDTO;
+import com.lirouti.domain.achievement.event.AchievementProgressEvent;
 import com.lirouti.domain.verification.converter.ChallengeVerificationConverter;
 import com.lirouti.domain.verification.dto.response.ChallengeVerificationResDTO;
 import com.lirouti.domain.verification.dto.request.ChallengeVerificationReqDTO;
@@ -18,6 +17,7 @@ import com.lirouti.domain.reward.service.command.RewardCommandService;
 import com.lirouti.global.util.TimeUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -26,7 +26,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZonedDateTime;
-import java.util.List;
 import java.util.Optional;
 import com.lirouti.domain.verification.exception.VerificationException;
 import com.lirouti.domain.verification.exception.code.error.ChallengeVerificationErrorCode;
@@ -55,6 +54,11 @@ public class ChallengeVerificationCommandService {
     // 저장된 key를 공개 URL로 조립하는 데만 쓴다. DB를 다루지 않는 유틸성 서비스다.
     private final MediaService mediaService;
     private final RewardCommandService rewardCommandService;
+
+    /** achievement 도메인이 구독하는 루틴 완료 이벤트의 condition key. 개인 루틴 인증과 동일한 키를 공유한다. */
+    private static final String CONDITION_KEY_ROUTINE_COMPLETE_COUNT = "ROUTINE_COMPLETE_COUNT";
+    private static final String SOURCE_TYPE_CHALLENGE_VERIFICATION = "CHALLENGE_VERIFICATION";
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * 인증 저장과 스트릭 갱신. <b>DAILY</b> 에서 오늘 이미 인증했으면 행을 새로 만들지 않고
@@ -168,6 +172,16 @@ public class ChallengeVerificationCommandService {
             rewardCommandService.grantForVerification(
                     memberChallenge.getMember(), verification.getId(),
                     memberChallenge.getChallenge().getReward());
+
+            if (eventPublisher != null) {
+                eventPublisher.publishEvent(new AchievementProgressEvent(
+                        memberChallenge.getMember().getId(),
+                        CONDITION_KEY_ROUTINE_COMPLETE_COUNT,
+                        1,
+                        SOURCE_TYPE_CHALLENGE_VERIFICATION,
+                        verification.getId()
+                ));
+            }
         }
 
         // 보류 건은 아직 대기 prefix 에 있어 공개 주소가 없다. 그 주소로 열면 403 이므로

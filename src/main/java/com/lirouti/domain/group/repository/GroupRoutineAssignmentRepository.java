@@ -1,5 +1,6 @@
 package com.lirouti.domain.group.repository;
 
+import com.lirouti.domain.group.dto.projection.DailyAssignmentTotals;
 import com.lirouti.domain.group.dto.projection.DailyScheduleAndCompletion;
 import com.lirouti.domain.group.entity.GroupRoutineAssignment;
 import com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus;
@@ -388,4 +389,27 @@ public interface GroupRoutineAssignmentRepository
             @Param("from") LocalTime from,
             @Param("to") LocalTime to
     );
+
+    /**
+     * 오늘 그 그룹의 현재 가입 회차 ACTIVE 구성원 전원이 각자의 할당을 모두 완료했는지
+     * 판정하기 위한 집계. "총 0건"(오늘 할당된 루틴이 없는 방)은 완료로 치지 않기 위해
+     * 총 건수도 함께 반환한다.
+     */
+    @Query("""
+        select new com.lirouti.domain.group.dto.projection.DailyAssignmentTotals(
+            count(assignment),
+            sum(case when assignment.status = com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus.COMPLETED
+                     then 1L else 0L end)
+        )
+        from GroupRoutineAssignment assignment
+        join GroupMember gm
+             on gm.group.id = assignment.groupRoutine.group.id
+            and gm.member.id = assignment.member.id
+        where assignment.groupRoutine.group.id = :groupId
+          and assignment.assignedDate = :assignedDate
+          and gm.status = com.lirouti.domain.group.enums.GroupMemberStatus.ACTIVE
+          and assignment.createdAt >= gm.joinedAt
+        """)
+    DailyAssignmentTotals countTodayAssignmentTotalsForActiveMembers(
+            @Param("groupId") Long groupId, @Param("assignedDate") LocalDate assignedDate);
 }

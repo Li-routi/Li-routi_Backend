@@ -1,5 +1,6 @@
 package com.lirouti.domain.group.service.command;
 
+import com.lirouti.domain.achievement.event.AchievementProgressEvent;
 import com.lirouti.domain.group.converter.GroupConverter;
 import com.lirouti.domain.group.dto.request.GroupReqDTO;
 import com.lirouti.domain.group.dto.response.GroupResDTO;
@@ -17,6 +18,7 @@ import com.lirouti.domain.group.service.GroupValidationService;
 import com.lirouti.domain.member.entity.Member;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,6 +41,18 @@ public class GroupCreationAttemptService {
     private final GroupRoutineRepository groupRoutineRepository;
     private final GroupRoutineAssignmentCommandService assignmentCommandService;
     private final GroupInviteCodeGenerator inviteCodeGenerator;
+    private final ApplicationEventPublisher eventPublisher;
+
+    /**
+     * ACH-ST-003(첫 방 만들기)와 ACH-ST-014(방 참여 2개, 만든 방+참여한 방 합산)의 conditionKey.
+     * DISTINCT_ROOM_COUNT 는 sourceId 로 방(group) id 를 써서, 방 생성이든 초대 참여든
+     * 같은 방을 다시 세지 않게 한다 - AchievementProgressEventLog 의
+     * (sourceType, sourceId, conditionKey, memberId) unique 제약이 그 구분을 대신 해 준다.
+     */
+    private static final String ROOM_CREATE_CONDITION_KEY = "ROOM_CREATE_COUNT";
+    private static final String ROOM_CREATE_SOURCE_TYPE = "ROOM_CREATE";
+    private static final String ROOM_DISTINCT_CONDITION_KEY = "ROOM_DISTINCT_COUNT";
+    private static final String ROOM_DISTINCT_SOURCE_TYPE = "ROOM_PARTICIPATION";
 
     /**
      * 회원 잠금부터 OWNER 할당까지 전체 생성을 한 번 시도한다.
@@ -93,6 +107,12 @@ public class GroupCreationAttemptService {
                 createdRoutines.stream()
                         .mapToInt(GroupConverter.CreatedRoutine::assignmentCount)
                         .sum());
+
+        eventPublisher.publishEvent(new AchievementProgressEvent(
+                memberId, ROOM_CREATE_CONDITION_KEY, 1, ROOM_CREATE_SOURCE_TYPE, memberId));
+        eventPublisher.publishEvent(new AchievementProgressEvent(
+                memberId, ROOM_DISTINCT_CONDITION_KEY, 1, ROOM_DISTINCT_SOURCE_TYPE, group.getId()));
+
         return GroupConverter.toCreateResult(group, createdCategories, createdRoutines);
     }
 
