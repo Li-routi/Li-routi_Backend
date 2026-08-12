@@ -7,16 +7,24 @@ import com.lirouti.domain.achievement.entity.MemberAchievementCondition;
 import com.lirouti.domain.achievement.event.AchievementProgressEvent;
 import com.lirouti.domain.achievement.repository.AchievementRepository;
 import com.lirouti.domain.achievement.repository.MemberAchievementConditionRepository;
+import com.lirouti.domain.achievement.repository.MemberAchievementProgressDayRepository;
 import com.lirouti.domain.achievement.repository.MemberAchievementRepository;
+import com.lirouti.domain.achievement.entity.MemberAchievementProgressDay;
 import com.lirouti.domain.member.repository.MemberRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
+import java.time.DayOfWeek;
+import java.time.LocalDate;
+import java.time.temporal.TemporalAdjusters;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -30,14 +38,22 @@ import java.util.stream.Collectors;
  * 사건인지"를 먼저 확정한다. 이 체크는 conditionKey 를 쓰는 업적이 여러 개라도 원본
  * 사건 1건당 딱 한 번만 수행된다 — 업적별로 나눠서 체크하면, 같은 conditionKey 를 쓰는
  * 업적이 두 개일 때 두 번째 업적은 "이미 처리됨"으로 오판해 스킵되는 버그가 생긴다.
+ *
+ * <p>같은 conditionKey 를 여러 업적이 공유할 수 있으므로(예: ROUTINE_COMPLETE_COUNT 를
+ * CUMULATIVE_COUNT 업적과 아직 미구현인 DISTINCT_DAY_COUNT 업적이 함께 참조), {@code handle}
+ * 은 업적 하나씩을 try-catch 로 격리해 처리한다 — 한 업적의 반영이 실패해도(예: 미구현
+ * progressType) 형제 업적의 진행도 갱신까지 막히지 않는다.
  */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class AchievementProgressService {
 
     private final AchievementRepository achievementRepository;
     private final MemberAchievementRepository memberAchievementRepository;
     private final MemberAchievementConditionRepository memberAchievementConditionRepository;
+    private final MemberAchievementProgressDayRepository memberAchievementProgressDayRepository;
+    private final MemberAchievementProgressDayService memberAchievementProgressDayService;
     private final MemberRepository memberRepository;
     private final AchievementProgressEventLogService achievementProgressEventLogService;
 
@@ -52,7 +68,16 @@ public class AchievementProgressService {
 
         List<Achievement> targets = achievementRepository.findAllActiveByConditionKey(event.conditionKey());
         for (Achievement achievement : targets) {
-            applyProgress(achievement, event);
+            // 같은 conditionKey 를 여러 업적이 공유한다 (예: ROUTINE_COMPLETE_COUNT 를
+            // CUMULATIVE_COUNT 업적과 아직 미구현인 DISTINCT_DAY_COUNT 업적이 함께 쓴다).
+            // 업적 하나가 실패(예: 미구현 progressType)해도 나머지 형제 업적의 진행도
+            // 갱신까지 통째로 막히면 안 되므로 업적 단위로 격리한다.
+            try {
+                applyProgress(achievement, event);
+            } catch (RuntimeException e) {
+                log.error("업적 진행도 반영 실패 - achievementCode={}, progressType={}, memberId={}",
+                        achievement.getCode(), achievement.getProgressType(), event.memberId(), e);
+            }
         }
     }
 
@@ -68,24 +93,125 @@ public class AchievementProgressService {
             case COMPOSITE -> applyComposite(memberAchievement, achievement, event);
             case CUMULATIVE_COUNT, DISTINCT_ROOM_COUNT ->
                     memberAchievement.increaseProgress(event.amount(), requireTargetCount(achievement));
+            case DISTINCT_DAY_COUNT -> applyDistinctDayCount(memberAchievement, achievement, event);
+            case WEEKLY_DISTINCT_DAY_COUNT -> applyPeriodDistinctDayCount(
+                    memberAchievement, achievement, event, this::weekRangeOf);
+            case MONTHLY_DISTINCT_DAY_COUNT -> applyPeriodDistinctDayCount(
+                    memberAchievement, achievement, event, this::monthRangeOf);
+            // TODO: 다음 단계에서 구현. 지금은 조회 API가 죽지 않도록(enum 매핑) 값만 정의해 두고,
+            // 실제 반영 로직은 아직 없다 - handle() 의 per-achievement try-catch 가 이 스텁으로 인한
+            // 실패를 형제 업적에 전파되지 않게 막아 준다.
+            case CATEGORY_COVERAGE_COUNT, STREAK_DAYS -> notImplementedYet(achievement);
+            // GROUP_* 는 이 업적들이 condition_key 를 비워 두므로 findAllActiveByConditionKey 의
+            // 결과에 애초에 포함되지 않는다 - 여기 도달한다면 조회 쿼리 또는 마이그레이션 데이터가
+            // 잘못된 것이므로 조용히 넘기지 않고 바로 알아챌 수 있게 예외로 방어한다.
+            case GROUP_CUMULATIVE_COUNT, GROUP_DISTINCT_DAY_COUNT ->
+                    throw new IllegalStateException(
+                            "업적 " + achievement.getCode() + "(" + achievement.getProgressType()
+                                    + ")는 그룹 단위 파이프라인에서 처리되어야 하며 회원 단위 리스너에 "
+                                    + "도달하면 안 됩니다. condition_key 설정을 확인하세요.");
         }
     }
 
     /**
-     * 카테고리 시작 업적(예: 운동 시작, 건강 시작)이 자신의 카테고리와 무관한 루틴
-     * 완료 이벤트까지 달성 처리하지 않도록 막는다.
+     * DISTINCT_DAY_COUNT(평생 누적) 처리.
+     * 오늘 날짜가 이 업적에 처음 기록되는 경우에만 +1 — 하루에 여러 번 이벤트가 와도
+     * {@link MemberAchievementProgressDayService#tryMarkDay} 의 unique 제약 덕분에 한 번만 센다.
+     */
+    private void applyDistinctDayCount(MemberAchievement memberAchievement, Achievement achievement,
+                                       AchievementProgressEvent event) {
+        LocalDate eventDate = toKstDate(event);
+        boolean isNewDay = memberAchievementProgressDayService.tryMarkDay(memberAchievement, eventDate);
+        if (!isNewDay) {
+            return; // 오늘 치는 이미 세어짐 - 진행도 변화 없음
+        }
+        memberAchievement.increaseProgress(1, requireTargetCount(achievement));
+    }
+
+    /**
+     * WEEKLY_DISTINCT_DAY_COUNT·MONTHLY_DISTINCT_DAY_COUNT 공통 처리.
      *
-     * <p>{@code achievement.getRoutineCategoryId()} 가 null 이면 카테고리 무관 업적이라
-     * 항상 true. 그 값이 있으면 이벤트의 {@code routineCategoryId} 와 정확히 같아야
-     * true — 좋아요/쿡쿡처럼 카테고리 개념이 없는 이벤트(routineCategoryId == null)는
-     * 이 조건을 절대 통과하지 못하므로 안전하다.
+     * <p>날짜 dedup 자체는 DISTINCT_DAY_COUNT 와 같은 테이블·같은 방식을 쓴다(날짜 하나는
+     * 전역적으로 한 번만 기록됨 — "이번 주"인지 "이번 달"인지는 나중에 세는 쪽에서 구분한다).
+     * 새 날짜가 생겼을 때만 현재 기간 범위로 다시 세어 {@code syncProgress}(절대값 갱신)로
+     * 반영한다 — 주/월이 바뀌면 지난 기간의 날짜는 범위 밖으로 밀려나 자연히 줄어든다.
+     */
+    private void applyPeriodDistinctDayCount(MemberAchievement memberAchievement, Achievement achievement,
+                                             AchievementProgressEvent event,
+                                             Function<LocalDate, LocalDate[]> rangeResolver) {
+        LocalDate eventDate = toKstDate(event);
+        boolean isNewDay = memberAchievementProgressDayService.tryMarkDay(memberAchievement, eventDate);
+        if (!isNewDay) {
+            return;
+        }
+        LocalDate[] range = rangeResolver.apply(eventDate);
+        long countInRange = memberAchievementProgressDayRepository
+                .countByMemberAchievementIdAndProgressDateBetween(memberAchievement.getId(), range[0], range[1]);
+        memberAchievement.syncProgress((int) countInRange, requireTargetCount(achievement));
+    }
+
+    /** 이벤트 발생일이 속한 주(일요일 - 월요일)의 [시작, 끝]. */
+    private LocalDate[] weekRangeOf(LocalDate date) {
+        LocalDate start = date.with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY));
+        LocalDate end = date.with(TemporalAdjusters.nextOrSame(DayOfWeek.MONDAY));
+        return new LocalDate[]{start, end};
+    }
+
+    /** 이벤트 발생일이 속한 달의 [1일, 말일]. */
+    private LocalDate[] monthRangeOf(LocalDate date) {
+        return new LocalDate[]{
+                date.with(TemporalAdjusters.firstDayOfMonth()),
+                date.with(TemporalAdjusters.lastDayOfMonth())
+        };
+    }
+
+    /** 이벤트 발생 시각을 KST 기준 날짜로 변환한다. occurredAt 은 이미 KST 로 채워진다는 전제다. */
+    private LocalDate toKstDate(AchievementProgressEvent event) {
+        return event.occurredAt().toLocalDate();
+    }
+
+    /**
+     * 아직 반영 로직이 없는 progress_type 용 스텁.
+     *
+     * <p>DISTINCT_DAY_COUNT·WEEKLY_DISTINCT_DAY_COUNT·MONTHLY_DISTINCT_DAY_COUNT·
+     * CATEGORY_COVERAGE_COUNT·STREAK_DAYS 는 {@link com.lirouti.domain.achievement.enums.AchievementProgressType}
+     * 에 값만 정의된 상태고, 실제 진행도 반영은 후속 작업이다. 예외를 던져 로그로 남기되,
+     * 호출부({@code handle})가 업적 단위로 격리해 처리하므로 다른 업적에는 영향을 주지 않는다.
+     */
+    private void notImplementedYet(Achievement achievement) {
+        throw new UnsupportedOperationException(
+                "progressType=" + achievement.getProgressType() + " (업적 " + achievement.getCode()
+                        + ") 은 아직 진행도 반영 로직이 구현되지 않았습니다.");
+    }
+
+    /**
+     * 카테고리 시작 업적(예: 운동 시작, 건강 시작)이나 카테고리 한정 EGG 업적(예: 배움이
+     * 차곡차곡, 건강한 땀방울)이 자신과 무관한 루틴 완료 이벤트까지 반영하지 않도록 막는다.
+     *
+     * <p>카테고리 조건은 두 경로 중 하나로 걸린다 — 같은 업적이 둘 다 쓰지는 않는다:
+     * <ul>
+     *   <li>{@code achievement.routineCategoryId}(단일 FK): 카테고리 시작 업적처럼 정확히
+     *   카테고리 1개만 요구할 때.</li>
+     *   <li>{@code achievement.routineCategoryIds}({@code achievement_routine_category}
+     *   조인 테이블): 카테고리 2개 이상 중 아무거나 해당하면 되는 경우(예: 건강한 땀방울 =
+     *   운동 또는 건강). "전부 다 커버해야" 하는 CATEGORY_COVERAGE_COUNT(루틴 탐험가)는
+     *   이거랑 다른 판정이 필요해서 별도로 처리한다(TODO, 아직 미구현).</li>
+     * </ul>
+     * 둘 다 비어 있으면 카테고리 무관 업적이라 항상 true. 좋아요/쿡쿡처럼 카테고리 개념이
+     * 없는 이벤트(routineCategoryId == null)는 두 경로 모두 통과하지 못하므로 안전하다.
      */
     private boolean routineCategoryMatches(Achievement achievement, AchievementProgressEvent event) {
         Long requiredCategoryId = achievement.getRoutineCategoryId();
-        if (requiredCategoryId == null) {
-            return true;
+        if (requiredCategoryId != null) {
+            return requiredCategoryId.equals(event.routineCategoryId());
         }
-        return requiredCategoryId.equals(event.routineCategoryId());
+
+        Set<Long> requiredCategoryIds = achievement.getRoutineCategoryIds();
+        if (!requiredCategoryIds.isEmpty()) {
+            return event.routineCategoryId() != null && requiredCategoryIds.contains(event.routineCategoryId());
+        }
+
+        return true; // 카테고리 무관 업적
     }
 
     /**

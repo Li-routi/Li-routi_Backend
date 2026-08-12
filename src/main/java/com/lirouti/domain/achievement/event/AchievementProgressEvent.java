@@ -1,5 +1,7 @@
 package com.lirouti.domain.achievement.event;
 
+import java.time.LocalDateTime;
+
 /**
  * 회원의 행동(루틴 완료, 좋아요, 쿡쿡 등)이 일어났을 때 발행되는 이벤트.
  *
@@ -37,11 +39,43 @@ public record AchievementProgressEvent(
          * 이 값이 일치할 때만 반영된다 — null 이면 매칭 자체가 안 돼 아무 업적도
          * 잘못 달성 처리되지 않는다.
          */
-        Long routineCategoryId
+        Long routineCategoryId,
+
+        /**
+         * 원본 행동이 실제로 일어난 시각(KST 기준). {@code DISTINCT_DAY_COUNT} 계열
+         * progressType(작심삼일 탈출, 배움이 차곡차곡 등)이 "서로 다른 날짜"를 판별하는
+         * 근거로 쓴다.
+         *
+         * <p>이 필드를 받지 않는 기존 생성자를 호출하면 이벤트 처리 시점의 {@code now()}로
+         * 채워진다 — 대부분의 이벤트가 발행과 거의 동시에 처리되므로 실무상 문제는 없지만,
+         * 자정 부근에 발행-처리 사이 시차가 있으면 날짜가 하루 어긋날 수 있다. 날짜 경계에
+         * 민감한 이벤트(루틴 완료 등)를 발행하는 쪽은 가능하면 7개 인자 생성자로 실제 발생
+         * 시각을 명시적으로 넘기는 걸 권장한다.
+         */
+        LocalDateTime occurredAt
 ) {
+    /** 루틴 카테고리와 발생 시각까지 명시하는 생성자. 날짜 경계에 민감한 이벤트는 이걸 쓴다. */
+    public AchievementProgressEvent(Long memberId, String conditionKey, int amount,
+                                    String sourceType, Long sourceId, Long routineCategoryId,
+                                    LocalDateTime occurredAt) {
+        this.memberId = memberId;
+        this.conditionKey = conditionKey;
+        this.amount = amount;
+        this.sourceType = sourceType;
+        this.sourceId = sourceId;
+        this.routineCategoryId = routineCategoryId;
+        this.occurredAt = occurredAt;
+    }
+
+    /** 기존 호출부 호환용. 발생 시각은 처리 시점(now)으로 채워진다. */
+    public AchievementProgressEvent(Long memberId, String conditionKey, int amount,
+                                    String sourceType, Long sourceId, Long routineCategoryId) {
+        this(memberId, conditionKey, amount, sourceType, sourceId, routineCategoryId, LocalDateTime.now());
+    }
+
     /** 루틴 카테고리와 무관한 이벤트(좋아요, 쿡쿡, 방 생성 등)용 편의 생성자. */
     public AchievementProgressEvent(Long memberId, String conditionKey, int amount,
                                     String sourceType, Long sourceId) {
-        this(memberId, conditionKey, amount, sourceType, sourceId, null);
+        this(memberId, conditionKey, amount, sourceType, sourceId, null, LocalDateTime.now());
     }
 }
