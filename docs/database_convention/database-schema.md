@@ -1361,13 +1361,18 @@ member 행을 잠근다   (SELECT ... FOR UPDATE)
 
 **`AvatarSlot` 에 `CHARACTER` 를 더하지 않는다.** 넣으면 `avatar_item` 한 표에 **돈으로 사는 것과 조건으로 여는 것이 섞이고**, 슬롯 유니크 제약(`UNIQUE(member_id, slot)`)이 "캐릭터는 반드시 하나"와 "아이템은 없을 수 있다"를 같은 규칙으로 다루게 된다. 성질이 다르므로 표를 나눈다.
 
-### 알에서 성체로 — 관문이 둘이다
+### 잠금이 곧 알이다
+
+캐릭터 한 마리가 이미지 두 장을 갖는다. **알은 성장 단계가 아니라 잠금 상태의 그림이다.**
 
 ```text
-해금 조건 달성 → 알 획득 → 루틴을 한 날이 hatch_days 만큼 쌓임 → 성체
+잠겨 있음  →  알 그림
+해금 조건 달성  →  성체
 ```
 
-캐릭터 한 마리가 이미지 두 장(알·성체)을 갖는다. 중간 단계는 두지 않는다. 난이도를 잡을 때 **조건과 일수를 함께** 봐야 한다.
+**관문은 하나다.** 조건을 채우면 그 자리에서 성체가 된다 — 기다리는 구간이 없다.
+
+> 중간 단계도, 부화도 두지 않는다. 난이도는 **해금 조건만으로** 잡는다.
 
 ### `character`
 
@@ -1379,9 +1384,8 @@ member 행을 잠근다   (SELECT ... FOR UPDATE)
 | code | VARCHAR(30) | N | 논리 키. 시드·조건이 참조한다 |
 | name | VARCHAR(30) | N | 이름 |
 | grade | VARCHAR(20) | N | `BASIC` · `RARE` · `EPIC` · `SPECIAL` |
-| hatch_days | INT | N | 부화까지 필요한 활동일. 첫 알 14, 중간 30~50, 최상위 하나만 100 |
-| egg_image_key | VARCHAR(512) | N | 알 이미지. **절대 URL 이 아니라 S3 key** |
-| adult_image_key | VARCHAR(512) | N | 성체 이미지 |
+| egg_image_key | VARCHAR(512) | N | **잠긴 상태**로 보여줄 알 그림. 절대 URL 이 아니라 S3 key |
+| adult_image_key | VARCHAR(512) | N | **해금 뒤** 보여줄 성체 그림 |
 | hidden | TINYINT(1) | N | 목록에 감출지. 기본 `0` |
 | display_order | INT | N | 노출 순서 |
 | active | TINYINT(1) | N | 사용 여부, 기본값 `1` |
@@ -1389,11 +1393,9 @@ member 행을 잠근다   (SELECT ... FOR UPDATE)
 
 유니크: `uk_character_code` (`code`)
 
-**`hatch_days` 를 컬럼으로 두는 이유는 지금 이 숫자를 맞힐 방법이 없기 때문이다.** 실사용 데이터가 없다. 코드에 고정하면 틀렸을 때 마이그레이션이지만, 컬럼이면 `R__` 시드 한 줄을 고치고 배포하면 끝난다.
+**수집 속도를 정하는 것은 오직 해금 조건이다.** 기다리는 구간이 없으므로 조건 하나하나가 곧 난이도다. 첫 캐릭터를 이른 시점에 열어 주는 것이 중요하다 — 그전까지 목록이 알로만 차 있으면 **이 시스템이 무엇인지 알려 주는 순간이 오지 않는다.**
 
-첫 부화를 2주 안에 겪게 하는 것이 중요하다. 그 전까지 알은 안 움직이는 그림이라 **이 시스템이 무엇인지 알려 주는 순간이 오지 않는다.**
-
-> **병목은 성장일이 아니라 해금 조건이다.** 알이 병렬로 자라므로 여러 마리를 모아도 총 시간이 더해지지 않는다. 수집 속도를 실제로 정하는 것은 알을 얼마나 자주 얻느냐이고, 난이도 조절은 조건 쪽에서 해야 한다.
+조건 수치는 `character_unlock_condition.target_count` 에 있어 **`R__` 시드 한 줄을 고치고 배포하면 조정된다.** 실사용 데이터가 없어 지금 그 값을 맞힐 방법이 없으므로, 코드가 아니라 데이터에 두는 것이 중요하다.
 
 ### `character_unlock_condition`
 
@@ -1429,17 +1431,18 @@ member 행을 잠근다   (SELECT ... FOR UPDATE)
 | id | BIGINT | N | 기본 키 |
 | member_id | BIGINT | N | `member.id` FK |
 | character_id | BIGINT | N | `character.id` FK |
-| acquired_date | DATE | N | 알을 얻은 날(KST). **성장 계산의 기준점** |
-| hatched_at | DATETIME(6) | Y | 부화 시각. `NULL` 이면 아직 알이다 |
+| unlocked_date | DATE | N | 해금된 날(KST) |
 | created_at / updated_at | DATETIME(6) | N / N | 생성·수정 시각 |
 
 유니크: `uk_member_character` (`member_id`, `character_id`)
+
+**행이 있으면 해금된 것이고, 없으면 알이다.** 상태 컬럼을 따로 두지 않는다 — 전이가 한 방향뿐이라 행의 존재가 곧 상태다.
 
 **유니크가 해금의 멱등을 보장한다.** 판정이 두 번 돌아도 두 번째 INSERT 가 막힌다 — 이 프로젝트가 인증 중복을 다루는 방식과 같다. 애플리케이션 검사는 선검사이고 최종 판정은 제약이 한다.
 
 ### `member_activity_day`
 
-**성장 대상을 고르는 화면이 없다. 그러므로 고르는 개념 자체를 두지 않는다** — 알을 얻은 날 이후로 **루틴을 하나라도 한 날**을 세면 그것이 곧 성장일이다.
+**해금 조건이 "며칠 했는가" 를 묻는데, 지금은 그것을 셀 방법이 없다.** 스트릭은 그룹·챌린지 단위로만 있고 전역 활동일 기록이 없다. `ACTIVE_DAYS`·`CATEGORY_DAYS` 같은 조건이 이 표 위에서 성립한다.
 
 | 컬럼 | 타입 | NULL | 설명 |
 | --- | --- | --- | --- |
@@ -1450,11 +1453,10 @@ member 행을 잠근다   (SELECT ... FOR UPDATE)
 
 유니크: `uk_member_activity_day` (`member_id`, `activity_date`)
 
-**`character_id` 칸이 없다.** 그냥 "이 사람이 이날 루틴을 했다"이다. 진행도는 알마다 이렇게 센다.
+**캐릭터를 가리키는 칸이 없다.** 그냥 "이 사람이 이날 루틴을 했다"이다. 조건 판정이 이 위에서 센다.
 
 ```sql
-SELECT COUNT(*) FROM member_activity_day
-WHERE member_id = :memberId AND activity_date >= :acquiredDate;
+SELECT COUNT(*) FROM member_activity_day WHERE member_id = :memberId;
 ```
 
 이 설계에서 따라오는 것들이다.
@@ -1462,12 +1464,8 @@ WHERE member_id = :memberId AND activity_date >= :acquiredDate;
 | | |
 | --- | --- |
 | 하루에 여러 개 완료해도 1일 | 유니크가 두 번째 INSERT 를 막는다 |
-| 보유한 알이 전부 같이 자란다 | 각자 자기 획득일부터 세므로 병렬이다 |
 | 재화로 못 건너뛴다 | 이 표에 쓰는 경로를 루틴 완료 하나로만 두면 자동이다 |
 | 동시성에 잠금이 필요 없다 | 루틴 둘을 동시에 완료해도 유니크가 하나를 튕겨 낸다. 그 예외를 삼키면 끝이다 |
-| 소급이 불가능하다 | 획득일 이전 기록은 조건에서 걸러진다 |
-
-**획득 당일을 포함한다(`>=`).** 그러면 해금 경로에 따라 자연스럽게 갈린다 — 루틴으로 해금하면 그날 행이 이미 있어 바로 1일이고, 다른 조건으로 해금하면 0일에서 시작한다. **분기를 짜지 않아도 조건 하나가 둘 다 처리한다.**
 
 #### 무엇이 "루틴 완료"인가 — 셋을 합산한다
 
@@ -1477,37 +1475,29 @@ POST /api/groups/{gid}/routines/{id}/verifications    그룹 루틴
 POST /api/challenges/.../verifications                챌린지 인증
 ```
 
-**셋 다 활동일을 만든다.** 알 성장은 "앱을 꾸준히 썼는가"에 대한 보상이지 특정 기능을 밀어주는 장치가 아니다. 개인 루틴만 세면 **그룹·챌린지 위주로 쓰는 사람은 매일 인증해도 알이 안 자란다.** 합산해도 빨라지지 않는다 — 어차피 하루 1일이다.
+**셋 다 활동일을 만든다.** 해금은 "앱을 꾸준히 썼는가"에 대한 보상이지 특정 기능을 밀어주는 장치가 아니다. 개인 루틴만 세면 **그룹·챌린지 위주로 쓰는 사람은 매일 인증해도 조건이 안 오른다.** 합산해도 빨라지지 않는다 — 어차피 하루 1일이다.
 
-> **이 표는 캐릭터 전용이 아니다.** 지금 전역 활동일 기록이 없어(스트릭은 그룹·챌린지 단위로만 있다) `ACTIVE_DAYS` 같은 조건을 쓸 방법이 없었다. 이 표가 그것을 연다.
+> **이 표는 캐릭터 전용이 아니다.** 전역 활동일은 업적·리포트처럼 "얼마나 꾸준히 썼는가" 를 묻는 곳이면 어디서나 쓴다. 캐릭터가 첫 소비자일 뿐이다.
 
-### 해금·부화는 한 번만 일어나야 한다
+### 해금은 한 번만 일어나야 한다
 
-둘 다 **판정이 여러 번 돌 수 있다.** 인증이 들어올 때마다 보고, 요청 둘이 동시에 들어오기도 한다. 그때 팝업이 두 번 뜨거나 상태가 두 번 바뀌면 안 된다.
+**판정이 여러 번 돈다.** 인증이 들어올 때마다 조건을 보고, 요청 둘이 동시에 들어오기도 한다. 그때 캐릭터가 두 번 열리거나 팝업이 두 번 뜨면 안 된다.
 
-**해금은 유니크가 막는다.** `uk_member_character(member_id, character_id)` 로 두 번째 INSERT 가 튕긴다.
+**유니크가 승자를 하나로 만든다.** `uk_member_character(member_id, character_id)` 로 두 번째 INSERT 가 튕긴다. **INSERT 에 성공한 요청만 팝업을 발행하고, 둘을 같은 트랜잭션에 둔다** — 나누면 해금만 되고 팝업이 없는 상태가 남는다.
 
-**부화는 조건부 갱신으로 승자를 하나만 만든다.** `hatched_at` 이 아직 비어 있을 때만 채우고, **갱신된 행 수를 승패 판정에 쓴다.**
+제약 위반은 "졌다"는 뜻이므로 **조용히 끝낸다.** 오류로 올리지 않는다.
 
-```sql
-UPDATE member_character
-SET hatched_at = :now
-WHERE id = :memberCharacterId AND hatched_at IS NULL;
-```
-
-`0` 이면 남이 이미 부화시킨 것이므로 **팝업을 만들지 않고 조용히 끝낸다.** `1` 을 받은 요청만 팝업을 발행한다. 갱신과 팝업 발행은 **같은 트랜잭션**에 둔다 — 나누면 부화만 되고 팝업이 없는 상태가 남는다.
-
-> 결제 지급이 `markPaid` 의 반환값으로 승자를 가리는 것과 같은 방식이다.
+> 지급이 유니크로 승자를 가리고 그 트랜잭션 안에서 후속 처리를 하는 것과 같은 방식이다.
 
 ### `pending_popup` — 캐릭터 전용이 아니다
 
-해금과 부화는 **반드시 보여줘야 하는 1회성 알림**이다. 소비자가 이미 둘이다(캐릭터, 업적 달성). 범용 모듈로 둔다.
+해금은 **반드시 보여줘야 하는 1회성 알림**이다. 소비자가 이미 둘이다(캐릭터, 업적 달성). 범용 모듈로 둔다.
 
 | 컬럼 | 타입 | NULL | 설명 |
 | --- | --- | --- | --- |
 | id | BIGINT | N | 기본 키 |
 | member_id | BIGINT | N | `member.id` FK |
-| popup_type | VARCHAR(30) | N | `CHARACTER_UNLOCKED` · `CHARACTER_HATCHED` · `ACHIEVEMENT_ACHIEVED` … |
+| popup_type | VARCHAR(30) | N | `CHARACTER_UNLOCKED` · `ACHIEVEMENT_ACHIEVED` … |
 | title | VARCHAR(100) | N | **발행자가 채운다** |
 | body | VARCHAR(255) | N | 발행자가 채운다 |
 | image_key | VARCHAR(512) | Y | 발행자가 채운다 |
@@ -1526,7 +1516,6 @@ WHERE id = :memberCharacterId AND hatched_at IS NULL;
 | `popup_type` | `dedup_key` |
 | --- | --- |
 | `CHARACTER_UNLOCKED` | `character-unlocked:{characterId}` |
-| `CHARACTER_HATCHED` | `character-hatched:{characterId}` |
 | `ACHIEVEMENT_ACHIEVED` | `achievement-achieved:{achievementId}` |
 
 `member_id` 가 유니크 키의 선두 컬럼이라 키 안에 회원을 다시 넣지 않는다. 사건이 회차·기간을 갖는 종류라면 그 값까지 키에 넣는다 — **"같은 사건"의 범위를 정하는 것이 이 키의 전부다.**
@@ -1561,9 +1550,8 @@ WHERE id = :memberCharacterId AND hatched_at IS NULL;
 
 ### 아직 정하지 못한 것
 
-- `hatch_days` 의 실제 값(첫 알 14 / 중간 30~50 / 최상위 100)이 등급에 맞는지. **시드 값이라 나중에 바꿔도 싸다**
 - 좋아요 집계 조건을 이 범위에 넣을지, 별도로 뺄지. 넣으면 좋아요 도메인까지 범위가 는다
-- 성체가 된 뒤 **알 이미지를 다시 쓰는 화면**이 있는지(도감 등)
+- 해금 뒤 **알 그림을 다시 쓰는 화면**이 있는지(도감 등). 없으면 `egg_image_key` 는 목록의 잠금 표시 전용이다
 - **복구권은 아직 없는 기능이다.** 기획에 *"복구권을 사용한 날은 포함하지 않는다"* 가 있는데 코드에도 DB 에도 복구권이 없다. 지금은 해당 없음으로 두되, **복구권을 만들 때 이 조건을 함께 봐야 한다**
 
 ## 주문 및 결제 테이블
