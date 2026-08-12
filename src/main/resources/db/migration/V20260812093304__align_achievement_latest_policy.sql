@@ -42,7 +42,7 @@ INSERT INTO achievement
 (code, category, name, condition_desc, progress_type, target_count, topaz_reward, badge_yn, limited_outfit_yn, sort_order, hidden_yn)
 VALUES
     ('ACH-EG-001', 'EGG', '첫 루틴의 새싹',   '개인 루틴 또는 챌린지를 처음 완료',                       'NONE',                     NULL, 0, FALSE, FALSE, 31, FALSE),
-    ('ACH-EG-002', 'EGG', '배움이 차곡차곡', '자기계발 루틴을 서로 다른 날짜에 20일 완료',              'DISTINCT_DAY_COUNT',        20, 0, FALSE, FALSE, 32, FALSE),
+    ('ACH-EG-002', 'EGG', '배움이 차곡차곡', '공부 또는 자기계발 루틴을 서로 다른 날짜에 20일 완료',              'DISTINCT_DAY_COUNT',        20, 0, FALSE, FALSE, 32, FALSE),
     ('ACH-EG-003', 'EGG', '일찍 일어난 새',   '오전 7시 이전에 루틴을 완료한 날 5회 달성',               'CUMULATIVE_COUNT',           5, 0, FALSE, FALSE, 33, TRUE),
     ('ACH-EG-004', 'EGG', '건강한 땀방울',   '운동 또는 건강 루틴을 서로 다른 날짜에 20일 완료',         'DISTINCT_DAY_COUNT',        20, 0, FALSE, FALSE, 34, FALSE),
     ('ACH-EG-005', 'EGG', '마음에 쉼표',     '마음관리 루틴을 서로 다른 날짜에 20일 완료',               'DISTINCT_DAY_COUNT',        20, 0, FALSE, FALSE, 35, FALSE),
@@ -115,15 +115,3 @@ UPDATE achievement SET condition_key = 'ROUTINE_STREAK_DAYS' WHERE code = 'ACH-S
 UPDATE achievement SET condition_key = 'ROUTINE_COMPLETE_COUNT' WHERE code = 'ACH-SP-003';
 -- SP-004는 group_achievement_progress_event_log로 처리되어 condition_key 불필요.
 UPDATE achievement SET condition_key = 'PAID_PURCHASE_COUNT' WHERE code = 'ACH-SP-005'; -- 결제 이벤트 미구현, 스펙만 선반영
-
--- 배지/한정 의상 아이템도 정책서 콘셉트 그대로 기록 (선택: 굳이 안 써도 무방하지만 뱃지/의상 이름이 앱에 노출되므로 미리 반영)
-INSERT INTO achievement_reward_item (achievement_id, item_category, item_name)
-SELECT id, 'BADGE', '100 달력·왕관·체크 도장 뱃지' FROM achievement WHERE code = 'ACH-SP-002';
-INSERT INTO achievement_reward_item (achievement_id, item_category, item_name)
-SELECT id, 'OUTFIT', '왕관' FROM achievement WHERE code = 'ACH-SP-002';
-INSERT INTO achievement_reward_item (achievement_id, item_category, item_name)
-SELECT id, 'OUTFIT', '선글라스' FROM achievement WHERE code = 'ACH-SP-002';
-INSERT INTO achievement_reward_item (achievement_id, item_category, item_name)
-SELECT id, 'OUTFIT', '로열 망토' FROM achievement WHERE code = 'ACH-SP-002';
-INSERT INTO achievement_reward_item (achievement_id, item_category, item_name)
-SELECT id, 'OUTFIT', '뿌듯 표정' FROM achievement WHERE code = 'ACH-SP-002';
