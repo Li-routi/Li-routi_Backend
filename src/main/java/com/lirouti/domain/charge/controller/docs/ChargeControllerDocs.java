@@ -78,14 +78,19 @@ public interface ChargeControllerDocs {
                     않는다.
 
                     **이미 지급된 결제면 조용히 성공으로 답한다.** 이 요청과 웹훅이 둘 다 오는
-                    것이 정상이다.
+                    것이 정상이다. 그때도 응답은 같다 — 지급된 수량과 현재 잔액이 그대로 나간다.
+
+                    응답에 **지급 후 잔액이 실려 있어 잔액 조회를 따로 부르지 않아도 된다.**
+                    유상(`paidBalance`)과 무상(`freeBalance`)이 나뉘어 있고, 화면에 하나로
+                    보여줄 때는 둘을 더하면 된다.
 
                     - `CHARGE404_2` 없는 결제이거나 내 결제가 아님
                     - `CHARGE409_2` 금액 불일치
-                    - `CHARGE409_3` 아직 완료되지 않은 결제
+                    - `CHARGE409_3` 아직 완료되지 않은 결제 — 결제창을 거치지 않았거나
+                      가상계좌처럼 입금 전인 경우다. 실패로 확정하지 않으므로 나중에 웹훅이 온다
                     """
     )
-    ApiResponse<ChargeResDTO.Started> completeCharge(String paymentId,
+    ApiResponse<ChargeResDTO.Settled> completeCharge(String paymentId,
                                                      CustomUserDetails userDetails);
 
     @Operation(

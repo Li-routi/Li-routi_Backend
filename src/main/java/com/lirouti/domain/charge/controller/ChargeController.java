@@ -50,11 +50,11 @@ public class ChargeController implements ChargeControllerDocs {
 
     @Override
     @PostMapping("/charges/{paymentId}/complete")
-    public ApiResponse<ChargeResDTO.Started> completeCharge(
+    public ApiResponse<ChargeResDTO.Settled> completeCharge(
             @PathVariable String paymentId,
             @AuthenticationPrincipal CustomUserDetails userDetails
     ) {
-        ChargeResDTO.Started result =
+        ChargeResDTO.Settled result =
                 chargeCommandService.complete(userDetails.getMemberId(), paymentId);
         return ApiResponse.onSuccess(ChargeSuccessCode.CHARGE_COMPLETE_SUCCESS, result);
     }

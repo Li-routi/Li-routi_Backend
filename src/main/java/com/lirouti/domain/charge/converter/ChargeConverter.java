@@ -59,6 +59,24 @@ public final class ChargeConverter {
                 .build();
     }
 
+    /**
+     * 지급이 끝난 결제를 응답으로 바꾼다.
+     *
+     * <p>지급 수량은 <b>결제 시작 때 굳혀 둔 값</b>이다. 상품이 그 사이 바뀌어도 실제로 준
+     * 것과 응답이 어긋나지 않는다.
+     */
+    public static ChargeResDTO.Settled toSettled(ChargePayment payment,
+                                                 int paidBalance, int freeBalance) {
+        return ChargeResDTO.Settled.builder()
+                .paymentId(payment.getPaymentId())
+                .currency(payment.getRewardCurrency())
+                .rewardAmount(payment.getRewardAmount())
+                .bonusAmount(payment.getBonusAmount())
+                .paidBalance(paidBalance)
+                .freeBalance(freeBalance)
+                .build();
+    }
+
     public static ChargeResDTO.ExchangeResult toExchangeResult(
             ExchangeProduct product, int fromBalance, int toBalance) {
         return ChargeResDTO.ExchangeResult.builder()
