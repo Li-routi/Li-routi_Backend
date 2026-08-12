@@ -7,6 +7,7 @@ import com.lirouti.domain.achievement.entity.MemberAchievementCondition;
 import com.lirouti.domain.achievement.event.AchievementProgressEvent;
 import com.lirouti.domain.achievement.repository.AchievementRepository;
 import com.lirouti.domain.achievement.repository.MemberAchievementConditionRepository;
+import com.lirouti.domain.achievement.repository.MemberAchievementProgressCategoryRepository;
 import com.lirouti.domain.achievement.repository.MemberAchievementProgressDayRepository;
 import com.lirouti.domain.achievement.repository.MemberAchievementRepository;
 import com.lirouti.domain.achievement.entity.MemberAchievementProgressDay;
@@ -54,6 +55,8 @@ public class AchievementProgressService {
     private final MemberAchievementConditionRepository memberAchievementConditionRepository;
     private final MemberAchievementProgressDayRepository memberAchievementProgressDayRepository;
     private final MemberAchievementProgressDayService memberAchievementProgressDayService;
+    private final MemberAchievementProgressCategoryRepository memberAchievementProgressCategoryRepository;
+    private final MemberAchievementProgressCategoryService memberAchievementProgressCategoryService;
     private final MemberRepository memberRepository;
     private final AchievementProgressEventLogService achievementProgressEventLogService;
 
@@ -104,10 +107,7 @@ public class AchievementProgressService {
             // 끊기면 다음 완료 이벤트가 더 작은 값을 보내올 수 있는데, syncProgress는 IN_PROGRESS
             // 상태에서만 값을 바꾸므로 이미 ACHIEVED/CLAIMED 된 이후엔 끊긴 스트릭이 되돌리지 못한다.
             case STREAK_DAYS -> memberAchievement.syncProgress(event.amount(), requireTargetCount(achievement));
-            // TODO: 다음 단계에서 구현. 지금은 조회 API가 죽지 않도록(enum 매핑) 값만 정의해 두고,
-            // 실제 반영 로직은 아직 없다 - handle() 의 per-achievement try-catch 가 이 스텁으로 인한
-            // 실패를 형제 업적에 전파되지 않게 막아 준다.
-            case CATEGORY_COVERAGE_COUNT -> notImplementedYet(achievement);
+            case CATEGORY_COVERAGE_COUNT -> applyCategoryCoverage(memberAchievement, achievement, event);
             // GROUP_* 는 이 업적들이 condition_key 를 비워 두므로 findAllActiveByConditionKey 의
             // 결과에 애초에 포함되지 않는다 - 여기 도달한다면 조회 쿼리 또는 마이그레이션 데이터가
             // 잘못된 것이므로 조용히 넘기지 않고 바로 알아챌 수 있게 예외로 방어한다.
@@ -177,16 +177,27 @@ public class AchievementProgressService {
     }
 
     /**
-     * 아직 반영 로직이 없는 progress_type 용 스텁.
+     * CATEGORY_COVERAGE_COUNT(루틴 탐험가) 처리.
      *
-     * <p>CATEGORY_COVERAGE_COUNT 는 {@link com.lirouti.domain.achievement.enums.AchievementProgressType}
-     * 에 값만 정의된 상태고, 실제 진행도 반영은 후속 작업이다. 예외를 던져 로그로 남기되,
-     * 호출부({@code handle})가 업적 단위로 격리해 처리하므로 다른 업적에는 영향을 주지 않는다.
+     * <p>{@code routineCategoryMatches} 게이트를 이미 통과했다는 건 이 이벤트의 카테고리가
+     * 이 업적이 요구하는 6개 카테고리 중 하나라는 뜻이다. 그 카테고리를 처음 커버하는
+     * 순간에만 커버리지 테이블에 마킹하고, 지금까지 커버한 개수로 절대값 갱신한다 —
+     * "몇 번 했는지"가 아니라 "몇 개의 서로 다른 카테고리를 했는지"가 기준이라 dedup 대상이
+     * 날짜가 아니라 카테고리라는 점만 {@code applyDistinctDayCount} 와 다르다.
      */
-    private void notImplementedYet(Achievement achievement) {
-        throw new UnsupportedOperationException(
-                "progressType=" + achievement.getProgressType() + " (업적 " + achievement.getCode()
-                        + ") 은 아직 진행도 반영 로직이 구현되지 않았습니다.");
+    private void applyCategoryCoverage(MemberAchievement memberAchievement, Achievement achievement,
+                                       AchievementProgressEvent event) {
+        Long categoryId = event.routineCategoryId();
+        if (categoryId == null) {
+            return; // 카테고리 정보가 없는 이벤트는 커버리지에 기여할 수 없다
+        }
+        boolean isNewCategory = memberAchievementProgressCategoryService.tryMarkCategory(memberAchievement, categoryId);
+        if (!isNewCategory) {
+            return; // 이미 커버한 카테고리 - 진행도 변화 없음
+        }
+        long coveredCount = memberAchievementProgressCategoryRepository
+                .countByMemberAchievementId(memberAchievement.getId());
+        memberAchievement.syncProgress((int) coveredCount, requireTargetCount(achievement));
     }
 
     /**

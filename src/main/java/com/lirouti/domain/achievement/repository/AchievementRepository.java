@@ -2,6 +2,7 @@ package com.lirouti.domain.achievement.repository;
 
 import com.lirouti.domain.achievement.entity.Achievement;
 import com.lirouti.domain.achievement.enums.AchievementCategory;
+import com.lirouti.domain.achievement.enums.AchievementProgressType;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -36,4 +37,11 @@ public interface AchievementRepository extends JpaRepository<Achievement, Long> 
             and (a.conditionKey = :conditionKey or c.conditionKey = :conditionKey)
             """)
     List<Achievement> findAllActiveByConditionKey(@Param("conditionKey") String conditionKey);
+
+    /**
+     * 그룹 단위 파이프라인(GroupAchievementProgressService)이 쓴다. GROUP_CUMULATIVE_COUNT·
+     * GROUP_DISTINCT_DAY_COUNT 업적은 {@code condition_key} 를 비워 두므로
+     * {@link #findAllActiveByConditionKey} 로는 찾을 수 없다 — progressType 자체로 찾는다.
+     */
+    List<Achievement> findAllByActiveTrueAndProgressType(AchievementProgressType progressType);
 }
