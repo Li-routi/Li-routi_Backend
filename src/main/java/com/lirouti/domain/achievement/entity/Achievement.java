@@ -108,6 +108,14 @@ public class Achievement extends BaseEntity {
     @Column(name = "active", nullable = false)
     private boolean active;
 
+    /**
+     * 히든 업적(일찍 일어난 새 / 자정의 방문자 / 딱 1분 남았어!) 여부.
+     * true 면 달성 전까지 이름·조건·진행률을 응답에서 감추고 잠금 표시만 노출해야 한다 —
+     * 이 판단은 이 필드 하나로 API 계층에서 분기한다.
+     */
+    @Column(name = "hidden_yn", nullable = false)
+    private boolean hiddenYn;
+
     @OneToMany(mappedBy = "achievement", fetch = FetchType.LAZY)
     private List<AchievementCondition> conditions = new ArrayList<>();
 
@@ -116,7 +124,7 @@ public class Achievement extends BaseEntity {
                         String conditionDesc, AchievementProgressType progressType,
                         Integer targetCount, String conditionKey, Long routineCategoryId,
                         int topazReward, boolean badgeYn, boolean limitedOutfitYn,
-                        int sortOrder, boolean active) {
+                        int sortOrder, boolean active, boolean hiddenYn) {
         this.code = code;
         this.category = category;
         this.name = name;
@@ -130,5 +138,6 @@ public class Achievement extends BaseEntity {
         this.limitedOutfitYn = limitedOutfitYn;
         this.sortOrder = sortOrder;
         this.active = active;
+        this.hiddenYn = hiddenYn;
     }
 }
