@@ -788,6 +788,72 @@ WebSocket은 저장된 메시지를 실시간 전달하는 수단이다. 그룹 
 - **회차를 넘는 주기 1회는 이 제약이 막지 못한다.** 키에 `participation_round`가 들어 있어 재참여로 회차가 오르면 같은 구간도 통과하기 때문이다. 그 부분은 저장 경로의 비관 잠금 + 애플리케이션 검증으로 막는다(아래 [주기 1회는 회차를 넘는다]). 제약에서 회차를 빼지 않은 것은 정책 이전에 쌓인 중복 행이 남아 있어서다.
 - 인증을 나열할 때는 회차로 좁히지 않는다. 지난 회차의 인증도 그 회원이 남긴 기록이며, 회차는 응답에 실어 "이번 참여 / 지난 참여"를 구분한다.
 - 챌린지 단위 피드는 `member_challenge`를 경유한다. `member_challenge`를 `(challenge_id, active)` 인덱스로 좁힌 뒤 `challenge_verification`을 `member_challenge_id`로 조인한다. **이 조인에 별도 인덱스를 추가할 필요는 없다** — 위 유니크 제약의 선두 컬럼이 `member_challenge_id`라 그 인덱스가 조인과 "이번 구간 인증 행 찾기"를 모두 커버한다.
+
+#### 주기를 바꿀 때는 백필이 함께 필요하다
+
+`period_start_date`는 **저장 시점의 주기로 계산해 못 박은 값**이다. 챌린지의 `routine_cycle`을 바꿔도 옛 행은 옛 기준으로 남는다.
+
+**백필 없이 바꾸면 그 구간이 뚫린다.**
+
+```
+DAILY 로 월요일에 인증  → period_start_date = 월요일
+WEEKLY 로 바꾼 뒤 수요일에 다시 인증 → 이번 구간 첫날 = 그 주 일요일
+→ 유니크 키에도 조회에도 안 걸린다 → 그 주에 한 건 더 들어간다
+```
+
+**스트릭도 함께 어긋난다.** `current_streak`은 `last_verified_date`를 주기 단위로 해석해 세므로(위 [연속 참여일] 참고), 일 단위로 쌓인 값을 주 단위로 읽게 된다 — "30일 연속"이 "30주 연속"이 된다.
+
+**하필 그 경로가 조용하다.** `routine_cycle`은 `R__seed_challenge.sql`의 upsert로 바뀐다. 값을 한 글자 고치고 머지하면 다음 배포에 그냥 덮어써진다. 마이그레이션처럼 이력이 남지도, 리뷰에서 눈에 띄지도 않는다.
+
+##### 단순 UPDATE로 끝나지 않는다
+
+유니크 키는 `(member_challenge_id, participation_round, period_start_date)`이고 **`deleted_at`이 들어 있지 않다.** 즉 본인이 지운 인증도 키를 차지한다. 주기를 넓히면 여러 행이 **같은 구간으로 접히면서** 그 키에 걸린다.
+
+```
+DAILY  월·수 인증 (period_start_date 가 각각 다름)     → 통과
+WEEKLY 로 다시 계산하면 둘 다 그 주 일요일이 된다      → 유니크 키 위반
+```
+
+그래서 **접히는 행이 있는지 먼저 확인하고, 남길 행을 정한 뒤** 갱신한다.
+
+##### 절차
+
+**1) 접히는 행 확인** (`WEEKLY`로 바꾸는 경우)
+
+```sql
+SELECT cv.member_challenge_id, cv.participation_round,
+       DATE_SUB(cv.verified_date, INTERVAL DAYOFWEEK(cv.verified_date) - 1 DAY) AS new_period,
+       COUNT(*) AS cnt
+FROM challenge_verification cv
+JOIN member_challenge mc ON mc.id = cv.member_challenge_id
+WHERE mc.challenge_id = :challengeId
+GROUP BY 1, 2, 3
+HAVING cnt > 1;
+```
+
+**2) 남길 행을 정한다.** 결과가 비어 있지 않으면 정책 판단이 필요하다 — 구간별로 어느 인증을 남길지(가장 이른 것 / 가장 늦은 것), 나머지는 `deleted_at`을 채울지 물리 삭제할지. **소프트 삭제만으로는 키가 비지 않는다**는 점에 주의한다.
+
+**3) 백필**
+
+```sql
+-- WEEKLY: 그 주 일요일
+UPDATE challenge_verification cv
+JOIN member_challenge mc ON mc.id = cv.member_challenge_id
+SET cv.period_start_date =
+        DATE_SUB(cv.verified_date, INTERVAL DAYOFWEEK(cv.verified_date) - 1 DAY)
+WHERE mc.challenge_id = :challengeId;
+
+-- MONTHLY: 그 달 1일
+--   SET cv.period_start_date = DATE_FORMAT(cv.verified_date, '%Y-%m-01')
+-- DAILY: 인증일과 같다
+--   SET cv.period_start_date = cv.verified_date
+```
+
+**4) 스트릭 정리.** `current_streak`의 단위가 바뀌므로 그대로 두면 과장된 숫자가 표시된다. 이력을 되짚어 정확히 다시 세려면 인증 행 전체를 순회해야 하므로, **얼마나 정확히 복원할지는 그때 정한다.** 가장 단순한 선택은 해당 챌린지 참여 행의 `current_streak`을 초기화하는 것이다.
+
+**5) 검증.** 1번 쿼리를 다시 돌려 결과가 비어 있는지, 그리고 새 주기로 이번 구간에 인증이 두 건 들어가지 않는지 확인한다.
+
+> 이 절차는 **주기를 실제로 바꾸기 전에** 필요하다. 현재 운영 챌린지는 전부 `DAILY`이고 주기를 바꾼 적이 없다.
 - **피드의 정렬·커서 키는 `verified_at`이 아니라 `id`(내림차순)다.** 당일 재인증이 `verified_at`을 덮어쓰기 때문에, `verified_at`을 커서로 쓰면 페이지를 넘기는 도중 항목이 위로 점프해 중복·누락이 생긴다. `id`는 한 번 부여되면 변하지 않아 커서가 안정적이고, 하루 1건 제약상 오늘 인증은 어차피 상단에 온다. 따라서 `(member_challenge_id, verified_at)` 인덱스는 두지 않는다.
 - **피드 정렬은 최신순(`id DESC`)과 좋아요순 둘이다.** 기본은 최신순 — 파라미터를 안 보내던 클라이언트의 화면이 조용히 달라지면 안 된다.
   - **좋아요순도 커서로 끝까지 넘긴다. 다만 커서 값이 둘이다** — `(좋아요 수, id)`. 좋아요 0개가 대부분이라 값이 겹쳐서, `id` 하나로는 "어디까지 봤는지"를 가릴 수 없다. 집계값으로 거르는 것이라 `where` 가 아니라 `having` 에 들어간다.
