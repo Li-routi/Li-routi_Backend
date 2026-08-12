@@ -13,7 +13,6 @@ import com.lirouti.domain.group.repository.GroupRepository;
 import com.lirouti.domain.group.repository.GroupRoutineRepository;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.service.query.MemberQueryService;
-import com.lirouti.domain.shop.dto.response.ShopResDTO;
 import com.lirouti.domain.shop.entity.AvatarItem;
 import com.lirouti.domain.shop.entity.MemberAvatarEquipment;
 import com.lirouti.domain.shop.enums.AvatarSlot;
@@ -87,11 +86,11 @@ class GroupJoinQueryServiceTest {
                 6,
                 2,
                 List.of(
-                        new GroupResDTO.JoinPreviewMember(new ShopResDTO.Avatar(List.of())),
-                        new GroupResDTO.JoinPreviewMember(new ShopResDTO.Avatar(List.of())),
-                        new GroupResDTO.JoinPreviewMember(new ShopResDTO.Avatar(List.of())),
-                        new GroupResDTO.JoinPreviewMember(new ShopResDTO.Avatar(List.of())),
-                        new GroupResDTO.JoinPreviewMember(new ShopResDTO.Avatar(List.of()))
+                        new GroupResDTO.JoinPreviewMember(new GroupResDTO.Avatar(List.of())),
+                        new GroupResDTO.JoinPreviewMember(new GroupResDTO.Avatar(List.of())),
+                        new GroupResDTO.JoinPreviewMember(new GroupResDTO.Avatar(List.of())),
+                        new GroupResDTO.JoinPreviewMember(new GroupResDTO.Avatar(List.of())),
+                        new GroupResDTO.JoinPreviewMember(new GroupResDTO.Avatar(List.of()))
                 ),
                 true,
                 null));
@@ -109,8 +108,6 @@ class GroupJoinQueryServiceTest {
         AvatarItem avatarItem = mock(AvatarItem.class);
         MemberAvatarEquipment equipment = mock(MemberAvatarEquipment.class);
         when(equipmentOwner.getId()).thenReturn(10L);
-        when(avatarItem.getId()).thenReturn(100L);
-        when(avatarItem.getName()).thenReturn("모자");
         when(avatarItem.getImageUrl()).thenReturn("https://img/hat.png");
         when(equipment.getMember()).thenReturn(equipmentOwner);
         when(equipment.getAvatarItem()).thenReturn(avatarItem);
@@ -121,11 +118,10 @@ class GroupJoinQueryServiceTest {
         GroupResDTO.JoinPreview result = groupJoinQueryService.getJoinPreview(MEMBER_ID, INVITE_CODE);
 
         assertThat(result.members()).containsExactly(
-                new GroupResDTO.JoinPreviewMember(new ShopResDTO.Avatar(List.of())),
-                new GroupResDTO.JoinPreviewMember(new ShopResDTO.Avatar(List.of(
-                        new ShopResDTO.Equipped(
-                                AvatarSlot.HEAD, 100L, "모자", "https://img/hat.png")))),
-                new GroupResDTO.JoinPreviewMember(new ShopResDTO.Avatar(List.of()))
+                new GroupResDTO.JoinPreviewMember(new GroupResDTO.Avatar(List.of())),
+                new GroupResDTO.JoinPreviewMember(new GroupResDTO.Avatar(List.of(
+                        new GroupResDTO.Equipped(AvatarSlot.HEAD, "https://img/hat.png")))),
+                new GroupResDTO.JoinPreviewMember(new GroupResDTO.Avatar(List.of()))
         );
         assertThat(GroupResDTO.JoinPreviewMember.class.getRecordComponents())
                 .extracting(RecordComponent::getName)

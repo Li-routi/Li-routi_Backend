@@ -21,7 +21,6 @@ import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.exception.MemberException;
 import com.lirouti.domain.member.exception.code.error.MemberErrorCode;
 import com.lirouti.domain.member.service.query.MemberQueryService;
-import com.lirouti.domain.shop.dto.response.ShopResDTO;
 import com.lirouti.domain.shop.entity.AvatarItem;
 import com.lirouti.domain.shop.entity.MemberAvatarEquipment;
 import com.lirouti.domain.shop.enums.AvatarSlot;
@@ -106,8 +105,6 @@ class GroupQueryServiceTest {
         AvatarItem avatarItem = mock(AvatarItem.class);
         MemberAvatarEquipment equipment = mock(MemberAvatarEquipment.class);
         when(equipmentOwner.getId()).thenReturn(MEMBER_ID);
-        when(avatarItem.getId()).thenReturn(100L);
-        when(avatarItem.getName()).thenReturn("모자");
         when(avatarItem.getImageUrl()).thenReturn("https://img/hat.png");
         when(equipment.getMember()).thenReturn(equipmentOwner);
         when(equipment.getAvatarItem()).thenReturn(avatarItem);
@@ -129,12 +126,12 @@ class GroupQueryServiceTest {
         assertThat(result.inviteCode()).isEqualTo("DETAIL1");
         assertThat(result.members()).containsExactly(
                 new GroupResDTO.MemberActivity(
-                        MEMBER_ID, "리루티", new ShopResDTO.Avatar(List.of(
-                                new ShopResDTO.Equipped(
-                                        AvatarSlot.HEAD, 100L, "모자", "https://img/hat.png"))), "오늘도 완료",
+                        MEMBER_ID, "리루티", new GroupResDTO.Avatar(List.of(
+                                new GroupResDTO.Equipped(
+                                        AvatarSlot.HEAD, "https://img/hat.png"))), "오늘도 완료",
                         4, 12L, 7L, new GroupResDTO.DailyProgress(2L, 3L)),
                 new GroupResDTO.MemberActivity(
-                        2L, "동료", new ShopResDTO.Avatar(List.of()), null,
+                        2L, "동료", new GroupResDTO.Avatar(List.of()), null,
                         1, 3L, 0L, new GroupResDTO.DailyProgress(0L, 0L))
         );
     }

@@ -14,8 +14,6 @@ import com.lirouti.domain.group.repository.GroupRepository;
 import com.lirouti.domain.group.repository.GroupRoutineRepository;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.service.query.MemberQueryService;
-import com.lirouti.domain.shop.converter.ShopConverter;
-import com.lirouti.domain.shop.dto.response.ShopResDTO;
 import com.lirouti.domain.shop.repository.MemberAvatarEquipmentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -59,7 +57,7 @@ public class GroupJoinQueryService {
         List<Long> activeMemberIds = groupMemberRepository
                 .findMemberIdsByGroupIdAndStatusOrderByJoinedAtAscIdAsc(
                         group.getId(), GroupMemberStatus.ACTIVE);
-        Map<Long, ShopResDTO.Avatar> avatarsByMemberId = ShopConverter.toAvatarsByMemberId(
+        Map<Long, GroupResDTO.Avatar> avatarsByMemberId = GroupConverter.toAvatarsByMemberId(
                 activeMemberIds,
                 activeMemberIds.isEmpty()
                         ? List.of()

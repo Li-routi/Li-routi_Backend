@@ -18,8 +18,6 @@ import com.lirouti.domain.group.repository.GroupRoutineQueryRepository.GroupRout
 import com.lirouti.domain.group.repository.GroupRoutineQueryRepository.RoutineScheduleProjection;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.service.query.MemberQueryService;
-import com.lirouti.domain.shop.converter.ShopConverter;
-import com.lirouti.domain.shop.dto.response.ShopResDTO;
 import com.lirouti.domain.shop.repository.MemberAvatarEquipmentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -132,7 +130,7 @@ public class GroupQueryService {
         List<Long> activeMemberIds = memberDetails.stream()
                 .map(GroupDetailQueryRepository.GroupMemberDetailProjection::memberId)
                 .toList();
-        Map<Long, ShopResDTO.Avatar> avatarsByMemberId = ShopConverter.toAvatarsByMemberId(
+        Map<Long, GroupResDTO.Avatar> avatarsByMemberId = GroupConverter.toAvatarsByMemberId(
                 activeMemberIds,
                 activeMemberIds.isEmpty()
                         ? List.of()
