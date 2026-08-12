@@ -133,11 +133,10 @@ public interface GroupMemberRepository extends JpaRepository<GroupMember, Long> 
     );
 
     /**
-     * Preview에 표시할 ACTIVE 구성원 수만큼의 요약 항목을 ID 순서대로 만든다.
-     * 캐릭터 저장 모델이 아직 없으므로 Member를 fetch join하지 않고 GroupMember ID만 조회한다.
+     * Preview에 표시할 ACTIVE 구성원의 회원 ID를 가입 순서대로 조회한다.
      */
     @Query("""
-            select groupMember.id
+            select member.id
             from GroupMember groupMember
             join groupMember.member member
             where groupMember.group.id = :groupId
@@ -146,7 +145,7 @@ public interface GroupMemberRepository extends JpaRepository<GroupMember, Long> 
               and member.deletedAt is null
             order by groupMember.joinedAt asc, groupMember.id asc
             """)
-    List<Long> findIdsByGroupIdAndStatusOrderByJoinedAtAscIdAsc(
+    List<Long> findMemberIdsByGroupIdAndStatusOrderByJoinedAtAscIdAsc(
             @Param("groupId") Long groupId,
             @Param("status") GroupMemberStatus status
     );

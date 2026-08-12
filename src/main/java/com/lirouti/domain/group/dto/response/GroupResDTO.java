@@ -5,6 +5,7 @@ import com.lirouti.domain.group.enums.GroupJoinUnavailableReason;
 import com.lirouti.domain.group.enums.GroupMemberStatus;
 import com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus;
 import com.lirouti.domain.routine.enums.RoutineCategoryColor;
+import com.lirouti.domain.shop.dto.response.ShopResDTO;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 
@@ -78,7 +79,7 @@ public final class GroupResDTO {
     public record MemberActivity(
             Long memberId,
             String name,
-            String profileImageKey,
+            ShopResDTO.Avatar avatar,
             String statusMessage,
             int currentStreak,
             long totalLikeCount,
@@ -287,13 +288,12 @@ public final class GroupResDTO {
     }
 
     /**
-     * 참여 Preview에 표시하는 ACTIVE 구성원 요약이다.
-     * 캐릭터 도메인이 도입되기 전에는 characterImageUrl이 null이며 내부 식별자는 노출하지 않는다.
+     * 참여 Preview에 표시하는 ACTIVE 구성원의 조합 아바타다. 내부 식별자는 노출하지 않는다.
      */
     @Builder
     @Schema(name = "GroupJoinPreviewMember", description = "그룹 참여 Preview 구성원 요약")
     public record JoinPreviewMember(
-            String characterImageUrl
+            ShopResDTO.Avatar avatar
     ) {
     }
 

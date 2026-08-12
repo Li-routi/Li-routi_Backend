@@ -17,6 +17,7 @@ import com.lirouti.domain.group.repository.GroupListQueryRepository.MyGroupProje
 import com.lirouti.domain.group.repository.GroupRoutineQueryRepository.GroupRoutineProjection;
 import com.lirouti.domain.group.repository.GroupRoutineQueryRepository.RoutineScheduleProjection;
 import com.lirouti.domain.routine.enums.RoutineCategoryColor;
+import com.lirouti.domain.shop.dto.response.ShopResDTO;
 
 import java.util.Comparator;
 import java.util.List;
@@ -123,7 +124,8 @@ public final class GroupConverter {
     /** 그룹 상세 멤버 projection과 오늘 진행도 집계를 진입 화면 응답으로 조립한다. */
     public static GroupResDTO.Detail toGroupDetail(
             List<GroupMemberDetailProjection> memberDetails,
-            List<TodayMemberProgressProjection> progresses
+            List<TodayMemberProgressProjection> progresses,
+            Map<Long, ShopResDTO.Avatar> avatarsByMemberId
     ) {
         GroupMemberDetailProjection group = memberDetails.getFirst();
         Map<Long, TodayMemberProgressProjection> progressByMemberId = progresses.stream()
@@ -139,21 +141,24 @@ public final class GroupConverter {
                 .members(memberDetails.stream()
                         .map(member -> toMemberActivity(
                                 member,
-                                progressByMemberId.get(member.memberId())))
+                                progressByMemberId.get(member.memberId()),
+                                avatarsByMemberId.getOrDefault(
+                                        member.memberId(), new ShopResDTO.Avatar(List.of()))))
                         .toList())
                 .build();
     }
 
     private static GroupResDTO.MemberActivity toMemberActivity(
             GroupMemberDetailProjection member,
-            TodayMemberProgressProjection progress
+            TodayMemberProgressProjection progress,
+            ShopResDTO.Avatar avatar
     ) {
         long completedCount = progress == null ? 0L : progress.completedCount();
         long totalCount = progress == null ? 0L : progress.totalCount();
         return GroupResDTO.MemberActivity.builder()
                 .memberId(member.memberId())
                 .name(member.name())
-                .profileImageKey(member.profileImageKey())
+                .avatar(avatar)
                 .statusMessage(member.statusMessage())
                 .currentStreak(member.currentStreak())
                 .totalLikeCount(member.totalLikeCount())
@@ -412,7 +417,8 @@ public final class GroupConverter {
             Group group,
             long activeMemberCount,
             long totalRoutineCount,
-            List<Long> activeMembershipIds,
+            List<Long> activeMemberIds,
+            Map<Long, ShopResDTO.Avatar> avatarsByMemberId,
             boolean joinable,
             GroupJoinUnavailableReason unavailableReason
     ) {
@@ -422,8 +428,9 @@ public final class GroupConverter {
                 .activeMemberCount((int) activeMemberCount)
                 .maxMemberCount(GroupMember.MAX_ACTIVE_MEMBER_COUNT_PER_GROUP)
                 .totalRoutineCount((int) totalRoutineCount)
-                .members(activeMembershipIds.stream()
-                        .map(ignored -> new GroupResDTO.JoinPreviewMember(null))
+                .members(activeMemberIds.stream()
+                        .map(memberId -> new GroupResDTO.JoinPreviewMember(
+                                avatarsByMemberId.getOrDefault(memberId, new ShopResDTO.Avatar(List.of()))))
                         .toList())
                 .joinable(joinable)
                 .unavailableReason(unavailableReason)

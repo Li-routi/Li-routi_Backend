@@ -4,8 +4,12 @@ import com.lirouti.domain.shop.dto.response.ShopResDTO;
 import com.lirouti.domain.shop.entity.AvatarItem;
 import com.lirouti.domain.shop.entity.MemberAvatarEquipment;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 public final class ShopConverter {
 
@@ -48,5 +52,21 @@ public final class ShopConverter {
         return ShopResDTO.Avatar.builder()
                 .equipped(equipments.stream().map(ShopConverter::toEquipped).toList())
                 .build();
+    }
+
+    /** 장착하지 않은 회원도 빈 목록으로 포함해 회원별 현재 착용 상태를 조립한다. */
+    public static Map<Long, ShopResDTO.Avatar> toAvatarsByMemberId(
+            List<Long> memberIds,
+            List<MemberAvatarEquipment> equipments
+    ) {
+        Map<Long, List<MemberAvatarEquipment>> equipmentsByMemberId = equipments.stream()
+                .collect(Collectors.groupingBy(equipment -> equipment.getMember().getId()));
+
+        return memberIds.stream().distinct().collect(Collectors.toMap(
+                Function.identity(),
+                memberId -> toAvatar(equipmentsByMemberId.getOrDefault(memberId, List.of())),
+                (left, right) -> left,
+                LinkedHashMap::new
+        ));
     }
 }
