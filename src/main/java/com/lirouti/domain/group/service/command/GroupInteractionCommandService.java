@@ -41,19 +41,21 @@ public class GroupInteractionCommandService {
         GroupMember actor = validationService.validateActiveGroupMember(groupId, memberId);
         GroupRoutineVerification verification = verificationRepository.findByIdAndGroupId(verificationId, groupId)
                 .orElseThrow(() -> new VerificationException(VerificationErrorCode.GROUP_ROUTINE_VERIFICATION_NOT_FOUND));
+        Long assignmentId = verification.getAssignment().getId();
+        Long authorId = verification.getAssignment().getMember().getId();
+        String actorNickname = actor.getMember().getNickname();
         int deletedLike = likeRepository.deleteLike(verificationId, memberId);
         if (deletedLike == 1) {
             GroupMember authorMembership = groupMemberActivityCommandService.lockMembership(
-                    groupId, verification.getAssignment().getMember().getId());
+                    groupId, authorId);
             groupMemberRepository.decrementTotalLikeCountForCurrentActiveMembershipIfPositive(
-                    authorMembership.getId(), verification.getAssignment().getId());
+                    authorMembership.getId(), assignmentId);
         }
         int inserted = disappointmentRepository.insertIfAbsent(verificationId, memberId);
-        Long authorId = verification.getAssignment().getMember().getId();
         if (inserted == 1 && !authorId.equals(memberId)) {
             eventPublisher.publishEvent(new NotificationRequestedEvent(authorId, NotificationCategory.GROUP_ROUTINE,
                     NotificationType.GROUP_VERIFICATION_DISAPPOINTED, "그룹원이 인증을 응원하고 있어요",
-                    actor.getMember().getNickname()+"님이 인증에 아쉬워요를 남겼습니다.", groupId,
+                    actorNickname+"님이 인증에 아쉬워요를 남겼습니다.", groupId,
                     verificationId, "GROUP_ROUTINE_VERIFICATION",
                     "group-disappointment:"+verificationId+":"+memberId));
         }
