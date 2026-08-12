@@ -14,12 +14,15 @@ import com.lirouti.domain.group.repository.GroupRepository;
 import com.lirouti.domain.group.repository.GroupRoutineRepository;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.service.query.MemberQueryService;
+import com.lirouti.domain.shop.repository.MemberAvatarEquipmentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /** 초대코드 입력 시 보여줄 그룹 참여 Preview를 읽기 전용으로 구성한다. */
 @Slf4j
@@ -29,6 +32,7 @@ public class GroupJoinQueryService {
     private final GroupRepository groupRepository;
     private final GroupMemberRepository groupMemberRepository;
     private final GroupRoutineRepository groupRoutineRepository;
+    private final MemberAvatarEquipmentRepository memberAvatarEquipmentRepository;
     private final MemberQueryService memberQueryService;
 
     /**
@@ -50,9 +54,16 @@ public class GroupJoinQueryService {
 
         long activeMemberCount = groupMemberRepository.countActiveMembersByGroupId(
                 group.getId(), GroupMemberStatus.ACTIVE);
-        var activeMembershipIds = groupMemberRepository
-                .findIdsByGroupIdAndStatusOrderByJoinedAtAscIdAsc(
+        List<Long> activeMemberIds = groupMemberRepository
+                .findMemberIdsByGroupIdAndStatusOrderByJoinedAtAscIdAsc(
                         group.getId(), GroupMemberStatus.ACTIVE);
+        Map<Long, GroupResDTO.Avatar> avatarsByMemberId = GroupConverter.toAvatarsByMemberId(
+                activeMemberIds,
+                activeMemberIds.isEmpty()
+                        ? List.of()
+                        : memberAvatarEquipmentRepository
+                                .findAllByMemberIdInWithMemberAndAvatarItem(activeMemberIds)
+        );
         long totalRoutineCount = groupRoutineRepository.countByGroupIdAndActiveTrue(group.getId());
         GroupJoinUnavailableReason unavailableReason = findUnavailableReason(
                 group, member, activeMemberCount);
@@ -66,7 +77,8 @@ public class GroupJoinQueryService {
                 group,
                 activeMemberCount,
                 totalRoutineCount,
-                activeMembershipIds,
+                activeMemberIds,
+                avatarsByMemberId,
                 joinable,
                 unavailableReason
         );

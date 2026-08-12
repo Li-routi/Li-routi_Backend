@@ -132,6 +132,40 @@ class ChargeCompletionTest {
     }
 
     @Test
+    @DisplayName("응답에 지급 수량과 지급 후 잔액이 실린다 — 잔액 조회를 다시 부르지 않게")
+    void complete_ReturnsGrantedAmountsAndBalances() {
+        portOneSays("PAID", PRICE);
+
+        ChargeResDTO.Settled result = chargeCommandService.complete(me.getId(), paymentId);
+
+        assertAll(
+                () -> assertThat(result.paymentId()).isEqualTo(paymentId),
+                () -> assertThat(result.currency()).isEqualTo(Currency.GEM),
+                () -> assertThat(result.rewardAmount()).as("유상으로 들어간 수량").isEqualTo(REWARD),
+                () -> assertThat(result.bonusAmount()).as("무상으로 들어간 보너스").isEqualTo(BONUS),
+                () -> assertThat(result.paidBalance()).as("지급 후 유상 잔액").isEqualTo(REWARD),
+                () -> assertThat(result.freeBalance()).as("지급 후 무상 잔액").isEqualTo(BONUS)
+        );
+    }
+
+    @Test
+    @DisplayName("이미 지급된 결제를 다시 불러도 같은 응답이 나간다 — 이 경로는 grant를 타지 않는다")
+    void completeTwice_ReturnsSameSettledResult() {
+        portOneSays("PAID", PRICE);
+
+        ChargeResDTO.Settled first = chargeCommandService.complete(me.getId(), paymentId);
+        ChargeResDTO.Settled again = chargeCommandService.complete(me.getId(), paymentId);
+        em.flush();
+
+        assertAll(
+                () -> assertThat(again).as("멱등하다").isEqualTo(first),
+                () -> assertThat(again.paidBalance()).as("두 번 지급되지 않는다").isEqualTo(REWARD),
+                () -> assertThat(again.freeBalance()).isEqualTo(BONUS),
+                () -> assertThat(balance()).isEqualTo(REWARD + BONUS)
+        );
+    }
+
+    @Test
     @DisplayName("웹훅으로 들어와도 같은 처리를 한다 — 앱이 죽어도 재화는 들어온다")
     void webhook_GrantsToo() {
         portOneSays("PAID", PRICE);

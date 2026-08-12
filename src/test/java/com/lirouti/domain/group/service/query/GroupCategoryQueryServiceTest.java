@@ -12,6 +12,7 @@ import com.lirouti.domain.group.repository.GroupListQueryRepository;
 import com.lirouti.domain.group.repository.GroupRoutineQueryRepository;
 import com.lirouti.domain.group.service.GroupValidationService;
 import com.lirouti.domain.member.service.query.MemberQueryService;
+import com.lirouti.domain.shop.repository.MemberAvatarEquipmentRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -37,6 +38,7 @@ class GroupCategoryQueryServiceTest {
     @Mock private GroupListQueryRepository groupListQueryRepository;
     @Mock private GroupRoutineQueryRepository groupRoutineQueryRepository;
     @Mock private GroupRoutineCategoryRepository categoryRepository;
+    @Mock private MemberAvatarEquipmentRepository memberAvatarEquipmentRepository;
     @Mock private GroupValidationService validationService;
     @Mock private MemberQueryService memberQueryService;
 
@@ -50,6 +52,7 @@ class GroupCategoryQueryServiceTest {
                 groupListQueryRepository,
                 groupRoutineQueryRepository,
                 categoryRepository,
+                memberAvatarEquipmentRepository,
                 validationService,
                 memberQueryService,
                 Clock.systemUTC()

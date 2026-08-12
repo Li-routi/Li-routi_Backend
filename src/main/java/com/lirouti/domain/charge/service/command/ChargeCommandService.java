@@ -97,7 +97,7 @@ public class ChargeCommandService {
      * <p>요청 본문의 값으로 판단하지 않는다. 결제 식별자로 <b>인증된 회원의</b> 행이 있는지
      * 먼저 보고, 없으면 포트원을 부르지도 않는다.
      */
-    public ChargeResDTO.Started complete(Long memberId, String paymentId) {
+    public ChargeResDTO.Settled complete(Long memberId, String paymentId) {
         settlementCommandService.requireOwnedBy(memberId, paymentId);
         return settle(paymentId, false);
     }
@@ -121,7 +121,7 @@ public class ChargeCommandService {
      * <p>순서가 중요하다 — <b>외부 조회를 잠금 밖에서</b> 끝내고, 그 결과만 들고 잠금 안으로
      * 들어간다.
      */
-    private ChargeResDTO.Started settle(String paymentId, boolean fromWebhook) {
+    private ChargeResDTO.Settled settle(String paymentId, boolean fromWebhook) {
         Optional<ChargePaymentStatus> status = settlementCommandService.statusOf(paymentId);
 
         // 우리가 모르는 결제다. 웹훅 주소는 공개라 아무나 아무 식별자나 보낼 수 있으므로,

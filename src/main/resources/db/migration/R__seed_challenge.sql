@@ -18,6 +18,22 @@
 --     소프트 삭제 대신 active로 노출을 제어하고(database-schema.md), member_challenge가
 --     참조 중인 챌린지는 물리 삭제도 불가능하다.
 --
+-- id 1~12 는 처음 열두 챌린지가 쓰던 번호다. 목록을 갈아엎으면서도 그 번호를 그대로 두고
+-- 이름·설명·분류만 새 목록에 맞춰 바꿨다. 참여 중인 사람이 있기 때문이다 — active 를 FALSE 로
+-- 내려 갈아치우면 "내 챌린지" 조회가 challenge.active = true 로 거르므로 참여 행이 남아 있어도
+-- 화면에서 통째로 사라진다(MemberChallengeRepository). id 를 유지하면 참여가 안 끊긴다.
+--   id 12 는 분류가 HOBBY 에서 MIND 로 옮겨 갔다. '감사 기록 남기기' 는 취미가 아니라 마음관리다.
+--
+-- id 대역.
+--   1~999       이 파일(운영 마스터). 지금 66 까지 썼다.
+--   9001~9004   로컬 더미(db/dummy)가 쓰는 번호. <b>운영 DB 에도 들어 있다</b> — 배포로 들어온
+--               것이 아니라(flyway 이력에 없다) 누가 클라이언트로 직접 넣었고, 그때 커넥션이
+--               UTF-8 이 아니어서 이름의 한글이 버려졌다. 이 대역을 침범하면 덮어쓴다.
+--
+-- 그 위는 AUTO_INCREMENT 가 가져간다. 운영 카운터가 이미 9005 라 <b>코드나 콘솔로 만드는
+-- 챌린지는 9005 부터 붙는다</b> — 1000 번대를 비워 둬도 그리로 가지 않는다. 이 파일은 언제나
+-- id 를 직접 적으므로 그 카운터와 무관하고, 그래서 위 두 대역만 신경 쓰면 된다.
+--
 -- image_url은 넣지 않는다. 비어 있으면 그 챌린지에서 좋아요를 가장 많이 받은 인증 사진이
 -- 표지가 되고, 인증이 없으면 클라이언트가 분류별 기본 이미지를 그린다.
 --
@@ -46,18 +62,72 @@
 
 INSERT INTO challenge (id, name, description, category, routine_cycle, reward, active, created_at, updated_at)
 VALUES
-  (1,  '물 2L 마시기',      '하루 2L 이상 물 마시기',              'HEALTH',   'DAILY', 10, TRUE, NOW(), NOW()),
-  (2,  '아침 챙겨 먹기',    '거르지 않고 아침 식사하기',            'HEALTH',   'DAILY', 10, TRUE, NOW(), NOW()),
-  (3,  '자정 전에 잠들기',  '12시 넘기지 않고 잠자리에 들기',        'HEALTH',   'DAILY', 10, TRUE, NOW(), NOW()),
-  (4,  '30분 걷기',         '하루 30분 이상 걷기',                 'EXERCISE', 'DAILY', 10, TRUE, NOW(), NOW()),
-  (5,  '스트레칭 10분',     '자기 전 10분 스트레칭하기',            'EXERCISE', 'DAILY', 10, TRUE, NOW(), NOW()),
-  (6,  '계단 이용하기',     '엘리베이터 대신 계단으로 오르내리기',    'EXERCISE', 'DAILY', 10, TRUE, NOW(), NOW()),
-  (7,  '책 10쪽 읽기',      '하루 10쪽 이상 책 읽기',               'STUDY',    'DAILY', 10, TRUE, NOW(), NOW()),
-  (8,  '영어 단어 10개',    '하루 영어 단어 10개 외우기',           'STUDY',    'DAILY', 10, TRUE, NOW(), NOW()),
-  (9,  '설거지 바로 하기',  '식사 후 미루지 않고 설거지하기',        'LIFE',     'DAILY', 10, TRUE, NOW(), NOW()),
-  (10, '자기 전 책상 정리', '하루를 마치며 책상 위 비우기',          'LIFE',     'DAILY', 10, TRUE, NOW(), NOW()),
-  (11, '하루 한 장 사진',   '오늘의 순간을 사진 한 장으로 남기기',    'HOBBY',    'DAILY', 10, TRUE, NOW(), NOW()),
-  (12, '감사일기 쓰기',     '하루 한 줄, 감사한 일 기록하기',        'HOBBY',    'DAILY', 10, TRUE, NOW(), NOW())
+  ( 5, '스트레칭하기',                  '굳은 몸을 풀어 주는 스트레칭하기', 'EXERCISE', 'DAILY',  10, TRUE, NOW(), NOW()),
+  (13, '홈트레이닝하기',                 '집에서 할 수 있는 운동 한 세트 하기', 'EXERCISE', 'DAILY',  10, TRUE, NOW(), NOW()),
+  (14, '요가 자세 따라 하기',             '요가 동작을 하나 골라 따라 하기', 'EXERCISE', 'DAILY',  10, TRUE, NOW(), NOW()),
+  (15, '플랭크 자세 인증하기',             '플랭크 자세를 버티고 남기기', 'EXERCISE', 'DAILY',  10, TRUE, NOW(), NOW()),
+  ( 6, '계단 이용하기',                 '엘리베이터 대신 계단으로 오르내리기', 'EXERCISE', 'DAILY',  10, TRUE, NOW(), NOW()),
+  ( 4, '30분 산책하기',                '밖으로 나가 30분 이상 걷기', 'EXERCISE', 'DAILY',  10, TRUE, NOW(), NOW()),
+  (16, '만 보 걷기',                  '하루 걸음 수 만 보 채우기', 'EXERCISE', 'DAILY',  10, TRUE, NOW(), NOW()),
+  (17, '헬스장 다녀오기',                '이번 주에 헬스장에 다녀오기', 'EXERCISE', 'WEEKLY',  30, TRUE, NOW(), NOW()),
+  (18, '자전거 타기',                  '이번 주에 자전거를 타고 나가기', 'EXERCISE', 'WEEKLY',  30, TRUE, NOW(), NOW()),
+  (19, '등산하기',                    '이번 달에 산에 다녀오기', 'EXERCISE', 'MONTHLY', 100, TRUE, NOW(), NOW()),
+  ( 1, '물 2L 마시기',                '하루 2L 이상 물 마시기', 'HEALTH', 'DAILY',  10, TRUE, NOW(), NOW()),
+  (20, '과일 챙겨 먹기',                '하루에 과일 한 번 챙겨 먹기', 'HEALTH', 'DAILY',  10, TRUE, NOW(), NOW()),
+  (21, '채소가 있는 한 끼 먹기',           '채소가 들어간 식사 한 끼 하기', 'HEALTH', 'DAILY',  10, TRUE, NOW(), NOW()),
+  (22, '단백질이 있는 한 끼 먹기',          '단백질이 들어간 식사 한 끼 하기', 'HEALTH', 'DAILY',  10, TRUE, NOW(), NOW()),
+  ( 2, '아침 식사 챙겨 먹기',             '거르지 않고 아침 식사하기', 'HEALTH', 'DAILY',  10, TRUE, NOW(), NOW()),
+  (23, '영양제 챙겨 먹기',               '정한 시간에 영양제 챙겨 먹기', 'HEALTH', 'DAILY',  10, TRUE, NOW(), NOW()),
+  ( 3, '7시간 이상 자기',               '잠을 7시간 이상 자기', 'HEALTH', 'DAILY',  10, TRUE, NOW(), NOW()),
+  (24, '하루 세끼 모두 직접 건강식으로 차려 먹기', '하루 세 끼를 직접 건강하게 차려 먹기', 'HEALTH', 'MONTHLY', 100, TRUE, NOW(), NOW()),
+  (25, '일주일치 밀프렙 만들기',            '한 주 먹을 식사를 미리 만들어 두기', 'HEALTH', 'MONTHLY', 100, TRUE, NOW(), NOW()),
+  (26, '한 달 식단 짜기',               '한 달 치 식단을 계획해 적어 두기', 'HEALTH', 'MONTHLY', 100, TRUE, NOW(), NOW()),
+  (27, '책 펼쳐 읽기',                 '분량과 상관없이 책을 펼쳐 읽기', 'STUDY', 'DAILY',  10, TRUE, NOW(), NOW()),
+  ( 7, '책 10쪽 읽기',                '하루 10쪽 이상 책 읽기', 'STUDY', 'DAILY',  10, TRUE, NOW(), NOW()),
+  (28, '1시간 공부하기',                '집중해서 1시간 공부하기', 'STUDY', 'DAILY',  10, TRUE, NOW(), NOW()),
+  (29, '공부 노트 남기기',               '오늘 공부한 것을 노트로 남기기', 'STUDY', 'DAILY',  10, TRUE, NOW(), NOW()),
+  ( 8, '외국어 공부하기',                '외국어를 하루 한 번 공부하기', 'STUDY', 'DAILY',  10, TRUE, NOW(), NOW()),
+  (30, '뉴스 읽고 정리하기',              '뉴스를 읽고 요점을 정리하기', 'STUDY', 'DAILY',  10, TRUE, NOW(), NOW()),
+  (31, '한 주 공부 내용 정리하기',          '이번 주에 공부한 것을 모아 정리하기', 'STUDY', 'WEEKLY',  30, TRUE, NOW(), NOW()),
+  (32, '포트폴리오 작업하기',              '이번 주에 포트폴리오를 손보기', 'STUDY', 'WEEKLY',  30, TRUE, NOW(), NOW()),
+  (33, '온라인 강의 한 과정 완강하기',        '이번 달에 강의 한 과정을 끝내기', 'STUDY', 'MONTHLY', 100, TRUE, NOW(), NOW()),
+  (34, '원서 한 권 완독하기',             '이번 달에 원서 한 권을 끝까지 읽기', 'STUDY', 'MONTHLY', 100, TRUE, NOW(), NOW()),
+  (35, '침대 정리하기',                 '일어나서 이불과 침대 정리하기', 'LIFE', 'DAILY',  10, TRUE, NOW(), NOW()),
+  ( 9, '설거지 완료하기',                '식사 후 미루지 않고 설거지 끝내기', 'LIFE', 'DAILY',  10, TRUE, NOW(), NOW()),
+  (36, '빨래 개기',                   '마른 빨래를 개어 정리하기', 'LIFE', 'DAILY',  10, TRUE, NOW(), NOW()),
+  (10, '책상 위 정리하기',               '하루를 마치며 책상 위 비우기', 'LIFE', 'DAILY',  10, TRUE, NOW(), NOW()),
+  (37, '쓰레기 버리기',                 '쌓인 쓰레기를 그날 버리기', 'LIFE', 'DAILY',  10, TRUE, NOW(), NOW()),
+  (38, '방 정리하기',                  '이번 주에 방을 정리하기', 'LIFE', 'WEEKLY',  30, TRUE, NOW(), NOW()),
+  (39, '욕실 청소하기',                 '이번 주에 욕실을 청소하기', 'LIFE', 'WEEKLY',  30, TRUE, NOW(), NOW()),
+  (40, '냉장고 정리하기',                '이번 주에 냉장고 안을 정리하기', 'LIFE', 'WEEKLY',  30, TRUE, NOW(), NOW()),
+  (41, '분리수거하기',                  '이번 주에 분리수거 내놓기', 'LIFE', 'WEEKLY',  30, TRUE, NOW(), NOW()),
+  (42, '방 전체 대청소하기',              '이번 달에 방을 통째로 청소하기', 'LIFE', 'MONTHLY', 100, TRUE, NOW(), NOW()),
+  (43, '집 안 물건 비우기',              '안 쓰는 물건을 골라 비우기', 'LIFE', 'MONTHLY', 100, TRUE, NOW(), NOW()),
+  (44, '냉장고 전체 정리하기',             '냉장고를 비우고 전체를 정리하기', 'LIFE', 'MONTHLY', 100, TRUE, NOW(), NOW()),
+  (12, '감사 기록 남기기',               '하루 한 줄, 감사한 일 기록하기', 'MIND', 'DAILY',  10, TRUE, NOW(), NOW()),
+  (45, '일기 쓰기',                   '오늘 하루를 일기로 남기기', 'MIND', 'DAILY',  10, TRUE, NOW(), NOW()),
+  (46, '감정 기록 남기기',               '오늘 느낀 감정을 적어 두기', 'MIND', 'DAILY',  10, TRUE, NOW(), NOW()),
+  (47, '명상하기',                    '조용히 앉아 명상하기', 'MIND', 'DAILY',  10, TRUE, NOW(), NOW()),
+  (48, '오늘 잘한 일 적기',              '오늘 잘한 일을 하나 적기', 'MIND', 'DAILY',  10, TRUE, NOW(), NOW()),
+  (49, '나에게 긍정적인 문장 남기기',         '스스로에게 건네는 문장 남기기', 'MIND', 'DAILY',  10, TRUE, NOW(), NOW()),
+  (50, '차 한 잔 마시며 쉬기',            '차를 마시며 잠깐 쉬어 가기', 'MIND', 'DAILY',  10, TRUE, NOW(), NOW()),
+  (51, '좋아하는 음악 듣기',              '좋아하는 음악을 골라 듣기', 'MIND', 'DAILY',  10, TRUE, NOW(), NOW()),
+  (52, '햇빛을 받으며 20분 쉬기',          '햇빛 아래에서 20분 쉬기', 'MIND', 'DAILY',  10, TRUE, NOW(), NOW()),
+  (53, '한 주 동안 힘들었던 일 정리하기',      '이번 주에 힘들었던 일을 적어 정리하기', 'MIND', 'WEEKLY',  30, TRUE, NOW(), NOW()),
+  (54, '혼자만의 시간 보내고 기록하기',        '혼자 보낸 시간을 기록으로 남기기', 'MIND', 'WEEKLY',  30, TRUE, NOW(), NOW()),
+  (55, '가벼운 여행 다녀오기',             '이번 달에 가볍게 다녀오기', 'MIND', 'MONTHLY', 100, TRUE, NOW(), NOW()),
+  (56, '미래의 나에게 편지 쓰기',           '앞으로의 나에게 편지 남기기', 'MIND', 'MONTHLY', 100, TRUE, NOW(), NOW()),
+  (57, '그림 그리기',                  '무엇이든 하나 그려 보기', 'HOBBY', 'DAILY',  10, TRUE, NOW(), NOW()),
+  (58, '악기 연습하기',                 '악기를 꺼내 연습하기', 'HOBBY', 'DAILY',  10, TRUE, NOW(), NOW()),
+  (59, '글쓰기',                     '분량과 상관없이 글을 쓰기', 'HOBBY', 'DAILY',  10, TRUE, NOW(), NOW()),
+  (11, '사진 한 장 찍기',               '오늘의 순간을 사진 한 장으로 남기기', 'HOBBY', 'DAILY',  10, TRUE, NOW(), NOW()),
+  (60, '새로운 요리 만들기',              '안 해 본 요리를 이번 주에 만들기', 'HOBBY', 'WEEKLY',  30, TRUE, NOW(), NOW()),
+  (61, '베이킹하기',                   '이번 주에 직접 구워 보기', 'HOBBY', 'WEEKLY',  30, TRUE, NOW(), NOW()),
+  (62, '식물 돌보기',                  '이번 주에 식물을 살피고 돌보기', 'HOBBY', 'WEEKLY',  30, TRUE, NOW(), NOW()),
+  (63, '공예품 만들기',                 '이번 주에 손으로 무언가 만들기', 'HOBBY', 'WEEKLY',  30, TRUE, NOW(), NOW()),
+  (64, '영화보고 감상 기록하기',            '영화를 보고 감상을 남기기', 'HOBBY', 'WEEKLY',  30, TRUE, NOW(), NOW()),
+  (65, '하루 종일 취미 활동하기',           '이번 달에 하루를 통째로 취미에 쓰기', 'HOBBY', 'MONTHLY', 100, TRUE, NOW(), NOW()),
+  (66, '미뤄둔 취미 결과물 완성하기',         '미뤄 둔 작업을 이번 달에 끝내기', 'HOBBY', 'MONTHLY', 100, TRUE, NOW(), NOW())
 -- 새 행은 VALUES(컬럼)이 아니라 별칭으로 참조한다. VALUES() 함수는 MySQL 8.0.19에서
 -- deprecated 되어 부팅마다 경고가 찍히고 향후 제거 예정이다(운영도 MySQL 8.4).
 AS new_row

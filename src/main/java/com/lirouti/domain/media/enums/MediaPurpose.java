@@ -28,19 +28,25 @@ import java.util.Set;
 public enum MediaPurpose {
     // TODO(영상): 특정 용도에 영상을 허용하려면 그 용도의 Set에 MediaCategory.VIDEO 추가
     //  예) CHALLENGE_VERIFICATION("challenge-verifications", Set.of(MediaCategory.IMAGE, MediaCategory.VIDEO))
+    // 인증 사진 셋은 정책 하나를 나눠 쓴다. 한 사람이 아침에 개인 루틴을 인증하고 그룹 인증도
+    // 하는 것이 정상 사용이라 서로 굶길 이유가 없다. 성격이 다른 것은 프로필이다 — 자주 바꾸지
+    // 않고, 바꿀 때 몰아서 바꾼다. 그래서 프로필만 따로 뗀다.
     CHALLENGE_VERIFICATION(
             "challenge-verifications", "challenge-verifications-staging",
-            Set.of(MediaCategory.IMAGE), true, true),
+            Set.of(MediaCategory.IMAGE), true, true, "media-presign-verification"),
     // 그 방 멤버 전원만, 본인만 볼 수 있다. 버킷 정책이 열려 있지 않아 서명으로만 열린다.
-    GROUP_ROUTINE_VERIFICATION("group-routine-verifications", null, Set.of(MediaCategory.IMAGE), false, true),
-    MEMBER_ROUTINE_VERIFICATION("member-routine-verifications", null, Set.of(MediaCategory.IMAGE), false, true),
+    GROUP_ROUTINE_VERIFICATION("group-routine-verifications", null,
+            Set.of(MediaCategory.IMAGE), false, true, "media-presign-verification"),
+    MEMBER_ROUTINE_VERIFICATION("member-routine-verifications", null,
+            Set.of(MediaCategory.IMAGE), false, true, "media-presign-verification"),
     // 공개 용도로 설계돼 있지만 정책에는 아직 없다 — 프로필 이미지 자체가 없어 미리 열면
     // "언제 왜 열었는지 모르는 공개 prefix"가 남는다는 판단이었다(deploy/README.md).
     // 정책에 없는 것을 공개로 표시하면 서명 없는 주소가 나가 403 이 되므로 지금은 비공개다.
     // 프로필 업로드를 구현하며 정책을 열 때 이 값을 함께 true 로 바꾼다.
-    PROFILE("profiles", null, Set.of(MediaCategory.IMAGE), false, true),
+    PROFILE("profiles", null, Set.of(MediaCategory.IMAGE), false, true, "media-presign-profile"),
     // 서비스가 등록한 자산만 사용하며 일반 사용자에게 presigned PUT을 발급하지 않는다.
-    CHAT_EMOTICON("chat-emoticons", null, Set.of(MediaCategory.IMAGE), false, false);
+    // 발급 경로가 없으니 셀 것도 없어 정책이 null 이다.
+    CHAT_EMOTICON("chat-emoticons", null, Set.of(MediaCategory.IMAGE), false, false, null);
 
     private final String pathPrefix;
 
@@ -64,6 +70,19 @@ public enum MediaPurpose {
 
     /** 일반 사용자에게 presigned PUT을 발급할 수 있는 용도인가. */
     private final boolean clientUploadAllowed;
+
+    /**
+     * 발급 빈도를 셀 때 쓸 {@code rate-limit.policies} 키. 셀 필요가 없으면 {@code null}.
+     *
+     * <p><b>여기 있는 것은 정책 "이름"뿐이고 한도 값은 설정에 있다.</b> 컨트롤러에
+     * {@code @RateLimit("정책이름")}만 적고 횟수·창은 yaml 에 두는 것과 같은 분리다 —
+     * 운영에서 값을 조정할 때 코드를 고치지 않기 위해서다.
+     *
+     * <p>용도별 갈림을 이 enum 이 들고 있는 이유는 prefix·공개 여부·허용 카테고리처럼
+     * <b>이미 용도마다 다른 값들이 여기 모여 있기</b> 때문이다. 매핑을 설정으로 빼면 용도를
+     * 추가할 때 두 곳을 고쳐야 하고, 한쪽을 빠뜨려도 부팅은 성공한다.
+     */
+    private final String rateLimitPolicy;
 
     public boolean allows(MediaCategory category) {
         return allowedCategories.contains(category);

@@ -29,13 +29,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @TestPropertySource(properties = {
         "rate-limit.enabled=true",
-        "rate-limit.policies.media-presign.limit=2",
-        "rate-limit.policies.media-presign.window=PT1H"
+        "rate-limit.policies.media-presign-verification.limit=2",
+        "rate-limit.policies.media-presign-verification.window=PT1H"
 })
 @DisplayName("레이트 리밋 통합 테스트")
 class RateLimitIntegrationTest {
     private static final long MEMBER_ID = 99_001L;
-    private static final String COUNTER_KEY = "rate-limit:media-presign:member:" + MEMBER_ID;
+    private static final String COUNTER_KEY =
+            "rate-limit:media-presign-verification:member:" + MEMBER_ID;
 
     @Autowired
     private MockMvc mockMvc;
