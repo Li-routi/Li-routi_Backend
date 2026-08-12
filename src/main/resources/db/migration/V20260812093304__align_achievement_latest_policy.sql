@@ -13,13 +13,13 @@ UPDATE achievement SET active = FALSE WHERE code IN ('ACH-ST-006', 'ACH-AC-003')
 INSERT INTO achievement
 (code, category, name, condition_desc, progress_type, target_count, topaz_reward, badge_yn, limited_outfit_yn, sort_order, hidden_yn)
 VALUES
-    ('ACH-AC-004', 'EPIC', '작심삼일 탈출',        '서로 다른 날짜에 루틴 인증 3일 달성',              'DISTINCT_DAY_COUNT',         3, 100, TRUE, FALSE, 24, FALSE),
-    ('ACH-AC-005', 'EPIC', '일주일 루틴러',        '한 주 동안 서로 다른 날짜에 루틴 인증 5일 이상',    'WEEKLY_DISTINCT_DAY_COUNT',  5, 100, TRUE, FALSE, 25, FALSE),
-    ('ACH-AC-006', 'EPIC', '쿡쿡 장인',            '친구 쿡쿡 찌르기 누적 50회',                       'CUMULATIVE_COUNT',          50, 100, TRUE, FALSE, 26, FALSE),
-    ('ACH-AC-007', 'EPIC', '빨리 좀 해',           '다른 사용자에게 아얏 받기 누적 50회',              'CUMULATIVE_COUNT',          50, 100, TRUE, FALSE, 27, FALSE),
-    ('ACH-AC-008', 'EPIC', '루틴 탐험가',          '6개 카테고리 루틴을 각각 1회 이상 인증',            'CATEGORY_COVERAGE_COUNT',    6, 100, TRUE, FALSE, 28, FALSE),
-    ('ACH-AC-009', 'EPIC', '우리 방 정상영업합니다', '한 루틴방의 구성원 전체 인증 합계 100회',          'GROUP_CUMULATIVE_COUNT',   100, 100, TRUE, FALSE, 29, FALSE),
-    ('ACH-AC-010', 'EPIC', '꽉 찬 방',             '내가 참여한 루틴방이 최대 인원에 도달',             'NONE',                    NULL, 100, TRUE, FALSE, 30, FALSE);
+    ('ACH-AC-004', 'EPIC', '작심삼일 탈출',        '서로 다른 날짜에 루틴 인증 3일 달성',              'DISTINCT_DAY_COUNT',         3, 100, TRUE, FALSE, 25, FALSE),
+    ('ACH-AC-005', 'EPIC', '일주일 루틴러',        '한 주 동안 서로 다른 날짜에 루틴 인증 5일 이상',    'WEEKLY_DISTINCT_DAY_COUNT',  5, 100, TRUE, FALSE, 26, FALSE),
+    ('ACH-AC-006', 'EPIC', '쿡쿡 장인',            '친구 쿡쿡 찌르기 누적 50회',                       'CUMULATIVE_COUNT',          50, 100, TRUE, FALSE, 27, FALSE),
+    ('ACH-AC-007', 'EPIC', '빨리 좀 해',           '다른 사용자에게 아얏 받기 누적 50회',              'CUMULATIVE_COUNT',          50, 100, TRUE, FALSE, 28, FALSE),
+    ('ACH-AC-008', 'EPIC', '루틴 탐험가',          '6개 카테고리 루틴을 각각 1회 이상 인증',            'CATEGORY_COVERAGE_COUNT',    6, 100, TRUE, FALSE, 29, FALSE),
+    ('ACH-AC-009', 'EPIC', '우리 방 정상영업합니다', '한 루틴방의 구성원 전체 인증 합계 100회',          'GROUP_CUMULATIVE_COUNT',   100, 100, TRUE, FALSE, 30, FALSE),
+    ('ACH-AC-010', 'EPIC', '꽉 찬 방',             '내가 참여한 루틴방이 최대 인원에 도달',             'NONE',                    NULL, 100, TRUE, FALSE, 31, FALSE);
 
 UPDATE achievement SET condition_key = 'ROUTINE_COMPLETE_COUNT' WHERE code = 'ACH-AC-004';
 UPDATE achievement SET condition_key = 'ROUTINE_COMPLETE_COUNT' WHERE code = 'ACH-AC-005';
@@ -41,18 +41,18 @@ WHERE a.code = 'ACH-AC-008' AND rc.id BETWEEN 1 AND 6;
 INSERT INTO achievement
 (code, category, name, condition_desc, progress_type, target_count, topaz_reward, badge_yn, limited_outfit_yn, sort_order, hidden_yn)
 VALUES
-    ('ACH-EG-001', 'EGG', '첫 루틴의 새싹',   '개인 루틴 또는 챌린지를 처음 완료',                       'NONE',                     NULL, 0, FALSE, FALSE, 31, FALSE),
-    ('ACH-EG-002', 'EGG', '배움이 차곡차곡', '공부 또는 자기계발 루틴을 서로 다른 날짜에 20일 완료',              'DISTINCT_DAY_COUNT',        20, 0, FALSE, FALSE, 32, FALSE),
-    ('ACH-EG-003', 'EGG', '일찍 일어난 새',   '오전 7시 이전에 루틴을 완료한 날 5회 달성',               'CUMULATIVE_COUNT',           5, 0, FALSE, FALSE, 33, TRUE),
-    ('ACH-EG-004', 'EGG', '건강한 땀방울',   '운동 또는 건강 루틴을 서로 다른 날짜에 20일 완료',         'DISTINCT_DAY_COUNT',        20, 0, FALSE, FALSE, 34, FALSE),
-    ('ACH-EG-005', 'EGG', '마음에 쉼표',     '마음관리 루틴을 서로 다른 날짜에 20일 완료',               'DISTINCT_DAY_COUNT',        20, 0, FALSE, FALSE, 35, FALSE),
-    ('ACH-EG-006', 'EGG', '취미의 물결',     '취미 루틴을 서로 다른 날짜에 20일 완료',                   'DISTINCT_DAY_COUNT',        20, 0, FALSE, FALSE, 36, FALSE),
-    ('ACH-EG-007', 'EGG', '알림 보고 왔어요', '루틴 알림을 눌러 앱에 접속한 횟수 10회 달성',              'CUMULATIVE_COUNT',          10, 0, FALSE, FALSE, 37, FALSE),
-    ('ACH-EG-008', 'EGG', '정리하면 다미',   '생활정리 루틴을 서로 다른 날짜에 20일 완료',               'DISTINCT_DAY_COUNT',        20, 0, FALSE, FALSE, 38, FALSE),
-    ('ACH-EG-009', 'EGG', '자정의 방문자',   '자정 00:00에 앱에 접속',                                  'NONE',                     NULL, 0, FALSE, FALSE, 39, TRUE),
-    ('ACH-EG-010', 'EGG', '좋아요 요정',     '친구 인증에 내가 누른 좋아요 누적 100회',                  'CUMULATIVE_COUNT',         100, 0, FALSE, FALSE, 40, FALSE),
-    ('ACH-EG-011', 'EGG', '딱 1분 남았어!',  '루틴 마감까지 1분 이하 남았을 때 완료',                    'NONE',                     NULL, 0, FALSE, FALSE, 41, TRUE),
-    ('ACH-EG-012', 'EGG', '100일의 태양',    '루틴 연속 기록 100일 달성',                               'STREAK_DAYS',              100, 0, FALSE, FALSE, 42, FALSE);
+    ('ACH-EG-001', 'EGG', '첫 루틴의 새싹',   '개인 루틴 또는 챌린지를 처음 완료',                       'NONE',                     NULL, 0, FALSE, FALSE, 32, FALSE),
+    ('ACH-EG-002', 'EGG', '배움이 차곡차곡', '공부 또는 자기계발 루틴을 서로 다른 날짜에 20일 완료',              'DISTINCT_DAY_COUNT',        20, 0, FALSE, FALSE, 33, FALSE),
+    ('ACH-EG-003', 'EGG', '일찍 일어난 새',   '오전 7시 이전에 루틴을 완료한 날 5회 달성',               'CUMULATIVE_COUNT',           5, 0, FALSE, FALSE, 34, TRUE),
+    ('ACH-EG-004', 'EGG', '건강한 땀방울',   '운동 또는 건강 루틴을 서로 다른 날짜에 20일 완료',         'DISTINCT_DAY_COUNT',        20, 0, FALSE, FALSE, 35, FALSE),
+    ('ACH-EG-005', 'EGG', '마음에 쉼표',     '마음관리 루틴을 서로 다른 날짜에 20일 완료',               'DISTINCT_DAY_COUNT',        20, 0, FALSE, FALSE, 36, FALSE),
+    ('ACH-EG-006', 'EGG', '취미의 물결',     '취미 루틴을 서로 다른 날짜에 20일 완료',                   'DISTINCT_DAY_COUNT',        20, 0, FALSE, FALSE, 37, FALSE),
+    ('ACH-EG-007', 'EGG', '알림 보고 왔어요', '루틴 알림을 눌러 앱에 접속한 횟수 10회 달성',              'CUMULATIVE_COUNT',          10, 0, FALSE, FALSE, 38, FALSE),
+    ('ACH-EG-008', 'EGG', '정리하면 다미',   '생활정리 루틴을 서로 다른 날짜에 20일 완료',               'DISTINCT_DAY_COUNT',        20, 0, FALSE, FALSE, 39, FALSE),
+    ('ACH-EG-009', 'EGG', '자정의 방문자',   '자정 00:00에 앱에 접속',                                  'NONE',                     NULL, 0, FALSE, FALSE, 40, TRUE),
+    ('ACH-EG-010', 'EGG', '좋아요 요정',     '친구 인증에 내가 누른 좋아요 누적 100회',                  'CUMULATIVE_COUNT',         100, 0, FALSE, FALSE, 41, FALSE),
+    ('ACH-EG-011', 'EGG', '딱 1분 남았어!',  '루틴 마감까지 1분 이하 남았을 때 완료',                    'NONE',                     NULL, 0, FALSE, FALSE, 42, TRUE),
+    ('ACH-EG-012', 'EGG', '100일의 태양',    '루틴 연속 기록 100일 달성',                               'STREAK_DAYS',              100, 0, FALSE, FALSE, 43, FALSE);
 
 UPDATE achievement SET condition_key = 'ROUTINE_COMPLETE_COUNT'       WHERE code = 'ACH-EG-001';
 UPDATE achievement SET condition_key = 'ROUTINE_COMPLETE_COUNT'       WHERE code = 'ACH-EG-002';
@@ -106,10 +106,10 @@ FROM achievement a
 INSERT INTO achievement
 (code, category, name, condition_desc, progress_type, target_count, topaz_reward, badge_yn, limited_outfit_yn, sort_order, hidden_yn, active)
 VALUES
-    ('ACH-SP-002', 'UNIQUE', '100일 완주',        '루틴 연속 기록 100일 달성',                       'STREAK_DAYS',              100, 200, TRUE, TRUE, 43, FALSE, TRUE),
-    ('ACH-SP-003', 'UNIQUE', '한 달의 루틴러',    '한 달 동안 서로 다른 날짜에 루틴 인증 20일 이상',   'MONTHLY_DISTINCT_DAY_COUNT', 20, 200, TRUE, TRUE, 44, FALSE, TRUE),
-    ('ACH-SP-004', 'UNIQUE', '루틴 하우스 메이트', '같은 방의 모든 구성원이 함께 인증한 날 10회',       'GROUP_DISTINCT_DAY_COUNT',   10, 200, TRUE, TRUE, 45, FALSE, TRUE),
-    ('ACH-SP-005', 'UNIQUE', '특별 후원자',        '금액과 관계없이 유료 재화를 처음 한 번 결제',       'NONE',                     NULL, 200, TRUE, TRUE, 46, FALSE, FALSE);
+    ('ACH-SP-002', 'UNIQUE', '100일 완주',        '루틴 연속 기록 100일 달성',                       'STREAK_DAYS',              100, 200, TRUE, TRUE, 44, FALSE, TRUE),
+    ('ACH-SP-003', 'UNIQUE', '한 달의 루틴러',    '한 달 동안 서로 다른 날짜에 루틴 인증 20일 이상',   'MONTHLY_DISTINCT_DAY_COUNT', 20, 200, TRUE, TRUE, 45, FALSE, TRUE),
+    ('ACH-SP-004', 'UNIQUE', '루틴 하우스 메이트', '같은 방의 모든 구성원이 함께 인증한 날 10회',       'GROUP_DISTINCT_DAY_COUNT',   10, 200, TRUE, TRUE, 46, FALSE, TRUE),
+    ('ACH-SP-005', 'UNIQUE', '특별 후원자',        '금액과 관계없이 유료 재화를 처음 한 번 결제',       'NONE',                     NULL, 200, TRUE, TRUE, 47, FALSE, FALSE);
 
 UPDATE achievement SET condition_key = 'ROUTINE_STREAK_DAYS' WHERE code = 'ACH-SP-002'; -- EG-012와 같은 스트릭 소스, 100일 동시 달성 정책과 일치
 UPDATE achievement SET condition_key = 'ROUTINE_COMPLETE_COUNT' WHERE code = 'ACH-SP-003';

@@ -98,13 +98,11 @@ public class AchievementProgressService {
                     memberAchievement, achievement, event, this::weekRangeOf);
             case MONTHLY_DISTINCT_DAY_COUNT -> applyPeriodDistinctDayCount(
                     memberAchievement, achievement, event, this::monthRangeOf);
-            // TODO: 다음 단계에서 구현. 지금은 조회 API가 죽지 않도록(enum 매핑) 값만 정의해 두고,
-            // 실제 반영 로직은 아직 없다 - handle() 의 per-achievement try-catch 가 이 스텁으로 인한
-            // 실패를 형제 업적에 전파되지 않게 막아 준다.
-            case CATEGORY_COVERAGE_COUNT, STREAK_DAYS -> notImplementedYet(achievement);
-            // GROUP_* 는 이 업적들이 condition_key 를 비워 두므로 findAllActiveByConditionKey 의
-            // 결과에 애초에 포함되지 않는다 - 여기 도달한다면 조회 쿼리 또는 마이그레이션 데이터가
-            // 잘못된 것이므로 조용히 넘기지 않고 바로 알아챌 수 있게 예외로 방어한다.
+            // STREAK_DAYS: event.amount()에 담긴 "현재시점 연속 일수" 절대값으로 진행도를 갱신(syncProgress)한다.
+            // 결석 등으로 스트릭이 초기화되었을 때 진행도도 함께 내려가야 하므로 increaseProgress(더하기) 대신 syncProgress를 사용한다.
+            case STREAK_DAYS -> memberAchievement.syncProgress(event.amount(), requireTargetCount(achievement));
+            // TODO: 다음 단계에서 구현.
+            case CATEGORY_COVERAGE_COUNT -> notImplementedYet(achievement);
             case GROUP_CUMULATIVE_COUNT, GROUP_DISTINCT_DAY_COUNT ->
                     throw new IllegalStateException(
                             "업적 " + achievement.getCode() + "(" + achievement.getProgressType()
@@ -173,8 +171,7 @@ public class AchievementProgressService {
     /**
      * 아직 반영 로직이 없는 progress_type 용 스텁.
      *
-     * <p>DISTINCT_DAY_COUNT·WEEKLY_DISTINCT_DAY_COUNT·MONTHLY_DISTINCT_DAY_COUNT·
-     * CATEGORY_COVERAGE_COUNT·STREAK_DAYS 는 {@link com.lirouti.domain.achievement.enums.AchievementProgressType}
+     * <p>CATEGORY_COVERAGE_COUNT 는 {@link com.lirouti.domain.achievement.enums.AchievementProgressType}
      * 에 값만 정의된 상태고, 실제 진행도 반영은 후속 작업이다. 예외를 던져 로그로 남기되,
      * 호출부({@code handle})가 업적 단위로 격리해 처리하므로 다른 업적에는 영향을 주지 않는다.
      */

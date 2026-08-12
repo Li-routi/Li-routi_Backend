@@ -15,3 +15,6 @@ CREATE TABLE member_achievement_progress_day
     CONSTRAINT fk_member_achievement_progress_day_member_achievement
         FOREIGN KEY (member_achievement_id) REFERENCES member_achievement (id)
 );
+
+ALTER TABLE achievement DROP FOREIGN KEY fk_achievement_routine_category;
+ALTER TABLE achievement DROP COLUMN routine_category_id;

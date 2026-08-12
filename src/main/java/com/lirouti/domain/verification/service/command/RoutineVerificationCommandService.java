@@ -4,6 +4,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 import com.lirouti.domain.achievement.event.AchievementProgressEvent;
+import com.lirouti.domain.achievement.service.command.MemberRoutineStreakCommandService;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -52,12 +53,14 @@ public class RoutineVerificationCommandService {
     /** achievement 도메인이 구독하는 루틴 완료 이벤트의 condition key */
     private static final String CONDITION_KEY_ROUTINE_COMPLETE_COUNT = "ROUTINE_COMPLETE_COUNT";
     private static final String SOURCE_TYPE_MEMBER_ROUTINE_VERIFICATION = "MEMBER_ROUTINE_VERIFICATION";
+    private static final String SOURCE_TYPE_GROUP_ROUTINE_VERIFICATION = "GROUP_ROUTINE_VERIFICATION";
 
     private final GroupRoutineVerificationRepository groupRoutineVerificationRepository;
     private final GroupRoutineAssignmentRepository groupRoutineAssignmentRepository;
     private final GroupRoutineAssignmentCommandService assignmentCommandService;
     private final GroupValidationService groupValidationService;
     private final MemberRoutineVerificationRepository memberRoutineVerificationRepository;
+    private final MemberRoutineStreakCommandService memberRoutineStreakCommandService; // 생성자 주입 추가
 
     private final ApplicationEventPublisher eventPublisher;
 
@@ -125,6 +128,16 @@ public class RoutineVerificationCommandService {
 
         // 같은 트랜잭션에 참여한다(REQUIRED). 여기서 예외가 나면 위 저장도 함께 롤백된다.
         assignmentCommandService.completeAssignmentAndRecordActivity(assignment, verifiedAt);
+
+        // 그룹 루틴 인증 시에도 회원의 연속 기록(Streak)을 계산 및 이벤트를 발행한다.
+        memberRoutineStreakCommandService.recordCompletion(
+                assignment.getMember().getId(),
+                verifiedAt.toLocalDate(),
+                verifiedAt,
+                SOURCE_TYPE_GROUP_ROUTINE_VERIFICATION,
+                saved.getId()
+        );
+
         return saved;
     }
 
@@ -145,6 +158,10 @@ public class RoutineVerificationCommandService {
                 .build();
         MemberRoutineVerification saved = save(() -> memberRoutineVerificationRepository.saveAndFlush(verification));
         publishRoutineCompleteEvent(routine, saved);
+
+        memberRoutineStreakCommandService.recordCompletion(
+                routine.getMember().getId(), verifiedDate, verifiedAt,
+                SOURCE_TYPE_MEMBER_ROUTINE_VERIFICATION, saved.getId());
         return saved;
     }
 

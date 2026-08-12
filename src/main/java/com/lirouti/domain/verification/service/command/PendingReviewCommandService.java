@@ -1,5 +1,6 @@
 package com.lirouti.domain.verification.service.command;
 
+import com.lirouti.domain.achievement.event.AchievementProgressEvent;
 import com.lirouti.domain.challenge.entity.MemberChallenge;
 import com.lirouti.domain.challenge.repository.MemberChallengeRepository;
 import com.lirouti.domain.verification.entity.ChallengeVerification;
@@ -33,6 +34,9 @@ public class PendingReviewCommandService {
     private final MemberChallengeRepository memberChallengeRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final RewardCommandService rewardCommandService;
+
+    private static final String CONDITION_KEY_ROUTINE_COMPLETE_COUNT = "ROUTINE_COMPLETE_COUNT";
+    private static final String SOURCE_TYPE_CHALLENGE_VERIFICATION = "CHALLENGE_VERIFICATION";
 
     /**
      * 재심사를 한 번 시도했다고 기록한다. <b>심사를 부르기 전에</b> 올린다.
@@ -76,6 +80,15 @@ public class PendingReviewCommandService {
                     rewardCommandService.grantForVerification(
                             v.getMemberChallenge().getMember(), v.getId(),
                             v.getMemberChallenge().getChallenge().getReward());
+
+                    eventPublisher.publishEvent(new AchievementProgressEvent(
+                            v.getMemberChallenge().getMember().getId(),
+                            CONDITION_KEY_ROUTINE_COMPLETE_COUNT,
+                            1,
+                            SOURCE_TYPE_CHALLENGE_VERIFICATION,
+                            v.getId()
+                    ));
+
                     eventPublisher.publishEvent(reviewNotification(v, true));
                     return true;
                 })

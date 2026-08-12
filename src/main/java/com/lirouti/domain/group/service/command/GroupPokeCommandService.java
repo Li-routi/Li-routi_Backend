@@ -41,6 +41,7 @@ public class GroupPokeCommandService {
     /**
      * 업적 진행도 이벤트의 conditionKey. 쿡쿡을 보낸 사람 기준으로 쌓인다.
      */
+    private static final String POKE_RECEIVED_COUNT_CONDITION_KEY = "POKE_RECEIVED_COUNT";
     private static final String POKE_COUNT_CONDITION_KEY = "POKE_COUNT";
     private static final String POKE_SOURCE_TYPE = "POKE";
 
@@ -114,6 +115,15 @@ public class GroupPokeCommandService {
                 POKE_SOURCE_TYPE,
                 groupPoke.getId()
         ));
+
+        eventPublisher.publishEvent(new AchievementProgressEvent(
+                targetMemberId,
+                POKE_RECEIVED_COUNT_CONDITION_KEY,
+                1,
+                POKE_SOURCE_TYPE,
+                groupPoke.getId()
+        ));
+
         log.info("그룹 구성원을 찔렀습니다. groupId={}, requesterMemberId={}, targetMemberId={}, totalPokeCount={}",
                 groupId, requesterMemberId, targetMemberId, targetMembership.getTotalPokeCount());
         return new GroupResDTO.PokeResult(targetMemberId, targetMembership.getTotalPokeCount());
