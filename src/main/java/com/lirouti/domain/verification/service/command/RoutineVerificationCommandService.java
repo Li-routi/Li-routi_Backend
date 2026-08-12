@@ -4,6 +4,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 import com.lirouti.domain.achievement.event.AchievementProgressEvent;
+import com.lirouti.domain.achievement.event.GroupAchievementProgressEvent;
 import com.lirouti.domain.achievement.service.command.MemberRoutineStreakCommandService;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.CannotAcquireLockException;
@@ -125,18 +126,20 @@ public class RoutineVerificationCommandService {
         assignment.attachVerification(verification);
         GroupRoutineVerification saved =
                 save(() -> groupRoutineVerificationRepository.saveAndFlush(verification));
-
-        // 같은 트랜잭션에 참여한다(REQUIRED). 여기서 예외가 나면 위 저장도 함께 롤백된다.
         assignmentCommandService.completeAssignmentAndRecordActivity(assignment, verifiedAt);
 
-        // 그룹 루틴 인증 시에도 회원의 연속 기록(Streak)을 계산 및 이벤트를 발행한다.
+        Long groupId = assignment.getGroupRoutine().getGroup().getId();
+
+        eventPublisher.publishEvent(new GroupAchievementProgressEvent(
+                groupId, "ACH-AC-009", 1,
+                "GROUP_ROUTINE_VERIFICATION", saved.getId()));
+        eventPublisher.publishEvent(new GroupAchievementProgressEvent(
+                groupId, "ACH-SP-004", 1,
+                "GROUP_ROUTINE_VERIFICATION", saved.getId()));
+
         memberRoutineStreakCommandService.recordCompletion(
-                assignment.getMember().getId(),
-                verifiedAt.toLocalDate(),
-                verifiedAt,
-                SOURCE_TYPE_GROUP_ROUTINE_VERIFICATION,
-                saved.getId()
-        );
+                assignment.getMember().getId(), verifiedAt.toLocalDate(), verifiedAt,
+                "GROUP_ROUTINE_VERIFICATION", saved.getId());
 
         return saved;
     }
