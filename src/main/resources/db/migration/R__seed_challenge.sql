@@ -47,18 +47,39 @@
 -- 되돌리면, 지정한 사람은 자기가 뭘 잘못했는지 알 수 없다.
 -- created_at/updated_at은 NOT NULL이라 함께 넣되, updated_at만 재적용 때 갱신한다.
 
--- 아래 목록은 백엔드에서 잠정으로 정한 값이다(#46). 기획 확정본이 나오면 이 파일만 고치면
+-- 아래 목록은 기획 확정본이 없어 백엔드가 잠정으로 정한 값이다. 확정본이 나오면 이 파일만 고치면
 -- 다음 배포에 그대로 반영된다. id는 유지하고 name/description/category만 바꾸는 편이
 -- 안전하다 — 이미 참여한 회원의 member_challenge가 id로 이 행을 가리키기 때문이다.
 --
--- routine_cycle은 전부 DAILY다. 스트릭 셈법이 DAILY 기준으로만 구현되어 있어
--- (RoutineCycle 주석 참고) WEEKLY·MONTHLY 챌린지는 그 규칙이 정의된 뒤에 추가한다.
+-- routine_cycle 분포: DAILY 38 / WEEKLY 15 / MONTHLY 13.
+-- 스트릭은 주기 단위로 센다 — DAILY 면 연속 며칠, WEEKLY 면 연속 몇 주다. 셈법은
+-- RoutineCycle 의 currentPeriodStart·previousPeriodStart 가 주기별로 각각 구현한다.
 --
--- reward는 일단 전부 10으로 둔다. 재화 적립·챌린지 성공 판정이 아직 미구현이라
--- (Challenge 엔티티 주석) 값을 차등하는 근거가 없다. 상점·재화 정책이 정해지면 조정한다.
+-- ⚠️ 이미 인증이 쌓인 챌린지의 routine_cycle을 바꾸려면 백필이 함께 필요하다.
 --
--- 카테고리 분포: HEALTH 3 / EXERCISE 3 / STUDY 2 / LIFE 2 / HOBBY 2.
--- 화면 필터 칩 5개가 모두 비지 않게 하려는 의도다.
+-- 인증 행은 period_start_date(구간 첫날)를 들고 있는데, 그 값은 저장 시점의 주기로 계산해
+-- 못 박은 것이다. 주기만 바꾸면 옛 행은 옛 기준으로 남아 "주기 1회"가 그 구간만큼 뚫린다.
+--
+--   DAILY 로 월요일에 인증 → period_start_date = 월요일
+--   WEEKLY 로 바꾼 뒤 수요일에 다시 인증 → 이번 구간 첫날은 그 주 일요일
+--   → 유니크 키에도 조회에도 안 걸린다 → 그 주에 한 건 더 들어간다
+--
+-- 스트릭도 같이 어긋난다. current_streak 은 last_verified_date 를 주기 단위로 해석해
+-- 세는데, 일 단위로 쌓인 값을 주 단위로 읽게 된다("30일 연속"이 "30주 연속"이 된다).
+--
+-- 이 파일은 upsert 라 값을 한 글자 고치고 머지하면 다음 배포에 그냥 덮어써진다.
+-- 마이그레이션처럼 이력이 남지도, 리뷰에서 눈에 띄지도 않는다. 그래서 여기 적어 둔다.
+--
+-- 절차는 database-schema.md 의 [주기를 바꿀 때는 백필이 함께 필요하다] 를 따른다.
+-- 단순 UPDATE 로 끝나지 않는다 — 여러 행이 같은 구간으로 접히면서 유니크 키에 걸린다.
+-- 신고·좋아요가 인증을 외래 키로 참조해 물리 삭제도 못 한다. 접힌 행은 소프트 삭제하되
+-- period_start_date 는 옛 값으로 남겨야 한다(유니크 키에 deleted_at 이 없다).
+--
+-- reward는 주기에 맞춰 DAILY 10 / WEEKLY 30 / MONTHLY 100 으로 둔다. 한 번 인증하기까지의
+-- 무게가 다르므로 같은 값을 줄 수 없다. 상점·재화 정책이 정해지면 다시 조정한다.
+--
+-- 카테고리 분포(총 66): MIND 13 / LIFE 12 / HOBBY 11 / EXERCISE 10 / HEALTH 10 / STUDY 10.
+-- 화면 필터 칩 6개가 모두 비지 않게 하려는 의도다.
 
 INSERT INTO challenge (id, name, description, category, routine_cycle, reward, active, created_at, updated_at)
 VALUES
