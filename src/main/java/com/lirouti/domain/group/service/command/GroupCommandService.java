@@ -11,6 +11,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import com.lirouti.domain.chat.repository.ChatMessageRepository;
+import com.lirouti.domain.chat.repository.ChatReadRepository;
 import com.lirouti.domain.group.converter.GroupConverter;
 import com.lirouti.domain.group.dto.request.GroupReqDTO;
 import com.lirouti.domain.group.dto.response.GroupResDTO;
@@ -47,6 +49,8 @@ public class GroupCommandService {
     private final GroupRoutineCategoryRepository groupRoutineCategoryRepository;
     private final GroupRoutineRepository groupRoutineRepository;
     private final GroupRoutineVerificationReadRepository groupRoutineVerificationReadRepository;
+    private final ChatReadRepository chatReadRepository;
+    private final ChatMessageRepository chatMessageRepository;
     private final GroupRoutineAssignmentCommandService assignmentCommandService;
     private final GroupCreationAttemptService groupCreationAttemptService;
     private final GroupInviteCodeUniqueViolationDetector uniqueViolationDetector;
@@ -62,6 +66,8 @@ public class GroupCommandService {
             GroupRoutineCategoryRepository groupRoutineCategoryRepository,
             GroupRoutineRepository groupRoutineRepository,
             GroupRoutineVerificationReadRepository groupRoutineVerificationReadRepository,
+            ChatReadRepository chatReadRepository,
+            ChatMessageRepository chatMessageRepository,
             GroupRoutineAssignmentCommandService assignmentCommandService,
             GroupCreationAttemptService groupCreationAttemptService,
             GroupInviteCodeUniqueViolationDetector uniqueViolationDetector,
@@ -75,6 +81,8 @@ public class GroupCommandService {
         this.groupRoutineCategoryRepository = groupRoutineCategoryRepository;
         this.groupRoutineRepository = groupRoutineRepository;
         this.groupRoutineVerificationReadRepository = groupRoutineVerificationReadRepository;
+        this.chatReadRepository = chatReadRepository;
+        this.chatMessageRepository = chatMessageRepository;
         this.assignmentCommandService = assignmentCommandService;
         this.groupCreationAttemptService = groupCreationAttemptService;
         this.uniqueViolationDetector = uniqueViolationDetector;
@@ -99,6 +107,8 @@ public class GroupCommandService {
         groupMemberRepository.findAllByGroupIdForUpdate(groupId);
         // 읽음 행은 Group 애그리거트의 JPA cascade 대상이 아니다. 먼저 지워 FK 삭제를 열어 둔다.
         groupRoutineVerificationReadRepository.deleteAllByGroupId(groupId);
+        chatReadRepository.deleteAllByGroupId(groupId);
+        chatMessageRepository.deleteAllByGroupId(groupId);
         groupRepository.delete(group);
     }
 

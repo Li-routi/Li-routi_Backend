@@ -12,6 +12,14 @@ import java.util.Optional;
 
 public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> {
 
+    /** 그룹 hard delete에서 읽음 위치를 먼저 정리한 뒤 메시지를 제거한다. */
+    @Modifying(flushAutomatically = true)
+    @Query("""
+            delete from ChatMessage message
+            where message.group.id = :groupId
+            """)
+    int deleteAllByGroupId(@Param("groupId") Long groupId);
+
     /**
      * 그룹의 최신 메시지부터 cursor 이전의 메시지를 조회한다.
      *

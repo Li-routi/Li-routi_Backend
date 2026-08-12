@@ -1,5 +1,7 @@
 package com.lirouti.domain.group.service.command;
 
+import com.lirouti.domain.chat.repository.ChatMessageRepository;
+import com.lirouti.domain.chat.repository.ChatReadRepository;
 import com.lirouti.domain.group.dto.request.GroupReqDTO;
 import com.lirouti.domain.group.dto.response.GroupResDTO;
 import com.lirouti.domain.group.entity.Group;
@@ -58,6 +60,10 @@ class GroupCommandServiceTest {
     @Mock
     private GroupRoutineVerificationReadRepository groupRoutineVerificationReadRepository;
     @Mock
+    private ChatReadRepository chatReadRepository;
+    @Mock
+    private ChatMessageRepository chatMessageRepository;
+    @Mock
     private Group group;
     @Mock
     private GroupRoutineCategory category;
@@ -86,9 +92,18 @@ class GroupCommandServiceTest {
         // then
         verify(groupRepository).findByIdForUpdate(GROUP_ID);
         verify(groupValidationService).validateGroupOwner(group, OWNER_ID);
-        verify(groupMemberRepository).findAllByGroupIdForUpdate(GROUP_ID);
-        verify(groupRoutineVerificationReadRepository).deleteAllByGroupId(GROUP_ID);
-        verify(groupRepository).delete(group);
+        InOrder deletionOrder = inOrder(
+                groupMemberRepository,
+                groupRoutineVerificationReadRepository,
+                chatReadRepository,
+                chatMessageRepository,
+                groupRepository
+        );
+        deletionOrder.verify(groupMemberRepository).findAllByGroupIdForUpdate(GROUP_ID);
+        deletionOrder.verify(groupRoutineVerificationReadRepository).deleteAllByGroupId(GROUP_ID);
+        deletionOrder.verify(chatReadRepository).deleteAllByGroupId(GROUP_ID);
+        deletionOrder.verify(chatMessageRepository).deleteAllByGroupId(GROUP_ID);
+        deletionOrder.verify(groupRepository).delete(group);
     }
 
     @Test
@@ -103,6 +118,7 @@ class GroupCommandServiceTest {
                 .extracting("code")
                 .isEqualTo(GroupErrorCode.GROUP_NOT_FOUND);
         verify(groupRepository, never()).delete(any(Group.class));
+        verifyNoInteractions(chatReadRepository, chatMessageRepository);
         verifyNoInteractions(groupValidationService);
     }
 
@@ -120,6 +136,7 @@ class GroupCommandServiceTest {
                 .isEqualTo(GroupErrorCode.GROUP_NOT_FOUND);
         verifyNoInteractions(groupValidationService);
         verify(groupRepository, never()).delete(any(Group.class));
+        verifyNoInteractions(chatReadRepository, chatMessageRepository);
     }
 
     @Test
@@ -137,6 +154,7 @@ class GroupCommandServiceTest {
                 .extracting("code")
                 .isEqualTo(GroupErrorCode.GROUP_OWNER_ACCESS_DENIED);
         verify(groupRepository, never()).delete(any(Group.class));
+        verifyNoInteractions(chatReadRepository, chatMessageRepository);
     }
 
     @Test

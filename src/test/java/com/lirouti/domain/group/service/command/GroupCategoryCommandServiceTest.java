@@ -1,5 +1,7 @@
 package com.lirouti.domain.group.service.command;
 
+import com.lirouti.domain.chat.repository.ChatMessageRepository;
+import com.lirouti.domain.chat.repository.ChatReadRepository;
 import com.lirouti.domain.group.dto.request.GroupReqDTO;
 import com.lirouti.domain.group.dto.response.GroupResDTO;
 import com.lirouti.domain.group.entity.Group;
@@ -41,6 +43,8 @@ class GroupCategoryCommandServiceTest {
     @Mock private GroupRoutineRepository routineRepository;
     @Mock private GroupRoutineAssignmentCommandService assignmentService;
     @Mock private GroupRoutineVerificationReadRepository groupRoutineVerificationReadRepository;
+    @Mock private ChatReadRepository chatReadRepository;
+    @Mock private ChatMessageRepository chatMessageRepository;
     @Mock private GroupCreationAttemptService creationAttemptService;
     @Mock private GroupInviteCodeUniqueViolationDetector uniqueViolationDetector;
     @Mock private Validator validator;
@@ -54,7 +58,8 @@ class GroupCategoryCommandServiceTest {
     void setUp() {
         commandService = new GroupCommandService(
                 validationService, groupRepository, categoryRepository, routineRepository,
-                groupRoutineVerificationReadRepository, assignmentService, creationAttemptService,
+                groupRoutineVerificationReadRepository, chatReadRepository, chatMessageRepository,
+                assignmentService, creationAttemptService,
                 uniqueViolationDetector, validator,
                 webSocketSessionRegistry, groupMemberRepository, eventPublisher
         );

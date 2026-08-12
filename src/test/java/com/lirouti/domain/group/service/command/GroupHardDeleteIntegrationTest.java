@@ -1,5 +1,10 @@
 package com.lirouti.domain.group.service.command;
 
+import com.lirouti.domain.chat.entity.ChatMessage;
+import com.lirouti.domain.chat.entity.ChatRead;
+import com.lirouti.domain.chat.enums.ChatMessageType;
+import com.lirouti.domain.chat.repository.ChatMessageRepository;
+import com.lirouti.domain.chat.repository.ChatReadRepository;
 import com.lirouti.domain.group.entity.Group;
 import com.lirouti.domain.group.entity.GroupMember;
 import com.lirouti.domain.group.entity.GroupRoutine;
@@ -80,6 +85,10 @@ class GroupHardDeleteIntegrationTest {
     @Autowired
     private GroupRoutineVerificationReadRepository groupRoutineVerificationReadRepository;
     @Autowired
+    private ChatMessageRepository chatMessageRepository;
+    @Autowired
+    private ChatReadRepository chatReadRepository;
+    @Autowired
     private RoutineCategoryRepository routineCategoryRepository;
     @Autowired
     private MemberRoutineRepository memberRoutineRepository;
@@ -149,6 +158,17 @@ class GroupHardDeleteIntegrationTest {
         entityManager.persist(targetRead);
         entityManager.persist(otherRead);
 
+        ChatMessage targetChatMessage = chatMessage(targetGroup, owner, "target-chat-message");
+        ChatMessage otherChatMessage = chatMessage(otherGroup, owner, "other-chat-message");
+        entityManager.persist(targetChatMessage);
+        entityManager.persist(otherChatMessage);
+        entityManager.flush();
+
+        ChatRead targetChatRead = chatRead(targetGroup, member, targetChatMessage);
+        ChatRead otherChatRead = chatRead(otherGroup, member, otherChatMessage);
+        entityManager.persist(targetChatRead);
+        entityManager.persist(otherChatRead);
+
         RoutineCategory personalCategory = personalCategory(owner);
         MemberRoutine personalRoutine = MemberRoutine.builder()
                 .member(owner)
@@ -178,6 +198,10 @@ class GroupHardDeleteIntegrationTest {
                 otherAssignment,
                 targetVerification,
                 otherVerification,
+                targetChatMessage,
+                otherChatMessage,
+                targetChatRead,
+                otherChatRead,
                 personalCategory,
                 personalRoutine
         );
@@ -202,6 +226,8 @@ class GroupHardDeleteIntegrationTest {
         assertThat(groupRoutineVerificationRepository.existsById(ids.targetVerificationId())).isFalse();
         assertThat(groupRoutineVerificationReadRepository
                 .existsByGroupIdAndMemberId(ids.targetGroupId(), ids.memberId())).isFalse();
+        assertThat(chatMessageRepository.existsById(ids.targetChatMessageId())).isFalse();
+        assertThat(chatReadRepository.existsById(ids.targetChatReadId())).isFalse();
 
         // then: 다른 그룹과 그 하위 데이터
         assertThat(groupRepository.existsById(ids.otherGroupId())).isTrue();
@@ -215,6 +241,8 @@ class GroupHardDeleteIntegrationTest {
         assertThat(groupRoutineVerificationRepository.existsById(ids.otherVerificationId())).isTrue();
         assertThat(groupRoutineVerificationReadRepository
                 .existsByGroupIdAndMemberId(ids.otherGroupId(), ids.memberId())).isTrue();
+        assertThat(chatMessageRepository.existsById(ids.otherChatMessageId())).isTrue();
+        assertThat(chatReadRepository.existsById(ids.otherChatReadId())).isTrue();
 
         // then: Member 계정, 공용 기본 그룹 카테고리, 개인 루틴과 개인 카테고리
         assertThat(entityManager.find(Member.class, ids.ownerId())).isNotNull();
@@ -258,6 +286,11 @@ class GroupHardDeleteIntegrationTest {
             GroupRoutineVerification verification = verification(assignment);
             entityManager.persist(verification);
             assignment.attachVerification(verification);
+            ChatMessage chatMessage = chatMessage(group, owner, "rollback-chat-message");
+            entityManager.persist(chatMessage);
+            entityManager.flush();
+            ChatRead chatRead = chatRead(group, owner, chatMessage);
+            entityManager.persist(chatRead);
             entityManager.flush();
             return new RollbackIds(
                     group.getId(),
@@ -267,7 +300,9 @@ class GroupHardDeleteIntegrationTest {
                     routine.getId(),
                     routine.getSchedules().get(0).getId(),
                     assignment.getId(),
-                    verification.getId()
+                    verification.getId(),
+                    chatMessage.getId(),
+                    chatRead.getId()
             );
         });
 
@@ -288,6 +323,8 @@ class GroupHardDeleteIntegrationTest {
             assertThat(groupRoutineScheduleRepository.existsById(ids.scheduleId())).isTrue();
             assertThat(groupRoutineAssignmentRepository.existsById(ids.assignmentId())).isTrue();
             assertThat(groupRoutineVerificationRepository.existsById(ids.verificationId())).isTrue();
+            assertThat(chatMessageRepository.existsById(ids.chatMessageId())).isTrue();
+            assertThat(chatReadRepository.existsById(ids.chatReadId())).isTrue();
         } finally {
             new TransactionTemplate(transactionManager).executeWithoutResult(status ->
                     groupCommandService.deleteGroup(ids.groupId(), ids.ownerId()));
@@ -390,6 +427,25 @@ class GroupHardDeleteIntegrationTest {
                 .build();
     }
 
+    private ChatMessage chatMessage(Group group, Member sender, String clientMessageId) {
+        return ChatMessage.builder()
+                .group(group)
+                .sender(sender)
+                .messageType(ChatMessageType.TEXT)
+                .content("Hard Delete 통합 테스트 채팅")
+                .clientMessageId(clientMessageId)
+                .build();
+    }
+
+    private ChatRead chatRead(Group group, Member member, ChatMessage message) {
+        ChatRead chatRead = ChatRead.builder()
+                .group(group)
+                .member(member)
+                .build();
+        chatRead.advanceTo(message, LocalDateTime.now());
+        return chatRead;
+    }
+
     private RoutineCategory personalCategory(Member owner) {
         return RoutineCategory.builder()
                 .owner(owner)
@@ -418,6 +474,10 @@ class GroupHardDeleteIntegrationTest {
             Long otherAssignmentId,
             Long targetVerificationId,
             Long otherVerificationId,
+            Long targetChatMessageId,
+            Long otherChatMessageId,
+            Long targetChatReadId,
+            Long otherChatReadId,
             Long personalCategoryId,
             Long personalRoutineId
     ) {
@@ -437,6 +497,10 @@ class GroupHardDeleteIntegrationTest {
                 GroupRoutineAssignment otherAssignment,
                 GroupRoutineVerification targetVerification,
                 GroupRoutineVerification otherVerification,
+                ChatMessage targetChatMessage,
+                ChatMessage otherChatMessage,
+                ChatRead targetChatRead,
+                ChatRead otherChatRead,
                 RoutineCategory personalCategory,
                 MemberRoutine personalRoutine
         ) {
@@ -464,6 +528,10 @@ class GroupHardDeleteIntegrationTest {
                     otherAssignment.getId(),
                     targetVerification.getId(),
                     otherVerification.getId(),
+                    targetChatMessage.getId(),
+                    otherChatMessage.getId(),
+                    targetChatRead.getId(),
+                    otherChatRead.getId(),
                     personalCategory.getId(),
                     personalRoutine.getId()
             );
@@ -478,7 +546,9 @@ class GroupHardDeleteIntegrationTest {
             Long routineId,
             Long scheduleId,
             Long assignmentId,
-            Long verificationId
+            Long verificationId,
+            Long chatMessageId,
+            Long chatReadId
     ) {
     }
 }

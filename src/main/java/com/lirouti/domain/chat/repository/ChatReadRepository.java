@@ -11,6 +11,14 @@ import java.util.Optional;
 
 public interface ChatReadRepository extends JpaRepository<ChatRead, Long> {
 
+    /** 그룹 hard delete 전에 메시지 FK를 포함한 읽음 위치를 먼저 정리한다. */
+    @Modifying(flushAutomatically = true)
+    @Query("""
+            delete from ChatRead chatRead
+            where chatRead.group.id = :groupId
+            """)
+    int deleteAllByGroupId(@Param("groupId") Long groupId);
+
     /**
      * 회원·그룹별 기존 읽음 위치를 찾아 갱신하거나 새 행을 만들 수 있게 한다.
      */
