@@ -10,7 +10,6 @@ import com.lirouti.domain.achievement.repository.MemberAchievementConditionRepos
 import com.lirouti.domain.achievement.repository.MemberAchievementProgressCategoryRepository;
 import com.lirouti.domain.achievement.repository.MemberAchievementProgressDayRepository;
 import com.lirouti.domain.achievement.repository.MemberAchievementRepository;
-import com.lirouti.domain.achievement.entity.MemberAchievementProgressDay;
 import com.lirouti.domain.member.repository.MemberRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -45,6 +44,13 @@ import java.util.stream.Collectors;
  * CUMULATIVE_COUNT 업적과 아직 미구현인 DISTINCT_DAY_COUNT 업적이 함께 참조), {@code handle}
  * 은 업적 하나씩을 try-catch 로 격리해 처리한다 — 한 업적의 반영이 실패해도(예: 미구현
  * progressType) 형제 업적의 진행도 갱신까지 막히지 않는다.
+ *
+ * <p>대상 업적이 하나라도 있었는데 전부 실패한 경우, 이벤트 로그를 원복
+ * ({@link AchievementProgressEventLogService#unmarkProcessed}) 해 다음 재발행 때 다시
+ * 시도할 수 있게 한다. 반대로 하나라도 성공했다면 마커는 그대로 둔다 — 이미 반영된
+ * 진행도를 재발행 시 중복 가산하는 것보다, 실패한 일부 형제 업적이 다음 재시도를
+ * 놓치는 편이 더 안전한 트레이드오프이기 때문이다(완전한 개별 재시도가 필요하다면
+ * 이벤트 로그에 업적별 처리 상태 컬럼을 추가하는 별도 작업이 필요하다).
  */
 @Service
 @RequiredArgsConstructor
@@ -55,9 +61,7 @@ public class AchievementProgressService {
     private final MemberAchievementRepository memberAchievementRepository;
     private final MemberAchievementConditionRepository memberAchievementConditionRepository;
     private final MemberAchievementProgressDayRepository memberAchievementProgressDayRepository;
-    private final MemberAchievementProgressDayService memberAchievementProgressDayService;
     private final MemberAchievementProgressCategoryRepository memberAchievementProgressCategoryRepository;
-    private final MemberAchievementProgressCategoryService memberAchievementProgressCategoryService;
     private final MemberRepository memberRepository;
     private final AchievementProgressEventLogService achievementProgressEventLogService;
 
@@ -77,6 +81,8 @@ public class AchievementProgressService {
         }
 
         List<Achievement> targets = achievementRepository.findAllActiveByConditionKey(event.conditionKey());
+        boolean anySucceeded = false;
+
         for (Achievement achievement : targets) {
             // 같은 conditionKey 를 여러 업적이 공유한다 (예: ROUTINE_COMPLETE_COUNT 를
             // CUMULATIVE_COUNT 업적과 아직 미구현인 DISTINCT_DAY_COUNT 업적이 함께 쓴다).
@@ -84,10 +90,18 @@ public class AchievementProgressService {
             // 갱신까지 통째로 막히면 안 되므로 업적 단위로 격리한다.
             try {
                 applyProgress(achievement, event);
+                anySucceeded = true;
             } catch (RuntimeException e) {
                 log.error("업적 진행도 반영 실패 - achievementCode={}, progressType={}, memberId={}",
                         achievement.getCode(), achievement.getProgressType(), event.memberId(), e);
             }
+        }
+
+        if (!targets.isEmpty() && !anySucceeded) {
+            // 대상 업적이 있었는데 전부 실패한 경우에만 원복한다. targets 가 비어 있는
+            // 경우(매칭되는 업적이 없는 경우)는 실패가 아니므로 원복 대상이 아니다.
+            achievementProgressEventLogService.unmarkProcessed(
+                    event.memberId(), event.conditionKey(), event.sourceType(), event.sourceId());
         }
     }
 
@@ -134,7 +148,8 @@ public class AchievementProgressService {
     private void applyDistinctDayCount(MemberAchievement memberAchievement, Achievement achievement,
                                        AchievementProgressEvent event) {
         LocalDate eventDate = toKstDate(event);
-        boolean isNewDay = memberAchievementProgressDayService.tryMarkDay(memberAchievement, eventDate);
+        boolean isNewDay = memberAchievementProgressDayRepository
+                .insertIgnore(memberAchievement.getId(), eventDate) == 1;
         if (!isNewDay) {
             return; // 오늘 치는 이미 세어짐 - 진행도 변화 없음
         }
@@ -153,7 +168,8 @@ public class AchievementProgressService {
                                              AchievementProgressEvent event,
                                              Function<LocalDate, LocalDate[]> rangeResolver) {
         LocalDate eventDate = toKstDate(event);
-        boolean isNewDay = memberAchievementProgressDayService.tryMarkDay(memberAchievement, eventDate);
+        boolean isNewDay = memberAchievementProgressDayRepository
+                .insertIgnore(memberAchievement.getId(), eventDate) == 1;
         if (!isNewDay) {
             return;
         }
@@ -198,7 +214,8 @@ public class AchievementProgressService {
         if (categoryId == null) {
             return; // 카테고리 정보가 없는 이벤트는 커버리지에 기여할 수 없다
         }
-        boolean isNewCategory = memberAchievementProgressCategoryService.tryMarkCategory(memberAchievement, categoryId);
+        boolean isNewCategory = memberAchievementProgressCategoryRepository
+                .insertIgnore(memberAchievement.getId(), categoryId) == 1;
         if (!isNewCategory) {
             return; // 이미 커버한 카테고리 - 진행도 변화 없음
         }
@@ -220,7 +237,7 @@ public class AchievementProgressService {
      * {@code routineCategoryId} 가 그 집합에 포함될 때만 true — 좋아요/쿡쿡처럼 카테고리
      * 개념이 없는 이벤트(routineCategoryId == null)는 이 조건을 절대 통과하지 못하므로
      * 안전하다. "전부 다 커버해야" 하는 CATEGORY_COVERAGE_COUNT(루틴 탐험가)는 이 게이트를
-     * 통과한 이후 progress 반영 단계에서 별도로 커버리지를 판정한다(TODO, 아직 미구현).
+     * 통과한 이후 progress 반영 단계에서 insert-ignore 와 count 로 커버리지를 판정한다.
      */
     private boolean routineCategoryMatches(Achievement achievement, AchievementProgressEvent event) {
         Set<Long> requiredCategoryIds = achievement.getRoutineCategoryIds();

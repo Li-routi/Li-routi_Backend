@@ -28,18 +28,19 @@ public class AchievementProgressEventLogService {
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public boolean tryMarkProcessed(Long memberId, String conditionKey, String sourceType, Long sourceId) {
-        try {
-            achievementProgressEventLogRepository.saveAndFlush(
-                    AchievementProgressEventLog.builder()
-                            .memberId(memberId)
-                            .conditionKey(conditionKey)
-                            .sourceType(sourceType)
-                            .sourceId(sourceId)
-                            .build()
-            );
-            return true;
-        } catch (DataIntegrityViolationException e) {
-            return false;
-        }
+        int affected = achievementProgressEventLogRepository
+                .insertIfAbsent(memberId, conditionKey, sourceType, sourceId);
+        return affected == 1;
+    }
+
+    /**
+     * 모든 업적 처리 작업이 실패한 경우, 이후 이벤트 재발행 시 다시 시도할 수 있도록
+     * 기록된 이벤트 로그를 삭제(원복)한다.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void unmarkProcessed(Long memberId, String conditionKey, String sourceType, Long sourceId) {
+        achievementProgressEventLogRepository.deleteByMemberIdAndConditionKeyAndSourceTypeAndSourceId(
+                memberId, conditionKey, sourceType, sourceId
+        );
     }
 }

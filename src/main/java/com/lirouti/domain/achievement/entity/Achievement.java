@@ -58,7 +58,7 @@ public class Achievement extends BaseEntity {
      * <p>COMPOSITE 는 이 컬럼을 쓰지 않고 {@link AchievementCondition} 의 개별
      * conditionKey 들을 쓴다.
      */
-    @Column(name = "condition_key", length = 30)
+    @Column(name = "condition_key", length = 40)
     private String conditionKey;
 
     /**

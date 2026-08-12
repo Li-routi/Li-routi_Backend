@@ -1,5 +1,6 @@
 package com.lirouti.domain.achievement.entity;
 
+import com.lirouti.global.util.TimeUtil;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Builder;
@@ -66,7 +67,7 @@ public class GroupAchievementProgress {
         }
         this.currentProgress = Math.min(currentValue, targetCount);
         if (this.currentProgress >= targetCount) {
-            this.achievedAt = LocalDateTime.now();
+            this.achievedAt = LocalDateTime.now(TimeUtil.KST);
             return true;
         }
         return false;
@@ -83,7 +84,7 @@ public class GroupAchievementProgress {
         this.lastCountedDate = today;
         this.currentProgress = Math.min(currentValue, targetCount);
         if (this.currentProgress >= targetCount) {
-            this.achievedAt = LocalDateTime.now();
+            this.achievedAt = LocalDateTime.now(TimeUtil.KST);
             return true;
         }
         return false;

@@ -36,12 +36,13 @@ UPDATE achievement SET condition_key = 'ROUTINE_COMPLETE_COUNT' WHERE code = 'AC
 -- AC-009/010은 group_achievement_progress(_event_log) 및 achievement_progress_event_log로 처리되어
 -- condition_key가 아니라 group_id 단위로 판정되므로 값을 넣지 않는다.
 
--- 루틴 탐험가: 6개 카테고리 전부를 커버해야 하므로 조인 테이블에 6개 행을 모두 연결한다.
+-- 루틴 탐험가(ACH-AC-008): 카테고리 명칭 기반 매핑 (ID 하드코딩 제거)
 INSERT INTO achievement_routine_category (achievement_id, routine_category_id)
 SELECT a.id, rc.id
 FROM achievement a
          CROSS JOIN routine_category rc
-WHERE a.code = 'ACH-AC-008' AND rc.id BETWEEN 1 AND 6;
+WHERE a.code = 'ACH-AC-008'
+  AND rc.name IN ('운동', '건강', '자기계발', '생활정리', '마음관리', '취미');
 
 -- ==================== 3) 캐릭터 알 업적 신규 12개 (category='EGG') ====================
 -- 알 업적은 코인 보상이 없고 뱃지도 없다. 알 자체는 achievement_reward_item에 별도 기록한다.

@@ -22,11 +22,20 @@ SET routine_category_id = CASE routine_category_filter
     END
 WHERE routine_category_filter IS NOT NULL;
 
--- 3) 옛 문자열 컬럼 제거
+-- 3) 허용되지 않은 알 수 없는 카테고리 값이 존재하는지 검증 (MySQL 전용)
+-- routine_category_filter가 NULL이 아닌데 매핑 실패로 routine_category_id가 NULL이 된 행이 있다면 에러 발생 후 마이그레이션 중단
+ALTER TABLE achievement
+    ADD CONSTRAINT chk_migration_category_valid
+        CHECK (routine_category_filter IS NULL OR routine_category_id IS NOT NULL);
+
+ALTER TABLE achievement
+DROP CONSTRAINT chk_migration_category_valid;
+
+-- 4) 옛 문자열 컬럼 제거
 ALTER TABLE achievement
 DROP COLUMN routine_category_filter;
 
--- 4) 참조 무결성 보장 - 존재하지 않는 카테고리 id 를 가리키는 업적이 생기지 않게 한다.
+-- 5) 참조 무결성 보장 - 존재하지 않는 카테고리 id 를 가리키는 업적이 생기지 않게 한다.
 ALTER TABLE achievement
     ADD CONSTRAINT fk_achievement_routine_category
         FOREIGN KEY (routine_category_id) REFERENCES routine_category (id);

@@ -199,21 +199,20 @@ class GroupLeaveIntegrationTest {
             assertThatThrownBy(() -> leaveFuture.get(300, TimeUnit.MILLISECONDS))
                     .isInstanceOf(TimeoutException.class);
 
-            assertThat(assignmentRepository.findById(assignment.getId()).orElseThrow().getStatus())
-                    .isEqualTo(COMPLETED);
-            var persistedVerification = verificationRepository.findByAssignmentId(assignment.getId());
-            assertThat(persistedVerification).isPresent();
-            persistedVerification.ifPresent(v -> verificationIds.add(v.getId()));
-
+            // 신호를 풀어 비동기 인증 및 탈퇴 처리 진행
             releaseVerification.countDown();
             verificationFuture.get(10, TimeUnit.SECONDS);
             leaveFuture.get(10, TimeUnit.SECONDS);
         }
 
-        // then
+        // then: 두 트랜잭션이 완전히 끝난 후 인증 결과 및 최종 상태 검증
         assertThat(assignmentRepository.findById(assignment.getId()).orElseThrow().getStatus())
                 .isEqualTo(COMPLETED);
-        assertThat(verificationRepository.findByAssignmentId(assignment.getId())).isPresent();
+
+        var persistedVerification = verificationRepository.findByAssignmentId(assignment.getId());
+        assertThat(persistedVerification).isPresent();
+        persistedVerification.ifPresent(v -> verificationIds.add(v.getId()));
+
         assertThat(groupMemberRepository.findById(fixture.membership().getId()).orElseThrow().getStatus())
                 .isEqualTo(GroupMemberStatus.LEFT);
     }

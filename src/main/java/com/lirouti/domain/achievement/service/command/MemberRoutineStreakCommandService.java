@@ -3,6 +3,7 @@ package com.lirouti.domain.achievement.service.command;
 import com.lirouti.domain.achievement.entity.MemberRoutineStreak;
 import com.lirouti.domain.achievement.event.AchievementProgressEvent;
 import com.lirouti.domain.achievement.repository.MemberRoutineStreakRepository;
+import com.lirouti.domain.member.repository.MemberRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -31,6 +32,7 @@ public class MemberRoutineStreakCommandService {
     private static final String CONDITION_KEY_ROUTINE_STREAK_DAYS = "ROUTINE_STREAK_DAYS";
 
     private final MemberRoutineStreakRepository memberRoutineStreakRepository;
+    private final MemberRepository memberRepository;
     private final ApplicationEventPublisher eventPublisher;
 
     @Transactional(propagation = Propagation.MANDATORY)
@@ -41,9 +43,7 @@ public class MemberRoutineStreakCommandService {
             String sourceType,
             Long sourceId
     ) {
-        MemberRoutineStreak streak = memberRoutineStreakRepository.findByMemberIdForUpdate(memberId)
-                .orElseGet(() -> memberRoutineStreakRepository.save(
-                        MemberRoutineStreak.builder().memberId(memberId).build()));
+        MemberRoutineStreak streak = getOrCreateForUpdate(memberId);
 
         streak.recordCompletion(completedDate);
 
@@ -61,5 +61,19 @@ public class MemberRoutineStreakCommandService {
                 null,
                 occurredAt
         ));
+    }
+
+    private MemberRoutineStreak getOrCreateForUpdate(Long memberId) {
+        memberRepository.findByIdForUpdate(memberId)
+                .orElseThrow(() -> new IllegalArgumentException("Member not found. memberId=" + memberId));
+
+        if (memberRoutineStreakRepository.findByMemberIdForUpdate(memberId).isEmpty()) {
+            memberRoutineStreakRepository.saveAndFlush(
+                    MemberRoutineStreak.builder().memberId(memberId).build());
+        }
+
+        return memberRoutineStreakRepository.findByMemberIdForUpdate(memberId)
+                .orElseThrow(() -> new IllegalStateException(
+                        "MemberRoutineStreak was not created. memberId=" + memberId));
     }
 }

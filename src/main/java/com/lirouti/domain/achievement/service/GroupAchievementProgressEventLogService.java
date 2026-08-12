@@ -21,18 +21,7 @@ public class GroupAchievementProgressEventLogService {
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public boolean tryMarkProcessed(Long groupId, Long achievementId, String sourceType, Long sourceId) {
-        try {
-            groupAchievementProgressEventLogRepository.saveAndFlush(
-                    GroupAchievementProgressEventLog.builder()
-                            .groupId(groupId)
-                            .achievementId(achievementId)
-                            .sourceType(sourceType)
-                            .sourceId(sourceId)
-                            .build()
-            );
-            return true;
-        } catch (DataIntegrityViolationException e) {
-            return false;
-        }
+        int affected = groupAchievementProgressEventLogRepository.insertIfAbsent(groupId, achievementId, sourceType, sourceId);
+        return affected == 1;
     }
 }

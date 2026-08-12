@@ -18,7 +18,7 @@ import java.util.Optional;
 
 public interface GroupRoutineAssignmentRepository
         extends JpaRepository<GroupRoutineAssignment, Long>,
-                GroupRoutineAssignmentRepositoryCustom {
+        GroupRoutineAssignmentRepositoryCustom {
 
     /**
      * 동일 루틴·회원·날짜의 할당을 멱등하게 생성한다.
@@ -146,12 +146,12 @@ public interface GroupRoutineAssignmentRepository
             order by assignment.id
             """)
     List<GroupRoutineAssignment>
-            findAllByGroupIdAndMemberIdAndAssignedDateAndCreatedAtAfterOrEqualForUpdate(
-                    @Param("groupId") Long groupId,
-                    @Param("memberId") Long memberId,
-                    @Param("assignedDate") LocalDate assignedDate,
-                    @Param("joinedAt") java.time.LocalDateTime joinedAt
-            );
+    findAllByGroupIdAndMemberIdAndAssignedDateAndCreatedAtAfterOrEqualForUpdate(
+            @Param("groupId") Long groupId,
+            @Param("memberId") Long memberId,
+            @Param("assignedDate") LocalDate assignedDate,
+            @Param("joinedAt") java.time.LocalDateTime joinedAt
+    );
 
     /** 마감 batch가 잠근 그룹 안에서 실제 MISSED 전이 후보를 ID 순서로 조회한다. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
@@ -394,12 +394,17 @@ public interface GroupRoutineAssignmentRepository
      * 오늘 그 그룹의 현재 가입 회차 ACTIVE 구성원 전원이 각자의 할당을 모두 완료했는지
      * 판정하기 위한 집계. "총 0건"(오늘 할당된 루틴이 없는 방)은 완료로 치지 않기 위해
      * 총 건수도 함께 반환한다.
+     *
+     * <p>group by 가 없는 집계이므로 대상 행이 0건이면 count=0, sum=NULL 인 행 1개를
+     * 반환한다. sum(...) 을 coalesce 로 감싸지 않으면 그 NULL 이 원시형 long 인
+     * {@link DailyAssignmentTotals} 생성자로 매핑되지 못해 오늘 할당이 하나도 없는
+     * 그룹을 조회할 때마다 실패한다.
      */
     @Query("""
         select new com.lirouti.domain.group.dto.projection.DailyAssignmentTotals(
             count(assignment),
-            sum(case when assignment.status = com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus.COMPLETED
-                     then 1L else 0L end)
+            coalesce(sum(case when assignment.status = com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus.COMPLETED
+                     then 1L else 0L end), 0L)
         )
         from GroupRoutineAssignment assignment
         join GroupMember gm
