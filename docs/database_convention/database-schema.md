@@ -1748,6 +1748,26 @@ POST /api/challenges/.../verifications                챌린지 인증
 
 **자산을 교체할 때 같은 key 를 덮어쓰지 않는다.** 캐시가 옛 그림을 들고 있으면 사용자마다 다른 것을 본다. 새 key 로 올리고 마스터 행을 가리키게 바꾼다.
 
+#### key 배치 — 이미 올라가 있다
+
+```text
+avatar/character/{code}/adult-v1.png    해금 뒤 성체
+avatar/character/{code}/egg-v1.png      잠긴 상태
+avatar/nest/level1-back-v1.png          level1-front-v1.png
+avatar/nest/level2-back-v1.png          level2-front-v1.png
+```
+
+**꼬리의 `-v1` 이 교체 규칙을 강제한다.** 같은 이름으로 덮어쓸 자리가 없으므로 새 자산은 `-v2` 가 되고, 시드가 그것을 가리키도록 고치는 것이 곧 교체다.
+
+`{code}` 는 `character.code` 그대로다. 캐릭터 열셋의 코드는 이렇다.
+
+```text
+ROUTI  NOA  MORI  KOKO  YUKI  MINT  SOLA
+PADO   KKARU  DONGGEUL  PPIA  HORONG  DAMI
+```
+
+> **자산은 전부 400×400 이고 바닥 정렬이다.** 레이어를 겹칠 때 오프셋이 필요 없다는 뜻이고, 위 [겹쳐 그리려면 모든 장이 같은 캔버스여야 한다] 가 요구하는 규격을 이미 만족한다. **의상은 아직 이 규격이 아니다** — `viewBox` 가 아이템마다 달라 다시 받아야 한다.
+
 ### 정리하며 닫은 것
 
 - **좋아요 조건은 좋아요 도메인을 건드리지 않는다.** 누적 대신 지금 눌러 둔 수를 세는 것으로 뜻을 바꿨다(위 [`LIKE_GIVEN`] 참고)
