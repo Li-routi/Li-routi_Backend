@@ -34,6 +34,7 @@ import com.lirouti.domain.media.enums.MediaPurpose;
 import com.lirouti.domain.media.exception.MediaException;
 import com.lirouti.domain.media.exception.code.error.MediaErrorCode;
 import com.lirouti.global.properties.S3Properties;
+import com.lirouti.global.ratelimit.RateLimitGuard;
 import com.lirouti.global.util.TimeUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -79,6 +80,9 @@ public class MediaService {
     private final S3Client s3Client;
     private final S3Properties s3Properties;
 
+    /** presigned URL 발급 빈도를 용도별로 센다. 인터셉터가 아니라 여기서 부르는 이유는 issuePresignedUrl 주석 참고. */
+    private final RateLimitGuard rateLimitGuard;
+
     public record UploadedMedia(String mediaKey, String contentType) {
     }
 
@@ -87,6 +91,14 @@ public class MediaService {
         MediaContentType contentType = resolveContentType(request.contentType());
         validatePurposeAllows(request.purpose(), contentType);
         validateFileSize(contentType.getCategory(), request.contentLength());
+
+        // 빈도 제한은 검증을 모두 통과한 뒤에 센다. 인터셉터에 두었을 때는 @Valid 보다 먼저 돌아
+        // 형식·용량이 틀려 400·413 으로 끝날 요청까지 한 건을 깎았다. 발급이 실제로 일어날
+        // 요청만 세는 것이 맞다.
+        //
+        // 용도마다 정책이 다른 것은 예산을 나누기 위해서다. 하나로 두면 프로필 사진을 몇 번
+        // 바꾼 것 때문에 정작 인증이 막힌다.
+        rateLimitGuard.enforce(request.purpose().getRateLimitPolicy());
 
         String mediaKey = generateMediaKey(request.purpose(), contentType);
         Duration expiration = s3Properties.getPresignedUrlExpiration();

@@ -225,13 +225,18 @@ media:
     max-deletions-per-run: ${MEDIA_CLEANUP_MAX_DELETIONS_PER_RUN:1000}
 
 # 사용자당 요청 빈도 제한(#23). 한도를 코드가 아니라 여기 두어 재배포 없이 조정한다.
-# 정책 이름은 컨트롤러의 @RateLimit 값과 맞아야 한다 — 없는 이름이면 제한이 안 걸리고 ERROR 로그만 남는다.
+#
+# 정책 이름을 참조하는 곳이 둘이다 — 핸들러에 붙는 @RateLimit 값, 그리고 presigned URL 발급처럼
+# 요청 값에 따라 정책이 갈리는 경우의 MediaPurpose. 없는 이름을 가리키면 제한이 걸리지 않고
+# ERROR 로그만 남으므로, MediaPurpose 쪽은 MediaRateLimitPolicyValidator 가 부팅 때 확인한다.
 rate-limit:
   # 오탐으로 정상 사용자가 막히거나 Redis 문제가 생겼을 때의 탈출구.
   enabled: ${RATE_LIMIT_ENABLED:true}
   policies:
-    # presigned URL 발급. 발급 한 건이 최대 10MB 업로드를 허용하므로 이 값이 곧 용량 상한이 된다
-    # (30건 × 10MB = 창당 300MB, 연속으로 채우면 1.8GB/시간).
+    # presigned URL 발급. 발급 한 건이 최대 10MB 업로드를 허용하므로 이 값이 곧 용량 상한이 된다.
+    #
+    # 정책을 용도별로 나눈 이유는 예산을 갈라 두기 위해서다. 하나로 두면 프로필 사진을 몇 번
+    # 바꾼 것 때문에 정작 인증이 막힌다. 어느 용도가 어느 정책을 쓰는지는 MediaPurpose 가 들고 있다.
     #
     # 창을 1시간이 아니라 10분으로 둔 이유는 회복 시간이다. 고정 창이라 만료는 창의 첫 요청
     # 시각을 기준으로 걸린다. 창이 길면 한도를 소진한 사용자가 그만큼 오래 잠기는데, 실제로
@@ -239,12 +244,19 @@ rate-limit:
     #
     # 한 번의 인증이 발급 한 건으로 끝나지 않는 점도 값에 반영했다. presigned URL 유효 시간이
     # 5분이라 사진을 고르다 지체하거나 업로드가 끊기거나 사진을 바꾸면 재발급이 필요하고,
-    # 그때마다 한 건씩 깎인다. 소진 시점이 "인증 성공"이 아니라 "발급 시도"다.
-    # 챌린지·그룹 루틴·개인 루틴·프로필이 이 버킷 하나를 공유하는 것도 같은 이유로 부담이다.
-    # 용도별로 나누는 작업은 따로 진행한다.
-    media-presign:
-      limit: ${RATE_LIMIT_MEDIA_PRESIGN_LIMIT:30}
-      window: ${RATE_LIMIT_MEDIA_PRESIGN_WINDOW:PT10M}
+    # 그때마다 한 건씩 깎인다. 소진 시점은 "인증 성공"이 아니라 "발급"이다.
+    # (형식·용량 검증에서 걸린 요청은 깎지 않는다 — MediaService 가 검증을 통과한 뒤에 센다.)
+
+    # 챌린지·그룹 루틴·개인 루틴 인증이 나눠 쓴다. 셋을 더 쪼개지 않은 것은 한 사람이 아침에
+    # 개인 루틴을 인증하고 그룹 인증도 하는 것이 정상 사용이라 서로 굶길 이유가 없어서다.
+    # 30건 × 10MB = 창당 300MB, 연속으로 채우면 1.8GB/시간.
+    media-presign-verification:
+      limit: ${RATE_LIMIT_MEDIA_PRESIGN_VERIFICATION_LIMIT:30}
+      window: ${RATE_LIMIT_MEDIA_PRESIGN_VERIFICATION_WINDOW:PT10M}
+    # 프로필은 자주 바꾸지 않고 바꿀 때 몰아서 바꾼다. 인증만큼 줄 이유가 없다.
+    media-presign-profile:
+      limit: ${RATE_LIMIT_MEDIA_PRESIGN_PROFILE_LIMIT:5}
+      window: ${RATE_LIMIT_MEDIA_PRESIGN_PROFILE_WINDOW:PT10M}
 
 ---
 # 로컬 개발 전용 오버라이드.
