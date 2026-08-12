@@ -16,6 +16,7 @@ import com.lirouti.global.util.TimeUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
@@ -44,7 +45,7 @@ public class GroupAchievementProgressService {
     private final GroupRoutineAssignmentRepository groupRoutineAssignmentRepository;
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void handle(GroupAchievementProgressEvent event) {
         Achievement achievement = achievementRepository.findByCode(event.achievementCode())
                 .orElseThrow(() -> {

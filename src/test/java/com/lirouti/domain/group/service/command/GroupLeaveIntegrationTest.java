@@ -39,6 +39,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -198,6 +199,12 @@ class GroupLeaveIntegrationTest {
             assertThatThrownBy(() -> leaveFuture.get(300, TimeUnit.MILLISECONDS))
                     .isInstanceOf(TimeoutException.class);
 
+            assertThat(assignmentRepository.findById(assignment.getId()).orElseThrow().getStatus())
+                    .isEqualTo(COMPLETED);
+            var persistedVerification = verificationRepository.findByAssignmentId(assignment.getId());
+            assertThat(persistedVerification).isPresent();
+            persistedVerification.ifPresent(v -> verificationIds.add(v.getId()));
+
             releaseVerification.countDown();
             verificationFuture.get(10, TimeUnit.SECONDS);
             leaveFuture.get(10, TimeUnit.SECONDS);
@@ -279,10 +286,9 @@ class GroupLeaveIntegrationTest {
     }
 
     private Group group() {
-        int value = sequence.incrementAndGet();
         Group group = groupRepository.save(Group.builder()
-                .name("탈퇴 테스트 그룹 " + value)
-                .inviteCode(String.format("%07d", value))
+                .name("탈퇴 테스트 그룹 " + sequence.incrementAndGet())
+                .inviteCode(UUID.randomUUID().toString().replace("-", "").substring(0, 7).toUpperCase())
                 .build());
         groupIds.add(group.getId());
         return group;

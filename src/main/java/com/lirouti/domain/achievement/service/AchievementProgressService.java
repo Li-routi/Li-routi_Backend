@@ -15,6 +15,7 @@ import com.lirouti.domain.member.repository.MemberRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
@@ -61,7 +62,13 @@ public class AchievementProgressService {
     private final AchievementProgressEventLogService achievementProgressEventLogService;
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    @Transactional
+    // AFTER_COMMIT 시점엔 이미 원본 트랜잭션이 끝나 있다. 이 리스너는 MemberAchievement 등을
+    // 실제로 저장해야 하므로 트랜잭션이 필요한데, RestrictedTransactionalEventListenerFactory가
+    // 이 phase에서는 REQUIRES_NEW(새 트랜잭션 시작)나 NOT_SUPPORTED(트랜잭션 없음)만 허용하고
+    // 기본값 REQUIRED는 거부한다 - REQUIRED는 "이미 있으면 참여, 없으면 새로 시작"인데
+    // AFTER_COMMIT은 항상 트랜잭션이 없는 상태라 의미가 REQUIRES_NEW와 같아지면서도 그 사실을
+    // 프레임워크가 강제로 명시하게 만든다.
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void handle(AchievementProgressEvent event) {
         boolean firstTimeSeen = achievementProgressEventLogService.tryMarkProcessed(
                 event.memberId(), event.conditionKey(), event.sourceType(), event.sourceId());

@@ -4,6 +4,13 @@
 --  member_achievement 이력을 보존하기 위함. Group.delete()가 상태만 바꾸고
 --  행을 지우지 않는 것과 같은 패턴이다.)
 
+-- hidden_yn: 달성 전까지 이름/조건을 노출하지 않는 "히든 업적" 여부.
+-- (예: 일찍 일어난 새/자정의 방문자/딱 1분 남았어! 처럼 조건을 미리 알면 재미가 없는 업적)
+-- V20260810160000__create_achievement_tables.sql 에는 이 컬럼이 없어, 아래 INSERT들이
+-- hidden_yn을 참조하기 전에 여기서 먼저 추가한다.
+ALTER TABLE achievement
+    ADD COLUMN hidden_yn BOOLEAN NOT NULL DEFAULT FALSE AFTER active;
+
 -- ==================== 1) 기존 업적 중 제외 대상 비활성화 ====================
 -- ACH-ST-006 첫 토파즈 교환, ACH-AC-003 특별 후원가: 정책서 최신본에서 삭제됨.
 UPDATE achievement SET active = FALSE WHERE code IN ('ACH-ST-006', 'ACH-AC-003');
@@ -82,23 +89,26 @@ INSERT INTO achievement_routine_category (achievement_id, routine_category_id)
 SELECT a.id, 4 FROM achievement a WHERE a.code = 'ACH-EG-008'; -- 생활정리
 
 -- 알 보상 아이템 (achievement_reward_item.item_category='EGG'는 신규 값, 컬럼이 자유 VARCHAR라 스키마 변경 불필요)
+-- 주의: `VALUES ROW(...) AS v(col1, col2)` 테이블 값 생성자는 MySQL 8.0.19+ 에서만 지원된다.
+-- 로컬/테스트 MySQL이 그보다 낮은 버전이면 SQLSyntaxErrorException이 나므로,
+-- 모든 MySQL/MariaDB 버전에서 동작하는 UNION ALL SELECT 방식으로 대체한다.
 INSERT INTO achievement_reward_item (achievement_id, item_category, item_name)
 SELECT a.id, 'EGG', v.egg_name
 FROM achievement a
-         JOIN (VALUES
-                   ROW('ACH-EG-001', '민트의 알'),
-                   ROW('ACH-EG-002', '동글의 알'),
-                   ROW('ACH-EG-003', '노아의 알'),
-                   ROW('ACH-EG-004', '코코의 알'),
-                   ROW('ACH-EG-005', '유키의 알'),
-                   ROW('ACH-EG-006', '파도의 알'),
-                   ROW('ACH-EG-007', '까루의 알'),
-                   ROW('ACH-EG-008', '다미의 알'),
-                   ROW('ACH-EG-009', '모리의 알'),
-                   ROW('ACH-EG-010', '삐아의 알'),
-                   ROW('ACH-EG-011', '호롱의 알'),
-                   ROW('ACH-EG-012', '솔라의 알')
-) AS v(code, egg_name) ON v.code = a.code;
+         JOIN (
+    SELECT 'ACH-EG-001' AS code, '민트의 알' AS egg_name UNION ALL
+    SELECT 'ACH-EG-002', '동글의 알' UNION ALL
+    SELECT 'ACH-EG-003', '노아의 알' UNION ALL
+    SELECT 'ACH-EG-004', '코코의 알' UNION ALL
+    SELECT 'ACH-EG-005', '유키의 알' UNION ALL
+    SELECT 'ACH-EG-006', '파도의 알' UNION ALL
+    SELECT 'ACH-EG-007', '까루의 알' UNION ALL
+    SELECT 'ACH-EG-008', '다미의 알' UNION ALL
+    SELECT 'ACH-EG-009', '모리의 알' UNION ALL
+    SELECT 'ACH-EG-010', '삐아의 알' UNION ALL
+    SELECT 'ACH-EG-011', '호롱의 알' UNION ALL
+    SELECT 'ACH-EG-012', '솔라의 알'
+) AS v ON v.code = a.code;
 
 -- ==================== 4) 스페셜 업적 신규 4개 ====================
 -- 기존 SP-001(모두의 응원단장)은 그대로 유지.
