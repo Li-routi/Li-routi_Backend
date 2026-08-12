@@ -1349,6 +1349,193 @@ member 행을 잠근다   (SELECT ... FOR UPDATE)
 
 **가입 흐름을 건드리지 않는다.** 지갑을 가입 시점에 만들지 않고 필요할 때 만드는 것과 같은 방식이다.
 
+## 캐릭터 도메인 테이블 — 설계안 (합의 필요)
+
+아바타 아이템이 "입는 것"이라면 캐릭터는 **그것을 입는 몸**이다. 슬롯 넷(`HEAD`·`FACE`·`BODY`·`HAND`)은 그대로 두고 그 아래 베이스로 들어간다.
+
+```
+[배경]              구조만 만든다(아래)
+  [캐릭터]          이 절
+    + HEAD / FACE / BODY / HAND    avatar_item
+```
+
+**`AvatarSlot` 에 `CHARACTER` 를 더하지 않는다.** 넣으면 `avatar_item` 한 표에 **돈으로 사는 것과 조건으로 여는 것이 섞이고**, 슬롯 유니크 제약(`UNIQUE(member_id, slot)`)이 "캐릭터는 반드시 하나"와 "아이템은 없을 수 있다"를 같은 규칙으로 다루게 된다. 성질이 다르므로 표를 나눈다.
+
+### 알에서 성체로 — 관문이 둘이다
+
+```
+해금 조건 달성 → 알 획득 → 루틴을 한 날이 hatch_days 만큼 쌓임 → 성체
+```
+
+캐릭터 한 마리가 이미지 두 장(알·성체)을 갖는다. 중간 단계는 두지 않는다. 난이도를 잡을 때 **조건과 일수를 함께** 봐야 한다.
+
+### `character`
+
+앱이 제공하는 마스터 데이터다. `R__` 시드가 단일 진실 공급원이며 id 는 `1~999` 대역에 고정한다.
+
+| 컬럼 | 타입 | NULL | 설명 |
+| --- | --- | --- | --- |
+| id | BIGINT | N | 기본 키. 시드가 직접 지정한다 |
+| code | VARCHAR(30) | N | 논리 키. 시드·조건이 참조한다 |
+| name | VARCHAR(30) | N | 이름 |
+| grade | VARCHAR(20) | N | `BASIC` · `RARE` · `EPIC` · `SPECIAL` |
+| hatch_days | INT | N | 부화까지 필요한 활동일. 첫 알 14, 중간 30~50, 최상위 하나만 100 |
+| egg_image_key | VARCHAR(512) | N | 알 이미지. **절대 URL 이 아니라 S3 key** |
+| adult_image_key | VARCHAR(512) | N | 성체 이미지 |
+| hidden | TINYINT(1) | N | 목록에 감출지. 기본 `0` |
+| display_order | INT | N | 노출 순서 |
+| active | TINYINT(1) | N | 사용 여부, 기본값 `1` |
+| created_at / updated_at | DATETIME(6) | N / N | 생성·수정 시각 |
+
+유니크: `uk_character_code` (`code`)
+
+**`hatch_days` 를 컬럼으로 두는 이유는 지금 이 숫자를 맞힐 방법이 없기 때문이다.** 실사용 데이터가 없다. 코드에 고정하면 틀렸을 때 마이그레이션이지만, 컬럼이면 `R__` 시드 한 줄을 고치고 배포하면 끝난다.
+
+첫 부화를 2주 안에 겪게 하는 것이 중요하다. 그 전까지 알은 안 움직이는 그림이라 **이 시스템이 무엇인지 알려 주는 순간이 오지 않는다.**
+
+> **병목은 성장일이 아니라 해금 조건이다.** 알이 병렬로 자라므로 여러 마리를 모아도 총 시간이 더해지지 않는다. 수집 속도를 실제로 정하는 것은 알을 얼마나 자주 얻느냐이고, 난이도 조절은 조건 쪽에서 해야 한다.
+
+### `character_unlock_condition`
+
+| 컬럼 | 타입 | NULL | 설명 |
+| --- | --- | --- | --- |
+| id | BIGINT | N | 기본 키 |
+| character_id | BIGINT | N | `character.id` FK |
+| condition_key | VARCHAR(30) | N | 판정기 종류(아래) |
+| condition_param | VARCHAR(255) | Y | 키마다 뜻이 다르다. 없으면 `NULL` |
+| target_count | INT | N | 목표 수치 |
+| sort_order | INT | N | 진행도를 조건별로 표시하기 위한 순서 |
+
+**한 캐릭터에 조건 행이 여럿이면 AND 다.** 그래서 "운동 **또는** 건강"을 조건 둘로 나누면 안 된다 — 둘 다 채워야 하는 뜻이 되어 버린다. 합집합은 한 행의 `condition_param` 에 쉼표로 나열해 표현한다.
+
+**조건 행이 하나도 없으면 항상 열려 있는 기본 캐릭터다.** 팝업도 띄우지 않는다.
+
+#### `condition_param` 에는 카테고리 id 가 아니라 논리 키를 넣는다
+
+카테고리가 세 곳에 따로 있고 **id 가 서로 다르다.**
+
+| 어디 | 무엇 | 모양 |
+| --- | --- | --- |
+| 개인 루틴 | `routine_category` | 전역 프리셋 6종(`member_id IS NULL`) + 사용자 생성 |
+| 그룹 루틴 | `group_routine_category` | 전역 프리셋 6종(`group_id IS NULL`) + 그룹 생성 |
+| 챌린지 | `ChallengeCategory` | enum |
+
+코드가 논리 키 하나를 세 곳에 매핑한다. **사용자가 만든 동명 카테고리는 세지 않는다** — 운영 DB 에 실제로 `[테스트]사이드` 같은 사용자 생성 카테고리가 있다.
+
+### `member_character`
+
+| 컬럼 | 타입 | NULL | 설명 |
+| --- | --- | --- | --- |
+| id | BIGINT | N | 기본 키 |
+| member_id | BIGINT | N | `member.id` FK |
+| character_id | BIGINT | N | `character.id` FK |
+| acquired_date | DATE | N | 알을 얻은 날(KST). **성장 계산의 기준점** |
+| hatched_at | DATETIME(6) | Y | 부화 시각. `NULL` 이면 아직 알이다 |
+| created_at / updated_at | DATETIME(6) | N / N | 생성·수정 시각 |
+
+유니크: `uk_member_character` (`member_id`, `character_id`)
+
+**유니크가 해금의 멱등을 보장한다.** 판정이 두 번 돌아도 두 번째 INSERT 가 막힌다 — 이 프로젝트가 인증 중복을 다루는 방식과 같다. 애플리케이션 검사는 선검사이고 최종 판정은 제약이 한다.
+
+### `member_activity_day`
+
+**성장 대상을 고르는 화면이 없다. 그러므로 고르는 개념 자체를 두지 않는다** — 알을 얻은 날 이후로 **루틴을 하나라도 한 날**을 세면 그것이 곧 성장일이다.
+
+| 컬럼 | 타입 | NULL | 설명 |
+| --- | --- | --- | --- |
+| id | BIGINT | N | 기본 키 |
+| member_id | BIGINT | N | `member.id` FK |
+| activity_date | DATE | N | 루틴을 한 날(KST) |
+| created_at | DATETIME(6) | N | 생성 시각 |
+
+유니크: `uk_member_activity_day` (`member_id`, `activity_date`)
+
+**`character_id` 칸이 없다.** 그냥 "이 사람이 이날 루틴을 했다"이다. 진행도는 알마다 이렇게 센다.
+
+```sql
+SELECT COUNT(*) FROM member_activity_day
+WHERE member_id = :memberId AND activity_date >= :acquiredDate;
+```
+
+이 설계에서 따라오는 것들이다.
+
+| | |
+| --- | --- |
+| 하루에 여러 개 완료해도 1일 | 유니크가 두 번째 INSERT 를 막는다 |
+| 보유한 알이 전부 같이 자란다 | 각자 자기 획득일부터 세므로 병렬이다 |
+| 재화로 못 건너뛴다 | 이 표에 쓰는 경로를 루틴 완료 하나로만 두면 자동이다 |
+| 동시성에 잠금이 필요 없다 | 루틴 둘을 동시에 완료해도 유니크가 하나를 튕겨 낸다. 그 예외를 삼키면 끝이다 |
+| 소급이 불가능하다 | 획득일 이전 기록은 조건에서 걸러진다 |
+
+**획득 당일을 포함한다(`>=`).** 그러면 해금 경로에 따라 자연스럽게 갈린다 — 루틴으로 해금하면 그날 행이 이미 있어 바로 1일이고, 다른 조건으로 해금하면 0일에서 시작한다. **분기를 짜지 않아도 조건 하나가 둘 다 처리한다.**
+
+#### 무엇이 "루틴 완료"인가 — 셋을 합산한다
+
+```
+POST /api/routines/{id}/verifications                 개인 루틴
+POST /api/groups/{gid}/routines/{id}/verifications    그룹 루틴
+POST /api/challenges/.../verifications                챌린지 인증
+```
+
+**셋 다 활동일을 만든다.** 알 성장은 "앱을 꾸준히 썼는가"에 대한 보상이지 특정 기능을 밀어주는 장치가 아니다. 개인 루틴만 세면 **그룹·챌린지 위주로 쓰는 사람은 매일 인증해도 알이 안 자란다.** 합산해도 빨라지지 않는다 — 어차피 하루 1일이다.
+
+> **이 표는 캐릭터 전용이 아니다.** 지금 전역 활동일 기록이 없어(스트릭은 그룹·챌린지 단위로만 있다) `ACTIVE_DAYS` 같은 조건을 쓸 방법이 없었다. 이 표가 그것을 연다.
+
+### `pending_popup` — 캐릭터 전용이 아니다
+
+해금과 부화는 **반드시 보여줘야 하는 1회성 알림**이다. 소비자가 이미 둘이다(캐릭터, 업적 달성). 범용 모듈로 둔다.
+
+| 컬럼 | 타입 | NULL | 설명 |
+| --- | --- | --- | --- |
+| id | BIGINT | N | 기본 키 |
+| member_id | BIGINT | N | `member.id` FK |
+| popup_type | VARCHAR(30) | N | `CHARACTER_UNLOCKED` · `CHARACTER_HATCHED` · `ACHIEVEMENT_ACHIEVED` … |
+| title | VARCHAR(100) | N | **발행자가 채운다** |
+| body | VARCHAR(255) | N | 발행자가 채운다 |
+| image_key | VARCHAR(512) | Y | 발행자가 채운다 |
+| reference_type | VARCHAR(30) | Y | 눌렀을 때 어디로 보낼지 |
+| reference_id | BIGINT | Y | 그 대상의 id |
+| dedup_key | VARCHAR(100) | N | 중복 발행 차단 |
+| acked_at | DATETIME(6) | Y | `NULL` 이면 아직 안 보여줬다 |
+| created_at | DATETIME(6) | N | 생성 시각 |
+
+유니크: `uk_pending_popup_member_dedup` (`member_id`, `dedup_key`)
+
+**모듈은 도메인을 몰라야 한다.** 표에 `character_id` 같은 참조만 두면 조회할 때 모듈이 캐릭터·업적을 전부 알아야 하고, 그러면 소비자가 늘 때마다 모듈을 고쳐야 해 모듈화한 의미가 없다. **발행하는 쪽이 보여줄 내용을 채워 넣고 모듈은 그대로 돌려준다.**
+
+`title`·`body` 를 복사해 두면 마스터가 바뀌어도 옛 팝업은 옛 문구로 뜨지만, **팝업은 곧 뜨고 사라지므로 실질적으로 문제가 되지 않는다.** 결합을 끊는 값이 더 크다.
+
+#### 기존 `notification` 을 재사용하지 않는 이유
+
+| | 알림함 (`notification`) | 팝업 (`pending_popup`) |
+| --- | --- | --- |
+| 성격 | 목록. 나중에 봐도 된다 | 즉시 1회. **반드시 봐야 한다** |
+| 읽음 | 사용자가 열었을 때 | **앱이 띄운 직후 확인(ack)** |
+| 푸시 | `push_status`·`push_attempts` 로 관리 | 해당 없음 |
+
+### 배경은 구조만 만들고 내보내지 않는다
+
+`AvatarSlot` 에 `BACKGROUND` 를 더하고 표·카테고리 구조까지만 잡는다. **이미지도 시드 행도 넣지 않고, 카테고리 응답에서 제외한다.** 나중에 켤 때 제외를 걷어 내면 된다.
+
+제외가 실제로 걸리는지 테스트로 못 박는다 — **켤 때 그 테스트를 뒤집는 것이 곧 스위치**가 된다.
+
+### 자산은 사용자 업로드가 아니다
+
+캐릭터·아이템 이미지는 운영이 올리는 마스터 자산이다. `MediaPurpose.AVATAR_ASSET` 을 더하되 **presigned PUT 도, 레이트 리밋 정책도 두지 않는다** — 발급 경로가 없으니 셀 것도 없다. `CHAT_EMOTICON` 과 같은 취급이다.
+
+**DB 에는 절대 URL 이 아니라 key 를 넣는다.** 도메인이 바뀌면 행을 전부 고쳐야 하고, CloudFront 를 붙이는 순간 그 값이 전부 낡는다. 조회에서 `resolveViewUrl` 로 조립한다.
+
+> `avatar_item` 의 이미지 칸이 지금 절대 URL(`https://placehold.co/...`)이다. **key 로 바꾸는 것은 지금이 제일 싸다** — 실사용 데이터가 아직 없다.
+
+**자산을 교체할 때 같은 key 를 덮어쓰지 않는다.** 캐시가 옛 그림을 들고 있으면 사용자마다 다른 것을 본다. 새 key 로 올리고 마스터 행을 가리키게 바꾼다.
+
+### 아직 정하지 못한 것
+
+- `hatch_days` 의 실제 값(첫 알 14 / 중간 30~50 / 최상위 100)이 등급에 맞는지. **시드 값이라 나중에 바꿔도 싸다**
+- 좋아요 집계 조건을 이 범위에 넣을지, 별도로 뺄지. 넣으면 좋아요 도메인까지 범위가 는다
+- 성체가 된 뒤 **알 이미지를 다시 쓰는 화면**이 있는지(도감 등)
+- **복구권은 아직 없는 기능이다.** 기획에 *"복구권을 사용한 날은 포함하지 않는다"* 가 있는데 코드에도 DB 에도 복구권이 없다. 지금은 해당 없음으로 두되, **복구권을 만들 때 이 조건을 함께 봐야 한다**
+
 ## 주문 및 결제 테이블
 
 ### `member_order`
