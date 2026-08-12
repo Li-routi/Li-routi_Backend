@@ -5,7 +5,7 @@ import com.lirouti.global.ratelimit.RateLimitGuard;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.annotation.Configuration;
+import org.springframework.stereotype.Component;
 
 import java.util.Arrays;
 import java.util.List;
@@ -27,7 +27,7 @@ import java.util.stream.Collectors;
  * presigned PUT 을 발급하지 않아 셀 것이 없다는 뜻이고, 그건 오타가 아니라 의도다.
  */
 @Slf4j
-@Configuration
+@Component
 @RequiredArgsConstructor
 public class MediaRateLimitPolicyValidator {
     private final RateLimitGuard rateLimitGuard;
