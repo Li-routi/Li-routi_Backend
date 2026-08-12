@@ -18,6 +18,7 @@ import com.lirouti.domain.group.repository.GroupRoutineQueryRepository.GroupRout
 import com.lirouti.domain.group.repository.GroupRoutineQueryRepository.RoutineScheduleProjection;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.service.query.MemberQueryService;
+import com.lirouti.domain.shop.repository.MemberAvatarEquipmentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -42,6 +43,7 @@ public class GroupQueryService {
     private final GroupListQueryRepository groupListQueryRepository;
     private final GroupRoutineQueryRepository groupRoutineQueryRepository;
     private final GroupRoutineCategoryRepository groupRoutineCategoryRepository;
+    private final MemberAvatarEquipmentRepository memberAvatarEquipmentRepository;
     private final GroupValidationService groupValidationService;
     private final MemberQueryService memberQueryService;
     private final Clock clock;
@@ -125,10 +127,20 @@ public class GroupQueryService {
                 groupDetailQueryRepository.findActiveMemberDetails(groupId);
         List<GroupDetailQueryRepository.TodayMemberProgressProjection> progresses =
                 groupDetailQueryRepository.findTodayMemberProgress(groupId, today);
+        List<Long> activeMemberIds = memberDetails.stream()
+                .map(GroupDetailQueryRepository.GroupMemberDetailProjection::memberId)
+                .toList();
+        Map<Long, GroupResDTO.Avatar> avatarsByMemberId = GroupConverter.toAvatarsByMemberId(
+                activeMemberIds,
+                activeMemberIds.isEmpty()
+                        ? List.of()
+                        : memberAvatarEquipmentRepository
+                                .findAllByMemberIdInWithMemberAndAvatarItem(activeMemberIds)
+        );
 
         log.debug("그룹 상세 정보를 조회했습니다. groupId={}, memberId={}, memberCount={}",
                 groupId, memberId, memberDetails.size());
-        return GroupConverter.toGroupDetail(memberDetails, progresses);
+        return GroupConverter.toGroupDetail(memberDetails, progresses, avatarsByMemberId);
     }
 
     /** ACTIVE OWNER가 관리 중인 ACTIVE 그룹의 활성 루틴과 반복 일정을 조회한다. */

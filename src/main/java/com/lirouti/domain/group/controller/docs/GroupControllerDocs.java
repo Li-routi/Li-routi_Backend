@@ -72,7 +72,7 @@ public interface GroupControllerDocs {
     @Operation(
             summary = "그룹방 상세 조회",
             description = """
-                    ACTIVE 그룹 구성원만 그룹명, 초대코드와 ACTIVE 구성원별 활동 현황을 조회할 수 있습니다.
+                    ACTIVE 그룹 구성원만 그룹명, 초대코드와 ACTIVE 구성원별 활동 현황 및 현재 조합 아바타를 조회할 수 있습니다.
                     금일 진행도는 완료한 그룹 루틴 할당 수와 전체 할당 수이며, 할당이 없는 구성원은 0/0입니다.
                     """
     )
@@ -407,7 +407,7 @@ public interface GroupControllerDocs {
             description = """
                     인증 회원이 입력한 초대코드로 그룹명, 현재 ACTIVE 인원 및 참여 가능 여부를 조회합니다.
                     Preview는 안내용 읽기 전용 스냅샷으로 가입 관계나 그룹 루틴 할당을 생성하지 않으며,
-                    실제 가입 API는 잠금 후 모든 조건을 다시 검증합니다.
+                    실제 가입 API는 잠금 후 모든 조건을 다시 검증합니다. 구성원 항목은 식별 정보 없이 현재 조합 아바타만 제공합니다.
 
                     잠긴 그룹과 비활성 그룹은 조회할 수 없습니다. ACTIVE 구성원, KICKED 구성원,
                     회원의 ACTIVE 그룹 6개 상한, 그룹 ACTIVE 구성원 6명 상한은 200 응답의

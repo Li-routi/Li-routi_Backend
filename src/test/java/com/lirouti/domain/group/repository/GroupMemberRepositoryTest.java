@@ -138,8 +138,8 @@ class GroupMemberRepositoryTest {
     }
 
     @Test
-    @DisplayName("Preview ACTIVE 구성원 ID는 활성 계정만 joinedAt, id 순서로 조회한다")
-    void findIdsByGroupIdAndStatusOrderByJoinedAtAscIdAsc_ReturnsOnlyActiveAccountsInStableOrder() {
+    @DisplayName("Preview ACTIVE 회원 ID는 활성 계정만 joinedAt, id 순서로 조회한다")
+    void findMemberIdsByGroupIdAndStatusOrderByJoinedAtAscIdAsc_ReturnsOnlyActiveAccountsInStableOrder() {
         // given
         Group target = group("P000001");
         LocalDateTime firstJoinedAt = LocalDateTime.of(2026, 8, 1, 9, 0);
@@ -163,12 +163,13 @@ class GroupMemberRepositoryTest {
         em.clear();
 
         // when
-        List<Long> result = groupMemberRepository.findIdsByGroupIdAndStatusOrderByJoinedAtAscIdAsc(
+        List<Long> result = groupMemberRepository.findMemberIdsByGroupIdAndStatusOrderByJoinedAtAscIdAsc(
                 target.getId(), GroupMemberStatus.ACTIVE);
 
         // then
-        assertThat(result).containsExactly(first.getId(), sameTimeSecond.getId(), last.getId());
-        assertThat(result).doesNotContain(withdrawnMembership.getId());
+        assertThat(result).containsExactly(
+                first.getMember().getId(), sameTimeSecond.getMember().getId(), last.getMember().getId());
+        assertThat(result).doesNotContain(withdrawn.getId());
     }
 
     @Test

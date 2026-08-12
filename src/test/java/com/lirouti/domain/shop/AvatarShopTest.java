@@ -6,6 +6,7 @@ import com.lirouti.domain.member.enums.SocialProvider;
 import com.lirouti.domain.shop.dto.response.ShopResDTO;
 import com.lirouti.domain.shop.entity.AvatarItem;
 import com.lirouti.domain.shop.entity.MemberAvatarItem;
+import com.lirouti.domain.shop.entity.MemberAvatarEquipment;
 import com.lirouti.domain.shop.enums.AvatarSlot;
 import com.lirouti.domain.shop.exception.ShopException;
 import com.lirouti.domain.shop.repository.MemberAvatarEquipmentRepository;
@@ -124,6 +125,31 @@ class AvatarShopTest {
     private List<AvatarSlot> equippedSlots() {
         return memberAvatarEquipmentRepository.findAllByMemberId(me.getId())
                 .stream().map(e -> e.getSlot()).sorted().toList();
+    }
+
+    @Test
+    @DisplayName("여러 회원의 장착 아이템을 아이템과 함께 한 번에 회원·슬롯 순서로 조회한다")
+    void findAllByMemberIdInWithMemberAndAvatarItem_ReturnsOrderedEquipment() {
+        Member other = Member.builder()
+                .email("other" + seq.get() + "@ex.com").nickname("other")
+                .socialProvider(SocialProvider.GOOGLE).role(Role.ROLE_USER)
+                .socialId("other-sid-" + seq.get()).build();
+        em.persist(other);
+        em.persist(MemberAvatarEquipment.builder().member(me).avatarItem(hat).build());
+        em.persist(MemberAvatarEquipment.builder().member(me).avatarItem(glasses).build());
+        em.persist(MemberAvatarEquipment.builder().member(other).avatarItem(shirt).build());
+        em.flush();
+        em.clear();
+
+        List<MemberAvatarEquipment> result = memberAvatarEquipmentRepository
+                .findAllByMemberIdInWithMemberAndAvatarItem(List.of(me.getId(), other.getId()));
+
+        assertThat(result).extracting(equipment -> equipment.getMember().getId())
+                .containsExactly(me.getId(), me.getId(), other.getId());
+        assertThat(result).extracting(MemberAvatarEquipment::getSlot)
+                .containsExactly(AvatarSlot.FACE, AvatarSlot.HEAD, AvatarSlot.BODY);
+        assertThat(result).extracting(equipment -> equipment.getAvatarItem().getImageUrl())
+                .containsExactly("https://img/안경", "https://img/모자", "https://img/티셔츠");
     }
 
     // ── 구매 ──

@@ -5,6 +5,7 @@ import com.lirouti.domain.group.enums.GroupJoinUnavailableReason;
 import com.lirouti.domain.group.enums.GroupMemberStatus;
 import com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus;
 import com.lirouti.domain.routine.enums.RoutineCategoryColor;
+import com.lirouti.domain.shop.enums.AvatarSlot;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 
@@ -78,12 +79,30 @@ public final class GroupResDTO {
     public record MemberActivity(
             Long memberId,
             String name,
-            String profileImageKey,
+            Avatar avatar,
             String statusMessage,
             int currentStreak,
             long totalLikeCount,
             long totalPokeCount,
             DailyProgress dailyProgress
+    ) {
+    }
+
+    /** 그룹 조회 화면에 표시할 구성원의 현재 조합 아바타다. */
+    @Builder
+    @Schema(name = "GroupMemberAvatar", description = "그룹 구성원의 현재 아바타 착용 상태")
+    public record Avatar(
+            @Schema(description = "착용 중인 아이템. 안 입은 자리는 실리지 않는다")
+            List<Equipped> equipped
+    ) {
+    }
+
+    /** 그룹 조회 화면에 표시할 착용 아이템 한 건이다. */
+    @Builder
+    @Schema(name = "GroupMemberAvatarEquippedItem", description = "그룹 구성원이 착용 중인 아이템")
+    public record Equipped(
+            @Schema(description = "자리") AvatarSlot slot,
+            @Schema(description = "이미지 주소") String imageUrl
     ) {
     }
 
@@ -287,13 +306,12 @@ public final class GroupResDTO {
     }
 
     /**
-     * 참여 Preview에 표시하는 ACTIVE 구성원 요약이다.
-     * 캐릭터 도메인이 도입되기 전에는 characterImageUrl이 null이며 내부 식별자는 노출하지 않는다.
+     * 참여 Preview에 표시하는 ACTIVE 구성원의 조합 아바타다. 내부 식별자는 노출하지 않는다.
      */
     @Builder
     @Schema(name = "GroupJoinPreviewMember", description = "그룹 참여 Preview 구성원 요약")
     public record JoinPreviewMember(
-            String characterImageUrl
+            Avatar avatar
     ) {
     }
 

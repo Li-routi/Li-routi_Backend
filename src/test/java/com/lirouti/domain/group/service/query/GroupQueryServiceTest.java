@@ -21,6 +21,10 @@ import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.exception.MemberException;
 import com.lirouti.domain.member.exception.code.error.MemberErrorCode;
 import com.lirouti.domain.member.service.query.MemberQueryService;
+import com.lirouti.domain.shop.entity.AvatarItem;
+import com.lirouti.domain.shop.entity.MemberAvatarEquipment;
+import com.lirouti.domain.shop.enums.AvatarSlot;
+import com.lirouti.domain.shop.repository.MemberAvatarEquipmentRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -52,6 +56,8 @@ class GroupQueryServiceTest {
     @Mock
     private GroupRoutineCategoryRepository categoryRepository;
     @Mock
+    private MemberAvatarEquipmentRepository memberAvatarEquipmentRepository;
+    @Mock
     private GroupValidationService groupValidationService;
     @Mock
     private MemberQueryService memberQueryService;
@@ -72,6 +78,7 @@ class GroupQueryServiceTest {
                 groupListQueryRepository,
                 groupRoutineQueryRepository,
                 categoryRepository,
+                memberAvatarEquipmentRepository,
                 groupValidationService,
                 memberQueryService,
                 clock
@@ -86,14 +93,24 @@ class GroupQueryServiceTest {
         when(groupDetailQueryRepository.findActiveMemberDetails(groupId)).thenReturn(List.of(
                 new GroupDetailQueryRepository.GroupMemberDetailProjection(
                         groupId, "우리 집", "DETAIL1", MEMBER_ID, "리루티",
-                        "profiles/member-1.png", "오늘도 완료", 4, 12L, 7L),
+                        "오늘도 완료", 4, 12L, 7L),
                 new GroupDetailQueryRepository.GroupMemberDetailProjection(
                         groupId, "우리 집", "DETAIL1", 2L, "동료",
-                        null, null, 1, 3L, 0L)
+                        null, 1, 3L, 0L)
         ));
         when(groupDetailQueryRepository.findTodayMemberProgress(groupId, TODAY)).thenReturn(List.of(
                 new GroupDetailQueryRepository.TodayMemberProgressProjection(MEMBER_ID, 3L, 2L)
         ));
+        Member equipmentOwner = mock(Member.class);
+        AvatarItem avatarItem = mock(AvatarItem.class);
+        MemberAvatarEquipment equipment = mock(MemberAvatarEquipment.class);
+        when(equipmentOwner.getId()).thenReturn(MEMBER_ID);
+        when(avatarItem.getImageUrl()).thenReturn("https://img/hat.png");
+        when(equipment.getMember()).thenReturn(equipmentOwner);
+        when(equipment.getAvatarItem()).thenReturn(avatarItem);
+        when(equipment.getSlot()).thenReturn(AvatarSlot.HEAD);
+        when(memberAvatarEquipmentRepository.findAllByMemberIdInWithMemberAndAvatarItem(
+                List.of(MEMBER_ID, 2L))).thenReturn(List.of(equipment));
 
         // when
         GroupResDTO.Detail result = groupQueryService.getGroupDetail(groupId, MEMBER_ID);
@@ -102,15 +119,19 @@ class GroupQueryServiceTest {
         verify(groupValidationService).validateActiveGroupMember(groupId, MEMBER_ID);
         verify(groupDetailQueryRepository).findActiveMemberDetails(groupId);
         verify(groupDetailQueryRepository).findTodayMemberProgress(groupId, TODAY);
+        verify(memberAvatarEquipmentRepository)
+                .findAllByMemberIdInWithMemberAndAvatarItem(List.of(MEMBER_ID, 2L));
         assertThat(result.groupId()).isEqualTo(groupId);
         assertThat(result.groupName()).isEqualTo("우리 집");
         assertThat(result.inviteCode()).isEqualTo("DETAIL1");
         assertThat(result.members()).containsExactly(
                 new GroupResDTO.MemberActivity(
-                        MEMBER_ID, "리루티", "profiles/member-1.png", "오늘도 완료",
+                        MEMBER_ID, "리루티", new GroupResDTO.Avatar(List.of(
+                                new GroupResDTO.Equipped(
+                                        AvatarSlot.HEAD, "https://img/hat.png"))), "오늘도 완료",
                         4, 12L, 7L, new GroupResDTO.DailyProgress(2L, 3L)),
                 new GroupResDTO.MemberActivity(
-                        2L, "동료", null, null,
+                        2L, "동료", new GroupResDTO.Avatar(List.of()), null,
                         1, 3L, 0L, new GroupResDTO.DailyProgress(0L, 0L))
         );
     }
@@ -357,6 +378,7 @@ class GroupQueryServiceTest {
                 groupListQueryRepository,
                 groupRoutineQueryRepository,
                 categoryRepository,
+                memberAvatarEquipmentRepository,
                 groupValidationService,
                 memberQueryService,
                 monthEndClock
