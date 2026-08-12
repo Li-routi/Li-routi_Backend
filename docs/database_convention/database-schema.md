@@ -1153,7 +1153,7 @@ product        consumable_category_id FK  (소모품 분류)
 | currency | VARCHAR(20) | N | 결제 재화. `GEM` · `TOPAZ` |
 | price | INT | N | 가격. **`CHECK (price > 0)`** |
 | name | VARCHAR(100) | N | 아이템 이름 |
-| image_url | VARCHAR(2048) | N | 아이템 이미지 |
+| image_url | VARCHAR(2048) | N | 아이템 이미지. **현재 절대 URL(`https://placehold.co/...`)이며, 캐릭터 도메인 작업에서 `image_key`(S3 key)로 바꾼다** — 아래 [캐릭터 도메인] 절 참고 |
 | sort_order | INT | N | 목록 정렬 순서. 기본값 `0` |
 | active | TINYINT(1) | N | 판매 여부. 기본값 `1` |
 | created_at / updated_at | DATETIME(6) | N / N | 생성·수정 시각 |
@@ -1353,7 +1353,7 @@ member 행을 잠근다   (SELECT ... FOR UPDATE)
 
 아바타 아이템이 "입는 것"이라면 캐릭터는 **그것을 입는 몸**이다. 슬롯 넷(`HEAD`·`FACE`·`BODY`·`HAND`)은 그대로 두고 그 아래 베이스로 들어간다.
 
-```
+```text
 [배경]              구조만 만든다(아래)
   [캐릭터]          이 절
     + HEAD / FACE / BODY / HAND    avatar_item
@@ -1363,7 +1363,7 @@ member 행을 잠근다   (SELECT ... FOR UPDATE)
 
 ### 알에서 성체로 — 관문이 둘이다
 
-```
+```text
 해금 조건 달성 → 알 획득 → 루틴을 한 날이 hatch_days 만큼 쌓임 → 성체
 ```
 
@@ -1471,7 +1471,7 @@ WHERE member_id = :memberId AND activity_date >= :acquiredDate;
 
 #### 무엇이 "루틴 완료"인가 — 셋을 합산한다
 
-```
+```text
 POST /api/routines/{id}/verifications                 개인 루틴
 POST /api/groups/{gid}/routines/{id}/verifications    그룹 루틴
 POST /api/challenges/.../verifications                챌린지 인증
@@ -1480,6 +1480,24 @@ POST /api/challenges/.../verifications                챌린지 인증
 **셋 다 활동일을 만든다.** 알 성장은 "앱을 꾸준히 썼는가"에 대한 보상이지 특정 기능을 밀어주는 장치가 아니다. 개인 루틴만 세면 **그룹·챌린지 위주로 쓰는 사람은 매일 인증해도 알이 안 자란다.** 합산해도 빨라지지 않는다 — 어차피 하루 1일이다.
 
 > **이 표는 캐릭터 전용이 아니다.** 지금 전역 활동일 기록이 없어(스트릭은 그룹·챌린지 단위로만 있다) `ACTIVE_DAYS` 같은 조건을 쓸 방법이 없었다. 이 표가 그것을 연다.
+
+### 해금·부화는 한 번만 일어나야 한다
+
+둘 다 **판정이 여러 번 돌 수 있다.** 인증이 들어올 때마다 보고, 요청 둘이 동시에 들어오기도 한다. 그때 팝업이 두 번 뜨거나 상태가 두 번 바뀌면 안 된다.
+
+**해금은 유니크가 막는다.** `uk_member_character(member_id, character_id)` 로 두 번째 INSERT 가 튕긴다.
+
+**부화는 조건부 갱신으로 승자를 하나만 만든다.** `hatched_at` 이 아직 비어 있을 때만 채우고, **갱신된 행 수를 승패 판정에 쓴다.**
+
+```sql
+UPDATE member_character
+SET hatched_at = :now
+WHERE id = :memberCharacterId AND hatched_at IS NULL;
+```
+
+`0` 이면 남이 이미 부화시킨 것이므로 **팝업을 만들지 않고 조용히 끝낸다.** `1` 을 받은 요청만 팝업을 발행한다. 갱신과 팝업 발행은 **같은 트랜잭션**에 둔다 — 나누면 부화만 되고 팝업이 없는 상태가 남는다.
+
+> 결제 지급이 `markPaid` 의 반환값으로 승자를 가리는 것과 같은 방식이다.
 
 ### `pending_popup` — 캐릭터 전용이 아니다
 
@@ -1500,6 +1518,18 @@ POST /api/challenges/.../verifications                챌린지 인증
 | created_at | DATETIME(6) | N | 생성 시각 |
 
 유니크: `uk_pending_popup_member_dedup` (`member_id`, `dedup_key`)
+
+#### `dedup_key` 는 결정적이어야 한다
+
+**요청 id 나 UUID 를 넣으면 유니크가 아무것도 막지 못한다.** 재시도할 때마다 다른 키가 되어 팝업이 쌓인다. 같은 사건이면 몇 번을 다시 계산해도 **같은 문자열이 나와야** 한다.
+
+| `popup_type` | `dedup_key` |
+| --- | --- |
+| `CHARACTER_UNLOCKED` | `character-unlocked:{characterId}` |
+| `CHARACTER_HATCHED` | `character-hatched:{characterId}` |
+| `ACHIEVEMENT_ACHIEVED` | `achievement-achieved:{achievementId}` |
+
+`member_id` 가 유니크 키의 선두 컬럼이라 키 안에 회원을 다시 넣지 않는다. 사건이 회차·기간을 갖는 종류라면 그 값까지 키에 넣는다 — **"같은 사건"의 범위를 정하는 것이 이 키의 전부다.**
 
 **모듈은 도메인을 몰라야 한다.** 표에 `character_id` 같은 참조만 두면 조회할 때 모듈이 캐릭터·업적을 전부 알아야 하고, 그러면 소비자가 늘 때마다 모듈을 고쳐야 해 모듈화한 의미가 없다. **발행하는 쪽이 보여줄 내용을 채워 넣고 모듈은 그대로 돌려준다.**
 
@@ -1525,7 +1555,7 @@ POST /api/challenges/.../verifications                챌린지 인증
 
 **DB 에는 절대 URL 이 아니라 key 를 넣는다.** 도메인이 바뀌면 행을 전부 고쳐야 하고, CloudFront 를 붙이는 순간 그 값이 전부 낡는다. 조회에서 `resolveViewUrl` 로 조립한다.
 
-> `avatar_item` 의 이미지 칸이 지금 절대 URL(`https://placehold.co/...`)이다. **key 로 바꾸는 것은 지금이 제일 싸다** — 실사용 데이터가 아직 없다.
+**`avatar_item.image_url` 도 함께 바꾼다.** 지금 절대 URL(`https://placehold.co/...`)이라 이 계약과 어긋나 있다. 컬럼을 `image_key` 로 바꾸고 시드 값을 key 로 교체한 뒤, 조회에서 `resolveViewUrl` 로 조립한다. **실사용 데이터가 아직 없어 지금이 제일 싸다** — 나중에는 이미 저장된 행을 옮기는 백필이 붙는다.
 
 **자산을 교체할 때 같은 key 를 덮어쓰지 않는다.** 캐시가 옛 그림을 들고 있으면 사용자마다 다른 것을 본다. 새 key 로 올리고 마스터 행을 가리키게 바꾼다.
 
