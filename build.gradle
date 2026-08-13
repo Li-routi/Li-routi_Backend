@@ -101,6 +101,7 @@ tasks.named('bootJar') {
 
 tasks.named('test') {
 	useJUnitPlatform()
+	maxHeapSize = "2560m"
 	systemProperty 'spring.profiles.active', 'test'
 	systemProperty 'JWT_SECRET', 'test-only-jwt-secret-please-do-not-use-in-production'
 	systemProperty 'KAKAO_APP_ID', '1234567890'
