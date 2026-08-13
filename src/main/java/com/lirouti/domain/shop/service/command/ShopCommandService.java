@@ -11,11 +11,15 @@ import com.lirouti.domain.shop.entity.MemberAvatarEquipment;
 import com.lirouti.domain.shop.entity.MemberAvatarItem;
 import com.lirouti.domain.shop.enums.AvatarSlot;
 import com.lirouti.domain.shop.exception.ShopException;
+import com.lirouti.domain.shop.exception.ShopInsufficientBalanceException;
+import com.lirouti.domain.shop.exception.ShopItemRejectedException;
 import com.lirouti.domain.shop.exception.code.error.ShopErrorCode;
 import com.lirouti.domain.shop.repository.AvatarItemRepository;
 import com.lirouti.domain.shop.repository.MemberAvatarEquipmentRepository;
 import com.lirouti.domain.shop.repository.MemberAvatarItemRepository;
+import com.lirouti.domain.wallet.enums.Currency;
 import com.lirouti.domain.wallet.enums.WalletTransactionType;
+import com.lirouti.domain.wallet.service.WalletResult;
 import com.lirouti.domain.wallet.service.WalletService;
 import com.lirouti.domain.wallet.service.command.WalletCommandService.WalletCommand;
 import com.lirouti.global.util.TimeUtil;
@@ -27,9 +31,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.EnumSet;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * 아바타 아이템의 구매와 착용.
@@ -52,49 +61,156 @@ public class ShopCommandService {
 
 
     /**
-     * 아이템을 사고 <b>그 자리에 바로 입힌다.</b>
+     * 고른 아이템을 <b>한 번에 산다.</b>
      *
-     * <p>요청은 아이템 id 하나다 — 가격과 결제 재화는 마스터가 갖고 있으므로 <b>클라이언트가
-     * 보낸 값을 믿지 않는다.</b>
+     * <p>가격과 결제 재화는 마스터가 갖고 있으므로 <b>클라이언트가 보낸 값을 믿지 않는다.</b>
+     * 요청에는 아이템 id 와 멱등 키만 있다.
+     *
+     * <p><b>재화가 섞여도 된다.</b> 파란 보석 아이템과 주황 보석 아이템을 함께 담으면 재화별로
+     * 합계를 내어 각각 차감한다. 상점에 두 재화가 섞여 있으므로, 한 재화로 통일해야만 살 수
+     * 있게 하면 사용자가 고른 것을 그대로 살 수 없다.
+     *
+     * <p><b>전부 되거나 전부 안 되거나.</b> 화면이 "6개 · 4,800" 처럼 묶어서 결제하는데 일부만
+     * 성사되면, 사용자는 한 번 결제한 줄 알면서 절반만 반영된 상태를 보게 된다. 한 트랜잭션에
+     * 두어 무엇이 막히든 전부 되돌린다.
+     *
+     * <p><b>모자란 재화는 차감을 시작하기 전에 전부 확인한다.</b> 그냥 차감을 시도하면 먼저 걸린
+     * 재화 하나만 알게 되어, 사용자가 그것을 채우고 돌아왔을 때 다른 재화로 또 막힌다.
      *
      * <p>보유 행을 <b>차감보다 먼저</b> 만든다. 따닥으로 두 번 들어오면 유니크 제약이 하나를
      * 떨어뜨리고, 진 쪽은 차감까지 가지 못한다. 리워드 지급이 지급 행을 먼저 만드는 것과 같다.
      *
-     * <p>착용은 <b>그 아이템의 슬롯만</b> 건드린다 — 손에 든 것을 샀다고 모자가 벗겨지면 안 된다.
+     * <p><b>입히지 않는다.</b> 같은 자리 아이템을 둘 이상 함께 사면 어느 쪽을 입힐지 정할 수
+     * 없다. 서버가 임의로 고르면 사용자가 고르지 않은 착장이 저장되므로, 착용은 착장 저장이
+     * 맡는다.
      */
     @Transactional
-    public ShopResDTO.Avatar purchase(Long memberId, Long itemId) {
+    public ShopResDTO.PurchaseResult purchase(Long memberId, List<Long> itemIds,
+                                              String idempotencyKey) {
         Member member = lockMember(memberId);
 
-        AvatarItem item = avatarItemRepository.findById(itemId)
-                .orElseThrow(() -> new ShopException(ShopErrorCode.ITEM_NOT_FOUND));
-
-        // 목록에서 감추는 것과 구매를 막는 것은 다르다. 아이템 id 를 아는 클라이언트는
-        // 목록을 거치지 않고 여기로 바로 올 수 있다.
-        if (!item.isActive()) {
-            throw new ShopException(ShopErrorCode.ITEM_NOT_ON_SALE);
-        }
-        if (memberAvatarItemRepository.existsByMemberIdAndAvatarItemId(memberId, itemId)) {
-            throw new ShopException(ShopErrorCode.ALREADY_OWNED);
+        List<Long> requestedIds = itemIds == null ? List.of() : itemIds;
+        // 착용과 달리 중복을 조용히 합치지 않는다. 화면이 이미 개수와 금액을 보여준 뒤라,
+        // 말없이 하나를 지우면 사용자가 본 금액과 실제 결제액이 어긋난다.
+        List<Long> duplicated = duplicatesOf(requestedIds);
+        if (!duplicated.isEmpty()) {
+            throw new ShopItemRejectedException(ShopErrorCode.DUPLICATE_ITEM, duplicated);
         }
 
-        // 유니크 제약이 최종 방어선이다. 위 조회는 흔한 경우를 예외 없이 넘기기 위한 것이고,
-        // 동시에 들어오면 둘 다 통과하므로 제약이 하나를 떨군다.
-        memberAvatarItemRepository.saveAndFlush(MemberAvatarItem.builder()
-                .member(member)
-                .avatarItem(item)
-                .currency(item.getCurrency())
-                .paidPrice(item.getPrice())
-                .purchasedAt(LocalDateTime.now(TimeUtil.KST))
-                .build());
+        // 요청 순서를 지킨다 — 응답의 아이템 순서가 화면의 선택 순서와 같아야 대조하기 쉽다.
+        List<AvatarItem> items = itemsInRequestedOrder(requestedIds);
+        rejectUnavailable(memberId, items);
 
-        // 잔액이 모자라면 여기서 예외가 나가고 보유 행도 함께 롤백된다.
-        walletService.deduct(new WalletCommand(
-                memberId, item.getCurrency(), WalletTransactionType.PURCHASE,
-                "avatar:purchase:" + itemId, "AVATAR_ITEM", itemId), item.getPrice());
+        // 재화별 합계. 섞인 요청은 여기서 재화 수만큼의 결제로 갈린다.
+        //
+        // EnumMap 인 것은 순서 때문이다. 아래에서 재화마다 지갑 행을 잠그는데, 요청마다 순서가
+        // 다르면 두 요청이 서로의 다음 행을 기다리는 교착이 생긴다. 선언 순서로 고정된다.
+        Map<Currency, Integer> totals = new EnumMap<>(Currency.class);
+        for (AvatarItem item : items) {
+            totals.merge(item.getCurrency(), item.getPrice(), Integer::sum);
+        }
+        rejectIfShort(memberId, totals);
 
-        equipOne(member, item);
-        return currentAvatar(memberId);
+        LocalDateTime purchasedAt = LocalDateTime.now(TimeUtil.KST);
+        for (AvatarItem item : items) {
+            // 유니크 제약이 최종 방어선이다. 위 검사는 흔한 경우를 예외 없이 넘기기 위한
+            // 것이고, 동시에 들어오면 둘 다 통과하므로 제약이 하나를 떨군다.
+            memberAvatarItemRepository.save(MemberAvatarItem.builder()
+                    .member(member)
+                    .avatarItem(item)
+                    .currency(item.getCurrency())
+                    .paidPrice(item.getPrice())
+                    .purchasedAt(purchasedAt)
+                    .build());
+        }
+        memberAvatarItemRepository.flush();
+
+        List<ShopResDTO.Payment> payments = new ArrayList<>();
+        for (Map.Entry<Currency, Integer> total : totals.entrySet()) {
+            // 멱등 키를 재화별로 나누지 않는다. 원장의 유니크가 (회원, 재화, 키) 라서 같은
+            // 키가 재화마다 한 번씩 들어가고, 나누면 오히려 한 구매가 여러 키로 흩어져
+            // 되짚기 어려워진다. 교환이 한 사건의 두 재화에 같은 키를 쓰는 것과 같다.
+            //
+            // 참조는 비운다 — 묶음 구매에는 대표할 아이템이 하나로 정해지지 않는다.
+            WalletResult result = walletService.deduct(new WalletCommand(
+                    memberId, total.getKey(), WalletTransactionType.PURCHASE,
+                    "avatar:purchase:" + idempotencyKey, null, null), total.getValue());
+            payments.add(ShopConverter.toPayment(total.getKey(), total.getValue(), result));
+        }
+
+        return ShopConverter.toPurchaseResult(items, payments);
+    }
+
+    /** 두 번 이상 담긴 아이템. 화면에서 지울 대상을 알려주려고 id 를 모은다. */
+    private List<Long> duplicatesOf(List<Long> itemIds) {
+        Set<Long> seen = new LinkedHashSet<>();
+        return itemIds.stream()
+                .filter(id -> !seen.add(id))
+                .distinct()
+                .toList();
+    }
+
+    /**
+     * 요청한 순서대로 마스터를 붙인다.
+     *
+     * <p>없는 id 는 <b>어느 것인지 실어</b> 거절한다. 여섯 개 중 무엇이 문제인지 모르면 화면은
+     * 전체를 지우는 수밖에 없다.
+     */
+    private List<AvatarItem> itemsInRequestedOrder(List<Long> itemIds) {
+        if (itemIds.isEmpty()) {
+            return List.of();
+        }
+        Map<Long, AvatarItem> found = avatarItemRepository.findAllById(itemIds).stream()
+                .collect(Collectors.toMap(AvatarItem::getId, Function.identity()));
+
+        List<Long> missing = itemIds.stream().filter(id -> !found.containsKey(id)).toList();
+        if (!missing.isEmpty()) {
+            throw new ShopItemRejectedException(ShopErrorCode.ITEM_NOT_FOUND, missing);
+        }
+        return itemIds.stream().map(found::get).toList();
+    }
+
+    /**
+     * 살 수 없는 아이템을 걸러낸다.
+     *
+     * <p>판매 여부를 목록 조회와 따로 본다 — 목록에서 감추는 것과 구매를 막는 것은 다르다.
+     * 아이템 id 를 아는 클라이언트는 목록을 거치지 않고 구매로 바로 올 수 있다.
+     */
+    private void rejectUnavailable(Long memberId, List<AvatarItem> items) {
+        List<Long> notOnSale = items.stream()
+                .filter(item -> !item.isActive())
+                .map(AvatarItem::getId)
+                .toList();
+        if (!notOnSale.isEmpty()) {
+            throw new ShopItemRejectedException(ShopErrorCode.ITEM_NOT_ON_SALE, notOnSale);
+        }
+
+        // 아바타 아이템은 영구 보유라 두 번 살 이유가 없다. 두 번 결제되면 그대로 손해다.
+        List<Long> ids = items.stream().map(AvatarItem::getId).toList();
+        List<Long> owned = memberAvatarItemRepository.findOwnedItemIdsIn(memberId, ids);
+        if (!owned.isEmpty()) {
+            throw new ShopItemRejectedException(ShopErrorCode.ALREADY_OWNED, owned);
+        }
+    }
+
+    /**
+     * 모자란 재화를 <b>전부 모아</b> 한 번에 거절한다.
+     *
+     * <p>잔액을 잠그고 읽는다. 안 잠그면 확인과 차감 사이에 다른 요청이 잔액을 줄일 수 있고,
+     * 그러면 부족분을 실어 보내려던 응답이 결국 지갑의 밋밋한 오류로 나간다.
+     */
+    private void rejectIfShort(Long memberId, Map<Currency, Integer> totals) {
+        List<ShopInsufficientBalanceException.Shortage> shortages = new ArrayList<>();
+        for (Map.Entry<Currency, Integer> total : totals.entrySet()) {
+            int balance = walletService.lockedBalanceOf(memberId, total.getKey());
+            if (balance < total.getValue()) {
+                shortages.add(new ShopInsufficientBalanceException.Shortage(
+                        total.getKey(), total.getValue(), balance));
+            }
+        }
+        if (!shortages.isEmpty()) {
+            throw new ShopInsufficientBalanceException(shortages);
+        }
     }
 
     /**
@@ -151,22 +267,6 @@ public class ShopCommandService {
         memberAvatarEquipmentRepository.saveAll(saved);
 
         return ShopConverter.toAvatar(saved, mediaService::resolveAvatarAssetUrl);
-    }
-
-    /** 그 아이템의 슬롯만 교체한다. 다른 자리는 그대로다. */
-    private void equipOne(Member member, AvatarItem item) {
-        memberAvatarEquipmentRepository
-                .findByMemberIdAndSlot(member.getId(), item.getSlot())
-                .ifPresent(memberAvatarEquipmentRepository::delete);
-        memberAvatarEquipmentRepository.flush();
-        memberAvatarEquipmentRepository.save(
-                MemberAvatarEquipment.builder().member(member).avatarItem(item).build());
-    }
-
-    private ShopResDTO.Avatar currentAvatar(Long memberId) {
-        return ShopConverter.toAvatar(
-                memberAvatarEquipmentRepository.findAllByMemberId(memberId),
-                mediaService::resolveAvatarAssetUrl);
     }
 
     private Member lockMember(Long memberId) {

@@ -85,4 +85,79 @@ public final class ShopResDTO {
             List<Equipped> equipped
     ) {
     }
+
+    /**
+     * 한 재화에서 빠져나간 몫.
+     *
+     * <p><b>재화마다 한 줄이다.</b> 재화가 섞인 구매는 차감도 재화별로 나뉘고, 화면의 잔액
+     * 표시도 재화별이라 합쳐서 내릴 수 있는 값이 아니다.
+     */
+    @Schema(name = "ShopPurchasePayment", description = "재화 한 종류의 결제 내역")
+    @Builder
+    public record Payment(
+            @Schema(description = "결제한 재화") Currency currency,
+            @Schema(description = "이번에 빠진 수량") int paidAmount,
+            @Schema(description = "결제 후 잔액. 화면 상단 잔액을 이 값으로 갱신하면 된다")
+            int balanceAfter
+    ) {
+    }
+
+    /**
+     * 구매 결과.
+     *
+     * <p><b>착용 상태를 싣지 않는다.</b> 일괄 구매는 입히지 않기 때문이다 — 같은 자리 아이템을
+     * 둘 이상 함께 사면 어느 쪽을 입힐지 정할 수 없다. 착용은 착장 저장이 맡는다.
+     */
+    @Schema(name = "ShopPurchaseResult", description = "아이템 구매 결과")
+    @Builder
+    public record PurchaseResult(
+            @Schema(description = "이번에 산 아이템 id. 요청한 순서 그대로다")
+            List<Long> purchasedItemIds,
+            @Schema(description = "재화별 결제 내역. 한 재화로만 샀으면 한 줄이다")
+            List<Payment> payments
+    ) {
+    }
+
+    /**
+     * 한 재화가 얼마나 모자란지.
+     *
+     * <p>"부족합니다" 만으로는 사용자가 무엇을 해야 하는지 알 수 없다 — <b>몇 개를 더 채우면
+     * 되는지</b>를 알아야 충전하러 갈지 아이템을 뺄지 정할 수 있다.
+     */
+    @Schema(name = "ShopCurrencyShortage", description = "재화 한 종류의 부족분")
+    @Builder
+    public record Shortage(
+            @Schema(description = "모자란 재화") Currency currency,
+            @Schema(description = "이 재화로 내야 하는 총액") int required,
+            @Schema(description = "지금 가진 수량") int balance,
+            @Schema(description = "더 필요한 수량") int shortfall
+    ) {
+    }
+
+    /**
+     * 잔액 부족 안내. <b>실패 응답의 본문으로 나간다.</b>
+     *
+     * <p><b>모자란 재화를 전부 싣는다.</b> 하나씩 알려주면 사용자가 충전하고 돌아왔을 때 다른
+     * 재화로 또 막힌다 — 그래서 차감을 시작하기 전에 모든 재화를 먼저 검사한다.
+     */
+    @Schema(name = "ShopPurchaseShortage", description = "구매 재화 부족 안내")
+    @Builder
+    public record PurchaseShortage(
+            @Schema(description = "모자란 재화 목록") List<Shortage> shortages
+    ) {
+    }
+
+    /**
+     * 살 수 없는 아이템 안내. <b>실패 응답의 본문으로 나간다.</b>
+     *
+     * <p><b>어떤 아이템이 막혔는지</b>를 알아야 화면에서 그것만 빼고 다시 시도할 수 있다.
+     * 목록 전체를 거절당하면 사용자는 무엇을 지워야 할지 알 수 없다.
+     */
+    @Schema(name = "ShopRejectedItems", description = "구매할 수 없는 아이템 안내")
+    @Builder
+    public record RejectedItems(
+            @Schema(description = "막힌 아이템 id. 사유는 응답 code 가 가른다")
+            List<Long> itemIds
+    ) {
+    }
 }

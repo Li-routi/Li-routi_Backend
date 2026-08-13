@@ -123,11 +123,14 @@ class AvatarPurchaseConcurrencyTest {
         AtomicInteger rejected = new AtomicInteger();
 
         for (int i = 0; i < THREADS; i++) {
+            // 멱등 키를 스레드마다 다르게 준다. 같은 키를 주면 지갑의 멱등이 두 번째 차감을
+            // 대신 막아, 정작 보려던 것(보유 유니크 제약이 중복 구매를 떨구는가)이 가려진다.
+            String key = "concurrent-" + i;
             pool.submit(() -> {
                 try {
                     ready.countDown();
                     start.await();
-                    shopCommandService.purchase(memberId, itemId);
+                    shopCommandService.purchase(memberId, List.of(itemId), key);
                     success.incrementAndGet();
                 } catch (InterruptedException ignored) {
                     Thread.currentThread().interrupt();
@@ -190,7 +193,7 @@ class AvatarPurchaseConcurrencyTest {
                     .sortOrder(1).active(true).build());
             itemIds[i] = item.getId();
             createdItemIds.add(item.getId());
-            shopCommandService.purchase(memberId, item.getId());
+            shopCommandService.purchase(memberId, List.of(item.getId()), "equip-setup-" + i);
         }
 
         ExecutorService pool = Executors.newFixedThreadPool(THREADS);

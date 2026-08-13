@@ -9,6 +9,10 @@ import com.lirouti.domain.shop.entity.MemberAvatarItem;
 import com.lirouti.domain.shop.entity.MemberAvatarEquipment;
 import com.lirouti.domain.shop.enums.AvatarSlot;
 import com.lirouti.domain.shop.exception.ShopException;
+import com.lirouti.domain.shop.exception.ShopInsufficientBalanceException;
+import com.lirouti.domain.shop.exception.ShopInsufficientBalanceException.Shortage;
+import com.lirouti.domain.shop.exception.ShopItemRejectedException;
+import com.lirouti.domain.shop.exception.code.error.ShopErrorCode;
 import com.lirouti.domain.shop.repository.MemberAvatarEquipmentRepository;
 import com.lirouti.domain.shop.repository.MemberAvatarItemRepository;
 import com.lirouti.domain.shop.service.command.ShopCommandService;
@@ -34,6 +38,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.junit.jupiter.api.Assertions.assertAll;
 
 /**
@@ -156,48 +161,101 @@ class AvatarShopTest {
     // ── 구매 ──
 
     @Test
-    @DisplayName("구매하면 재화가 빠지고 보유·착용이 함께 남는다")
-    void purchase_DeductsOwnsAndEquips() {
+    @DisplayName("재화가 섞여도 한 번에 산다 — 재화별로 나눠 빠진다")
+    void purchase_SplitsDeductionPerCurrency() {
         giveBalance(Currency.TOPAZ, 1000);
+        giveBalance(Currency.GEM, 1000);
 
-        ShopResDTO.Avatar result = shopCommandService.purchase(me.getId(), hat.getId());
+        // 모자(TOPAZ 300) + 텀블러(TOPAZ 300) + 티셔츠(GEM 500)
+        ShopResDTO.PurchaseResult result = shopCommandService.purchase(
+                me.getId(), List.of(hat.getId(), tumbler.getId(), shirt.getId()), "buy-1");
         em.flush();
 
         assertAll(
-                () -> assertThat(balance(Currency.TOPAZ)).isEqualTo(700),
+                () -> assertThat(balance(Currency.TOPAZ)).isEqualTo(400),
+                () -> assertThat(balance(Currency.GEM)).isEqualTo(500),
+                () -> assertThat(result.purchasedItemIds())
+                        .as("요청한 순서 그대로 내린다")
+                        .containsExactly(hat.getId(), tumbler.getId(), shirt.getId()),
+                () -> assertThat(result.payments())
+                        .as("재화마다 한 줄이다")
+                        .extracting(ShopResDTO.Payment::currency, ShopResDTO.Payment::paidAmount)
+                        .containsExactlyInAnyOrder(
+                                tuple(Currency.TOPAZ, 600), tuple(Currency.GEM, 500)),
                 () -> assertThat(memberAvatarItemRepository
-                        .existsByMemberIdAndAvatarItemId(me.getId(), hat.getId())).isTrue(),
-                () -> assertThat(result.equipped()).hasSize(1),
-                () -> assertThat(result.equipped().getFirst().slot()).isEqualTo(AvatarSlot.HEAD)
+                        .findOwnedItemIdsIn(me.getId(),
+                                List.of(hat.getId(), tumbler.getId(), shirt.getId())))
+                        .hasSize(3)
         );
     }
 
     @Test
-    @DisplayName("이미 가진 아이템은 다시 살 수 없다 — 재화도 빠지지 않는다")
-    void purchase_RejectsWhenAlreadyOwned() {
+    @DisplayName("사도 입히지 않는다 — 같은 자리를 둘 사면 어느 쪽을 입힐지 정할 수 없다")
+    void purchase_DoesNotEquip() {
         giveBalance(Currency.TOPAZ, 1000);
-        shopCommandService.purchase(me.getId(), hat.getId());
+
+        shopCommandService.purchase(me.getId(), List.of(hat.getId(), tumbler.getId()), "buy-1");
         em.flush();
 
-        assertThatThrownBy(() -> shopCommandService.purchase(me.getId(), hat.getId()))
-                .isInstanceOf(ShopException.class);
-
-        assertThat(balance(Currency.TOPAZ))
-                .as("두 번째 시도에서 더 빠지지 않는다").isEqualTo(700);
+        assertThat(equippedSlots())
+                .as("착용은 착장 저장이 맡는다").isEmpty();
     }
 
     @Test
-    @DisplayName("잔액이 모자라면 살 수 없다")
-    void purchase_RejectsWhenInsufficientBalance() {
-        giveBalance(Currency.TOPAZ, 100);   // 모자 300 보다 적다
+    @DisplayName("하나라도 이미 가졌으면 전체를 거절한다 — 어떤 것인지 함께 알린다")
+    void purchase_RejectsAllWhenOneIsOwned() {
+        giveBalance(Currency.TOPAZ, 1000);
+        own(hat);
 
-        // 회수 테스트와 같은 이유로, 여기서 "보유 행이 안 남는다" 까지는 보지 않는다 —
-        // 테스트가 @Transactional 이라 서비스가 바깥 트랜잭션에 참여해 실제 롤백 경계가
-        // 만들어지지 않는다. 잔액이 안 빠지는 것으로 차감이 막혔음을 본다.
-        assertThatThrownBy(() -> shopCommandService.purchase(me.getId(), hat.getId()))
-                .isInstanceOf(WalletException.class);
+        assertThatThrownBy(() -> shopCommandService.purchase(
+                me.getId(), List.of(hat.getId(), tumbler.getId()), "buy-1"))
+                .isInstanceOf(ShopItemRejectedException.class)
+                .satisfies(e -> assertAll(
+                        () -> assertThat(((ShopItemRejectedException) e).getCode())
+                                .isEqualTo(ShopErrorCode.ALREADY_OWNED),
+                        () -> assertThat(((ShopItemRejectedException) e).getItemIds())
+                                .as("화면이 이것만 빼고 다시 시도할 수 있어야 한다")
+                                .containsExactly(hat.getId())));
 
-        assertThat(balance(Currency.TOPAZ)).isEqualTo(100);
+        assertThat(balance(Currency.TOPAZ))
+                .as("막힌 요청은 아무것도 빼지 않는다").isEqualTo(1000);
+    }
+
+    @Test
+    @DisplayName("모자란 재화를 전부 알린다 — 하나씩 알리면 충전하고 와서 또 막힌다")
+    void purchase_ReportsEveryShortage() {
+        giveBalance(Currency.TOPAZ, 100);   // 모자 300 에 200 모자람
+        giveBalance(Currency.GEM, 200);     // 티셔츠 500 에 300 모자람
+
+        assertThatThrownBy(() -> shopCommandService.purchase(
+                me.getId(), List.of(hat.getId(), shirt.getId()), "buy-1"))
+                .isInstanceOf(ShopInsufficientBalanceException.class)
+                .satisfies(e -> assertThat(
+                        ((ShopInsufficientBalanceException) e).getShortages())
+                        .extracting(Shortage::currency, Shortage::required,
+                                Shortage::balance, Shortage::shortfall)
+                        .containsExactlyInAnyOrder(
+                                tuple(Currency.TOPAZ, 300, 100, 200),
+                                tuple(Currency.GEM, 500, 200, 300)));
+
+        assertAll(
+                () -> assertThat(balance(Currency.TOPAZ)).isEqualTo(100),
+                () -> assertThat(balance(Currency.GEM)).isEqualTo(200)
+        );
+    }
+
+    @Test
+    @DisplayName("한 재화만 모자라도 전체가 막힌다 — 묶음은 전부 되거나 전부 안 되거나다")
+    void purchase_RejectsWholeBundleWhenOneCurrencyIsShort() {
+        giveBalance(Currency.TOPAZ, 1000);  // 모자는 살 수 있다
+        giveBalance(Currency.GEM, 100);     // 티셔츠 500 은 못 산다
+
+        assertThatThrownBy(() -> shopCommandService.purchase(
+                me.getId(), List.of(hat.getId(), shirt.getId()), "buy-1"))
+                .isInstanceOf(ShopInsufficientBalanceException.class);
+
+        assertThat(balance(Currency.TOPAZ))
+                .as("살 수 있었던 쪽도 빠지지 않는다").isEqualTo(1000);
     }
 
     @Test
@@ -206,23 +264,46 @@ class AvatarShopTest {
         giveBalance(Currency.TOPAZ, 1000);
         deactivate(hat);
 
-        assertThatThrownBy(() -> shopCommandService.purchase(me.getId(), hat.getId()))
-                .isInstanceOf(ShopException.class);
+        assertThatThrownBy(() -> shopCommandService.purchase(
+                me.getId(), List.of(hat.getId()), "buy-1"))
+                .isInstanceOf(ShopItemRejectedException.class)
+                .satisfies(e -> assertThat(((ShopItemRejectedException) e).getCode())
+                        .isEqualTo(ShopErrorCode.ITEM_NOT_ON_SALE));
 
         assertThat(balance(Currency.TOPAZ)).isEqualTo(1000);
     }
 
     @Test
-    @DisplayName("구매는 그 자리만 바꾼다 — 손에 든 것을 샀다고 모자가 벗겨지지 않는다")
-    void purchase_TouchesOnlyItsOwnSlot() {
+    @DisplayName("같은 아이템을 두 번 담으면 거절한다 — 말없이 합치면 본 금액과 어긋난다")
+    void purchase_RejectsDuplicateItem() {
         giveBalance(Currency.TOPAZ, 1000);
-        shopCommandService.purchase(me.getId(), hat.getId());       // HEAD
-        shopCommandService.purchase(me.getId(), tumbler.getId());   // HAND
-        em.flush();
 
-        assertThat(equippedSlots())
-                .as("먼저 산 모자가 그대로 남아 있다")
-                .containsExactly(AvatarSlot.HEAD, AvatarSlot.HAND);
+        assertThatThrownBy(() -> shopCommandService.purchase(
+                me.getId(), List.of(hat.getId(), hat.getId()), "buy-1"))
+                .isInstanceOf(ShopItemRejectedException.class)
+                .satisfies(e -> assertAll(
+                        () -> assertThat(((ShopItemRejectedException) e).getCode())
+                                .isEqualTo(ShopErrorCode.DUPLICATE_ITEM),
+                        () -> assertThat(((ShopItemRejectedException) e).getItemIds())
+                                .containsExactly(hat.getId())));
+
+        assertThat(balance(Currency.TOPAZ)).isEqualTo(1000);
+    }
+
+    @Test
+    @DisplayName("없는 아이템은 어떤 id 인지 알린다")
+    void purchase_ReportsMissingItemIds() {
+        giveBalance(Currency.TOPAZ, 1000);
+        long missing = hat.getId() + 100_000L;
+
+        assertThatThrownBy(() -> shopCommandService.purchase(
+                me.getId(), List.of(hat.getId(), missing), "buy-1"))
+                .isInstanceOf(ShopItemRejectedException.class)
+                .satisfies(e -> assertAll(
+                        () -> assertThat(((ShopItemRejectedException) e).getCode())
+                                .isEqualTo(ShopErrorCode.ITEM_NOT_FOUND),
+                        () -> assertThat(((ShopItemRejectedException) e).getItemIds())
+                                .containsExactly(missing)));
     }
 
     // ── 착용 ──

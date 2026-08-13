@@ -46,6 +46,32 @@ public enum ShopErrorCode implements BaseErrorCode {
             HttpStatus.BAD_REQUEST,
             "같은 자리에 두 개를 착용할 수 없습니다.",
             "SHOP400_1"
+    ),
+
+    /**
+     * 구매 요청에 같은 아이템이 두 번 들어온 경우.
+     *
+     * <p><b>조용히 하나로 합치지 않는다.</b> 착용은 두 번 보내도 뜻이 분명해 합쳐도 되지만,
+     * 구매는 화면이 이미 "6개 · 4,800" 처럼 개수와 금액을 보여준 뒤에 들어온다. 서버가 말없이
+     * 하나를 지우면 <b>사용자가 본 금액과 실제 결제액이 어긋난다.</b>
+     */
+    DUPLICATE_ITEM(
+            HttpStatus.BAD_REQUEST,
+            "같은 아이템을 두 번 담을 수 없습니다.",
+            "SHOP400_2"
+    ),
+
+    /**
+     * 재화가 모자라 구매를 거절한 경우.
+     *
+     * <p>지갑의 {@code WALLET409_1} 을 그대로 쓰지 않는 이유는 <b>부족분을 함께 실어야</b>
+     * 하기 때문이다. 재화가 섞인 구매는 모자란 재화가 둘일 수 있어, 화면이 "얼마가 더
+     * 필요한지" 를 재화별로 그려야 한다.
+     */
+    INSUFFICIENT_BALANCE(
+            HttpStatus.CONFLICT,
+            "재화가 부족합니다.",
+            "SHOP409_3"
     );
 
     private final HttpStatus httpStatus;

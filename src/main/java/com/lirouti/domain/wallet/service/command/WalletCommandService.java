@@ -133,6 +133,27 @@ public class WalletCommandService {
      * <p>만드는 순간에는 잠글 행이 없으므로 <b>동시에 두 요청이 만들 수 있다.</b> 그것은
      * 유니크 제약이 막고, 진 쪽은 트랜잭션 밖에서 한 번 다시 시도한다.
      */
+    /**
+     * 차감하기 전에 잔액을 미리 본다. <b>차감과 같은 방식으로 잠근다.</b>
+     *
+     * <p>여러 재화를 한 번에 쓰는 호출부(아이템 일괄 구매)를 위한 것이다. 그냥 차감을 시도하면
+     * <b>먼저 걸린 재화 하나만</b> 알게 되어, 사용자가 그것을 채우고 돌아왔을 때 다른 재화로 또
+     * 막힌다. 모자란 재화를 한 번에 알려주려면 <b>아무것도 빼기 전에</b> 전부 확인해야 한다.
+     *
+     * <p><b>잠그지 않으면 확인과 차감 사이가 벌어진다.</b> 그 틈에 다른 요청이 잔액을 줄이면
+     * "확인은 통과했는데 차감에서 부족" 이 되어, 부족분을 실어 보내려던 응답이 결국 지갑의
+     * 밋밋한 오류로 나간다. 잠가 두면 이 트랜잭션이 끝날 때까지 값이 움직이지 않는다.
+     *
+     * <p>지갑 행이 없으면 만들지 않고 0 으로 답한다 — 읽기만 하는 자리에서 행을 만들면, 잔액을
+     * 확인만 하고 사지 않은 사람에게도 빈 지갑이 쌓인다.
+     */
+    @Transactional
+    public int lockedBalanceOf(Long memberId, Currency currency) {
+        return memberWalletRepository.findForUpdate(memberId, currency)
+                .map(MemberWallet::totalBalance)
+                .orElse(0);
+    }
+
     private MemberWallet lockOrCreate(Long memberId, Currency currency) {
         return memberWalletRepository.findForUpdate(memberId, currency)
                 .orElseGet(() -> {
