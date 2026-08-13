@@ -15,6 +15,7 @@ import com.lirouti.domain.challenge.repository.MemberChallengeRepository;
 import com.lirouti.domain.media.service.MediaService;
 import com.lirouti.domain.reward.service.command.RewardCommandService;
 import com.lirouti.global.util.TimeUtil;
+import com.lirouti.domain.activity.service.command.MemberActivityDayCommandService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -59,6 +60,7 @@ public class ChallengeVerificationCommandService {
     private static final String CONDITION_KEY_ROUTINE_COMPLETE_COUNT = "ROUTINE_COMPLETE_COUNT";
     private static final String SOURCE_TYPE_CHALLENGE_VERIFICATION = "CHALLENGE_VERIFICATION";
     private final ApplicationEventPublisher eventPublisher;
+    private final MemberActivityDayCommandService memberActivityDayCommandService;
 
     /**
      * 인증 저장과 스트릭 갱신. <b>이번 구간에 살아 있는 인증이 있으면 주기와 무관하게 409</b> 다.
@@ -182,6 +184,22 @@ public class ChallengeVerificationCommandService {
                         verification.getId()
                 ));
             }
+        }
+
+        // 활동일은 인증과 같은 트랜잭션에서 남긴다. 나누면 인증은 있는데 활동일이 없는 날이
+        // 생기고, 그 하루는 어떤 조건에도 세어지지 않는다.
+        //
+        // 보류 건도 남긴다 -- 사진 심사가 늦어지는 것은 사용자가 한 일과 무관하고, 보류는
+        // 대부분 통과로 끝난다. 반려로 확정돼도 활동일을 되돌리지 않는다: 그날 앱을 쓴 것은
+        // 사실이고, 되돌리면 해금이 뒤늦게 취소되는 상황이 생긴다.
+        //
+        // all_completed 는 개인 루틴만 보는 값이라 여기서 올리지 않는다.
+        //
+        // ⚠️ 재인증은 남기지 않는다. 그 구간의 인증은 이미 있었고 사진을 바꾸는 것이라
+        //    새로운 완료가 아니다. 남기면 어제 인증의 사진만 오늘 교체해도 오늘이 활동일이
+        //    되어, "며칠 했는가" 가 실제로 한 날보다 부풀어 오른다.
+        if (!reverified) {
+            memberActivityDayCommandService.record(memberId, today);
         }
 
         // 보류 건은 아직 대기 prefix 에 있어 공개 주소가 없다. 그 주소로 열면 403 이므로

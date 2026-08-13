@@ -28,6 +28,7 @@ import com.lirouti.domain.verification.repository.GroupRoutineVerificationLikeRe
 import com.lirouti.domain.verification.repository.GroupRoutineVerificationDisappointmentRepository;
 import com.lirouti.domain.verification.repository.MemberRoutineVerificationRepository;
 
+import com.lirouti.domain.activity.service.command.MemberActivityDayCommandService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -70,6 +71,7 @@ public class RoutineVerificationCommandService {
     private final MemberRoutineStreakCommandService memberRoutineStreakCommandService;
 
     private final ApplicationEventPublisher eventPublisher;
+    private final MemberActivityDayCommandService memberActivityDayCommandService;
 
     /**
      * 그룹 루틴 인증의 DB 구간을 하나의 트랜잭션으로 처리한다.
@@ -126,6 +128,12 @@ public class RoutineVerificationCommandService {
         GroupRoutineVerification saved =
                 save(() -> groupRoutineVerificationRepository.saveAndFlush(verification));
 
+        // 그룹 인증도 활동일을 만든다 -- 해금은 "앱을 꾸준히 썼는가" 에 대한 보상이지 특정
+        // 기능을 밀어주는 장치가 아니다. all_completed 는 개인 루틴만 보는 값이라 여기서
+        // 올리지 않는다(이미 1 인 날을 덮어 내리지도 않는다).
+        memberActivityDayCommandService.record(
+                assignment.getMember().getId(), verifiedAt.toLocalDate());
+
         return saved;
     }
 
@@ -159,6 +167,10 @@ public class RoutineVerificationCommandService {
             }
         }
         verification.reverify(mediaKey, content, verifiedAt);
+
+        // 재인증은 활동일을 남기지 않는다. 그 할당의 인증은 이미 있었고 사진을 바꾸는 것이라
+        // 새로운 완료가 아니다 -- 남기면 어제 인증의 사진만 오늘 교체해도 오늘이 활동일이 되어
+        // "며칠 했는가" 가 실제로 한 날보다 부풀어 오른다. 챌린지 재인증도 같은 규칙이다.
         return verification;
     }
 
@@ -183,6 +195,14 @@ public class RoutineVerificationCommandService {
         memberRoutineStreakCommandService.recordCompletion(
                 routine.getMember().getId(), verifiedDate, verifiedAt,
                 SOURCE_TYPE_MEMBER_ROUTINE_VERIFICATION, saved.getId());
+
+        // 활동일은 인증과 같은 트랜잭션에서 남긴다. 나누면 인증은 있는데 활동일이 없는 날이
+        // 생기고, 그 하루는 어떤 조건에도 세어지지 않는다.
+        //
+        // "예정된 것을 전부 했는가" 도 여기서 판정한다 -- 과거에 무엇이 예정돼 있었는지는
+        // 나중에 복원할 수 없어(요일 행이 물리 삭제된다) 지금이 유일한 시점이다.
+        memberActivityDayCommandService.recordWithCompletion(
+                routine.getMember().getId(), verifiedDate);
         return saved;
     }
 
