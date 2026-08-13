@@ -11,6 +11,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.lirouti.domain.chat.cache.ChatEmoticonCacheReader;
+import com.lirouti.domain.chat.cache.ChatEmoticonCacheReader.CachedEmoticon;
 import com.lirouti.domain.chat.converter.ChatConverter;
 import com.lirouti.domain.chat.dto.response.ChatResDTO;
 import com.lirouti.domain.chat.entity.ChatEmoticon;
@@ -36,6 +38,7 @@ public class ChatQueryService {
 
     private final ChatMessageRepository chatMessageRepository;
     private final ChatEmoticonRepository chatEmoticonRepository;
+    private final ChatEmoticonCacheReader chatEmoticonCacheReader;
     private final GroupValidationService groupValidationService;
     private final MemberQueryService memberQueryService;
     private final MediaService mediaService;
@@ -80,11 +83,10 @@ public class ChatQueryService {
     public ChatResDTO.EmoticonList getEmoticons(Long memberId) {
         memberQueryService.getActiveMember(memberId);
 
-        List<ChatEmoticon> emoticons =
-                chatEmoticonRepository.findAllByActiveTrueOrderByDisplayOrderAscIdAsc();
+        List<CachedEmoticon> emoticons = chatEmoticonCacheReader.getActive();
 
-        Map<Long, String> assetUrls = resolveEmoticonAssetUrls(emoticons);
-        return ChatConverter.toEmoticonList(emoticons, assetUrls);
+        Map<Long, String> assetUrls = resolveCachedEmoticonAssetUrls(emoticons);
+        return ChatConverter.toEmoticonListFromCache(emoticons, assetUrls);
     }
 
     /**
@@ -134,6 +136,16 @@ public class ChatQueryService {
                         ChatEmoticon::getId,
                         emoticon -> mediaService.resolveViewUrl(
                                 emoticon.getAssetKey(),
+                                MediaPurpose.CHAT_EMOTICON)
+                ));
+    }
+
+    private Map<Long, String> resolveCachedEmoticonAssetUrls(List<CachedEmoticon> emoticons) {
+        return emoticons.stream()
+                .collect(Collectors.toMap(
+                        CachedEmoticon::id,
+                        emoticon -> mediaService.resolveViewUrl(
+                                emoticon.assetKey(),
                                 MediaPurpose.CHAT_EMOTICON)
                 ));
     }
