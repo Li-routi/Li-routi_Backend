@@ -51,18 +51,19 @@ class ShopCategoryTest {
     }
 
     /**
-     * 탭을 {@code AvatarSlot.values()} 로 만들면 이 테스트가 깨진다. 슬롯에는 {@code FACE}
-     * 가 아직 남아 있는데 화면에는 얼굴 탭이 없기 때문이다 — 무엇을 파는가와 무엇을
-     * 보여주는가는 같은 속도로 바뀌지 않는다.
+     * 탭을 {@code AvatarSlot.values()} 로 만들면 이 테스트가 깨진다. 슬롯 셋에 슬롯이 아닌
+     * 탭 둘(전체·캐릭터)이 더 있기 때문이다 — 무엇을 파는가와 무엇을 보여주는가는 같은
+     * 속도로 바뀌지 않는다.
      */
     @Test
-    @DisplayName("슬롯에 있는 FACE 가 탭에는 없다")
+    @DisplayName("탭에는 슬롯이 아닌 것이 둘 섞여 있다")
     void 탭은_슬롯_목록이_아니다() {
-        assertThat(AvatarSlot.values()).contains(AvatarSlot.FACE);
+        assertThat(ShopCategory.values()).hasSize(AvatarSlot.values().length + 2);
 
         assertThat(ShopCategory.values())
-                .extracting(ShopCategory::getSlot)
-                .doesNotContain(AvatarSlot.FACE);
+                .filteredOn(category -> category.getSlot() == null)
+                .extracting(ShopCategory::name)
+                .containsExactlyInAnyOrder("ALL", "CHARACTER");
     }
 
     /**
