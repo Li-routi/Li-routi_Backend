@@ -97,6 +97,10 @@ public class GroupRoutineAssignmentStatusRefreshBatchService {
                         completedIds, UNFINISHED_STATUSES, GroupRoutineAssignmentStatus.COMPLETED);
         if (completedCount > 0) {
             completed.forEach(this::recordCompletedAssignmentActivity);
+            completed.stream()
+                    .map(CompletedGroupDate::from)
+                    .distinct()
+                    .forEach(this::recordAllMembersCompletedDay);
         }
 
         int missedCount = missedIds.isEmpty() ? 0 : groupRoutineAssignmentRepository.markAssignmentsMissedByIds(
@@ -140,7 +144,7 @@ public class GroupRoutineAssignmentStatusRefreshBatchService {
         return likeCount >= minimumLikeCount;
     }
 
-    /** 실제 COMPLETED 전이 뒤에만 그룹 스트릭과 완료 업적을 반영한다. */
+    /** 실제 COMPLETED 전이 뒤에만 assignment 단위 그룹 스트릭과 완료 업적을 반영한다. */
     private void recordCompletedAssignmentActivity(ExpiredAssignment assignment) {
         groupMemberActivityCommandService.recordStreakIfAllAssignmentsCompleted(
                 assignment.groupId(), assignment.memberId(), assignment.assignedDate());
@@ -150,11 +154,24 @@ public class GroupRoutineAssignmentStatusRefreshBatchService {
         eventPublisher.publishEvent(new GroupAchievementProgressEvent(
                 assignment.groupId(), "ACH-AC-009", 1,
                 "GROUP_ASSIGNMENT_COMPLETE", assignment.assignmentId()));
+    }
+
+    /** 같은 그룹·날짜의 전체 완료 업적은 batch마다 한 번만 반영한다. */
+    private void recordAllMembersCompletedDay(CompletedGroupDate completedGroupDate) {
+        if (eventPublisher == null) {
+            return;
+        }
         if (groupMemberActivityCommandService
-                .isAllMembersCompletedToday(assignment.groupId(), assignment.assignedDate())) {
+                .isAllMembersCompletedToday(completedGroupDate.groupId(), completedGroupDate.assignedDate())) {
             eventPublisher.publishEvent(new GroupAchievementProgressEvent(
-                    assignment.groupId(), "ACH-SP-004", 1, "GROUP_ALL_COMPLETE_DAY",
-                    assignment.groupId() * 10_000_000L + assignment.assignedDate().toEpochDay()));
+                    completedGroupDate.groupId(), "ACH-SP-004", 1, "GROUP_ALL_COMPLETE_DAY",
+                    completedGroupDate.groupId() * 10_000_000L + completedGroupDate.assignedDate().toEpochDay()));
+        }
+    }
+
+    private record CompletedGroupDate(Long groupId, LocalDate assignedDate) {
+        private static CompletedGroupDate from(ExpiredAssignment assignment) {
+            return new CompletedGroupDate(assignment.groupId(), assignment.assignedDate());
         }
     }
 

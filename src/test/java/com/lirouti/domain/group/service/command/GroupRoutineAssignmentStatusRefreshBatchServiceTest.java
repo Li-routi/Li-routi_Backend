@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -160,6 +162,40 @@ class GroupRoutineAssignmentStatusRefreshBatchServiceTest {
         org.mockito.InOrder order = org.mockito.Mockito.inOrder(activityCommandService);
         order.verify(activityCommandService).recordStreakIfAllAssignmentsCompleted(1L, 2L, completed.assignedDate());
         order.verify(activityCommandService).resetCurrentStreaksForMissedAssignments(List.of(11L));
+        verify(eventPublisher).publishEvent(new GroupAchievementProgressEvent(
+                1L, "ACH-AC-009", 1, "GROUP_ASSIGNMENT_COMPLETE", 10L));
+        verify(eventPublisher, never()).publishEvent(new GroupAchievementProgressEvent(
+                1L, "ACH-SP-004", 1, "GROUP_ALL_COMPLETE_DAY",
+                1L * 10_000_000L + completed.assignedDate().toEpochDay()));
+    }
+
+    @Test
+    @DisplayName("같은 그룹·날짜의 완료 Assignment 여러 건은 AC-009은 건별로, SP-004는 한 번만 발행한다")
+    void markExpiredAssignments_SameGroupAndDate_DeduplicatesAllMembersCompletedEvent() {
+        DeadlineFixture first = deadlineFixture(true, 10L);
+        DeadlineFixture second = deadlineFixture(true, 11L);
+        when(assignmentRepository.findExpiredAssignmentsByGroupIdsForUpdate(any(), any(), any(), any()))
+                .thenReturn(List.of(first.assignment(), second.assignment()));
+        when(groupMemberRepository.countActiveMembersByGroupId(1L,
+                com.lirouti.domain.group.enums.GroupMemberStatus.ACTIVE)).thenReturn(1L);
+        when(likeRepository.countByVerificationIds(List.of(100L, 100L))).thenReturn(Map.of());
+        when(assignmentRepository.markAssignmentsCompletedByIds(any(), any(), any())).thenReturn(2);
+        when(activityCommandService.isAllMembersCompletedToday(1L, first.assignedDate())).thenReturn(true);
+
+        int result = service.resolveExpiredAssignments(LocalDateTime.of(2026, 8, 7, 10, 0), 100);
+
+        assertThat(result).isEqualTo(2);
+        verify(activityCommandService, times(2))
+                .recordStreakIfAllAssignmentsCompleted(1L, 2L, first.assignedDate());
+        verify(eventPublisher).publishEvent(new GroupAchievementProgressEvent(
+                1L, "ACH-AC-009", 1, "GROUP_ASSIGNMENT_COMPLETE", 10L));
+        verify(eventPublisher).publishEvent(new GroupAchievementProgressEvent(
+                1L, "ACH-AC-009", 1, "GROUP_ASSIGNMENT_COMPLETE", 11L));
+        verify(activityCommandService, times(1))
+                .isAllMembersCompletedToday(1L, first.assignedDate());
+        verify(eventPublisher, times(1)).publishEvent(new GroupAchievementProgressEvent(
+                1L, "ACH-SP-004", 1, "GROUP_ALL_COMPLETE_DAY",
+                1L * 10_000_000L + first.assignedDate().toEpochDay()));
     }
 
     @Test
