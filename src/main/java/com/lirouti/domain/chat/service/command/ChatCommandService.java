@@ -117,13 +117,13 @@ public class ChatCommandService {
         }
 
         ChatEmoticon emoticon = resolveActiveEmoticon(request);
-        int insertedCount = chatMessageRepository.insertIfAbsent(
-                groupId,
+        ChatMessage replyToMessage = resolveReplyToMessage(request, groupId);
+        int insertedCount = insertMessage(
+                request,
                 memberId,
-                request.clientMessageId(),
-                request.type().name(),
-                request.content(),
-                emoticon == null ? null : emoticon.getId()
+                groupId,
+                emoticon,
+                replyToMessage
         );
 
         ChatMessage message = chatMessageRepository
@@ -173,6 +173,13 @@ public class ChatCommandService {
     ) {
         if (existing.getMessageType() != request.type()
                 || !Objects.equals(existing.getContent(), request.content())) {
+            return false;
+        }
+
+        Long existingReplyToMessageId = existing.getReplyToMessage() == null
+                ? null
+                : existing.getReplyToMessage().getId();
+        if (!Objects.equals(existingReplyToMessageId, request.replyToMessageId())) {
             return false;
         }
 
@@ -272,7 +279,8 @@ public class ChatCommandService {
         ChatEmoticon emoticon = message.getEmoticonId() == null
                 ? null
                 : chatEmoticonRepository.findById(message.getEmoticonId()).orElse(null);
-        return toMessageResponse(message, emoticon);
+        ChatResDTO.Reply reply = toReplyResponse(message.getReplyToMessage());
+        return toMessageResponse(message, emoticon, reply);
     }
 
     /**
@@ -280,7 +288,8 @@ public class ChatCommandService {
      */
     private ChatResDTO.Message toMessageResponse(
             ChatMessage message,
-            ChatEmoticon emoticon
+            ChatEmoticon emoticon,
+            ChatResDTO.Reply reply
     ) {
         ChatResDTO.Emoticon responseEmoticon = emoticon == null
                 ? null
@@ -289,8 +298,70 @@ public class ChatCommandService {
                         mediaService.resolveViewUrl(
                                 emoticon.getAssetKey(),
                                 MediaPurpose.CHAT_EMOTICON));
-                                
-        return ChatConverter.toMessage(message, responseEmoticon);
+
+        return ChatConverter.toMessage(message, responseEmoticon, reply);
+    }
+
+    private ChatResDTO.Reply toReplyResponse(ChatMessage replyToMessage) {
+        if (replyToMessage == null) {
+            return null;
+        }
+
+        ChatEmoticon emoticon = replyToMessage.getEmoticonId() == null
+                ? null
+                : chatEmoticonRepository.findById(replyToMessage.getEmoticonId()).orElse(null);
+        ChatResDTO.Emoticon responseEmoticon = emoticon == null
+                ? null
+                : ChatConverter.toEmoticon(
+                        emoticon,
+                        mediaService.resolveViewUrl(
+                                emoticon.getAssetKey(),
+                                MediaPurpose.CHAT_EMOTICON));
+        return ChatConverter.toReply(replyToMessage, responseEmoticon);
+    }
+
+    private ChatMessage resolveReplyToMessage(
+            ChatReqDTO.SendMessage request,
+            Long groupId
+    ) {
+        if (request.replyToMessageId() == null) {
+            return null;
+        }
+
+        return chatMessageRepository.findByIdAndGroupId(
+                        request.replyToMessageId(),
+                        groupId)
+                .orElseThrow(() -> new ChatException(ChatErrorCode.MESSAGE_NOT_FOUND));
+    }
+
+    private int insertMessage(
+            ChatReqDTO.SendMessage request,
+            Long memberId,
+            Long groupId,
+            ChatEmoticon emoticon,
+            ChatMessage replyToMessage
+    ) {
+        Long emoticonId = emoticon == null ? null : emoticon.getId();
+        if (replyToMessage == null) {
+            return chatMessageRepository.insertIfAbsent(
+                    groupId,
+                    memberId,
+                    request.clientMessageId(),
+                    request.type().name(),
+                    request.content(),
+                    emoticonId
+            );
+        }
+
+        return chatMessageRepository.insertIfAbsent(
+                groupId,
+                memberId,
+                request.clientMessageId(),
+                request.type().name(),
+                request.content(),
+                emoticonId,
+                replyToMessage.getId()
+        );
     }
 
     private boolean isEmoticonCodeUniqueViolation(Throwable throwable) {

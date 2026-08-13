@@ -7,6 +7,9 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 
 @Tag(name = "Achievement", description = "업적 API")
 public interface AchievementControllerDocs {
@@ -36,5 +39,11 @@ public interface AchievementControllerDocs {
     })
     ApiResponse<AchievementResDTO.Achievements> getAchievements(
             @Parameter(hidden = true) CustomUserDetails userDetails
+    );
+
+    @PostMapping("/{achievementId}/claim")
+    ApiResponse<AchievementResDTO.Claim> claim(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long achievementId
     );
 }

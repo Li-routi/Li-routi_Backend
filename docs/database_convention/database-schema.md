@@ -650,6 +650,7 @@ WebSocket은 저장된 메시지를 실시간 전달하는 수단이다. 그룹 
 | message_type | VARCHAR(20) | N | `TEXT` 또는 `EMOTICON` |
 | content | VARCHAR(2000) | Y | TEXT 본문. EMOTICON이면 `NULL` |
 | emoticon_id | BIGINT | Y | `chat_emoticon.id` FK. EMOTICON 메시지에서 사용 |
+| reply_to_message_id | BIGINT | Y | 같은 그룹의 답장 원본 `group_chat_message.id` FK |
 | client_message_id | VARCHAR(100) | N | 클라이언트가 생성하고 재시도 때 재사용하는 식별자 |
 | created_at / updated_at | DATETIME(6) | N / N | 생성·수정 시각 |
 
@@ -659,7 +660,12 @@ WebSocket은 저장된 메시지를 실시간 전달하는 수단이다. 그룹 
 인덱스:
 
 - `idx_group_chat_message_group_id_id` (`group_id`, `id`) — 그룹별 ID cursor 조회
+- `idx_group_chat_message_group_id_created_at` (`group_id`, `created_at`) — 그룹별 날짜 목록·날짜 범위 조회
 - `idx_group_chat_message_sender_id` (`sender_id`) — 발신자 FK 조회와 참조 무결성 지원
+- `idx_group_chat_message_reply_to_message_id` (`reply_to_message_id`) — 답장 원본 FK 조회와 참조 무결성 지원
+
+`reply_to_message_id`가 `NULL`이면 일반 메시지이고, 값이 있으면 같은 그룹의 원본 메시지를
+가리킨다. 저장 전 Service에서 원본의 그룹 소속을 검증한다.
 
 동일한 그룹·발신자·`client_message_id`의 동시 재전송은 원자적 insert와 위 유니크 키로 한 건만
 저장한다. 같은 식별자에 다른 payload가 들어오면 애플리케이션에서 충돌로 거부한다.
