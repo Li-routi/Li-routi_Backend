@@ -22,7 +22,9 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import com.lirouti.support.testdb.MemberFixtureCleanup;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
@@ -79,6 +81,8 @@ class WeeklyVerificationConcurrencyTest {
     private MemberChallengeRepository memberChallengeRepository;
     @Autowired
     private ChallengeVerificationRepository challengeVerificationRepository;
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     private Long memberId;
     private Long challengeId;
@@ -126,6 +130,9 @@ class WeeklyVerificationConcurrencyTest {
         challengeVerificationRepository.deleteAll(allRows());
         memberChallengeRepository.deleteById(memberChallengeId);
         challengeRepository.deleteById(challengeId);
+        // 회원을 참조하는 표(업적·스트릭·활동일)를 먼저 지운다. 안 지우면 외래 키가 회원
+        // 삭제를 막고, 다음 테스트가 같은 이메일로 회원을 만들다 중복 키로 죽는다.
+        MemberFixtureCleanup.deleteDependencies(jdbcTemplate, memberId);
         memberRepository.deleteById(memberId);
     }
 
