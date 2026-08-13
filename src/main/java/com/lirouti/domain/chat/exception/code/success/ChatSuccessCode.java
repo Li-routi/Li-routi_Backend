@@ -13,6 +13,11 @@ public enum ChatSuccessCode implements BaseSuccessCode {
             "채팅 메시지 조회에 성공했습니다.",
             "CHAT200_1"
     ),
+    CHAT_DATES_FETCH_SUCCESS(
+            HttpStatus.OK,
+            "채팅 날짜 목록 조회에 성공했습니다.",
+            "CHAT200_7"
+    ),
     EMOTICON_LIST_FETCH_SUCCESS(
             HttpStatus.OK,
             "채팅 이모티콘 목록 조회에 성공했습니다.",
