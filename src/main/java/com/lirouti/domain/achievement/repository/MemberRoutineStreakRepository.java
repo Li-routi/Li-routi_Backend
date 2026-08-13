@@ -18,4 +18,7 @@ public interface MemberRoutineStreakRepository extends JpaRepository<MemberRouti
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select s from MemberRoutineStreak s where s.memberId = :memberId")
     Optional<MemberRoutineStreak> findByMemberIdForUpdate(@Param("memberId") Long memberId);
+
+    /** 읽기만 하는 쪽(해금 판정 등)은 잠그지 않는다. */
+    Optional<MemberRoutineStreak> findByMemberId(Long memberId);
 }
