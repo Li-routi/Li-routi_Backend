@@ -15,7 +15,7 @@ java {
 
 // Spring Boot 메인 클래스 명시적 지정
 springBoot {
-	mainClass = 'com.lirouti.LiRoutiApplication' // 본인의 메인 클래스명에 맞게 변경
+	mainClass = 'com.lirouti.LiroutiApplication' // 본인의 메인 클래스명에 맞게 변경
 }
 
 repositories {
