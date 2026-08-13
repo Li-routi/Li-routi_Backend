@@ -22,6 +22,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
+import com.lirouti.domain.media.service.MediaService;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -48,6 +49,7 @@ class GroupJoinQueryServiceTest {
     @Mock private GroupMemberRepository groupMemberRepository;
     @Mock private GroupRoutineRepository groupRoutineRepository;
     @Mock private MemberAvatarEquipmentRepository memberAvatarEquipmentRepository;
+    @Mock private MediaService mediaService;
     @Mock private MemberQueryService memberQueryService;
     @Mock private Member member;
     @Mock private Group group;
@@ -108,7 +110,9 @@ class GroupJoinQueryServiceTest {
         AvatarItem avatarItem = mock(AvatarItem.class);
         MemberAvatarEquipment equipment = mock(MemberAvatarEquipment.class);
         when(equipmentOwner.getId()).thenReturn(10L);
-        when(avatarItem.getImageUrl()).thenReturn("https://img/hat.png");
+        when(avatarItem.getImageKey()).thenReturn("avatar/item/head/hat-v1.png");
+        when(mediaService.resolveAvatarAssetUrl("avatar/item/head/hat-v1.png"))
+                .thenReturn("https://cdn/hat.png");
         when(equipment.getMember()).thenReturn(equipmentOwner);
         when(equipment.getAvatarItem()).thenReturn(avatarItem);
         when(equipment.getSlot()).thenReturn(AvatarSlot.HEAD);
@@ -120,7 +124,7 @@ class GroupJoinQueryServiceTest {
         assertThat(result.members()).containsExactly(
                 new GroupResDTO.JoinPreviewMember(new GroupResDTO.Avatar(List.of())),
                 new GroupResDTO.JoinPreviewMember(new GroupResDTO.Avatar(List.of(
-                        new GroupResDTO.Equipped(AvatarSlot.HEAD, "https://img/hat.png")))),
+                        new GroupResDTO.Equipped(AvatarSlot.HEAD, "https://cdn/hat.png")))),
                 new GroupResDTO.JoinPreviewMember(new GroupResDTO.Avatar(List.of()))
         );
         assertThat(GroupResDTO.JoinPreviewMember.class.getRecordComponents())

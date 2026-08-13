@@ -16,8 +16,10 @@ import java.util.Set;
  * 정책이 안 열려 있으면 조회가 403 이고, 비공개로 표시했는데 정책이 열려 있으면 서명 없이도
  * 열려 서명이 무의미해진다. 값을 바꾸려면 정책을 먼저 확인한다.
  *
- * <p>지금 버킷 정책이 여는 것은 challenge-verifications/ <b>하나뿐이다</b>
- * (deploy/bucket-policy-media.json).
+ * <p>지금 버킷 정책이 여는 것은 challenge-verifications/ 와 avatar/ <b>둘뿐이다</b>
+ * (deploy/bucket-policy-media.json). 성격이 다르다 — 앞은 사용자가 올린 사진이라 key 가
+ * UUID 여서 추측되지 않는 것에 기대고, 뒤는 운영이 올린 마스터 자산이라 모두에게 같은
+ * 그림이므로 숨길 것이 없다.
  *
  * 현재 모든 용도는 사진(IMAGE)만 허용한다. 특정 용도에서 영상을 받으려면
  * 해당 용도의 allowedCategories에 MediaCategory.VIDEO를 추가한다.
@@ -46,7 +48,17 @@ public enum MediaPurpose {
     PROFILE("profiles", null, Set.of(MediaCategory.IMAGE), false, true, "media-presign-profile"),
     // 서비스가 등록한 자산만 사용하며 일반 사용자에게 presigned PUT을 발급하지 않는다.
     // 발급 경로가 없으니 셀 것도 없어 정책이 null 이다.
-    CHAT_EMOTICON("chat-emoticons", null, Set.of(MediaCategory.IMAGE), false, false, null);
+    CHAT_EMOTICON("chat-emoticons", null, Set.of(MediaCategory.IMAGE), false, false, null),
+    // 캐릭터·알·둥지·의상. 운영이 직접 올리는 마스터 자산이라 이모티콘과 같은 취급이다 —
+    // 발급 경로가 없어 셀 것도 없다. 다른 점은 공개라는 것뿐이다. 모두에게 같은 그림이라
+    // 숨길 것이 없고, 서명 주소로 내리면 만료마다 다시 발급해야 해서 얻는 것 없이 비싸진다.
+    //
+    // 최상위 prefix 를 하나로 모아 버킷 정책이 avatar/* 한 줄로 끝난다. 자산 종류가 늘어도
+    // 정책을 다시 고치지 않는다.
+    //
+    // ⚠️ 정리 배치의 대상이 아니다. 참조 원천이 R__ 시드라 MediaReferenceSource 가 없고,
+    //    key 에 날짜 구간도 없다. 훑게 두면 전부 미참조로 보여 지워진다.
+    AVATAR_ASSET("avatar", null, Set.of(MediaCategory.IMAGE), true, false, null);
 
     private final String pathPrefix;
 

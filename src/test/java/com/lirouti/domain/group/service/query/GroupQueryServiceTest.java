@@ -31,6 +31,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import com.lirouti.domain.media.service.MediaService;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -60,6 +61,8 @@ class GroupQueryServiceTest {
     @Mock
     private MemberAvatarEquipmentRepository memberAvatarEquipmentRepository;
     @Mock
+    private MediaService mediaService;
+    @Mock
     private GroupValidationService groupValidationService;
     @Mock
     private MemberQueryService memberQueryService;
@@ -81,6 +84,7 @@ class GroupQueryServiceTest {
                 groupRoutineQueryRepository,
                 categoryRepository,
                 memberAvatarEquipmentRepository,
+                mediaService,
                 groupValidationService,
                 memberQueryService,
                 clock
@@ -111,7 +115,9 @@ class GroupQueryServiceTest {
         AvatarItem avatarItem = mock(AvatarItem.class);
         MemberAvatarEquipment equipment = mock(MemberAvatarEquipment.class);
         when(equipmentOwner.getId()).thenReturn(MEMBER_ID);
-        when(avatarItem.getImageUrl()).thenReturn("https://img/hat.png");
+        when(avatarItem.getImageKey()).thenReturn("avatar/item/head/hat-v1.png");
+        when(mediaService.resolveAvatarAssetUrl("avatar/item/head/hat-v1.png"))
+                .thenReturn("https://cdn/hat.png");
         when(equipment.getMember()).thenReturn(equipmentOwner);
         when(equipment.getAvatarItem()).thenReturn(avatarItem);
         when(equipment.getSlot()).thenReturn(AvatarSlot.HEAD);
@@ -135,7 +141,7 @@ class GroupQueryServiceTest {
                 new GroupResDTO.MemberActivity(
                         MEMBER_ID, "리루티", new GroupResDTO.Avatar(List.of(
                                 new GroupResDTO.Equipped(
-                                        AvatarSlot.HEAD, "https://img/hat.png"))), "오늘도 완료",
+                                        AvatarSlot.HEAD, "https://cdn/hat.png"))), "오늘도 완료",
                         4, 12L, 7L, new GroupResDTO.DailyProgress(2L, 3L)),
                 new GroupResDTO.MemberActivity(
                         2L, "동료", new GroupResDTO.Avatar(List.of()), null,
@@ -386,6 +392,7 @@ class GroupQueryServiceTest {
                 groupRoutineQueryRepository,
                 categoryRepository,
                 memberAvatarEquipmentRepository,
+                mediaService,
                 groupValidationService,
                 memberQueryService,
                 monthEndClock

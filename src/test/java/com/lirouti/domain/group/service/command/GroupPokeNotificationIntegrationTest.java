@@ -20,6 +20,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -28,6 +29,7 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static com.lirouti.support.testdb.MemberFixtureCleanup.deleteDependencies;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest
@@ -39,6 +41,7 @@ class GroupPokeNotificationIntegrationTest {
     @Autowired private MemberRepository memberRepository;
     @Autowired private NotificationRepository notificationRepository;
     @Autowired private PlatformTransactionManager transactionManager;
+    @Autowired private JdbcTemplate jdbcTemplate;
 
     private Seed seed;
 
@@ -50,6 +53,8 @@ class GroupPokeNotificationIntegrationTest {
             groupMemberRepository.deleteById(seed.requesterMembershipId());
             groupMemberRepository.deleteById(seed.targetMembershipId());
             groupRepository.deleteById(seed.groupId());
+            deleteDependencies(jdbcTemplate, seed.requesterId());
+            deleteDependencies(jdbcTemplate, seed.targetId());
             memberRepository.deleteById(seed.requesterId());
             memberRepository.deleteById(seed.targetId());
         });
