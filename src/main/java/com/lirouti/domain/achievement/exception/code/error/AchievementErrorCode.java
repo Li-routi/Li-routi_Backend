@@ -9,6 +9,17 @@ import org.springframework.http.HttpStatus;
 @AllArgsConstructor
 public enum AchievementErrorCode implements BaseErrorCode {
 
+    ACHIEVEMENT_ID_REQUIRED(
+            HttpStatus.BAD_REQUEST,
+            "업적 ID는 필수입니다.",
+            "ACHIEVEMENT400_1"
+    ),
+    BADGE_IMAGE_KEY_REQUIRED(
+            HttpStatus.BAD_REQUEST,
+            "업적 뱃지 이미지 key는 필수입니다.",
+            "ACHIEVEMENT400_2"
+    ),
+
     NOT_FOUND(
             HttpStatus.NOT_FOUND,
             "존재하지 않는 업적입니다.",
