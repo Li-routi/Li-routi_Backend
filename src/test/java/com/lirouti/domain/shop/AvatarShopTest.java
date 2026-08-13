@@ -298,6 +298,25 @@ class AvatarShopTest {
 
     // ── 목록 ──
 
+    /**
+     * DB 에는 key 를 담고 응답에는 주소를 내린다. 이 둘이 같아지면 앱은 key 를 이미지 주소로
+     * 알고 그리려다 실패한다 — 조립이 빠졌다는 신호다.
+     */
+    @Test
+    @DisplayName("목록은 저장된 key 가 아니라 조립된 주소를 내린다")
+    void items_ReturnsResolvedUrlNotKey() {
+        ShopResDTO.Items items = shopQueryService.getItems(me.getId(), AvatarSlot.HEAD, false);
+
+        assertThat(items.items()).filteredOn(item -> item.id().equals(hat.getId()))
+                .singleElement()
+                .satisfies(item -> assertAll(
+                        () -> assertThat(item.imageUrl()).startsWith("http"),
+                        () -> assertThat(item.imageUrl()).endsWith(hat.getImageKey()),
+                        () -> assertThat(item.imageUrl())
+                                .as("key 를 그대로 내리면 앱이 그리지 못한다")
+                                .isNotEqualTo(hat.getImageKey())));
+    }
+
     @Test
     @DisplayName("판매가 종료돼도 보유한 것은 목록에 남는다 — 빠지면 조용히 벗겨진다")
     void items_KeepsOwnedItemAfterDiscontinued() {

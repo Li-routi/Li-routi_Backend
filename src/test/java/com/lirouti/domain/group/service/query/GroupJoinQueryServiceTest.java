@@ -22,7 +22,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
-import com.lirouti.domain.media.enums.MediaPurpose;
 import com.lirouti.domain.media.service.MediaService;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -112,8 +111,8 @@ class GroupJoinQueryServiceTest {
         MemberAvatarEquipment equipment = mock(MemberAvatarEquipment.class);
         when(equipmentOwner.getId()).thenReturn(10L);
         when(avatarItem.getImageKey()).thenReturn("avatar/item/head/hat-v1.png");
-        when(mediaService.resolveViewUrl("avatar/item/head/hat-v1.png",
-                MediaPurpose.AVATAR_ASSET)).thenReturn("https://cdn/hat.png");
+        when(mediaService.resolveAvatarAssetUrl("avatar/item/head/hat-v1.png"))
+                .thenReturn("https://cdn/hat.png");
         when(equipment.getMember()).thenReturn(equipmentOwner);
         when(equipment.getAvatarItem()).thenReturn(avatarItem);
         when(equipment.getSlot()).thenReturn(AvatarSlot.HEAD);

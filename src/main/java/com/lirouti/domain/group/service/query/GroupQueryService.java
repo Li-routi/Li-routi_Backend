@@ -20,7 +20,6 @@ import com.lirouti.domain.group.repository.GroupRoutineQueryRepository.RoutineSc
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.service.query.MemberQueryService;
 import com.lirouti.domain.shop.repository.MemberAvatarEquipmentRepository;
-import com.lirouti.domain.media.enums.MediaPurpose;
 import com.lirouti.domain.media.service.MediaService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -51,11 +50,6 @@ public class GroupQueryService {
     private final GroupValidationService groupValidationService;
     private final MemberQueryService memberQueryService;
     private final Clock clock;
-
-    /** 저장된 S3 key 를 볼 수 있는 주소로 바꾼다. 아바타 자산은 공개 prefix 라 조립만 한다. */
-    private String toAvatarViewUrl(String imageKey) {
-        return mediaService.resolveViewUrl(imageKey, MediaPurpose.AVATAR_ASSET);
-    }
 
 
     /** 로그인 회원의 ACTIVE 참여 그룹과 오늘·월간 활동 요약을 배치 조회한다. */
@@ -147,7 +141,7 @@ public class GroupQueryService {
                         ? List.of()
                         : memberAvatarEquipmentRepository
                                 .findAllByMemberIdInWithMemberAndAvatarItem(activeMemberIds),
-                this::toAvatarViewUrl
+                mediaService::resolveAvatarAssetUrl
         );
 
         log.debug("그룹 상세 정보를 조회했습니다. groupId={}, memberId={}, memberCount={}",

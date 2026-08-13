@@ -15,7 +15,6 @@ import com.lirouti.domain.group.repository.GroupRoutineRepository;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.service.query.MemberQueryService;
 import com.lirouti.domain.shop.repository.MemberAvatarEquipmentRepository;
-import com.lirouti.domain.media.enums.MediaPurpose;
 import com.lirouti.domain.media.service.MediaService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -37,11 +36,6 @@ public class GroupJoinQueryService {
     private final MemberAvatarEquipmentRepository memberAvatarEquipmentRepository;
     private final MediaService mediaService;
     private final MemberQueryService memberQueryService;
-
-    /** 저장된 S3 key 를 볼 수 있는 주소로 바꾼다. 아바타 자산은 공개 prefix 라 조립만 한다. */
-    private String toAvatarViewUrl(String imageKey) {
-        return mediaService.resolveViewUrl(imageKey, MediaPurpose.AVATAR_ASSET);
-    }
 
 
     /**
@@ -72,7 +66,7 @@ public class GroupJoinQueryService {
                         ? List.of()
                         : memberAvatarEquipmentRepository
                                 .findAllByMemberIdInWithMemberAndAvatarItem(activeMemberIds),
-                this::toAvatarViewUrl
+                mediaService::resolveAvatarAssetUrl
         );
         long totalRoutineCount = groupRoutineRepository.countByGroupIdAndActiveTrue(group.getId());
         GroupJoinUnavailableReason unavailableReason = findUnavailableReason(
