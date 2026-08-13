@@ -1,11 +1,16 @@
 package com.lirouti.domain.chat.service.query;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -33,6 +38,7 @@ import lombok.RequiredArgsConstructor;
 public class ChatQueryService {
     private static final int DEFAULT_SIZE = 30;
     private static final int MAX_SIZE = 50;
+    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
     private final ChatMessageRepository chatMessageRepository;
     private final ChatEmoticonRepository chatEmoticonRepository;
@@ -50,26 +56,99 @@ public class ChatQueryService {
             Long cursor,
             Integer size
     ) {
+        return getMessages(memberId, groupId, null, cursor, size);
+    }
+
+    /**
+     * 선택한 날짜의 메시지부터 과거 방향으로 cursor 조회를 이어간다.
+     * 첫 요청은 선택 날짜만, 다음 요청부터는 해당 날짜 이전까지 조회한다.
+     */
+    @Transactional(readOnly = true)
+    public ChatResDTO.MessageList getMessages(
+            Long memberId,
+            Long groupId,
+            LocalDate date,
+            Long cursor,
+            Integer size
+    ) {
         groupValidationService.validateActiveGroupMember(groupId, memberId);
 
         int appliedSize = clampSize(size);
-        List<ChatMessage> rows = chatMessageRepository.findMessagesByGroupId(
-                groupId,
-                cursor,
-                PageRequest.of(0, appliedSize + 1)
-        );
-        
+        boolean hasChat = date == null;
+        boolean hasOlderMessages = false;
+        LocalDateTime fromInclusive = null;
+        LocalDateTime toExclusive = null;
+
+        if (date != null) {
+            fromInclusive = startOfDay(date);
+            toExclusive = startOfDay(date.plusDays(1));
+            hasChat = chatMessageRepository
+                    .existsByGroupIdAndCreatedAtGreaterThanEqualAndCreatedAtLessThan(
+                            groupId,
+                            fromInclusive,
+                            toExclusive);
+            if (!hasChat) {
+                return emptyMessageList(date, false);
+            }
+            if (cursor == null) {
+                hasOlderMessages = chatMessageRepository
+                        .existsByGroupIdAndCreatedAtLessThan(groupId, fromInclusive);
+            } else {
+                fromInclusive = null;
+            }
+        }
+
+        List<ChatMessage> rows = date == null
+                ? chatMessageRepository.findMessagesByGroupId(
+                        groupId,
+                        cursor,
+                        PageRequest.of(0, appliedSize + 1))
+                : chatMessageRepository.findMessagesByGroupIdAndCreatedAtRange(
+                        groupId,
+                        cursor,
+                        fromInclusive,
+                        toExclusive,
+                        PageRequest.of(0, appliedSize + 1));
+
         CursorPage<ChatMessage> page = sliceByCursor(rows, appliedSize, ChatMessage::getId);
 
         List<ChatMessage> messages = new ArrayList<>(page.rows());
         Collections.reverse(messages);
         Map<Long, ChatResDTO.Emoticon> emoticons = toMessageEmoticons(page.rows());
 
+        boolean hasNext = page.hasNext() || hasOlderMessages;
+        Long nextCursor = page.nextCursor();
+        if (hasOlderMessages && nextCursor == null && !page.rows().isEmpty()) {
+            nextCursor = page.rows().get(page.rows().size() - 1).getId();
+        }
         return ChatConverter.toMessageList(
                 messages,
                 emoticons,
-                page.nextCursor(),
-                page.hasNext()
+                nextCursor,
+                hasNext,
+                date,
+                date == null ? !page.rows().isEmpty() : hasChat
+        );
+    }
+
+    /**
+     * 활성 그룹 멤버가 지정한 KST 날짜 범위에서 채팅이 존재하는 날짜를 조회한다.
+     */
+    @Transactional(readOnly = true)
+    public List<LocalDate> getChatDates(
+            Long memberId,
+            Long groupId,
+            LocalDate from,
+            LocalDate to
+    ) {
+        groupValidationService.validateActiveGroupMember(groupId, memberId);
+        if (from == null || to == null || !from.isBefore(to)) {
+            throw new GeneralException(GeneralErrorCode.BAD_REQUEST);
+        }
+        return chatMessageRepository.findChatDatesByGroupIdAndCreatedAtRange(
+                groupId,
+                startOfDay(from),
+                startOfDay(to)
         );
     }
 
@@ -109,8 +188,12 @@ public class ChatQueryService {
      */
     private Map<Long, ChatResDTO.Emoticon> toMessageEmoticons(List<ChatMessage> messages) {
         List<Long> emoticonIds = messages.stream()
-                .map(ChatMessage::getEmoticonId)
-                .filter(id -> id != null)
+                .flatMap(message -> Stream.of(
+                        message.getEmoticonId(),
+                        message.getReplyToMessage() == null
+                                ? null
+                                : message.getReplyToMessage().getEmoticonId()))
+                .filter(Objects::nonNull)
                 .distinct()
                 .toList();
         if (emoticonIds.isEmpty()) {
@@ -162,6 +245,23 @@ public class ChatQueryService {
             return DEFAULT_SIZE;
         }
         return Math.min(size, MAX_SIZE);
+    }
+
+    private static LocalDateTime startOfDay(LocalDate date) {
+        return date.atStartOfDay(KST).toLocalDateTime();
+    }
+
+    private static ChatResDTO.MessageList emptyMessageList(
+            LocalDate date,
+            boolean hasChat
+    ) {
+        return ChatResDTO.MessageList.builder()
+                .messages(List.of())
+                .nextCursor(null)
+                .hasNext(false)
+                .date(date)
+                .hasChat(hasChat)
+                .build();
     }
  
     private record CursorPage<T>(

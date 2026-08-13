@@ -67,6 +67,11 @@ public class ChatMessage extends BaseEntity {
     @Column(name = "emoticon_id")
     private Long emoticonId;
 
+    /** 답장 대상은 같은 그룹의 기존 메시지만 참조한다. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "reply_to_message_id")
+    private ChatMessage replyToMessage;
+
     /** 네트워크 재시도 때 동일 메시지를 다시 저장하지 않기 위한 클라이언트 생성 식별자다. */
     @Column(name = "client_message_id", nullable = false, length = MAX_CLIENT_MESSAGE_ID_LENGTH)
     private String clientMessageId;
@@ -82,6 +87,7 @@ public class ChatMessage extends BaseEntity {
             ChatMessageType messageType,
             String content,
             Long emoticonId,
+            ChatMessage replyToMessage,
             String clientMessageId
     ) {
         this.group = group;
@@ -89,6 +95,7 @@ public class ChatMessage extends BaseEntity {
         this.messageType = messageType;
         this.content = content;
         this.emoticonId = emoticonId;
+        this.replyToMessage = replyToMessage;
         this.clientMessageId = clientMessageId;
     }
 

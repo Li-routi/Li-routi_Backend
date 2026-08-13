@@ -7,6 +7,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -28,6 +30,8 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
             select message
             from ChatMessage message
             join fetch message.sender
+            left join fetch message.replyToMessage reply
+            left join fetch reply.sender
             where message.group.id = :groupId
               and (:cursor is null or message.id < :cursor)
             order by message.id desc
@@ -36,6 +40,58 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
             @Param("groupId") Long groupId,
             @Param("cursor") Long cursor,
             Pageable pageable
+    );
+
+    /**
+     * 날짜를 선택한 채팅 조회에 사용한다. 첫 요청은 날짜 하한을 적용하고,
+     * 다음 cursor 요청은 상한만 적용해 선택 날짜 이전으로 이어서 조회할 수 있다.
+     */
+    @Query("""
+            select message
+            from ChatMessage message
+            join fetch message.sender
+            left join fetch message.replyToMessage reply
+            left join fetch reply.sender
+            where message.group.id = :groupId
+              and (:cursor is null or message.id < :cursor)
+              and (:fromInclusive is null or message.createdAt >= :fromInclusive)
+              and message.createdAt < :toExclusive
+            order by message.id desc
+            """)
+    List<ChatMessage> findMessagesByGroupIdAndCreatedAtRange(
+            @Param("groupId") Long groupId,
+            @Param("cursor") Long cursor,
+            @Param("fromInclusive") LocalDateTime fromInclusive,
+            @Param("toExclusive") LocalDateTime toExclusive,
+            Pageable pageable
+    );
+
+    boolean existsByGroupIdAndCreatedAtGreaterThanEqualAndCreatedAtLessThan(
+            Long groupId,
+            LocalDateTime fromInclusive,
+            LocalDateTime toExclusive
+    );
+
+    boolean existsByGroupIdAndCreatedAtLessThan(
+            Long groupId,
+            LocalDateTime createdAt
+    );
+
+    /**
+     * KST 날짜 범위에 실제 메시지가 존재하는 날짜만 오름차순으로 반환한다.
+     */
+    @Query(value = """
+            select distinct date(created_at)
+            from group_chat_message
+            where group_id = :groupId
+              and created_at >= :fromInclusive
+              and created_at < :toExclusive
+            order by date(created_at)
+            """, nativeQuery = true)
+    List<LocalDate> findChatDatesByGroupIdAndCreatedAtRange(
+            @Param("groupId") Long groupId,
+            @Param("fromInclusive") LocalDateTime fromInclusive,
+            @Param("toExclusive") LocalDateTime toExclusive
     );
 
     /**
@@ -65,6 +121,7 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
                 emoticon_id,
                 group_id,
                 sender_id,
+                reply_to_message_id,
                 updated_at,
                 client_message_id,
                 content,
@@ -74,6 +131,7 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
                 :emoticonId,
                 :groupId,
                 :senderId,
+                :replyToMessageId,
                 CURRENT_TIMESTAMP(6),
                 :clientMessageId,
                 :content,
@@ -87,8 +145,31 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
             @Param("clientMessageId") String clientMessageId,
             @Param("messageType") String messageType,
             @Param("content") String content,
-            @Param("emoticonId") Long emoticonId
+            @Param("emoticonId") Long emoticonId,
+            @Param("replyToMessageId") Long replyToMessageId
     );
+
+    /**
+     * 답장 없는 기존 메시지 저장 호출과의 호환을 유지한다.
+     */
+    default int insertIfAbsent(
+            Long groupId,
+            Long senderId,
+            String clientMessageId,
+            String messageType,
+            String content,
+            Long emoticonId
+    ) {
+        return insertIfAbsent(
+                groupId,
+                senderId,
+                clientMessageId,
+                messageType,
+                content,
+                emoticonId,
+                null
+        );
+    }
 
     /**
      * 읽음 위치 갱신 대상 메시지가 요청 그룹에 속하는지 함께 확인한다.
