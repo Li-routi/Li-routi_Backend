@@ -83,4 +83,13 @@ public final class AchievementResDTO {
             boolean rewardApplied
     ) {
     }
+
+    /** 관리자 뱃지 이미지 등록·교체 결과. object key는 외부에 노출하지 않는다. */
+    @Builder
+    public record AdminBadgeImage(
+            Long achievementId,
+            String code,
+            String badgeImageUrl
+    ) {
+    }
 }

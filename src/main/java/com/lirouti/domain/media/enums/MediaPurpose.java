@@ -49,6 +49,8 @@ public enum MediaPurpose {
     // 서비스가 등록한 자산만 사용하며 일반 사용자에게 presigned PUT을 발급하지 않는다.
     // 발급 경로가 없으니 셀 것도 없어 정책이 null 이다.
     CHAT_EMOTICON("chat-emoticons", null, Set.of(MediaCategory.IMAGE), false, false, null),
+    // 업적별 현재 뱃지 하나를 서버가 관리한다. 읽기는 공개하고 업로드는 서버만 수행한다.
+    ACHIEVEMENT_BADGE("achievement-badges", null, Set.of(MediaCategory.IMAGE), true, false, null),
     // 캐릭터·알·둥지·의상. 운영이 직접 올리는 마스터 자산이라 이모티콘과 같은 취급이다 —
     // 발급 경로가 없어 셀 것도 없다. 다른 점은 공개라는 것뿐이다. 모두에게 같은 그림이라
     // 숨길 것이 없고, 서명 주소로 내리면 만료마다 다시 발급해야 해서 얻는 것 없이 비싸진다.

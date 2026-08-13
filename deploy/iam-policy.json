@@ -19,7 +19,8 @@
         "StringLike": {
           "s3:prefix": [
             "challenge-verifications/*",
-            "chat-emoticons/*"
+            "chat-emoticons/*",
+            "achievement-badges/*"
           ]
         }
       }
@@ -31,7 +32,8 @@
       "Resource": [
         "arn:aws:s3:::lirouti-prod-bucket/challenge-verifications/*",
         "arn:aws:s3:::lirouti-prod-bucket/challenge-verifications-staging/*",
-        "arn:aws:s3:::lirouti-prod-bucket/chat-emoticons/*"
+        "arn:aws:s3:::lirouti-prod-bucket/chat-emoticons/*",
+        "arn:aws:s3:::lirouti-prod-bucket/achievement-badges/*"
       ]
     },
     {

@@ -275,6 +275,45 @@ Flyway 도입 전부터 쓰던 DB(개인 로컬·운영)에는 이력 테이블�
 
 아래는 각 테이블의 주요 필드다. 구현 시에는 이 문서의 의미 해석을 우선하고, 타입·제약은 실제 마이그레이션 또는 엔티티 정의와 대조한다.
 
+## 업적 테이블
+
+### `achievement`
+
+앱이 제공하는 업적 마스터 데이터다. 업적 자체의 노출 여부는 `active`로 관리하며,
+회원별 달성·수령 상태는 `member_achievement`에 저장한다.
+
+| 컬럼 | 타입 | NULL | 설명 |
+| --- | --- | --- | --- |
+| id | BIGINT | N | 기본 키 |
+| code | VARCHAR(20) | N | 업적의 안정적인 논리 식별자. 유니크 |
+| category | VARCHAR(10) | N | 업적 카테고리 |
+| name | VARCHAR(50) | N | 업적명 |
+| condition_desc | VARCHAR(200) | N | 조건 설명 |
+| progress_type | VARCHAR(30) | N | 진행도 계산 방식 |
+| target_count | INT | Y | 단일 조건 업적의 목표치 |
+| condition_key | VARCHAR(40) | Y | 단일 조건 업적의 이벤트 키 |
+| topaz_reward | INT | N | 지급 토파즈 |
+| badge_yn | BOOLEAN | N | 뱃지 보상 여부. 이미지 존재 여부와는 별개 |
+| badge_image_key | VARCHAR(500) | Y | public-read S3의 업적 뱃지 object key. 전체 URL을 저장하지 않음 |
+| limited_outfit_yn | BOOLEAN | N | 한정 의상 보상 여부 |
+| sort_order | INT | N | 회원용 목록 정렬 순서 |
+| active | BOOLEAN | N | 회원용 목록 노출 여부 |
+
+`badge_image_key`는 업적당 현재 사용 이미지 하나를 가리킨다. 이미지 등록 전 기존 업적을
+지원하기 위해 nullable로 두며, 이미지를 교체할 때는 기존 object를 덮어쓰지 않고 새 key를
+저장한다. 회원용 응답 URL은 조회 시 `MediaPurpose.ACHIEVEMENT_BADGE`의 public URL로
+조립한다.
+
+업적 뱃지 object는 다음 규칙을 따른다.
+
+```text
+achievement-badges/{yyyy}/{MM}/{dd}/{UUID}.{extension}
+```
+
+업적 key를 참조하는 원천은 `AchievementMediaReferenceSource`로 등록해 미참조 media
+cleanup이 현재 DB 참조를 보존하도록 한다. 기존 업적 테이블은 수정하지 않고
+`V20260813143702__add_achievement_badge_image_key.sql` forward migration으로 컬럼을 추가한다.
+
 ## 회원 및 알림 테이블
 
 ### `member`
