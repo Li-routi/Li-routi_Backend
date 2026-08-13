@@ -5,6 +5,7 @@ import com.lirouti.domain.shop.dto.response.ShopResDTO;
 import com.lirouti.domain.shop.entity.AvatarItem;
 import com.lirouti.domain.shop.entity.MemberAvatarEquipment;
 import com.lirouti.domain.shop.enums.AvatarSlot;
+import com.lirouti.domain.shop.enums.ShopCategory;
 import com.lirouti.domain.shop.repository.AvatarItemRepository;
 import com.lirouti.domain.shop.repository.MemberAvatarEquipmentRepository;
 import com.lirouti.domain.shop.repository.MemberAvatarItemRepository;
@@ -22,6 +23,21 @@ public class ShopQueryService {
     private final AvatarItemRepository avatarItemRepository;
     private final MemberAvatarItemRepository memberAvatarItemRepository;
     private final MemberAvatarEquipmentRepository memberAvatarEquipmentRepository;
+
+    /**
+     * 상점 화면의 탭 목록.
+     *
+     * <p><b>회원과 무관하다.</b> 탭 구성은 누가 보든 같다 — 보유 여부로 탭이 생기거나
+     * 사라지지 않는다.
+     *
+     * <p>DB 를 보지 않는다. 탭은 마스터 표가 아니라 화면 구성이고, 늘거나 줄 때 배포가
+     * 따르는 것이 맞다. 표로 두면 운영이 탭을 바꿀 수 있게 되는데, 탭이 늘면 그것을 그릴
+     * 화면도 함께 필요하므로 데이터만 바꿔서 될 일이 아니다.
+     */
+    @Transactional(readOnly = true)
+    public ShopResDTO.Categories getCategories() {
+        return ShopConverter.toCategories(List.of(ShopCategory.values()));
+    }
 
     /**
      * 상점 아이템 목록.

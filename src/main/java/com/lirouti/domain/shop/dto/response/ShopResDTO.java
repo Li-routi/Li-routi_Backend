@@ -1,6 +1,8 @@
 package com.lirouti.domain.shop.dto.response;
 
 import com.lirouti.domain.shop.enums.AvatarSlot;
+import com.lirouti.domain.shop.enums.ShopCategory;
+import com.lirouti.domain.shop.enums.ShopCategorySource;
 import com.lirouti.domain.wallet.enums.Currency;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
@@ -10,6 +12,31 @@ import java.util.List;
 public final class ShopResDTO {
 
     private ShopResDTO() {
+    }
+
+    @Schema(name = "ShopCategory", description = "상점 화면의 탭 하나")
+    @Builder
+    public record Category(
+            @Schema(description = "탭 식별자", example = "HEAD") ShopCategory key,
+            @Schema(description = "화면에 쓸 이름", example = "머리") String name,
+            @Schema(description = """
+                    이 탭을 눌렀을 때 무엇을 가져오는가. `ITEM` 이면 아이템 목록,
+                    `CHARACTER` 면 캐릭터 목록이다. **`slot` 이 비어 있는 탭이 둘이라
+                    이 값으로 갈라야 한다.**""")
+            ShopCategorySource source,
+            @Schema(description = """
+                    아이템 목록을 요청할 때 넣을 슬롯. **비어 있으면 넣지 않는다** —
+                    `전체` 탭이 곧 필터 없음이다.""")
+            AvatarSlot slot,
+            @Schema(description = "표시 순서. 오름차순으로 이미 정렬돼 있다") int sortOrder
+    ) {
+    }
+
+    @Schema(name = "ShopCategories", description = "상점 탭 목록")
+    @Builder
+    public record Categories(
+            @Schema(description = "탭 목록. 받은 순서대로 그리면 된다") List<Category> categories
+    ) {
     }
 
     @Schema(name = "ShopAvatarItem", description = "상점 아이템 한 건")
