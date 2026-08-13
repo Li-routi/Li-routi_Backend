@@ -88,6 +88,39 @@ class ChatWebSocketControllerTest {
     }
 
     @Test
+    @DisplayName("답장 메시지도 저장 성공 후 reply를 포함해 broadcast한다")
+    void sendMessage_Reply_Success_BroadcastsReplyMessage() {
+        ChatReqDTO.SendMessage request = new ChatReqDTO.SendMessage(
+                "client-reply-1",
+                ChatMessageType.TEXT,
+                "답장 메시지",
+                null,
+                80L
+        );
+        ChatResDTO.Reply reply = ChatResDTO.Reply.builder()
+                .id(80L)
+                .type(ChatMessageType.TEXT)
+                .content("원본 메시지")
+                .createdAt(LocalDateTime.of(2026, 8, 5, 22, 0))
+                .build();
+        ChatResDTO.Message response = ChatResDTO.Message.builder()
+                .id(100L)
+                .clientMessageId(request.clientMessageId())
+                .groupId(GROUP_ID)
+                .type(ChatMessageType.TEXT)
+                .content(request.content())
+                .reply(reply)
+                .createdAt(LocalDateTime.of(2026, 8, 5, 23, 0))
+                .build();
+        when(chatCommandService.sendMessage(MEMBER_ID, GROUP_ID, request))
+                .thenReturn(new ChatSendResult(response, true));
+
+        controller.sendMessage(GROUP_ID, request, authentication);
+
+        verify(messagingTemplate).convertAndSend(CHAT_DESTINATION, response);
+    }
+
+    @Test
     @DisplayName("저장 서비스가 실패하면 broadcast하지 않는다")
     void sendMessage_ServiceFailure_DoesNotBroadcast() {
         // given

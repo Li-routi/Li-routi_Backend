@@ -1,5 +1,8 @@
 package com.lirouti.domain.chat.controller.docs;
 
+import java.time.LocalDate;
+import java.util.List;
+
 import com.lirouti.domain.chat.dto.request.ChatReqDTO;
 import com.lirouti.domain.chat.dto.response.ChatResDTO;
 import com.lirouti.global.apiPayload.ApiResponse;
@@ -29,8 +32,29 @@ public interface ChatControllerDocs {
             @Parameter(hidden = true)
             @AuthenticationPrincipal CustomUserDetails userDetails,
             @Parameter(description = "조회할 그룹 ID") Long groupId,
+            @Parameter(description = "선택한 날짜. 해당 날짜부터 과거 메시지를 조회합니다.") LocalDate date,
             @Parameter(description = "이전 응답의 nextCursor") Long cursor,
             @Parameter(description = "조회할 메시지 수") Integer size
+    );
+
+    @Operation(
+            summary = "그룹 채팅 날짜 목록 조회",
+            description = "활성 그룹 멤버가 KST 기준으로 채팅이 존재하는 날짜를 조회합니다. from은 포함하고 to는 제외합니다."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200", description = "채팅 날짜 목록 조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "400", description = "날짜 범위가 올바르지 않음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "403", description = "그룹의 활성 멤버가 아님")
+    })
+    ApiResponse<ChatResDTO.ChatDates> getChatDates(
+            @Parameter(hidden = true)
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @Parameter(description = "조회할 그룹 ID") Long groupId,
+            @Parameter(description = "조회 시작 날짜(포함)") LocalDate from,
+            @Parameter(description = "조회 종료 날짜(제외)") LocalDate to
     );
 
     @Operation(

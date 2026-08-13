@@ -1,5 +1,8 @@
 package com.lirouti.domain.chat.controller;
 
+import java.time.LocalDate;
+import java.util.List;
+
 import com.lirouti.domain.chat.controller.docs.ChatControllerDocs;
 import com.lirouti.domain.chat.dto.request.ChatReqDTO;
 import com.lirouti.domain.chat.dto.response.ChatResDTO;
@@ -32,12 +35,33 @@ public class ChatController implements ChatControllerDocs {
     public ApiResponse<ChatResDTO.MessageList> getMessages(
             @AuthenticationPrincipal CustomUserDetails userDetails,
             @PathVariable Long groupId,
+            @RequestParam(required = false) LocalDate date,
             @RequestParam(required = false) Long cursor,
             @RequestParam(required = false) Integer size
     ) {
         ChatResDTO.MessageList result = chatQueryService.getMessages(
-                userDetails.getMemberId(), groupId, cursor, size);
+                userDetails.getMemberId(), groupId, date, cursor, size);
         return ApiResponse.onSuccess(ChatSuccessCode.MESSAGE_LIST_FETCH_SUCCESS, result);
+    }
+
+    /**
+     * 그룹 채팅이 존재하는 날짜를 KST 기준으로 조회한다.
+     */
+    @Override
+    @GetMapping("/api/groups/{groupId}/chat/dates")
+    public ApiResponse<ChatResDTO.ChatDates> getChatDates(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long groupId,
+            @RequestParam LocalDate from,
+            @RequestParam LocalDate to
+    ) {
+        List<LocalDate> result = chatQueryService.getChatDates(
+                userDetails.getMemberId(), groupId, from, to);
+        return ApiResponse.onSuccess(
+                ChatSuccessCode.CHAT_DATES_FETCH_SUCCESS,
+                ChatResDTO.ChatDates.builder()
+                        .chatDates(result)
+                        .build());
     }
 
     /**
