@@ -2,6 +2,7 @@ package com.lirouti.domain.group.service.command;
 
 import com.lirouti.domain.group.dto.response.GroupResDTO;
 import com.lirouti.domain.group.entity.GroupMember;
+import com.lirouti.domain.group.entity.GroupPoke;
 import com.lirouti.domain.group.enums.GroupMemberStatus;
 import com.lirouti.domain.group.exception.GroupException;
 import com.lirouti.domain.group.exception.code.error.GroupErrorCode;
@@ -22,7 +23,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -55,12 +55,14 @@ class GroupPokeCommandServiceTest {
             pokeCount.incrementAndGet();
             return null;
         }).when(target).increaseTotalPokeCount();
-        when(target.getJoinedAt()).thenReturn(LocalDateTime.of(2026, 8, 9, 12, 30));
         when(groupMemberRepository.findActiveMembershipLockCandidatesByGroupIdAndMemberIds(
                 GROUP_ID, List.of(REQUESTER_ID, TARGET_ID)))
                 .thenReturn(List.of(candidate(REQUESTER_ID, 10L), candidate(TARGET_ID, 20L)));
         when(groupMemberRepository.findByIdForUpdate(10L)).thenReturn(java.util.Optional.of(requester));
         when(groupMemberRepository.findByIdForUpdate(20L)).thenReturn(java.util.Optional.of(target));
+        GroupPoke groupPoke = mock(GroupPoke.class);
+        when(groupPokeRepository.save(any(GroupPoke.class))).thenReturn(groupPoke);
+        when(groupPoke.getId()).thenReturn(101L);
 
         GroupResDTO.PokeResult result = service.poke(GROUP_ID, REQUESTER_ID, TARGET_ID);
 
@@ -78,7 +80,7 @@ class GroupPokeCommandServiceTest {
                 GROUP_ID,
                 REQUESTER_ID,
                 "GROUP_MEMBER",
-                "group-poke:10:1:2:2026-08-09T12:30:8"
+                "group-poke:101"
         ));
         InOrder order = inOrder(groupValidationService, groupMemberRepository);
         order.verify(groupValidationService).validateActiveGroupMember(GROUP_ID, REQUESTER_ID);

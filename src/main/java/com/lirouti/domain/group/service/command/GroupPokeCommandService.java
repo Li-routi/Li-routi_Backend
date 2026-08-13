@@ -110,7 +110,7 @@ public class GroupPokeCommandService {
                 groupId,
                 requesterMemberId,
                 "GROUP_MEMBER",
-                deduplicationKey(groupId, requesterMemberId, targetMemberId, targetMembership)
+                deduplicationKey(groupPoke.getId())
         ));
 
         // 6. 업적 진행도 이벤트 발행 (찌른 사람 & 찔린 사람)
@@ -136,16 +136,8 @@ public class GroupPokeCommandService {
         return new GroupResDTO.PokeResult(targetMemberId, targetMembership.getTotalPokeCount());
     }
 
-    /**
-     * 같은 누적 poke 알림의 기존 group-poke 키 convention을 유지하되, 재가입 회차도 구분한다.
-     */
-    private String deduplicationKey(
-            Long groupId,
-            Long requesterMemberId,
-            Long targetMemberId,
-            GroupMember targetMembership
-    ) {
-        return "group-poke:" + groupId + ":" + requesterMemberId + ":" + targetMemberId
-                + ":" + targetMembership.getJoinedAt() + ":" + targetMembership.getTotalPokeCount();
+    /** 각 poke 이력마다 별도 알림을 남기기 위한 키다. */
+    private String deduplicationKey(Long groupPokeId) {
+        return "group-poke:" + groupPokeId;
     }
 }

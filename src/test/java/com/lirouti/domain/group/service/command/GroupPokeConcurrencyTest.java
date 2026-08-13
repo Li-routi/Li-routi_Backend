@@ -1,5 +1,6 @@
 package com.lirouti.domain.group.service.command;
 
+import com.lirouti.domain.achievement.service.AchievementProgressService;
 import com.lirouti.domain.group.entity.Group;
 import com.lirouti.domain.group.entity.GroupMember;
 import com.lirouti.domain.group.enums.GroupMemberRole;
@@ -18,6 +19,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import java.util.List;
 import java.util.UUID;
@@ -30,6 +33,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static com.lirouti.support.testdb.MemberFixtureCleanup.deleteDependencies;
 
 @SpringBootTest
 @DisplayName("그룹 구성원 찌르기 동시성 테스트")
@@ -41,6 +45,9 @@ class GroupPokeConcurrencyTest {
     @Autowired private GroupRepository groupRepository;
     @Autowired private GroupMemberRepository groupMemberRepository;
     @Autowired private MemberRepository memberRepository;
+    @Autowired private JdbcTemplate jdbcTemplate;
+
+    @MockitoBean private AchievementProgressService achievementProgressService;
 
     private Long groupId;
     private Long requesterId;
@@ -73,12 +80,15 @@ class GroupPokeConcurrencyTest {
             groupRepository.deleteById(groupId);
         }
         if (requesterId != null) {
+            deleteDependencies(jdbcTemplate, requesterId);
             memberRepository.deleteById(requesterId);
         }
         if (targetId != null) {
+            deleteDependencies(jdbcTemplate, targetId);
             memberRepository.deleteById(targetId);
         }
         if (ownerId != null) {
+            deleteDependencies(jdbcTemplate, ownerId);
             memberRepository.deleteById(ownerId);
         }
     }

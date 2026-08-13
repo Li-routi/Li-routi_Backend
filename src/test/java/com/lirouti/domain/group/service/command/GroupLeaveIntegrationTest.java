@@ -16,6 +16,7 @@ import com.lirouti.domain.group.repository.GroupRoutineAssignmentRepository;
 import com.lirouti.domain.group.repository.GroupRoutineCategoryRepository;
 import com.lirouti.domain.group.repository.GroupRoutineRepository;
 import com.lirouti.domain.group.service.GroupValidationService;
+import com.lirouti.domain.achievement.service.GroupAchievementProgressService;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.enums.Role;
 import com.lirouti.domain.member.enums.SocialProvider;
@@ -31,6 +32,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -52,6 +55,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus.*;
+import static com.lirouti.support.testdb.MemberFixtureCleanup.deleteDependencies;
 
 @SpringBootTest
 @DisplayName("그룹 방 나가기 통합 테스트")
@@ -77,6 +81,9 @@ class GroupLeaveIntegrationTest {
     @Autowired private GroupRoutineAssignmentRepository assignmentRepository;
     @Autowired private GroupRoutineVerificationRepository verificationRepository;
     @Autowired private MemberRepository memberRepository;
+    @Autowired private JdbcTemplate jdbcTemplate;
+
+    @MockitoBean private GroupAchievementProgressService groupAchievementProgressService;
 
     @AfterEach
     void tearDown() {
@@ -86,7 +93,10 @@ class GroupLeaveIntegrationTest {
         categoryIds.forEach(id -> categoryRepository.findById(id).ifPresent(categoryRepository::delete));
         membershipIds.forEach(id -> groupMemberRepository.findById(id).ifPresent(groupMemberRepository::delete));
         groupIds.forEach(id -> groupRepository.findById(id).ifPresent(groupRepository::delete));
-        memberIds.forEach(id -> memberRepository.findById(id).ifPresent(memberRepository::delete));
+        memberIds.forEach(id -> {
+            deleteDependencies(jdbcTemplate, id);
+            memberRepository.findById(id).ifPresent(memberRepository::delete);
+        });
     }
 
     @Test
