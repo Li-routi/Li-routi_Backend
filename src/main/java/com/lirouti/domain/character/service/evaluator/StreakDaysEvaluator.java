@@ -1,6 +1,5 @@
 package com.lirouti.domain.character.service.evaluator;
 
-import com.lirouti.domain.activity.entity.MemberActivityDay;
 import com.lirouti.domain.activity.repository.MemberActivityDayRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -30,20 +29,19 @@ public class StreakDaysEvaluator implements UnlockConditionEvaluator {
 
     @Override
     public long count(Long memberId, String conditionParam) {
-        List<MemberActivityDay> recent =
-                memberActivityDayRepository.findTop400ByMemberIdOrderByActivityDateDesc(memberId);
+        List<LocalDate> recent = memberActivityDayRepository.findRecentActivityDates(memberId);
         if (recent.isEmpty()) {
             return 0L;
         }
 
         long streak = 1L;
-        LocalDate previous = recent.getFirst().getActivityDate();
-        for (MemberActivityDay day : recent.subList(1, recent.size())) {
-            if (!day.getActivityDate().equals(previous.minusDays(1))) {
+        LocalDate previous = recent.getFirst();
+        for (LocalDate date : recent.subList(1, recent.size())) {
+            if (!date.equals(previous.minusDays(1))) {
                 break;
             }
             streak++;
-            previous = day.getActivityDate();
+            previous = date;
         }
         return streak;
     }

@@ -67,6 +67,16 @@ public interface MemberActivityDayRepository extends JpaRepository<MemberActivit
      *
      * <p>상한을 둔 이유는 연속 조건의 최대가 100 이기 때문이다 — 그보다 훨씬 긴 구간까지
      * 읽어도 답이 달라지지 않는데 행만 늘어난다.
+     *
+     * <p>엔티티가 아니라 날짜만 읽는다. 연속을 세는 데 다른 칸이 필요 없고, 영속성 컨텍스트에
+     * 쌓을 이유도 없다.
      */
-    List<MemberActivityDay> findTop400ByMemberIdOrderByActivityDateDesc(Long memberId);
+    @Query(value = """
+            select activityDay.activityDate
+            from MemberActivityDay activityDay
+            where activityDay.memberId = :memberId
+            order by activityDay.activityDate desc
+            limit 400
+            """)
+    List<LocalDate> findRecentActivityDates(@Param("memberId") Long memberId);
 }

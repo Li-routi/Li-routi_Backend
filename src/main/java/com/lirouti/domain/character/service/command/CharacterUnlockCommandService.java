@@ -15,8 +15,6 @@ import com.lirouti.domain.member.repository.MemberRepository;
 import com.lirouti.domain.popup.service.command.PopupCommandService;
 import com.lirouti.domain.popup.service.command.PopupPublishCommand;
 import com.lirouti.global.apiPayload.exception.GeneralException;
-import jakarta.annotation.PostConstruct;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -38,7 +36,6 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class CharacterUnlockCommandService {
 
     private static final String POPUP_TYPE = "CHARACTER_UNLOCKED";
@@ -50,15 +47,29 @@ public class CharacterUnlockCommandService {
     private final MemberSelectedCharacterRepository memberSelectedCharacterRepository;
     private final MemberRepository memberRepository;
     private final PopupCommandService popupCommandService;
-    private final List<UnlockConditionEvaluator> evaluators;
     private final Clock clock;
 
     /** 조건 키로 판정기를 찾는다. 판정 한 번에 조건이 여럿이라 매번 만들지 않는다. */
-    private Map<String, UnlockConditionEvaluator> evaluatorsByKey;
+    private final Map<String, UnlockConditionEvaluator> evaluatorsByKey;
 
-    @PostConstruct
-    void indexEvaluators() {
-        evaluatorsByKey = evaluators.stream().collect(Collectors.toMap(
+    public CharacterUnlockCommandService(
+            AvatarCharacterRepository avatarCharacterRepository,
+            CharacterUnlockConditionRepository characterUnlockConditionRepository,
+            MemberCharacterRepository memberCharacterRepository,
+            MemberSelectedCharacterRepository memberSelectedCharacterRepository,
+            MemberRepository memberRepository,
+            PopupCommandService popupCommandService,
+            List<UnlockConditionEvaluator> evaluators,
+            Clock clock
+    ) {
+        this.avatarCharacterRepository = avatarCharacterRepository;
+        this.characterUnlockConditionRepository = characterUnlockConditionRepository;
+        this.memberCharacterRepository = memberCharacterRepository;
+        this.memberSelectedCharacterRepository = memberSelectedCharacterRepository;
+        this.memberRepository = memberRepository;
+        this.popupCommandService = popupCommandService;
+        this.clock = clock;
+        this.evaluatorsByKey = evaluators.stream().collect(Collectors.toMap(
                 UnlockConditionEvaluator::conditionKey, Function.identity()));
     }
 
@@ -84,7 +95,7 @@ public class CharacterUnlockCommandService {
         }
 
         Map<Long, List<CharacterUnlockCondition>> conditionsByCharacterId =
-                characterUnlockConditionRepository.findAllWithCharacter().stream()
+                characterUnlockConditionRepository.findAllOfActiveCharacters().stream()
                         .collect(Collectors.groupingBy(
                                 condition -> condition.getAvatarCharacter().getId()));
 
