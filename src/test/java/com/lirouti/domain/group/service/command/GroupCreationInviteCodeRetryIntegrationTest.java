@@ -25,6 +25,7 @@ import java.time.ZoneId;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static com.lirouti.support.testdb.MemberFixtureCleanup.deleteDependencies;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -152,6 +153,7 @@ class GroupCreationInviteCodeRetryIntegrationTest {
                 .setParameter("successCode", SUCCESS_CODE)
                 .setParameter("collisionId", collisionGroupId)
                 .executeUpdate();
+        deleteDependencies(entityManager, memberId);
         entityManager.createNativeQuery("delete from member where id = :memberId")
                 .setParameter("memberId", memberId)
                 .executeUpdate();

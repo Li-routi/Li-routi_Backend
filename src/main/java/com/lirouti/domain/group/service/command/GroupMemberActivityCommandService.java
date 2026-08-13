@@ -3,6 +3,7 @@ package com.lirouti.domain.group.service.command;
 import java.time.LocalDate;
 import java.util.List;
 
+import com.lirouti.domain.group.enums.GroupMemberStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -70,5 +71,38 @@ public class GroupMemberActivityCommandService {
     public GroupMember lockMembership(Long groupId, Long memberId) {
         return groupMemberRepository.findByGroupIdAndMemberIdForUpdate(groupId, memberId)
                 .orElseThrow(() -> new GroupException(GroupErrorCode.GROUP_MEMBER_ACCESS_DENIED));
+    }
+
+    /**
+     * SP-004(루틴 하우스 메이트) 판정용. 그룹의 현재 ACTIVE 구성원 전원이
+     * 그 날짜에 배정된 할당을 모두 COMPLETED로 마쳤는지 확인한다.
+     * 그 날 배정된 할당이 아예 없는 구성원이 한 명이라도 있으면 "함께 인증"이 아니므로 false.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public boolean isAllMembersCompletedToday(Long groupId, LocalDate assignedDate) {
+        List<GroupMember> activeMembers = groupMemberRepository
+                .findAllByGroupIdAndStatus(groupId, GroupMemberStatus.ACTIVE);
+        if (activeMembers.isEmpty()) {
+            return false;
+        }
+
+        for (GroupMember member : activeMembers) {
+            List<GroupRoutineAssignment> assignments = groupRoutineAssignmentRepository
+                    .findAllByGroupIdAndMemberIdAndAssignedDateAndCreatedAtAfterOrEqualForUpdate(
+                            groupId,
+                            member.getMember().getId(),
+                            assignedDate,
+                            member.getJoinedAt());
+            if (assignments.isEmpty()) {
+                return false;
+            }
+            boolean allCompleted = assignments.stream()
+                    .allMatch(assignment -> assignment.getStatus()
+                            == GroupRoutineAssignmentStatus.COMPLETED);
+            if (!allCompleted) {
+                return false;
+            }
+        }
+        return true;
     }
 }

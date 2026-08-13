@@ -1,5 +1,6 @@
 package com.lirouti.domain.group.service.command;
 
+import com.lirouti.domain.achievement.event.GroupAchievementProgressEvent;
 import com.lirouti.domain.group.entity.GroupMember;
 import com.lirouti.domain.group.entity.GroupRoutine;
 import com.lirouti.domain.group.entity.GroupRoutineAssignment;
@@ -14,6 +15,7 @@ import com.lirouti.domain.group.repository.GroupRoutineRepository;
 import com.lirouti.domain.group.repository.GroupRoutineScheduleRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -45,6 +47,7 @@ public class GroupRoutineAssignmentCommandService {
     private final GroupMemberRepository groupMemberRepository;
     private final GroupMemberActivityCommandService groupMemberActivityCommandService;
     private final GroupRoutineAssignmentStatusRefreshBatchService statusRefreshBatchService;
+    private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
 
     /** 루틴 삭제 시 완료되지 않은 모든 회원의 할당을 한 번에 물리 삭제한다. */
@@ -296,11 +299,26 @@ public class GroupRoutineAssignmentCommandService {
             throw new IllegalArgumentException("그룹 루틴 할당은 필수입니다.");
         }
         completeAssignment(assignment.getId(), verifiedAt);
+
+        Long groupId = assignment.getGroupRoutine().getGroup().getId();
+        Long memberId = assignment.getMember().getId();
+        LocalDate assignedDate = assignment.getAssignedDate();
+
         groupMemberActivityCommandService.recordStreakIfAllAssignmentsCompleted(
-                assignment.getGroupRoutine().getGroup().getId(),
-                assignment.getMember().getId(),
-                assignment.getAssignedDate()
-        );
+                groupId, memberId, assignedDate);
+
+        // AC-009: 방 구성원 전체 인증 합계. sourceId로 assignment.getId()를 써서
+        // 재발행돼도 group_achievement_progress_event_log unique 제약이 중복 반영을 막는다.
+        eventPublisher.publishEvent(new GroupAchievementProgressEvent(
+                groupId, "ACH-AC-009", 1, "GROUP_ASSIGNMENT_COMPLETE", assignment.getId()));
+
+        // SP-004: 같은 날 구성원 전원 인증. "전원 완료" 판정 자체는
+        // recordStreakIfAllAssignmentsCompleted와 동일 조건이라 그 결과를 재사용해야 한다.
+        if (groupMemberActivityCommandService.isAllMembersCompletedToday(groupId, assignedDate)) {
+            eventPublisher.publishEvent(new GroupAchievementProgressEvent(
+                    groupId, "ACH-SP-004", 1, "GROUP_ALL_COMPLETE_DAY",
+                    groupId * 10_000_000L + assignedDate.toEpochDay())); // 그룹+날짜 합성 sourceId
+        }
     }
 
     /**
