@@ -1,17 +1,17 @@
 package com.lirouti.domain.routine.service.query;
 
 import com.lirouti.domain.member.service.query.MemberQueryService;
+import com.lirouti.domain.routine.cache.RoutineTemplateCacheReader;
+import com.lirouti.domain.routine.cache.RoutineTemplateCacheReader.CachedTemplate;
 import com.lirouti.domain.routine.converter.RoutineConverter;
 import com.lirouti.global.util.TimeUtil;
 import com.lirouti.domain.routine.dto.response.RoutineResDTO;
 import com.lirouti.domain.routine.entity.MemberRoutine;
 import com.lirouti.domain.routine.entity.RoutineCategory;
-import com.lirouti.domain.routine.entity.RoutineTemplate;
 import com.lirouti.domain.routine.exception.RoutineException;
 import com.lirouti.domain.routine.exception.code.error.RoutineErrorCode;
 import com.lirouti.domain.routine.repository.MemberRoutineRepository;
 import com.lirouti.domain.routine.repository.RoutineCategoryRepository;
-import com.lirouti.domain.routine.repository.RoutineTemplateRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -32,7 +32,7 @@ import java.util.stream.Collectors;
 public class RoutineQueryService {
     private final MemberQueryService memberQueryService;
     private final RoutineCategoryRepository routineCategoryRepository;
-    private final RoutineTemplateRepository routineTemplateRepository;
+    private final RoutineTemplateCacheReader routineTemplateCacheReader;
     private final MemberRoutineRepository memberRoutineRepository;
     private final RoutineCompletionSource completionSource;
 
@@ -74,9 +74,16 @@ public class RoutineQueryService {
     public RoutineResDTO.TemplateList getTemplates(Long memberId, Long categoryId) {
         memberQueryService.getActiveMember(memberId);
 
-        List<RoutineTemplate> templates = categoryId == null
-                ? routineTemplateRepository.findAllActiveWithCategory()
-                : findTemplatesInCategory(memberId, categoryId);
+        if (categoryId != null) {
+            validateCategoryAccess(memberId, categoryId);
+        }
+
+        List<CachedTemplate> templates = routineTemplateCacheReader.getAll();
+        if (categoryId != null) {
+            templates = templates.stream()
+                    .filter(template -> categoryId.equals(template.categoryId()))
+                    .toList();
+        }
 
         Set<Long> addedTemplateIds =
                 new HashSet<>(memberRoutineRepository.findTemplateIdsByMemberId(memberId));
@@ -84,7 +91,7 @@ public class RoutineQueryService {
         log.debug("기본 제공 루틴 목록을 조회했습니다. memberId={}, categoryId={}, templateCount={}",
                 memberId, categoryId, templates.size());
 
-        return RoutineConverter.toTemplateList(templates, addedTemplateIds);
+        return RoutineConverter.toTemplateListFromCache(templates, addedTemplateIds);
     }
 
     /**
@@ -114,16 +121,8 @@ public class RoutineQueryService {
         return RoutineConverter.toRoutineListResponse(hydrated);
     }
 
-    /**
-     * 회원이 사용할 수 있는 카테고리인지 확인한 뒤 그 카테고리의 기본 제공 루틴을 조회한다.
-     * 사용자 카테고리에는 기본 제공 루틴이 없으므로 결과가 비어 있을 수 있다.
-     *
-     * @param memberId 조회를 요청한 회원 ID
-     * @param categoryId 조회할 카테고리 ID
-     * @return 해당 카테고리의 활성 기본 제공 루틴 목록
-     * @throws RoutineException 카테고리를 찾을 수 없거나 다른 회원의 카테고리인 경우
-     */
-    private List<RoutineTemplate> findTemplatesInCategory(Long memberId, Long categoryId) {
+    // 권한 오류가 cache hit 때문에 빈 목록 응답으로 바뀌지 않도록 캐시보다 먼저 검증한다.
+    private void validateCategoryAccess(Long memberId, Long categoryId) {
         RoutineCategory category = routineCategoryRepository.findByIdAndActiveTrue(categoryId)
                 .orElseThrow(() -> {
                     log.warn("활성 루틴 카테고리 조회에 실패했습니다. memberId={}, categoryId={}",
@@ -136,8 +135,6 @@ public class RoutineQueryService {
                     memberId, categoryId);
             throw new RoutineException(RoutineErrorCode.ROUTINE_CATEGORY_ACCESS_DENIED);
         }
-
-        return routineTemplateRepository.findActiveByCategoryId(categoryId);
     }
 
     /**
