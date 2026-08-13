@@ -40,9 +40,15 @@ public class CharacterQueryService {
                         .collect(Collectors.toMap(
                                 owned -> owned.getAvatarCharacter().getId(), Function.identity()));
 
+        // 선택이 비어 있으면 가장 먼저 얻은 것을 선택으로 본다. 업적 claim 으로 캐릭터를
+        // 받으면 보유만 생기고 선택은 비어 있는데, 그때 도감과 아바타가 서로 다른 캐릭터를
+        // 가리키면 안 된다 — 아바타도 같은 규칙으로 그린다(AvatarLayerAssembler).
         Long selectedCharacterId = memberSelectedCharacterRepository.findByMemberId(memberId)
                 .map(MemberSelectedCharacter::getCharacterId)
-                .orElse(null);
+                .orElseGet(() -> ownedByCharacterId.values().stream()
+                        .min(java.util.Comparator.comparing(MemberCharacter::getId))
+                        .map(owned -> owned.getAvatarCharacter().getId())
+                        .orElse(null));
 
         return CharacterConverter.toCharacters(
                 avatarCharacterRepository.findAllByActiveTrueAndHiddenFalseOrderByDisplayOrderAsc(),

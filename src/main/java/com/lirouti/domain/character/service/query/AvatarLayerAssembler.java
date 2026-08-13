@@ -5,6 +5,7 @@ import com.lirouti.domain.character.dto.response.CharacterResDTO;
 import com.lirouti.domain.character.entity.AvatarCharacter;
 import com.lirouti.domain.character.enums.AvatarLayer;
 import com.lirouti.domain.character.repository.AvatarCharacterRepository;
+import com.lirouti.domain.character.repository.MemberCharacterRepository;
 import com.lirouti.domain.character.repository.MemberSelectedCharacterRepository;
 import com.lirouti.domain.media.service.MediaService;
 import com.lirouti.domain.shop.entity.MemberAvatarEquipment;
@@ -37,6 +38,7 @@ public class AvatarLayerAssembler {
 
     private final AvatarCharacterRepository avatarCharacterRepository;
     private final MemberSelectedCharacterRepository memberSelectedCharacterRepository;
+    private final MemberCharacterRepository memberCharacterRepository;
     private final MemberActivityDayRepository memberActivityDayRepository;
     private final MediaService mediaService;
     private final AvatarNestProperties nestProperties;
@@ -79,11 +81,26 @@ public class AvatarLayerAssembler {
             List<Long> memberIds,
             Map<Long, List<MemberAvatarEquipment>> equipmentsByMemberId
     ) {
-        Map<Long, Long> selectedCharacterIds = memberSelectedCharacterRepository
-                .findAllByMemberIdIn(memberIds).stream()
-                .collect(java.util.stream.Collectors.toMap(
-                        selected -> selected.getMemberId(),
-                        selected -> selected.getCharacterId()));
+        Map<Long, Long> selectedCharacterIds = new java.util.HashMap<>();
+        memberSelectedCharacterRepository.findAllByMemberIdIn(memberIds).forEach(selected ->
+                selectedCharacterIds.put(selected.getMemberId(), selected.getCharacterId()));
+
+        // 선택이 비어 있어도 보유가 있으면 가장 먼저 얻은 것으로 그린다.
+        //
+        // 캐릭터를 주는 경로가 둘이다 — 조건 판정(선택까지 채운다)과 업적 claim(보유만
+        // 넣는다). 뒤엣것으로 첫 캐릭터를 얻으면 선택이 비어 있는데, 그대로 두면 캐릭터도
+        // 둥지도 안 그려져 사용자는 "얻었는데 아무것도 안 바뀌었다" 를 보게 된다.
+        //
+        // 여기서 쓰기까지 하지는 않는다. 조회가 쓰기를 하면 읽기 전용 트랜잭션이 깨지고,
+        // 사용자가 캐릭터를 고르는 순간 어차피 행이 생긴다.
+        List<Long> withoutSelection = memberIds.stream().distinct()
+                .filter(memberId -> !selectedCharacterIds.containsKey(memberId))
+                .toList();
+        if (!withoutSelection.isEmpty()) {
+            memberCharacterRepository.findFirstOwnedByMemberIds(withoutSelection)
+                    .forEach(owned -> selectedCharacterIds.putIfAbsent(
+                            (Long) owned[0], (Long) owned[1]));
+        }
 
         Map<Long, AvatarCharacter> charactersById = avatarCharacterRepository
                 .findAllById(selectedCharacterIds.values().stream().distinct().toList()).stream()

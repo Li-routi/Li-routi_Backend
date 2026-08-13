@@ -148,6 +148,29 @@ class CharacterApiTest {
         assertThat(find(ROUTI).selected()).isTrue();
     }
 
+    /**
+     * 캐릭터를 주는 경로가 둘이다 — 조건 판정(선택까지 채운다)과 업적 claim(보유만 넣는다).
+     * 뒤엣것으로 첫 캐릭터를 얻으면 선택이 비어 있는데, 그대로 두면 캐릭터도 둥지도 안 그려져
+     * 사용자는 "얻었는데 아무것도 안 바뀌었다" 를 보게 된다.
+     */
+    @Test
+    @DisplayName("선택이 비어 있어도 보유가 있으면 그것으로 그린다")
+    void fallsBackToOwnedWhenSelectionMissing() {
+        unlock();
+        // 업적 경로처럼 선택만 지운다. 보유는 그대로다.
+        em.createNativeQuery("delete from member_selected_character where member_id = :memberId")
+                .setParameter("memberId", me.getId())
+                .executeUpdate();
+        em.flush();
+        em.clear();
+
+        assertAll(
+                () -> assertThat(avatarLayerAssembler.assembleAsResponse(me.getId(), List.of()))
+                        .as("아바타에 캐릭터가 빠지면 안 된다").isNotEmpty(),
+                () -> assertThat(find(ROUTI).selected())
+                        .as("도감과 아바타가 같은 캐릭터를 가리켜야 한다").isTrue());
+    }
+
     // ── 레이어 ──
 
     /**
