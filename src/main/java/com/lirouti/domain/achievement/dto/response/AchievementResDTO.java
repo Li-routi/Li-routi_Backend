@@ -47,6 +47,7 @@ public final class AchievementResDTO {
             Long achievementId,
             String code,
             String name,
+            String badgeImageUrl,
             String conditionDesc,
             MemberAchievementStatus status,
             Progress progress,

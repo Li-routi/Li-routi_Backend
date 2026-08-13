@@ -16,7 +16,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
-@Tag(name = "채팅 이모티콘 관리", description = "서비스 소유 채팅 이모티콘 운영 API")
+@Tag(name = "관리자 - 채팅 이모티콘 관리", description = "서비스 소유 채팅 이모티콘 운영 API")
 public interface ChatAdminControllerDocs {
 
     @Operation(

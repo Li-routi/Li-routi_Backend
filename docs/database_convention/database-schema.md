@@ -2816,6 +2816,7 @@ presigned URL 발급 시점의 KST 날짜다. **인증일(`verified_date`)과 �
 | `challenge_verification.image_url` | `ChallengeMediaReferenceSource` | 정리의 실제 대상 |
 | `challenge.image_url` | `ChallengeMediaReferenceSource` | 지금은 전부 `NULL`. 대표 이미지를 채울 때를 대비해 미리 포함 |
 | `chat_emoticon.asset_key` | `ChatMediaReferenceSource` | 활성·비활성 이모티콘 모두 기존 메시지 보존을 위해 참조 중으로 취급 |
+| `achievement.badge_image_key` | `AchievementMediaReferenceSource` | 비활성 업적도 DB에 key가 남아 있으면 참조 중으로 취급 |
 
 **탈퇴·신고로 숨겨진 인증의 사진도 "쓰이는 중"으로 친다.** 행이 남아 있으면 파일도 살아 있는 것이다. 탈퇴 회원 사진을 지우는 것은 별개 정책이다(#70).
 
@@ -2823,7 +2824,7 @@ presigned URL 발급 시점의 KST 날짜다. **인증일(`verified_date`)과 �
 
 **대기 prefix(`challenge-verifications-staging/`)는 여기에 등록하지 않는다.** 승격되지 않은 대기본은 DB 가 참조하지 않는 것이 정상이라, 대조 방식이 애초에 맞지 않는다. 대신 나이 기반 수명 주기 규칙으로 지운다 — 근거는 [심사가 붙는 용도는 대기 prefix로 먼저 받는다](#심사가-붙는-용도는-대기-prefix로-먼저-받는다)에 적었다. **담당자가 없는 유일한 정상 사례**이므로 빠뜨린 것으로 오해하지 않도록 여기에도 남긴다.
 
-아래 두 용도는 [인증(verification) 도메인](#인증verification-도메인--설계안-합의-필요)에서 **테이블·API 가 이미 추가됐다.** 다만 **아직 `MediaReferenceSource` 구현체가 없다.** prefix 도 목표 형태이지 현재 형태가 아니다.
+아래 두 용도는 [인증(verification) 도메인](#인증verification-도메인--설계안-합의-필요)에서 **테이블·API 가 이미 추가됐다.** 다만 **아직 `MediaReferenceSource` 구현체가 없다.** 위 표의 구현체가 담당하는 용도와 달리, prefix도 목표 형태이지 현재 형태가 아니다.
 
 > ⚠️ **이 두 용도의 고아 객체는 미참조 정리 배치로 삭제되지 않는다.** 담당자가 없는 용도는 배치가 목록조차 훑지 않기 때문이다(위 원칙 — 안전한 쪽으로 실패한다). 다른 수단(수동 삭제, 버킷 수명 주기 규칙)까지 막는 것은 아니지만, 지금 그런 수단은 없다.
 >
