@@ -167,6 +167,10 @@ public class RoutineVerificationCommandService {
             }
         }
         verification.reverify(mediaKey, content, verifiedAt);
+
+        // 재인증은 활동일을 남기지 않는다. 그 할당의 인증은 이미 있었고 사진을 바꾸는 것이라
+        // 새로운 완료가 아니다 -- 남기면 어제 인증의 사진만 오늘 교체해도 오늘이 활동일이 되어
+        // "며칠 했는가" 가 실제로 한 날보다 부풀어 오른다. 챌린지 재인증도 같은 규칙이다.
         return verification;
     }
 

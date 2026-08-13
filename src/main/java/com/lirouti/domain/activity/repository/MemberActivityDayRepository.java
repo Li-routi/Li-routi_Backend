@@ -1,7 +1,6 @@
 package com.lirouti.domain.activity.repository;
 
 import com.lirouti.domain.activity.entity.MemberActivityDay;
-import jakarta.transaction.Transactional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -33,7 +32,6 @@ public interface MemberActivityDayRepository extends JpaRepository<MemberActivit
      * <p>JPA 로는 이 갱신을 표현할 수 없어 네이티브로 둔다.
      */
     @Modifying
-    @Transactional
     @Query(value = """
             INSERT INTO member_activity_day
                 (member_id, activity_date, all_completed, created_at, updated_at)

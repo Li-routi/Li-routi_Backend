@@ -194,7 +194,13 @@ public class ChallengeVerificationCommandService {
         // 사실이고, 되돌리면 해금이 뒤늦게 취소되는 상황이 생긴다.
         //
         // all_completed 는 개인 루틴만 보는 값이라 여기서 올리지 않는다.
-        memberActivityDayCommandService.record(memberId, today);
+        //
+        // ⚠️ 재인증은 남기지 않는다. 그 구간의 인증은 이미 있었고 사진을 바꾸는 것이라
+        //    새로운 완료가 아니다. 남기면 어제 인증의 사진만 오늘 교체해도 오늘이 활동일이
+        //    되어, "며칠 했는가" 가 실제로 한 날보다 부풀어 오른다.
+        if (!reverified) {
+            memberActivityDayCommandService.record(memberId, today);
+        }
 
         // 보류 건은 아직 대기 prefix 에 있어 공개 주소가 없다. 그 주소로 열면 403 이므로
         // 서명을 발급한다 — 본인이 방금 올린 사진이라 여기서 보여 주는 것은 문제가 없다.
