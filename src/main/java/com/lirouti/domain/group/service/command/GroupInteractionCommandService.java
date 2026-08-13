@@ -52,6 +52,11 @@ public class GroupInteractionCommandService {
                     authorMembership.getId(), assignmentId);
         }
         int inserted = disappointmentRepository.insertIfAbsent(verificationId, memberId);
+        if (inserted == 1) {
+            GroupMember authorMembership = groupMemberActivityCommandService.lockMembership(groupId, authorId);
+            groupMemberRepository.incrementTotalDisappointmentCountForCurrentActiveMembership(
+                    authorMembership.getId(), assignmentId, inserted);
+        }
         if (inserted == 1 && !authorId.equals(memberId)) {
             eventPublisher.publishEvent(new NotificationRequestedEvent(authorId, NotificationCategory.GROUP_ROUTINE,
                     NotificationType.GROUP_VERIFICATION_DISAPPOINTED, "그룹원이 인증을 응원하고 있어요",
@@ -67,9 +72,18 @@ public class GroupInteractionCommandService {
     public GroupInteractionResDTO.Disappointment undisappoint(Long memberId, Long groupId, Long verificationId) {
         validationService.lockActiveGroupForUpdate(groupId);
         validationService.validateActiveGroupMember(groupId, memberId);
-        if (verificationRepository.findByIdAndGroupId(verificationId, groupId).isEmpty())
+        GroupRoutineVerification verification = verificationRepository.findByIdAndGroupId(verificationId, groupId)
+                .orElse(null);
+        if (verification == null)
             throw new VerificationException(VerificationErrorCode.GROUP_ROUTINE_VERIFICATION_NOT_FOUND);
-        disappointmentRepository.deleteReaction(verificationId, memberId);
+        int deleted = disappointmentRepository.deleteReaction(verificationId, memberId);
+        if (deleted == 1) {
+            Long assignmentId = verification.getAssignment().getId();
+            Long authorId = verification.getAssignment().getMember().getId();
+            GroupMember authorMembership = groupMemberActivityCommandService.lockMembership(groupId, authorId);
+            groupMemberRepository.decrementTotalDisappointmentCountForCurrentActiveMembershipIfPositive(
+                    authorMembership.getId(), assignmentId, deleted);
+        }
         return result(verificationId, false);
     }
 

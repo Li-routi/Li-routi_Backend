@@ -99,6 +99,7 @@ public interface GroupRoutineAssignmentRepository
             where assignment.groupRoutine.group.id = :groupId
               and assignment.member.id = :memberId
               and assignment.status in :unfinishedStatuses
+              and assignment.verification is null
             """)
     int deleteUnfinishedAssignmentsForLeaver(
             @Param("groupId") Long groupId,
@@ -119,6 +120,7 @@ public interface GroupRoutineAssignmentRepository
     @Query("""
             select assignment
             from GroupRoutineAssignment assignment
+            join fetch assignment.member
             join fetch assignment.groupRoutine routine
             join fetch routine.group groupEntity
             where routine.id = :groupRoutineId
@@ -157,6 +159,7 @@ public interface GroupRoutineAssignmentRepository
     @Query("""
             select assignment
             from GroupRoutineAssignment assignment
+            left join fetch assignment.verification
             where assignment.groupRoutine.group.id in :groupIds
               and assignment.status in :unfinishedStatuses
               and (
@@ -297,6 +300,21 @@ public interface GroupRoutineAssignmentRepository
             @Param("assignmentIds") List<Long> assignmentIds,
             @Param("unfinishedStatuses") List<GroupRoutineAssignmentStatus> unfinishedStatuses,
             @Param("missedStatus") GroupRoutineAssignmentStatus missedStatus
+    );
+
+    /** batch에서 잠근 인증 완료 후보만 COMPLETED로 전이한다. */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+            update GroupRoutineAssignment assignment
+            set assignment.status = :completedStatus,
+                assignment.version = assignment.version + 1
+            where assignment.id in :assignmentIds
+              and assignment.status in :unfinishedStatuses
+            """)
+    int markAssignmentsCompletedByIds(
+            @Param("assignmentIds") List<Long> assignmentIds,
+            @Param("unfinishedStatuses") List<GroupRoutineAssignmentStatus> unfinishedStatuses,
+            @Param("completedStatus") GroupRoutineAssignmentStatus completedStatus
     );
 
     /**

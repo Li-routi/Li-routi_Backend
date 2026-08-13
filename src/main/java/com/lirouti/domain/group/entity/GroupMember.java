@@ -95,6 +95,10 @@ public class GroupMember extends BaseEntity {
     @Column(name = "total_poke_count", nullable = false)
     private long totalPokeCount;
 
+    /** 현재 가입 회차에서 다른 그룹원에게 받은 누적 아쉬워요 수다. */
+    @Column(name = "total_disappointment_count", nullable = false)
+    private long totalDisappointmentCount;
+
     /**
      * 신규 참여 관계는 항상 ACTIVE 상태로 시작한다.
      * 그룹 생성자는 이 빌더에 OWNER role을 전달해 그룹 생성 트랜잭션 안에서 함께 저장한다.
@@ -195,12 +199,23 @@ public class GroupMember extends BaseEntity {
         totalPokeCount++;
     }
 
+    public void increaseTotalDisappointmentCount() {
+        totalDisappointmentCount++;
+    }
+
     /** 실제 Like 삭제와 카운터 감소를 함께 롤백시키기 위해 음수 상태를 허용하지 않는다. */
     public void decreaseTotalLikeCount() {
         if (totalLikeCount == 0) {
             throw new IllegalStateException("그룹 멤버 누적 좋아요 수는 음수가 될 수 없습니다.");
         }
         totalLikeCount--;
+    }
+
+    public void decreaseTotalDisappointmentCount() {
+        if (totalDisappointmentCount == 0) {
+            throw new IllegalStateException("그룹 멤버 누적 아쉬워요 수는 음수가 될 수 없습니다.");
+        }
+        totalDisappointmentCount--;
     }
 
     public void updateStatusMessage(String statusMessage) {
@@ -229,6 +244,7 @@ public class GroupMember extends BaseEntity {
         lastStreakCompletedDate = null;
         totalLikeCount = 0;
         totalPokeCount = 0;
+        totalDisappointmentCount = 0;
     }
 
     /*

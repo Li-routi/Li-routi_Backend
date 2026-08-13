@@ -47,7 +47,13 @@ public class GroupRoutineVerificationLikeCommandService {
         // 기존 단위 테스트의 직접 생성 경로에서는 신규 저장소가 null일 수 있다.
         // Spring 운영 빈에서는 항상 주입되어 좋아요/아쉬워요 상호 배타성을 보장한다.
         if (disappointmentRepository != null) {
-            disappointmentRepository.deleteReaction(verificationId, memberId);
+            int deletedDisappointment = disappointmentRepository.deleteReaction(verificationId, memberId);
+            if (deletedDisappointment == 1) {
+                AuthorVerificationContext author = authorContext(verification);
+                GroupMember authorMembership = lockAuthorMembership(groupId, author.memberId());
+                groupMemberRepository.decrementTotalDisappointmentCountForCurrentActiveMembershipIfPositive(
+                        authorMembership.getId(), author.assignmentId(), deletedDisappointment);
+            }
         }
         int inserted = groupRoutineVerificationLikeRepository.insertIfAbsent(verificationId, memberId);
         if (inserted == 1) {

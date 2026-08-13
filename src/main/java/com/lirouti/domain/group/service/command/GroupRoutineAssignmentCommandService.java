@@ -286,6 +286,22 @@ public class GroupRoutineAssignmentCommandService {
         throw new GroupException(GroupErrorCode.GROUP_ROUTINE_ASSIGNMENT_NOT_IN_PROGRESS);
     }
 
+    /** 인증 저장은 증빙만 남기고 최종 완료 판정은 마감 batch에 맡긴다. */
+    public void validateAssignmentVerifiable(GroupRoutineAssignment assignment, LocalDateTime verifiedAt) {
+        if (assignment == null || verifiedAt == null) {
+            throw new IllegalArgumentException("그룹 루틴 할당과 인증 시각은 필수입니다.");
+        }
+        if (assignment.getStatus() != GroupRoutineAssignmentStatus.PENDING
+                && assignment.getStatus() != GroupRoutineAssignmentStatus.IN_PROGRESS) {
+            throw new GroupException(GroupErrorCode.GROUP_ROUTINE_ASSIGNMENT_NOT_IN_PROGRESS);
+        }
+        if (!assignment.getAssignedDate().equals(verifiedAt.toLocalDate())
+                || assignment.getScheduledStartTime().isAfter(verifiedAt.toLocalTime())
+                || !assignment.getScheduledEndTime().isAfter(verifiedAt.toLocalTime())) {
+            throw new GroupException(GroupErrorCode.GROUP_ROUTINE_ASSIGNMENT_NOT_IN_PROGRESS);
+        }
+    }
+
     /** 실제 완료 전이와 현재 가입 회차 스트릭 갱신을 같은 트랜잭션으로 묶는다. */
     @Transactional
     public void completeAssignmentAndRecordActivity(
@@ -309,24 +325,24 @@ public class GroupRoutineAssignmentCommandService {
      * @param currentDateTime 상태 전이 기준 시각
      */
     public void refreshAssignmentStatuses(LocalDateTime currentDateTime) {
-        int missedCount = 0;
+        int transitionedCount = 0;
         while (true) {
-            int batchMissedCount = statusRefreshBatchService
-                    .markExpiredAssignmentsMissed(
+            int batchTransitionedCount = statusRefreshBatchService
+                    .resolveExpiredAssignments(
                             currentDateTime,
                             EXPIRED_ASSIGNMENT_GROUP_BATCH_SIZE
                     );
-            if (batchMissedCount == 0) {
+            if (batchTransitionedCount == 0) {
                 break;
             }
-            missedCount += batchMissedCount;
+            transitionedCount += batchTransitionedCount;
         }
         int inProgressCount = statusRefreshBatchService
                 .markStartedAssignmentsInProgress(currentDateTime);
-        if (missedCount > 0 || inProgressCount > 0) {
+        if (transitionedCount > 0 || inProgressCount > 0) {
             log.info("그룹 루틴 할당 상태 갱신을 완료했습니다. "
-                            + "currentDateTime={}, missedCount={}, inProgressCount={}",
-                    currentDateTime, missedCount, inProgressCount);
+                            + "currentDateTime={}, transitionedCount={}, inProgressCount={}",
+                    currentDateTime, transitionedCount, inProgressCount);
         }
     }
 

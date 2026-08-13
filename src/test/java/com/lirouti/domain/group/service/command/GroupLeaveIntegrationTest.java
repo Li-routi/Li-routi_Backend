@@ -30,7 +30,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -151,25 +150,26 @@ class GroupLeaveIntegrationTest {
     }
 
     @Test
-    @DisplayName("bulk delete가 실패하면 GroupMember 상태 변경과 할당 삭제도 함께 롤백된다")
-    void leaveGroup_DeleteFails_RollsBackMembershipAndAssignment() {
-        // given: 정상 불변식을 의도적으로 깨서 DB FK 오류를 만든다.
+    @DisplayName("인증이 연결된 미완료 Assignment는 탈퇴 시 보존한다")
+    void leaveGroup_VerifiedUnfinishedAssignment_IsPreserved() {
+        // given
         Fixture fixture = fixture();
         GroupRoutineAssignment pending = assignment(fixture.group(), fixture.member(), PENDING, LocalDate.now());
         GroupRoutineVerification verification = verification(pending);
 
-        // when & then
-        assertThatThrownBy(() -> groupCommandService.leaveGroup(fixture.group().getId(), fixture.member().getId()))
-                .isInstanceOf(DataIntegrityViolationException.class);
+        // when
+        groupCommandService.leaveGroup(fixture.group().getId(), fixture.member().getId());
+
+        // then
         assertThat(groupMemberRepository.findById(fixture.membership().getId()).orElseThrow().getStatus())
-                .isEqualTo(GroupMemberStatus.ACTIVE);
+                .isEqualTo(GroupMemberStatus.LEFT);
         assertThat(assignmentRepository.existsById(pending.getId())).isTrue();
         assertThat(verificationRepository.existsById(verification.getId())).isTrue();
     }
 
     @Test
-    @DisplayName("인증이 먼저 그룹 잠금을 확정하면 탈퇴는 완료·인증 이력을 보존한다")
-    void leaveGroup_VerificationCommitsFirst_PreservesCompletedAssignment() throws Exception {
+    @DisplayName("인증이 먼저 그룹 잠금을 확정하면 탈퇴는 인증 이력을 보존한다")
+    void leaveGroup_VerificationCommitsFirst_PreservesVerifiedAssignment() throws Exception {
         // given
         Fixture fixture = fixture();
         GroupRoutineAssignment assignment = verifiableAssignment(fixture);
@@ -183,7 +183,7 @@ class GroupLeaveIntegrationTest {
                 groupValidationService.lockActiveGroupForUpdate(fixture.group().getId());
                 verificationLocked.countDown();
                 await(releaseVerification);
-                verificationCommandService.verifyGroupRoutineAndComplete(
+                verificationCommandService.verifyGroupRoutine(
                         fixture.member().getId(), fixture.group().getId(), assignment.getGroupRoutine().getId(),
                         assignment.getAssignedDate(), "group-routine-verifications/lock-first.jpg", "완료",
                         LocalDateTime.now());
@@ -205,7 +205,7 @@ class GroupLeaveIntegrationTest {
 
         // then
         assertThat(assignmentRepository.findById(assignment.getId()).orElseThrow().getStatus())
-                .isEqualTo(COMPLETED);
+                .isEqualTo(IN_PROGRESS);
         assertThat(verificationRepository.findByAssignmentId(assignment.getId())).isPresent();
         assertThat(groupMemberRepository.findById(fixture.membership().getId()).orElseThrow().getStatus())
                 .isEqualTo(GroupMemberStatus.LEFT);
@@ -238,7 +238,7 @@ class GroupLeaveIntegrationTest {
             Future<?> verificationFuture = pool.submit(() -> {
                 verificationStarted.countDown();
                 try {
-                    verificationCommandService.verifyGroupRoutineAndComplete(
+                    verificationCommandService.verifyGroupRoutine(
                             fixture.member().getId(), fixture.group().getId(), assignment.getGroupRoutine().getId(),
                             assignment.getAssignedDate(), "group-routine-verifications/leave-first.jpg", "완료",
                             LocalDateTime.now());
