@@ -33,6 +33,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static com.lirouti.support.testdb.MemberFixtureCleanup.deleteDependencies;
 
 @SpringBootTest
 @DisplayName("그룹별 활성 그룹원 상한 동시성 테스트")
@@ -61,8 +62,10 @@ class GroupMemberLimitConcurrencyTest {
         }
         jdbcTemplate.update("delete from group_member where group_id = ?", groupId);
         jdbcTemplate.update("delete from member_group where id = ?", groupId);
-        memberIds.forEach(memberId ->
-                jdbcTemplate.update("delete from member where id = ?", memberId));
+        memberIds.forEach(memberId -> {
+            deleteDependencies(jdbcTemplate, memberId);
+            jdbcTemplate.update("delete from member where id = ?", memberId);
+        });
     }
 
     @Test

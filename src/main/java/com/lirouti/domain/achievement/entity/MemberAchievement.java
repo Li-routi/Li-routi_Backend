@@ -93,6 +93,25 @@ public class MemberAchievement extends BaseEntity {
         markAchieved();
     }
 
+    /**
+     * 진행도를 절대값으로 맞춘다. {@link #increaseProgress}가 "매번 얼마씩 더할지"를 받는
+     * 단조 증가 전용이라면, 이건 "지금 진행도가 정확히 얼마인지"를 매번 다시 계산해 넣는
+     * 용도다 — WEEKLY_DISTINCT_DAY_COUNT·MONTHLY_DISTINCT_DAY_COUNT 처럼 주/월 경계가
+     * 바뀌면 진행도가 줄어들 수도 있는 타입은 "더하기"로 표현할 수 없어서 필요하다.
+     *
+     * <p>increaseProgress와 마찬가지로 IN_PROGRESS 가 아니면 아무 것도 하지 않는다 — 이미
+     * ACHIEVED/CLAIMED 인 업적이 주가 바뀌었다고 다시 IN_PROGRESS 로 되돌아가지 않는다.
+     */
+    public void syncProgress(int currentValue, int targetCount) {
+        if (this.status != MemberAchievementStatus.IN_PROGRESS) {
+            return;
+        }
+        this.currentProgress = Math.min(currentValue, targetCount);
+        if (this.currentProgress >= targetCount) {
+            markAchieved();
+        }
+    }
+
     private void markAchieved() {
         this.status = MemberAchievementStatus.ACHIEVED;
         this.achievedAt = LocalDateTime.now();

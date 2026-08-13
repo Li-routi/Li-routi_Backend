@@ -27,6 +27,7 @@ import java.time.ZoneId;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
+import static com.lirouti.support.testdb.MemberFixtureCleanup.deleteDependencies;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
@@ -219,6 +220,7 @@ class GroupCreationControllerIntegrationTest {
                 delete("delete from group_member where group_id = :groupId", groupId);
                 delete("delete from member_group where id = :groupId", groupId);
             }
+            deleteDependencies(entityManager, memberId);
             entityManager.createNativeQuery("delete from member where id = :memberId")
                     .setParameter("memberId", memberId)
                     .executeUpdate();
