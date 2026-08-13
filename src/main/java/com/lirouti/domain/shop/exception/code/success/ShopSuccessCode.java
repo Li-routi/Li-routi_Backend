@@ -28,6 +28,11 @@ public enum ShopSuccessCode implements BaseSuccessCode {
             HttpStatus.OK,
             "아바타 착용 저장에 성공했습니다.",
             "SHOP200_4"
+    ),
+    SHOP_CATEGORY_LIST_FETCH_SUCCESS(
+            HttpStatus.OK,
+            "상점 탭 목록 조회에 성공했습니다.",
+            "SHOP200_5"
     );
 
     private final HttpStatus httpStatus;

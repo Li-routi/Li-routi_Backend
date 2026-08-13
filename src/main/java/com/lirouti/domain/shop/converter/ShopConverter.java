@@ -3,7 +3,9 @@ package com.lirouti.domain.shop.converter;
 import com.lirouti.domain.shop.dto.response.ShopResDTO;
 import com.lirouti.domain.shop.entity.AvatarItem;
 import com.lirouti.domain.shop.entity.MemberAvatarEquipment;
+import com.lirouti.domain.shop.enums.ShopCategory;
 
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -14,6 +16,26 @@ import java.util.stream.Collectors;
 public final class ShopConverter {
 
     private ShopConverter() {
+    }
+
+    public static ShopResDTO.Category toCategory(ShopCategory category) {
+        return ShopResDTO.Category.builder()
+                .key(category)
+                .name(category.getName())
+                .source(category.getSource())
+                .slot(category.getSlot())
+                .sortOrder(category.getSortOrder())
+                .build();
+    }
+
+    /** 정렬해서 내린다 — 클라이언트가 순서 규칙을 따로 갖지 않게 한다. */
+    public static ShopResDTO.Categories toCategories(List<ShopCategory> categories) {
+        return ShopResDTO.Categories.builder()
+                .categories(categories.stream()
+                        .sorted(Comparator.comparingInt(ShopCategory::getSortOrder))
+                        .map(ShopConverter::toCategory)
+                        .toList())
+                .build();
     }
 
     public static ShopResDTO.Item toItem(AvatarItem item, boolean owned) {
