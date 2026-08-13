@@ -17,4 +17,7 @@ public interface MemberCharacterRepository extends JpaRepository<MemberCharacter
     List<Long> findCharacterIdsByMemberId(@Param("memberId") Long memberId);
 
     boolean existsByMemberIdAndAvatarCharacterId(Long memberId, Long characterId);
+
+    /** 목록 화면이 캐릭터마다 보유를 묻지 않도록 한 번에 읽는다. */
+    List<MemberCharacter> findAllByMemberId(Long memberId);
 }

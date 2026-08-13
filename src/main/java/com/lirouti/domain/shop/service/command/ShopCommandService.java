@@ -20,6 +20,7 @@ import com.lirouti.domain.wallet.service.WalletService;
 import com.lirouti.domain.wallet.service.command.WalletCommandService.WalletCommand;
 import com.lirouti.global.util.TimeUtil;
 import com.lirouti.domain.media.service.MediaService;
+import com.lirouti.domain.character.service.query.AvatarLayerAssembler;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -49,6 +50,7 @@ public class ShopCommandService {
     private final MemberAvatarEquipmentRepository memberAvatarEquipmentRepository;
     private final WalletService walletService;
     private final MediaService mediaService;
+    private final AvatarLayerAssembler avatarLayerAssembler;
 
 
     /**
@@ -150,7 +152,9 @@ public class ShopCommandService {
         }
         memberAvatarEquipmentRepository.saveAll(saved);
 
-        return ShopConverter.toAvatar(saved, mediaService::resolveAvatarAssetUrl);
+        return ShopConverter.toAvatar(saved,
+                avatarLayerAssembler.assembleAsResponse(memberId, saved),
+                mediaService::resolveAvatarAssetUrl);
     }
 
     /** 그 아이템의 슬롯만 교체한다. 다른 자리는 그대로다. */
@@ -164,8 +168,10 @@ public class ShopCommandService {
     }
 
     private ShopResDTO.Avatar currentAvatar(Long memberId) {
-        return ShopConverter.toAvatar(
-                memberAvatarEquipmentRepository.findAllByMemberId(memberId),
+        List<MemberAvatarEquipment> equipments =
+                memberAvatarEquipmentRepository.findAllByMemberId(memberId);
+        return ShopConverter.toAvatar(equipments,
+                avatarLayerAssembler.assembleAsResponse(memberId, equipments),
                 mediaService::resolveAvatarAssetUrl);
     }
 

@@ -1,0 +1,163 @@
+package com.lirouti.domain.character.service.query;
+
+import com.lirouti.domain.activity.repository.MemberActivityDayRepository;
+import com.lirouti.domain.character.dto.response.CharacterResDTO;
+import com.lirouti.domain.character.entity.AvatarCharacter;
+import com.lirouti.domain.character.enums.AvatarLayer;
+import com.lirouti.domain.character.repository.AvatarCharacterRepository;
+import com.lirouti.domain.character.repository.MemberSelectedCharacterRepository;
+import com.lirouti.domain.media.service.MediaService;
+import com.lirouti.domain.shop.entity.MemberAvatarEquipment;
+import com.lirouti.global.properties.AvatarNestProperties;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Clock;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+/**
+ * 화면에 겹쳐 그릴 레이어를 세운다.
+ *
+ * <p><b>서버가 순서를 정한다.</b> 앱이 슬롯 이름을 보고 깊이를 판단하면 레이어가 하나 늘 때마다
+ * 앱 배포가 붙는다 — 정렬해서 내리고, 앱은 받은 순서대로 겹치기만 한다.
+ *
+ * <p><b>좌표는 내리지 않는다.</b> 자산이 전부 같은 캔버스(400×400)에 그려져 있어 겹치기만 하면
+ * 맞는다. 좌표를 내리기 시작하면 자산을 다시 그릴 때마다 그 값이 낡고, 앱이 그것을 믿고 배치한
+ * 뒤라 자산 교체가 앱 배포를 부른다.
+ */
+@Service
+@RequiredArgsConstructor
+public class AvatarLayerAssembler {
+
+    private final AvatarCharacterRepository avatarCharacterRepository;
+    private final MemberSelectedCharacterRepository memberSelectedCharacterRepository;
+    private final MemberActivityDayRepository memberActivityDayRepository;
+    private final MediaService mediaService;
+    private final AvatarNestProperties nestProperties;
+    private final Clock clock;
+
+    /** 한 사람의 레이어를 응답 모양으로. */
+    @Transactional(readOnly = true)
+    public List<CharacterResDTO.Layer> assembleAsResponse(
+            Long memberId, List<MemberAvatarEquipment> equipments) {
+        return toResponse(assembleAll(List.of(memberId), Map.of(memberId, equipments)).get(memberId));
+    }
+
+    /** 여러 사람의 레이어를 응답 모양으로. */
+    @Transactional(readOnly = true)
+    public Map<Long, List<CharacterResDTO.Layer>> assembleAllAsResponse(
+            List<Long> memberIds, Map<Long, List<MemberAvatarEquipment>> equipmentsByMemberId) {
+        return assembleAll(memberIds, equipmentsByMemberId).entrySet().stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        Map.Entry::getKey, entry -> toResponse(entry.getValue()),
+                        (left, right) -> left, java.util.LinkedHashMap::new));
+    }
+
+    private List<CharacterResDTO.Layer> toResponse(List<Layer> layers) {
+        return layers.stream()
+                .map(layer -> CharacterResDTO.Layer.builder()
+                        .layer(layer.layer())
+                        .z(layer.z())
+                        .imageUrl(layer.imageUrl())
+                        .build())
+                .toList();
+    }
+
+    /**
+     * 여러 사람의 레이어를 한 번에.
+     *
+     * <p>그룹 화면이 구성원마다 아바타를 그린다 — 사람마다 따로 조회하면 N+1 이 된다.
+     */
+    @Transactional(readOnly = true)
+    public Map<Long, List<Layer>> assembleAll(
+            List<Long> memberIds,
+            Map<Long, List<MemberAvatarEquipment>> equipmentsByMemberId
+    ) {
+        Map<Long, Long> selectedCharacterIds = memberSelectedCharacterRepository
+                .findAllByMemberIdIn(memberIds).stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        selected -> selected.getMemberId(),
+                        selected -> selected.getCharacterId()));
+
+        Map<Long, AvatarCharacter> charactersById = avatarCharacterRepository
+                .findAllById(selectedCharacterIds.values().stream().distinct().toList()).stream()
+                .collect(java.util.stream.Collectors.toMap(AvatarCharacter::getId, character -> character));
+
+        return memberIds.stream().distinct().collect(java.util.stream.Collectors.toMap(
+                memberId -> memberId,
+                memberId -> assembleOne(
+                        memberId,
+                        Optional.ofNullable(selectedCharacterIds.get(memberId))
+                                .map(charactersById::get)
+                                .orElse(null),
+                        equipmentsByMemberId.getOrDefault(memberId, List.of())),
+                (left, right) -> left,
+                java.util.LinkedHashMap::new
+        ));
+    }
+
+    private List<Layer> assembleOne(Long memberId,
+                                    AvatarCharacter character,
+                                    List<MemberAvatarEquipment> equipments) {
+        List<Layer> layers = new ArrayList<>();
+
+        // 캐릭터가 없으면 둥지도 그리지 않는다. 캐릭터 없이 둥지만 뜨면 빈 둥지가 남는다.
+        if (character != null) {
+            int nestLevel = nestLevelOf(memberId);
+            layers.add(layer(AvatarLayer.NEST_BACK, nestBackKey(nestLevel)));
+            layers.add(layer(AvatarLayer.CHARACTER, character.getAdultImageKey()));
+            layers.add(layer(AvatarLayer.NEST_FRONT, nestFrontKey(nestLevel)));
+        }
+
+        equipments.forEach(equipment -> layers.add(layer(
+                AvatarLayer.of(equipment.getSlot()),
+                equipment.getAvatarItem().getImageKey())));
+
+        // 정렬은 서버가 한다. 클라이언트가 순서 규칙을 따로 갖지 않게 한다.
+        layers.sort(Comparator.comparingInt(Layer::z));
+        return layers;
+    }
+
+    /**
+     * 둥지 레벨. <b>저장하지 않고 지금 기록으로 계산한다.</b>
+     *
+     * <p>강등이 있어 상태로 들고 다니면 "기록" 과 "카운터" 라는 진실이 둘이 된다. 최근 창에
+     * 완수한 날이 창 길이만큼 들어 있으면 연속이라는 뜻이라, 끊김을 따로 판정하지 않는다.
+     *
+     * <p>기준일을 애플리케이션이 넘긴다 — {@code CURRENT_DATE} 는 DB 세션 시간대를 따르는데
+     * 활동일은 KST 로 찍혀서 자정 언저리에 하루가 밀린다.
+     */
+    private int nestLevelOf(Long memberId) {
+        int windowDays = nestProperties.getLevel2Days();
+        LocalDate exclusiveFrom = LocalDate.now(clock).minusDays(windowDays);
+        long completed = memberActivityDayRepository
+                .countByMemberIdAndAllCompletedTrueAndActivityDateAfter(memberId, exclusiveFrom);
+        return completed >= windowDays ? 2 : 1;
+    }
+
+    private String nestBackKey(int level) {
+        return level == 2 ? nestProperties.getLevel2BackKey() : nestProperties.getLevel1BackKey();
+    }
+
+    private String nestFrontKey(int level) {
+        return level == 2 ? nestProperties.getLevel2FrontKey() : nestProperties.getLevel1FrontKey();
+    }
+
+    private Layer layer(AvatarLayer avatarLayer, String imageKey) {
+        return new Layer(avatarLayer, mediaService.resolveAvatarAssetUrl(imageKey));
+    }
+
+    /** 그릴 것 하나. */
+    public record Layer(AvatarLayer layer, String imageUrl) {
+
+        public int z() {
+            return layer.getZ();
+        }
+    }
+}

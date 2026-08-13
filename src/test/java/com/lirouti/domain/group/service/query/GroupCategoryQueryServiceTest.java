@@ -17,6 +17,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import com.lirouti.domain.character.service.query.AvatarLayerAssembler;
 import com.lirouti.domain.media.service.MediaService;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -41,6 +42,7 @@ class GroupCategoryQueryServiceTest {
     @Mock private GroupRoutineCategoryRepository categoryRepository;
     @Mock private MemberAvatarEquipmentRepository memberAvatarEquipmentRepository;
     @Mock private MediaService mediaService;
+    @Mock private AvatarLayerAssembler avatarLayerAssembler;
     @Mock private GroupValidationService validationService;
     @Mock private MemberQueryService memberQueryService;
 
@@ -56,6 +58,7 @@ class GroupCategoryQueryServiceTest {
                 categoryRepository,
                 memberAvatarEquipmentRepository,
                 mediaService,
+                avatarLayerAssembler,
                 validationService,
                 memberQueryService,
                 Clock.systemUTC()
