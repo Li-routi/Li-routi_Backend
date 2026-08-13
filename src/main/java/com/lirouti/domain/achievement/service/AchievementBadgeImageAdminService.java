@@ -41,7 +41,7 @@ public class AchievementBadgeImageAdminService {
     ) {
         validateActiveAdmin(adminId);
         if (achievementId == null) {
-            throw new AchievementException(AchievementErrorCode.NOT_FOUND);
+            throw new AchievementException(AchievementErrorCode.ACHIEVEMENT_ID_REQUIRED);
         }
         achievementRepository.findById(achievementId)
                 .orElseThrow(() -> new AchievementException(AchievementErrorCode.NOT_FOUND));

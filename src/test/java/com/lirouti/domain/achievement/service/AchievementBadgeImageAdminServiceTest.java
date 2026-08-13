@@ -132,6 +132,20 @@ class AchievementBadgeImageAdminServiceTest {
     }
 
     @Test
+    @DisplayName("업적 ID가 없으면 400으로 거부하고 업적 조회와 업로드를 하지 않는다")
+    void uploadBadgeImage_NullAchievementId_ThrowsBadRequest() {
+        givenActiveAdmin();
+
+        assertThatThrownBy(() -> adminService.uploadBadgeImage(
+                ADMIN_ID, null, CONTENT_TYPE, 10L, source()))
+                .isInstanceOf(AchievementException.class)
+                .extracting("code")
+                .isEqualTo(AchievementErrorCode.ACHIEVEMENT_ID_REQUIRED);
+
+        verifyNoInteractions(achievementRepository, mediaService, achievementCommandService);
+    }
+
+    @Test
     @DisplayName("DB key 교체 실패 시 새 S3 object를 보상 삭제하고 원래 예외를 유지한다")
     void uploadBadgeImage_DatabaseFailure_DeletesNewObject() {
         InputStreamSource source = source();
