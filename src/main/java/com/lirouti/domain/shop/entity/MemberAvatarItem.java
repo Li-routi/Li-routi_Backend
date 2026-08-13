@@ -1,7 +1,6 @@
 package com.lirouti.domain.shop.entity;
 
 import com.lirouti.domain.member.entity.Member;
-import com.lirouti.domain.shop.enums.AvatarItemSource;
 import com.lirouti.domain.wallet.enums.Currency;
 import com.lirouti.global.entity.BaseEntity;
 import jakarta.persistence.*;
