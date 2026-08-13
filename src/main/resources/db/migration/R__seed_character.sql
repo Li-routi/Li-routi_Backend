@@ -58,7 +58,18 @@ VALUES (1, 'ROUTI', '루티',
        (13, 'DAMI', '다미',
         'avatar/character/DAMI/egg-v1.png', 'avatar/character/DAMI/adult-v1.png',
         0, 13, 1, NOW(6), NOW(6)) AS new_row
-ON DUPLICATE KEY UPDATE `code`            = new_row.`code`,
+ON DUPLICATE KEY UPDATE
+    -- ⚠️ 이 절은 어느 키가 충돌했는지 가리지 않는다. code 에도 유니크가 걸려 있어서, 시드의
+    --    code 를 다른 id 가 이미 쓰고 있으면(예: 백오피스가 넣은 1000 번) 그 행의 이름과
+    --    이미지가 시드 값으로 조용히 덮어써진다. id 대역 규칙과 "id 는 안정적이다" 는 계약이
+    --    거기서 깨진다.
+    --
+    --    그래서 id 로 걸린 것이 아니면 id 를 NULL 로 만들어 즉시 실패시킨다. NOT NULL 컬럼이라
+    --    "Column 'id' cannot be null" 로 마이그레이션이 멈춘다 — 조용히 남의 행을 고치는 것보다
+    --    부팅이 실패하는 편이 낫다. 사람이 code 충돌을 풀고 다시 배포해야 한다.
+                        `id`              = IF(`avatar_character`.`id` = new_row.`id`,
+                                               `avatar_character`.`id`, NULL),
+                        `code`            = new_row.`code`,
                         `name`            = new_row.`name`,
                         `egg_image_key`   = new_row.`egg_image_key`,
                         `adult_image_key` = new_row.`adult_image_key`,
