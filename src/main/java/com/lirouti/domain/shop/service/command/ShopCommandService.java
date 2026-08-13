@@ -19,6 +19,8 @@ import com.lirouti.domain.wallet.enums.WalletTransactionType;
 import com.lirouti.domain.wallet.service.WalletService;
 import com.lirouti.domain.wallet.service.command.WalletCommandService.WalletCommand;
 import com.lirouti.global.util.TimeUtil;
+import com.lirouti.domain.media.enums.MediaPurpose;
+import com.lirouti.domain.media.service.MediaService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -47,6 +49,18 @@ public class ShopCommandService {
     private final MemberAvatarItemRepository memberAvatarItemRepository;
     private final MemberAvatarEquipmentRepository memberAvatarEquipmentRepository;
     private final WalletService walletService;
+    private final MediaService mediaService;
+
+    /**
+     * 저장된 S3 key 를 볼 수 있는 주소로 바꾼다.
+     *
+     * <p>아바타 자산은 공개 prefix 라 서명 없이 조립만 한다 — S3 를 부르지 않으므로 목록에서
+     * 행마다 불러도 비용이 얹히지 않는다.
+     */
+    private String toViewUrl(String imageKey) {
+        return mediaService.resolveViewUrl(imageKey, MediaPurpose.AVATAR_ASSET);
+    }
+
 
     /**
      * 아이템을 사고 <b>그 자리에 바로 입힌다.</b>
@@ -147,7 +161,7 @@ public class ShopCommandService {
         }
         memberAvatarEquipmentRepository.saveAll(saved);
 
-        return ShopConverter.toAvatar(saved);
+        return ShopConverter.toAvatar(saved, this::toViewUrl);
     }
 
     /** 그 아이템의 슬롯만 교체한다. 다른 자리는 그대로다. */
@@ -161,7 +175,8 @@ public class ShopCommandService {
     }
 
     private ShopResDTO.Avatar currentAvatar(Long memberId) {
-        return ShopConverter.toAvatar(memberAvatarEquipmentRepository.findAllByMemberId(memberId));
+        return ShopConverter.toAvatar(
+                memberAvatarEquipmentRepository.findAllByMemberId(memberId), this::toViewUrl);
     }
 
     private Member lockMember(Long memberId) {

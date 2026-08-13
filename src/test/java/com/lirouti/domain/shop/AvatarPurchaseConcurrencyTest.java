@@ -86,7 +86,7 @@ class AvatarPurchaseConcurrencyTest {
 
         AvatarItem item = avatarItemRepository.save(AvatarItem.builder()
                 .slot(AvatarSlot.HAND).currency(Currency.TOPAZ).price(PRICE)
-                .name("동시성 아이템").imageUrl("https://img/conc")
+                .name("동시성 아이템").imageKey("avatar/item/conc-v1.png")
                 .sortOrder(1).active(true).build());
         itemId = item.getId();
         createdItemIds.add(itemId);
@@ -186,7 +186,7 @@ class AvatarPurchaseConcurrencyTest {
         for (int i = 0; i < slots.length; i++) {
             AvatarItem item = avatarItemRepository.save(AvatarItem.builder()
                     .slot(slots[i]).currency(Currency.TOPAZ).price(PRICE)
-                    .name("동시착용" + i).imageUrl("https://img/eq" + i)
+                    .name("동시착용" + i).imageKey("avatar/item/eq" + i + "-v1.png")
                     .sortOrder(1).active(true).build());
             itemIds[i] = item.getId();
             createdItemIds.add(item.getId());

@@ -9,6 +9,8 @@ import com.lirouti.domain.shop.enums.ShopCategory;
 import com.lirouti.domain.shop.repository.AvatarItemRepository;
 import com.lirouti.domain.shop.repository.MemberAvatarEquipmentRepository;
 import com.lirouti.domain.shop.repository.MemberAvatarItemRepository;
+import com.lirouti.domain.media.enums.MediaPurpose;
+import com.lirouti.domain.media.service.MediaService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +25,18 @@ public class ShopQueryService {
     private final AvatarItemRepository avatarItemRepository;
     private final MemberAvatarItemRepository memberAvatarItemRepository;
     private final MemberAvatarEquipmentRepository memberAvatarEquipmentRepository;
+    private final MediaService mediaService;
+
+    /**
+     * 저장된 S3 key 를 볼 수 있는 주소로 바꾼다.
+     *
+     * <p>아바타 자산은 공개 prefix 라 서명 없이 조립만 한다 — S3 를 부르지 않으므로 목록에서
+     * 행마다 불러도 비용이 얹히지 않는다.
+     */
+    private String toViewUrl(String imageKey) {
+        return mediaService.resolveViewUrl(imageKey, MediaPurpose.AVATAR_ASSET);
+    }
+
 
     /**
      * 상점 화면의 탭 목록.
@@ -59,7 +73,7 @@ public class ShopQueryService {
                 // 판매 중인 것 + 보유한 것. 보유했는데 판매가 내려간 아이템이 빠지면, 착장
                 // 저장이 전체 목록을 받으므로 화면에서 고를 수 없어 조용히 벗겨진다.
                 : avatarItemRepository.findForShop(slot, ownedIds);
-        return ShopConverter.toItems(items, ownedIds);
+        return ShopConverter.toItems(items, ownedIds, this::toViewUrl);
     }
 
     /** 현재 착용 상태. 안 입은 자리는 실리지 않는다. */
@@ -67,6 +81,6 @@ public class ShopQueryService {
     public ShopResDTO.Avatar getMyAvatar(Long memberId) {
         List<MemberAvatarEquipment> equipped =
                 memberAvatarEquipmentRepository.findAllByMemberId(memberId);
-        return ShopConverter.toAvatar(equipped);
+        return ShopConverter.toAvatar(equipped, this::toViewUrl);
     }
 }

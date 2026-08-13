@@ -90,7 +90,7 @@ class AvatarShopTest {
     private AvatarItem item(AvatarSlot slot, Currency currency, int price, String name) {
         AvatarItem item = AvatarItem.builder()
                 .slot(slot).currency(currency).price(price)
-                .name(name).imageUrl("https://img/" + name)
+                .name(name).imageKey("avatar/item/" + name + "-v1.png")
                 .sortOrder(1).active(true).build();
         em.persist(item);
         return item;
@@ -148,8 +148,9 @@ class AvatarShopTest {
                 .containsExactly(me.getId(), me.getId(), other.getId());
         assertThat(result).extracting(MemberAvatarEquipment::getSlot)
                 .containsExactly(AvatarSlot.HAND, AvatarSlot.HEAD, AvatarSlot.BODY);
-        assertThat(result).extracting(equipment -> equipment.getAvatarItem().getImageUrl())
-                .containsExactly("https://img/텀블러", "https://img/모자", "https://img/티셔츠");
+        assertThat(result).extracting(equipment -> equipment.getAvatarItem().getImageKey())
+                .containsExactly("avatar/item/텀블러-v1.png", "avatar/item/모자-v1.png",
+                        "avatar/item/티셔츠-v1.png");
     }
 
     // ── 구매 ──

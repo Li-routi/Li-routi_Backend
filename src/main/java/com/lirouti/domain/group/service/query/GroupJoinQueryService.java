@@ -15,6 +15,8 @@ import com.lirouti.domain.group.repository.GroupRoutineRepository;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.service.query.MemberQueryService;
 import com.lirouti.domain.shop.repository.MemberAvatarEquipmentRepository;
+import com.lirouti.domain.media.enums.MediaPurpose;
+import com.lirouti.domain.media.service.MediaService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -33,7 +35,14 @@ public class GroupJoinQueryService {
     private final GroupMemberRepository groupMemberRepository;
     private final GroupRoutineRepository groupRoutineRepository;
     private final MemberAvatarEquipmentRepository memberAvatarEquipmentRepository;
+    private final MediaService mediaService;
     private final MemberQueryService memberQueryService;
+
+    /** 저장된 S3 key 를 볼 수 있는 주소로 바꾼다. 아바타 자산은 공개 prefix 라 조립만 한다. */
+    private String toAvatarViewUrl(String imageKey) {
+        return mediaService.resolveViewUrl(imageKey, MediaPurpose.AVATAR_ASSET);
+    }
+
 
     /**
      * Preview는 현재 DB 상태의 안내용 스냅샷이며 잠금·가입 관계·할당을 생성하지 않는다.
@@ -62,7 +71,8 @@ public class GroupJoinQueryService {
                 activeMemberIds.isEmpty()
                         ? List.of()
                         : memberAvatarEquipmentRepository
-                                .findAllByMemberIdInWithMemberAndAvatarItem(activeMemberIds)
+                                .findAllByMemberIdInWithMemberAndAvatarItem(activeMemberIds),
+                this::toAvatarViewUrl
         );
         long totalRoutineCount = groupRoutineRepository.countByGroupIdAndActiveTrue(group.getId());
         GroupJoinUnavailableReason unavailableReason = findUnavailableReason(
