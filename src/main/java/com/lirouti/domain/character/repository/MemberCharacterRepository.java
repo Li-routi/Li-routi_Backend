@@ -6,6 +6,8 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDate;
+
 public interface MemberCharacterRepository extends JpaRepository<MemberCharacter, Long> {
 
     /**
@@ -14,8 +16,10 @@ public interface MemberCharacterRepository extends JpaRepository<MemberCharacter
     @Modifying(flushAutomatically = true)
     @Query(value = """
         INSERT INTO member_character (member_id, character_id, unlocked_date, created_at, updated_at)
-        VALUES (:memberId, :characterId, CURRENT_DATE(), NOW(), NOW())
+        VALUES (:memberId, :characterId, :unlockedDate, NOW(), NOW())
         ON DUPLICATE KEY UPDATE id = id
         """, nativeQuery = true)
-    int insertIfAbsent(@Param("memberId") Long memberId, @Param("characterId") Long characterId);
+    int insertIfAbsent(@Param("memberId") Long memberId,
+                       @Param("characterId") Long characterId,
+                       @Param("unlockedDate") LocalDate unlockedDate);
 }
