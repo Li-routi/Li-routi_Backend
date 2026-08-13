@@ -43,7 +43,8 @@ public class GroupDetailQueryRepository {
                         groupMember.statusMessage,
                         groupMember.currentStreak,
                         groupMember.totalLikeCount,
-                        groupMember.totalPokeCount
+                        groupMember.totalPokeCount,
+                        groupMember.totalDisappointmentCount
                 ))
                 .from(groupMember)
                 .join(groupMember.group, group)
@@ -108,7 +109,8 @@ public class GroupDetailQueryRepository {
             String statusMessage,
             int currentStreak,
             long totalLikeCount,
-            long totalPokeCount
+            long totalPokeCount,
+            long totalDisappointmentCount
     ) {
     }
 

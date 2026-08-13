@@ -57,6 +57,7 @@ class GroupDetailQueryRepositoryTest {
         completedMembership.updateStatusMessage("완료했습니다");
         completedMembership.increaseTotalPokeCount();
         completedMembership.increaseTotalPokeCount();
+        completedMembership.increaseTotalDisappointmentCount();
         membership(group, pendingMember);
         membership(group, noAssignmentMember);
 
@@ -93,6 +94,7 @@ class GroupDetailQueryRepositoryTest {
             assertThat(member.name()).isEqualTo("완료 회원");
             assertThat(member.statusMessage()).isEqualTo("완료했습니다");
             assertThat(member.totalPokeCount()).isEqualTo(2L);
+            assertThat(member.totalDisappointmentCount()).isEqualTo(1L);
         });
         assertThat(progresses).containsExactlyInAnyOrder(
                 new TodayMemberProgressProjection(completedMember.getId(), 2L, 1L),

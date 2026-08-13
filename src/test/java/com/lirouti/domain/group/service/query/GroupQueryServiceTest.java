@@ -103,10 +103,10 @@ class GroupQueryServiceTest {
         when(groupDetailQueryRepository.findActiveMemberDetails(groupId)).thenReturn(List.of(
                 new GroupDetailQueryRepository.GroupMemberDetailProjection(
                         groupId, "우리 집", "DETAIL1", MEMBER_ID, "리루티",
-                        "오늘도 완료", 4, 12L, 7L),
+                        "오늘도 완료", 4, 12L, 7L, 2L),
                 new GroupDetailQueryRepository.GroupMemberDetailProjection(
                         groupId, "우리 집", "DETAIL1", 2L, "동료",
-                        null, 1, 3L, 0L)
+                        null, 1, 3L, 0L, 1L)
         ));
         when(groupDetailQueryRepository.findTodayMemberProgress(groupId, TODAY)).thenReturn(List.of(
                 new GroupDetailQueryRepository.TodayMemberProgressProjection(MEMBER_ID, 3L, 2L)
@@ -142,10 +142,10 @@ class GroupQueryServiceTest {
                         MEMBER_ID, "리루티", new GroupResDTO.Avatar(List.of(
                                 new GroupResDTO.Equipped(
                                         AvatarSlot.HEAD, "https://cdn/hat.png"))), "오늘도 완료",
-                        4, 12L, 7L, new GroupResDTO.DailyProgress(2L, 3L)),
+                        4, 12L, 7L, 2L, new GroupResDTO.DailyProgress(2L, 3L)),
                 new GroupResDTO.MemberActivity(
                         2L, "동료", new GroupResDTO.Avatar(List.of()), null,
-                        1, 3L, 0L, new GroupResDTO.DailyProgress(0L, 0L))
+                        1, 3L, 0L, 1L, new GroupResDTO.DailyProgress(0L, 0L))
         );
     }
 

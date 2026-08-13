@@ -383,7 +383,7 @@ class GroupRoutineAssignmentCommandServiceTest {
         // given
         LocalDateTime currentDateTime = LocalDateTime.of(2026, 7, 23, 10, 0);
 
-        when(statusRefreshBatchService.markExpiredAssignmentsMissed(currentDateTime, 100))
+        when(statusRefreshBatchService.resolveExpiredAssignments(currentDateTime, 100))
                 .thenReturn(0);
 
         // when
@@ -392,7 +392,7 @@ class GroupRoutineAssignmentCommandServiceTest {
         // then
         InOrder inOrder = inOrder(statusRefreshBatchService);
         inOrder.verify(statusRefreshBatchService)
-                .markExpiredAssignmentsMissed(currentDateTime, 100);
+                .resolveExpiredAssignments(currentDateTime, 100);
         inOrder.verify(statusRefreshBatchService)
                 .markStartedAssignmentsInProgress(currentDateTime);
     }
@@ -402,7 +402,7 @@ class GroupRoutineAssignmentCommandServiceTest {
     void refreshAssignmentStatuses_RepeatsUntilNoMissedAssignmentsRemain() {
         // given
         LocalDateTime currentDateTime = LocalDateTime.of(2026, 7, 23, 10, 0);
-        when(statusRefreshBatchService.markExpiredAssignmentsMissed(currentDateTime, 100))
+        when(statusRefreshBatchService.resolveExpiredAssignments(currentDateTime, 100))
                 .thenReturn(100, 40, 0);
 
         // when
@@ -411,7 +411,7 @@ class GroupRoutineAssignmentCommandServiceTest {
         // then
         InOrder inOrder = inOrder(statusRefreshBatchService);
         inOrder.verify(statusRefreshBatchService, times(3))
-                .markExpiredAssignmentsMissed(currentDateTime, 100);
+                .resolveExpiredAssignments(currentDateTime, 100);
         inOrder.verify(statusRefreshBatchService)
                 .markStartedAssignmentsInProgress(currentDateTime);
     }

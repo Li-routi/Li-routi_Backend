@@ -5,6 +5,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -51,6 +52,20 @@ public class RoutineVerificationController implements RoutineVerificationControl
         VerificationResDTO.GroupRoutine result = routineVerificationService.verifyGroupRoutine(
                 userDetails.getMemberId(), groupId, routineId, request);
         return ApiResponse.onSuccess(VerificationSuccessCode.GROUP_ROUTINE_VERIFY_SUCCESS, result);
+    }
+
+    @Override
+    @PatchMapping("/api/groups/{groupId}/routines/{routineId}/verifications/{verificationId}")
+    public ApiResponse<VerificationResDTO.GroupRoutine> reverifyGroupRoutine(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long groupId,
+            @PathVariable Long routineId,
+            @PathVariable Long verificationId,
+            @Valid @RequestBody VerificationReqDTO.Verify request
+    ) {
+        return ApiResponse.onSuccess(VerificationSuccessCode.GROUP_ROUTINE_VERIFY_SUCCESS,
+                routineVerificationService.reverifyGroupRoutine(
+                        userDetails.getMemberId(), groupId, routineId, verificationId, request));
     }
 
     @Override

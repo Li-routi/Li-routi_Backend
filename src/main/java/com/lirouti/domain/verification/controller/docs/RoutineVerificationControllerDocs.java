@@ -52,7 +52,8 @@ public interface RoutineVerificationControllerDocs {
     @Operation(
             summary = "그룹 루틴 인증",
             description = """
-                    오늘 배정된 그룹 루틴을 사진으로 인증합니다. 인증이 곧 완료 처리입니다.
+                    오늘 배정된 그룹 루틴을 사진으로 인증합니다. 최종 완료 여부는 마감 시
+                    그룹원 수와 좋아요 기준으로 확정됩니다.
 
                     먼저 POST /api/media/presigned-url 로 purpose=GROUP_ROUTINE_VERIFICATION 을
                     지정해 발급받은 URL에 사진을 올린 뒤, 그 응답의 mediaKey를 보냅니다.
@@ -79,6 +80,20 @@ public interface RoutineVerificationControllerDocs {
             @AuthenticationPrincipal CustomUserDetails userDetails,
             Long groupId,
             Long routineId,
+            VerificationReqDTO.Verify request
+    );
+
+    @Operation(summary = "그룹 루틴 재인증", description = "기존 인증 행을 유지한 채 사진·내용을 교체하고 Like와 아쉬워요를 초기화합니다. 마감 확정 뒤에는 수정할 수 없습니다.")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "재인증 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "오늘 배정된 인증이 아니거나 없음"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "수행 시간이 아님 또는 마감 확정됨")
+    })
+    ApiResponse<VerificationResDTO.GroupRoutine> reverifyGroupRoutine(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            Long groupId,
+            Long routineId,
+            Long verificationId,
             VerificationReqDTO.Verify request
     );
 

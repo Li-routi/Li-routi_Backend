@@ -86,6 +86,7 @@ public final class GroupResDTO {
             int currentStreak,
             long totalLikeCount,
             long totalPokeCount,
+            long totalDisappointmentCount,
             DailyProgress dailyProgress
     ) {
     }

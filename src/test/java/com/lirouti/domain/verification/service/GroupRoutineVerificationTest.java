@@ -33,7 +33,11 @@ import com.lirouti.domain.verification.dto.response.VerificationResDTO;
 import com.lirouti.domain.verification.exception.VerificationException;
 import com.lirouti.domain.verification.exception.code.error.VerificationErrorCode;
 import com.lirouti.domain.verification.repository.GroupRoutineVerificationRepository;
+import com.lirouti.domain.verification.repository.GroupRoutineVerificationLikeRepository;
+import com.lirouti.domain.verification.repository.GroupRoutineVerificationDisappointmentRepository;
 import com.lirouti.domain.group.repository.GroupMemberRepository;
+import com.lirouti.domain.verification.service.command.GroupRoutineVerificationLikeCommandService;
+import com.lirouti.domain.group.service.command.GroupInteractionCommandService;
 import com.lirouti.global.util.TimeUtil;
 
 import jakarta.persistence.EntityManager;
@@ -52,6 +56,8 @@ import jakarta.persistence.PersistenceContext;
 class GroupRoutineVerificationTest {
     private static final String KEY =
             "group-routine-verifications/2026/07/31/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.jpg";
+    private static final String REVERIFIED_KEY =
+            "group-routine-verifications/2026/07/31/cccccccc-cccc-4ccc-8ccc-cccccccccccc.jpg";
 
     @Autowired
     private RoutineVerificationService verificationService;
@@ -59,6 +65,14 @@ class GroupRoutineVerificationTest {
     private GroupRoutineVerificationRepository verificationRepository;
     @Autowired
     private GroupMemberRepository groupMemberRepository;
+    @Autowired
+    private GroupRoutineVerificationLikeRepository likeRepository;
+    @Autowired
+    private GroupRoutineVerificationDisappointmentRepository disappointmentRepository;
+    @Autowired
+    private GroupRoutineVerificationLikeCommandService likeCommandService;
+    @Autowired
+    private GroupInteractionCommandService groupInteractionCommandService;
 
     @MockitoBean
     private MediaService mediaService;
@@ -152,8 +166,8 @@ class GroupRoutineVerificationTest {
 
     // ── 테스트 ──
     @Test
-    @DisplayName("인증하면 사진이 저장되고 할당이 완료로 바뀐다 — 화면에 보이는 것은 이 상태다")
-    void verify_SavesPhotoAndCompletesAssignment() {
+    @DisplayName("인증하면 사진만 저장하고 assignment 최종 판정은 마감까지 보류한다")
+    void verify_SavesPhotoAndLeavesAssignmentUnfinished() {
         // given
         Member member = member();
         GroupRoutineAssignment assignment = assignment(member, GroupRoutineAssignmentStatus.IN_PROGRESS);
@@ -170,10 +184,10 @@ class GroupRoutineVerificationTest {
         em.flush();
         em.clear();
         assertThat(em.find(GroupRoutineAssignment.class, assignment.getId()).getStatus())
-                .isEqualTo(GroupRoutineAssignmentStatus.COMPLETED);
+                .isEqualTo(GroupRoutineAssignmentStatus.IN_PROGRESS);
         assertThat(groupMemberRepository.findByGroupIdAndMemberId(
                 groupIdOf(assignment), member.getId()).orElseThrow().getCurrentStreak())
-                .isEqualTo(1);
+                .isZero();
     }
 
     @Test
@@ -229,5 +243,58 @@ class GroupRoutineVerificationTest {
                 member.getId(), otherGroupId, routineIdOf(assignment), request()))
                 .isInstanceOf(VerificationException.class)
                 .hasFieldOrPropertyWithValue("code", VerificationErrorCode.ASSIGNMENT_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("재인증은 인증 ID를 유지하고 모든 반응 및 작성자 누적값을 실제 삭제 건수만큼 초기화한다")
+    void reverify_KeepsIdClearsInteractionsAndDecreasesAuthorTotals() {
+        Member author = member();
+        GroupRoutineAssignment assignment = assignment(author, GroupRoutineAssignmentStatus.IN_PROGRESS);
+        Group group = assignment.getGroupRoutine().getGroup();
+        Member firstLiker = member();
+        Member secondLiker = member();
+        Member firstDisappointer = member();
+        Member secondDisappointer = member();
+        em.persist(GroupMember.builder().group(group).member(firstLiker).role(GroupMemberRole.MEMBER).build());
+        em.persist(GroupMember.builder().group(group).member(secondLiker).role(GroupMemberRole.MEMBER).build());
+        em.persist(GroupMember.builder().group(group).member(firstDisappointer).role(GroupMemberRole.MEMBER).build());
+        em.persist(GroupMember.builder().group(group).member(secondDisappointer).role(GroupMemberRole.MEMBER).build());
+        em.flush();
+        Long groupId = group.getId();
+        Long routineId = assignment.getGroupRoutine().getId();
+        Long authorMembershipId = groupMemberRepository.findByGroupIdAndMemberId(groupId, author.getId())
+                .orElseThrow().getId();
+
+        VerificationResDTO.GroupRoutine verified = verificationService.verifyGroupRoutine(
+                author.getId(), groupId, routineId, request());
+        likeCommandService.like(firstLiker.getId(), groupId, verified.verificationId());
+        likeCommandService.like(secondLiker.getId(), groupId, verified.verificationId());
+        groupInteractionCommandService.disappoint(
+                firstDisappointer.getId(), groupId, verified.verificationId());
+        groupInteractionCommandService.disappoint(
+                secondDisappointer.getId(), groupId, verified.verificationId());
+        em.flush();
+        em.clear();
+        assertThat(likeRepository.countByVerificationIds(java.util.List.of(verified.verificationId()))
+                .getOrDefault(verified.verificationId(), 0L)).isEqualTo(2L);
+        assertThat(disappointmentRepository.countByVerificationId(verified.verificationId())).isEqualTo(2L);
+        GroupMember beforeReverify = em.find(GroupMember.class, authorMembershipId);
+        assertThat(beforeReverify.getTotalLikeCount()).isEqualTo(2L);
+        assertThat(beforeReverify.getTotalDisappointmentCount()).isEqualTo(2L);
+
+        VerificationResDTO.GroupRoutine reverified = verificationService.reverifyGroupRoutine(
+                author.getId(), groupId, routineId, verified.verificationId(),
+                new VerificationReqDTO.Verify(REVERIFIED_KEY, "다시 인증"));
+
+        assertThat(reverified.verificationId()).isEqualTo(verified.verificationId());
+        assertThat(reverified.imageKey()).isEqualTo(REVERIFIED_KEY);
+        em.flush();
+        em.clear();
+        assertThat(likeRepository.countByVerificationIds(java.util.List.of(verified.verificationId())))
+                .doesNotContainKey(verified.verificationId());
+        assertThat(disappointmentRepository.countByVerificationId(verified.verificationId())).isZero();
+        GroupMember authorMembership = em.find(GroupMember.class, authorMembershipId);
+        assertThat(authorMembership.getTotalLikeCount()).isZero();
+        assertThat(authorMembership.getTotalDisappointmentCount()).isZero();
     }
 }

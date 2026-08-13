@@ -167,6 +167,7 @@ public final class GroupConverter {
                 .currentStreak(member.currentStreak())
                 .totalLikeCount(member.totalLikeCount())
                 .totalPokeCount(member.totalPokeCount())
+                .totalDisappointmentCount(member.totalDisappointmentCount())
                 .dailyProgress(new GroupResDTO.DailyProgress(completedCount, totalCount))
                 .build();
     }

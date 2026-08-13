@@ -33,18 +33,20 @@ class GroupMemberActivityCommandServiceTest {
     @InjectMocks private GroupMemberActivityCommandService service;
 
     @Test
-    @DisplayName("당일 현재 가입 회차 Assignment가 모두 COMPLETED면 스트릭을 증가시킨다")
-    void recordStreak_AllCompleted_IncreasesOnce() {
+    @DisplayName("같은 날짜의 여러 Assignment가 모두 COMPLETED여도 스트릭은 하루 한 번만 증가한다")
+    void recordStreak_MultipleAssignmentsCompletedOnSameDate_IncreasesOnce() {
         GroupMember membership = membership();
         LocalDate assignedDate = LocalDate.of(2026, 8, 7);
-        GroupRoutineAssignment completedAssignment = assignment(
+        GroupRoutineAssignment firstCompletedAssignment = assignment(
+                GroupRoutineAssignmentStatus.COMPLETED);
+        GroupRoutineAssignment secondCompletedAssignment = assignment(
                 GroupRoutineAssignmentStatus.COMPLETED);
         when(groupMemberRepository.findByGroupIdAndMemberIdForUpdate(1L, 2L))
                 .thenReturn(Optional.of(membership));
         when(assignmentRepository
                 .findAllByGroupIdAndMemberIdAndAssignedDateAndCreatedAtAfterOrEqualForUpdate(
                         any(), any(), any(), any()))
-                .thenReturn(List.of(completedAssignment));
+                .thenReturn(List.of(firstCompletedAssignment, secondCompletedAssignment));
 
         service.recordStreakIfAllAssignmentsCompleted(1L, 2L, assignedDate);
         service.recordStreakIfAllAssignmentsCompleted(1L, 2L, assignedDate);
@@ -74,6 +76,29 @@ class GroupMemberActivityCommandServiceTest {
         service.recordStreakIfAllAssignmentsCompleted(1L, 2L, LocalDate.of(2026, 8, 7));
 
         assertThat(membership.getCurrentStreak()).isZero();
+    }
+
+    @Test
+    @DisplayName("같은 날짜에 완료 기록 뒤 MISSED가 처리되면 현재 스트릭은 초기화된다")
+    void recordStreak_CompletedThenMissedOnSameDate_ResetsCurrentStreak() {
+        GroupMember membership = membership();
+        LocalDate assignedDate = LocalDate.of(2026, 8, 7);
+        GroupRoutineAssignment completedAssignment = assignment(
+                GroupRoutineAssignmentStatus.COMPLETED);
+        when(groupMemberRepository.findByGroupIdAndMemberIdForUpdate(1L, 2L))
+                .thenReturn(Optional.of(membership));
+        when(assignmentRepository
+                .findAllByGroupIdAndMemberIdAndAssignedDateAndCreatedAtAfterOrEqualForUpdate(
+                        any(), any(), any(), any()))
+                .thenReturn(List.of(completedAssignment));
+        when(groupMemberRepository.findAllActiveCurrentMembershipsByAssignmentIdsForUpdate(List.of(10L)))
+                .thenReturn(List.of(membership));
+
+        service.recordStreakIfAllAssignmentsCompleted(1L, 2L, assignedDate);
+        service.resetCurrentStreaksForMissedAssignments(List.of(10L));
+
+        assertThat(membership.getCurrentStreak()).isZero();
+        assertThat(membership.getLastStreakCompletedDate()).isNull();
     }
 
     private GroupMember membership() {
