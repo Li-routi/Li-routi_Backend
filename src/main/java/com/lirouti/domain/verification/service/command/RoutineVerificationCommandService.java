@@ -29,6 +29,7 @@ import com.lirouti.domain.verification.repository.GroupRoutineVerificationDisapp
 import com.lirouti.domain.verification.repository.MemberRoutineVerificationRepository;
 
 import com.lirouti.domain.activity.service.command.MemberActivityDayCommandService;
+import com.lirouti.domain.character.service.command.CharacterUnlockCommandService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -72,6 +73,7 @@ public class RoutineVerificationCommandService {
 
     private final ApplicationEventPublisher eventPublisher;
     private final MemberActivityDayCommandService memberActivityDayCommandService;
+    private final CharacterUnlockCommandService characterUnlockCommandService;
 
     /**
      * 그룹 루틴 인증의 DB 구간을 하나의 트랜잭션으로 처리한다.
@@ -133,6 +135,7 @@ public class RoutineVerificationCommandService {
         // 올리지 않는다(이미 1 인 날을 덮어 내리지도 않는다).
         memberActivityDayCommandService.record(
                 assignment.getMember().getId(), verifiedAt.toLocalDate());
+        characterUnlockCommandService.evaluateAndUnlock(assignment.getMember().getId());
 
         return saved;
     }
@@ -203,6 +206,8 @@ public class RoutineVerificationCommandService {
         // 나중에 복원할 수 없어(요일 행이 물리 삭제된다) 지금이 유일한 시점이다.
         memberActivityDayCommandService.recordWithCompletion(
                 routine.getMember().getId(), verifiedDate);
+        // 활동일을 남긴 직후에 판정한다. 방금 것까지 세어야 "오늘 채운" 조건이 오늘 열린다.
+        characterUnlockCommandService.evaluateAndUnlock(routine.getMember().getId());
         return saved;
     }
 
