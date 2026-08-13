@@ -22,12 +22,14 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.context.ApplicationEventPublisher;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.lirouti.domain.group.entity.Group;
 import com.lirouti.domain.group.entity.GroupRoutineAssignment;
+import com.lirouti.domain.achievement.event.GroupAchievementProgressEvent;
 import com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus;
 import com.lirouti.domain.group.enums.GroupStatus;
 import com.lirouti.domain.group.repository.GroupRepository;
@@ -46,6 +48,7 @@ class GroupRoutineAssignmentStatusRefreshBatchServiceTest {
     @Mock private GroupMemberRepository groupMemberRepository;
     @Mock private GroupRoutineVerificationLikeRepository likeRepository;
     @Mock private GroupMemberActivityCommandService activityCommandService;
+    @Mock private ApplicationEventPublisher eventPublisher;
     @InjectMocks private GroupRoutineAssignmentStatusRefreshBatchService service;
 
     @Test
@@ -128,11 +131,14 @@ class GroupRoutineAssignmentStatusRefreshBatchServiceTest {
                     List.of(fixture.assignmentId()), unfinishedStatuses(), expectedStatus);
             verify(activityCommandService).recordStreakIfAllAssignmentsCompleted(
                     1L, 2L, fixture.assignedDate());
+            verify(eventPublisher).publishEvent(new GroupAchievementProgressEvent(
+                    1L, "ACH-AC-009", 1, "GROUP_ASSIGNMENT_COMPLETE", fixture.assignmentId()));
         } else {
             verify(assignmentRepository).markAssignmentsMissedByIds(
                     List.of(fixture.assignmentId()), unfinishedStatuses(), expectedStatus);
             verify(activityCommandService).resetCurrentStreaksForMissedAssignments(
                     List.of(fixture.assignmentId()));
+            verifyNoInteractions(eventPublisher);
         }
     }
 
@@ -196,7 +202,7 @@ class GroupRoutineAssignmentStatusRefreshBatchServiceTest {
                 LocalDateTime.of(2026, 8, 7, 10, 0), 100);
 
         assertThat(result).isZero();
-        verifyNoInteractions(assignmentRepository, activityCommandService);
+        verifyNoInteractions(assignmentRepository, activityCommandService, eventPublisher);
     }
 
     private List<GroupRoutineAssignmentStatus> unfinishedStatuses() {

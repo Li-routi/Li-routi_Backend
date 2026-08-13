@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -29,6 +30,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static com.lirouti.support.testdb.MemberFixtureCleanup.deleteDependencies;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
@@ -44,6 +46,7 @@ class GroupPokeNotificationFailureIsolationTest {
     @Autowired private GroupMemberRepository groupMemberRepository;
     @Autowired private MemberRepository memberRepository;
     @Autowired private PlatformTransactionManager transactionManager;
+    @Autowired private JdbcTemplate jdbcTemplate;
     @Autowired @Qualifier("notificationTaskExecutor")
     private ThreadPoolTaskExecutor notificationTaskExecutor;
 
@@ -59,6 +62,8 @@ class GroupPokeNotificationFailureIsolationTest {
             groupMemberRepository.deleteById(seed.requesterMembershipId());
             groupMemberRepository.deleteById(seed.targetMembershipId());
             groupRepository.deleteById(seed.groupId());
+            deleteDependencies(jdbcTemplate, seed.requesterId());
+            deleteDependencies(jdbcTemplate, seed.targetId());
             memberRepository.deleteById(seed.requesterId());
             memberRepository.deleteById(seed.targetId());
         });

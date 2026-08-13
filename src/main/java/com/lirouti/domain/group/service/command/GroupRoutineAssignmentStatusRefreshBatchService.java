@@ -7,12 +7,14 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.springframework.data.domain.PageRequest;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.lirouti.domain.group.entity.Group;
 import com.lirouti.domain.group.entity.GroupRoutineAssignment;
+import com.lirouti.domain.achievement.event.GroupAchievementProgressEvent;
 import com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus;
 import com.lirouti.domain.group.enums.GroupStatus;
 import com.lirouti.domain.group.repository.GroupRepository;
@@ -37,6 +39,7 @@ public class GroupRoutineAssignmentStatusRefreshBatchService {
     private final GroupMemberRepository groupMemberRepository;
     private final GroupRoutineVerificationLikeRepository groupRoutineVerificationLikeRepository;
     private final GroupMemberActivityCommandService groupMemberActivityCommandService;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * 빈 프록시를 통해 REQUIRES_NEW로 호출된다. 반환 전에 커밋되어 이 batch의 모든 잠금이 해제된다.
@@ -93,9 +96,7 @@ public class GroupRoutineAssignmentStatusRefreshBatchService {
                 : groupRoutineAssignmentRepository.markAssignmentsCompletedByIds(
                         completedIds, UNFINISHED_STATUSES, GroupRoutineAssignmentStatus.COMPLETED);
         if (completedCount > 0) {
-            completed.forEach(assignment -> groupMemberActivityCommandService
-                    .recordStreakIfAllAssignmentsCompleted(
-                            assignment.groupId(), assignment.memberId(), assignment.assignedDate()));
+            completed.forEach(this::recordCompletedAssignmentActivity);
         }
 
         int missedCount = missedIds.isEmpty() ? 0 : groupRoutineAssignmentRepository.markAssignmentsMissedByIds(
@@ -137,6 +138,24 @@ public class GroupRoutineAssignmentStatusRefreshBatchService {
             default -> Long.MAX_VALUE;
         };
         return likeCount >= minimumLikeCount;
+    }
+
+    /** 실제 COMPLETED 전이 뒤에만 그룹 스트릭과 완료 업적을 반영한다. */
+    private void recordCompletedAssignmentActivity(ExpiredAssignment assignment) {
+        groupMemberActivityCommandService.recordStreakIfAllAssignmentsCompleted(
+                assignment.groupId(), assignment.memberId(), assignment.assignedDate());
+        if (eventPublisher == null) {
+            return;
+        }
+        eventPublisher.publishEvent(new GroupAchievementProgressEvent(
+                assignment.groupId(), "ACH-AC-009", 1,
+                "GROUP_ASSIGNMENT_COMPLETE", assignment.assignmentId()));
+        if (groupMemberActivityCommandService
+                .isAllMembersCompletedToday(assignment.groupId(), assignment.assignedDate())) {
+            eventPublisher.publishEvent(new GroupAchievementProgressEvent(
+                    assignment.groupId(), "ACH-SP-004", 1, "GROUP_ALL_COMPLETE_DAY",
+                    assignment.groupId() * 10_000_000L + assignment.assignedDate().toEpochDay()));
+        }
     }
 
     private record ExpiredAssignment(

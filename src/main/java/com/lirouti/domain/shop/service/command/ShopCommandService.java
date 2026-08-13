@@ -19,6 +19,7 @@ import com.lirouti.domain.wallet.enums.WalletTransactionType;
 import com.lirouti.domain.wallet.service.WalletService;
 import com.lirouti.domain.wallet.service.command.WalletCommandService.WalletCommand;
 import com.lirouti.global.util.TimeUtil;
+import com.lirouti.domain.media.service.MediaService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -47,6 +48,8 @@ public class ShopCommandService {
     private final MemberAvatarItemRepository memberAvatarItemRepository;
     private final MemberAvatarEquipmentRepository memberAvatarEquipmentRepository;
     private final WalletService walletService;
+    private final MediaService mediaService;
+
 
     /**
      * 아이템을 사고 <b>그 자리에 바로 입힌다.</b>
@@ -147,7 +150,7 @@ public class ShopCommandService {
         }
         memberAvatarEquipmentRepository.saveAll(saved);
 
-        return ShopConverter.toAvatar(saved);
+        return ShopConverter.toAvatar(saved, mediaService::resolveAvatarAssetUrl);
     }
 
     /** 그 아이템의 슬롯만 교체한다. 다른 자리는 그대로다. */
@@ -161,7 +164,9 @@ public class ShopCommandService {
     }
 
     private ShopResDTO.Avatar currentAvatar(Long memberId) {
-        return ShopConverter.toAvatar(memberAvatarEquipmentRepository.findAllByMemberId(memberId));
+        return ShopConverter.toAvatar(
+                memberAvatarEquipmentRepository.findAllByMemberId(memberId),
+                mediaService::resolveAvatarAssetUrl);
     }
 
     private Member lockMember(Long memberId) {

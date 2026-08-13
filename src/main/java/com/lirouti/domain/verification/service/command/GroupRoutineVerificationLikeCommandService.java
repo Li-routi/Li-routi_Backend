@@ -2,6 +2,7 @@ package com.lirouti.domain.verification.service.command;
 
 import java.util.List;
 
+import com.lirouti.domain.achievement.event.AchievementProgressEvent;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.context.ApplicationEventPublisher;
@@ -29,6 +30,11 @@ import lombok.RequiredArgsConstructor;
 @Service
 @RequiredArgsConstructor
 public class GroupRoutineVerificationLikeCommandService {
+
+    /** achievement 도메인이 구독하는 좋아요 이벤트의 conditionKey. ACH-ST-001·010·011, ACH-SP-001 이 반응한다. */
+    private static final String CONDITION_KEY_LIKE_COUNT = "LIKE_COUNT";
+    private static final String SOURCE_TYPE_GROUP_ROUTINE_VERIFICATION_LIKE = "GROUP_ROUTINE_VERIFICATION_LIKE";
+
     private final GroupValidationService groupValidationService;
     private final GroupMemberActivityCommandService groupMemberActivityCommandService;
     private final GroupMemberRepository groupMemberRepository;
@@ -57,6 +63,7 @@ public class GroupRoutineVerificationLikeCommandService {
         }
         int inserted = groupRoutineVerificationLikeRepository.insertIfAbsent(verificationId, memberId);
         if (inserted == 1) {
+            publishLikeCountEvent(memberId, verificationId);
             AuthorVerificationContext author = authorContext(verification);
             GroupMember authorMembership = lockAuthorMembership(groupId, author.memberId());
             groupMemberRepository.incrementTotalLikeCountForCurrentActiveMembership(
@@ -94,6 +101,28 @@ public class GroupRoutineVerificationLikeCommandService {
                     authorMembership.getId(), author.assignmentId());
         }
         return buildResult(verificationId, false);
+    }
+
+    /**
+     * 좋아요를 누른 회원(memberId, 글쓴이가 아니라 <b>액션을 한 사람</b>)의 achievement 진행도를 올린다.
+     *
+     * <p>{@code sourceId} 로 verificationId(좋아요 눌린 게시물)를 쓴다. 이 값은 여러 회원이
+     * 공유할 수 있으므로 — 같은 게시물에 여러 명이 좋아요를 누르면 sourceId가 같다 — 멱등성
+     * 판정 키에 memberId가 반드시 포함되어야 한다(achievement_progress_event_log 의
+     * uk_achievement_progress_event_log 가 member_id를 포함하도록 마이그레이션되어 있다).
+     * memberId 없이 판정하면 두 번째 회원의 좋아요가 "이미 처리됨"으로 오판돼 스킵된다.
+     */
+    private void publishLikeCountEvent(Long memberId, Long verificationId) {
+        if (eventPublisher == null) {
+            return;
+        }
+        eventPublisher.publishEvent(new AchievementProgressEvent(
+                memberId,
+                CONDITION_KEY_LIKE_COUNT,
+                1,
+                SOURCE_TYPE_GROUP_ROUTINE_VERIFICATION_LIKE,
+                verificationId
+        ));
     }
 
     /**

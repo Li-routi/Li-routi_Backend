@@ -15,6 +15,7 @@ import com.lirouti.domain.group.repository.GroupRoutineRepository;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.service.query.MemberQueryService;
 import com.lirouti.domain.shop.repository.MemberAvatarEquipmentRepository;
+import com.lirouti.domain.media.service.MediaService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -33,7 +34,9 @@ public class GroupJoinQueryService {
     private final GroupMemberRepository groupMemberRepository;
     private final GroupRoutineRepository groupRoutineRepository;
     private final MemberAvatarEquipmentRepository memberAvatarEquipmentRepository;
+    private final MediaService mediaService;
     private final MemberQueryService memberQueryService;
+
 
     /**
      * Preview는 현재 DB 상태의 안내용 스냅샷이며 잠금·가입 관계·할당을 생성하지 않는다.
@@ -62,7 +65,8 @@ public class GroupJoinQueryService {
                 activeMemberIds.isEmpty()
                         ? List.of()
                         : memberAvatarEquipmentRepository
-                                .findAllByMemberIdInWithMemberAndAvatarItem(activeMemberIds)
+                                .findAllByMemberIdInWithMemberAndAvatarItem(activeMemberIds),
+                mediaService::resolveAvatarAssetUrl
         );
         long totalRoutineCount = groupRoutineRepository.countByGroupIdAndActiveTrue(group.getId());
         GroupJoinUnavailableReason unavailableReason = findUnavailableReason(

@@ -280,7 +280,14 @@ docker compose logs caddy | tail -20     # certificate obtained 류의 줄
 
 ### 공개 미디어 — 버킷 정책으로 prefix만 연다
 
-[`deploy/bucket-policy-media.json`](./bucket-policy-media.json)을 S3 → 버킷 → 권한 → 버킷 정책에 붙여넣는다. `s3:GetObject`만, `challenge-verifications/*`만 허용한다. 이 정책은 **익명 접근자**에게 적용되며 `ListBucket`을 주지 않으므로 **목록으로 훑는 것은 불가능**하고 key가 UUID라 추측도 안 된다.
+[`deploy/bucket-policy-media.json`](./bucket-policy-media.json)을 S3 → 버킷 → 권한 → 버킷 정책에 붙여넣는다. `s3:GetObject`만, **`challenge-verifications/*` 와 `avatar/*` 두 prefix만** 허용한다. 이 정책은 **익명 접근자**에게 적용되며 `ListBucket`을 주지 않으므로 **목록으로 훑는 것은 불가능**하다.
+
+| prefix | 무엇 | 왜 여는가 |
+| --- | --- | --- |
+| `challenge-verifications/*` | 사용자가 올린 인증 사진 | 피드에 그대로 뜬다. key 가 UUID 라 추측되지 않는다 |
+| `avatar/*` | 운영이 올린 마스터 자산(캐릭터·알·둥지·의상) | 모두에게 같은 그림이라 숨길 것이 없다. **presign 을 쓸 이유가 없다** |
+
+> **`avatar/` 는 최상위 하나로 모았다.** 캐릭터·알·둥지·의상이 전부 이 아래에 있어 **정책 문장이 한 줄로 끝난다.** 자산 종류가 늘어도 정책을 다시 고치지 않는다.
 
 > **주체를 구분할 것.** 위 문장은 버킷 정책(익명 접근자) 이야기다. 앱이 쓰는 IAM 역할은 별개이며, 미참조 이미지 정리를 위해 `challenge-verifications/` 아래에 한해 `ListBucket`을 갖는다(아래 [미참조 미디어 정리] 절). 즉 **URL을 아는 외부인은 여전히 열거할 수 없고, 열거할 수 있는 것은 서버뿐이다.**
 >
@@ -451,9 +458,27 @@ S3 라이프사이클(“N일 지난 객체 자동 삭제”)이 가장 단순�
 | Sid | 액션 | 리소스 | 왜 |
 | --- | --- | --- | --- |
 | `MediaCleanupList` | `s3:ListBucket` | `arn:aws:s3:::lirouti-prod-bucket` (버킷 자체)<br>+ `Condition: s3:prefix = challenge-verifications/* 또는 chat-emoticons/*` | 두 용도의 날짜 prefix 아래 오브젝트 목록을 얻는다 |
-| `MediaCleanupDelete` | `s3:DeleteObject` | `arn:aws:s3:::lirouti-prod-bucket/challenge-verifications/*`<br>`arn:aws:s3:::lirouti-prod-bucket/chat-emoticons/*` | 미참조 오브젝트와 등록 실패 이모티콘을 지운다 |
+| `MediaCleanupDelete` | `s3:DeleteObject` | `arn:aws:s3:::lirouti-prod-bucket/challenge-verifications/*`<br>`arn:aws:s3:::lirouti-prod-bucket/challenge-verifications-staging/*`<br>`arn:aws:s3:::lirouti-prod-bucket/chat-emoticons/*` | 미참조 오브젝트와 등록 실패 이모티콘을 지운다. **대기본은 승격 직후 지운다** |
 
 > `ListBucket`의 리소스는 **버킷 ARN이지 `/*`가 아니다.** 오브젝트 액션과 리소스 형태가 다르다 — `/*`를 붙이면 조용히 권한이 안 먹는다.
+
+> **이 파일과 콘솔은 일치한다**(2026-08-13 확인). 그전까지 두 방향으로 어긋나 있었고, 그 이력을 남겨 둔다.
+>
+> | | 어긋나 있던 상태 | 지금 |
+> | --- | --- | --- |
+> | `challenge-verifications-staging/*` 삭제 | 콘솔에만 있었다 | 파일에 더했다 |
+> | `chat-emoticons/*` 열거·삭제 | 파일에만 있었다 | 콘솔에 적용했다 |
+>
+> **`-staging` 삭제가 파일에서 빠져 있던 것이 위험했다.** 심사를 통과한 사진을 공개 prefix 로 복사한 뒤 대기본을 지우는, **지금 실제로 쓰이는 권한**이다. 파일을 그대로 붙여넣었으면 승격 때마다 대기본이 쌓이기 시작했을 것이다.
+>
+> **`chat-emoticons/*` 삭제는 정리 배치 전용이 아니다.** 이모티콘 등록 중 DB 저장이 실패하면 방금 올린 객체를 그 자리에서 지우는데(`ChatEmoticonAdminService`), 그 경로가 권한이 없어 조용히 실패하고 있었다. 열거 쪽만 배치 전용이라 배치를 켤 때까지 놀지만, 삭제와 갈라 두면 다음에 또 어긋난다.
+
+**열거는 두 prefix 조건 안에서만 동작한다.** 버킷 루트를 훑으면 `AccessDenied` 가 나는 것이 정상이며, 이것으로 정책이 좁게 걸렸는지 확인할 수 있다.
+
+```bash
+aws s3 ls s3://lirouti-prod-bucket/chat-emoticons/   # 된다
+aws s3 ls s3://lirouti-prod-bucket/                  # AccessDenied ← 정상
+```
 
 **둘 다 `challenge-verifications/`와 `chat-emoticons/` 아래로만 좁혀 뒀다.** 앞으로 추가될 다른 비공개 미디어(개인 루틴·그룹 채팅 사진)는 **앱 역할로도 열거·삭제할 수 없다.**
 
@@ -590,7 +615,7 @@ LiRouti는 **umc 계정 하나에만** 있고 다른 계정과 리소스를 공�
 - **SSE-KMS를 고르면** 아래 정책에 `kms:GenerateDataKey`·`kms:Decrypt`가 추가로 필요하다. 특별한 이유가 없으면 기본값을 쓴다.
   - 여기서 **customer-managed 키(CMK)를 쓰면 IAM 정책만으로는 부족하다.** KMS는 키 정책(key policy)이 IAM 위임을 허용해야 IAM 쪽 권한이 효력을 갖는다. 허용 문구가 없으면 권한을 붙여도 S3 PUT에서 `AccessDenied`가 난다. CMK를 쓸 경우 키 정책에 `lirouti-ec2-role`의 ARN을 직접 넣거나, 계정 위임(`arn:aws:iam::<계정>:root` 허용) 문구가 있는지 확인한다.
   - AWS 관리형 키(`aws/s3`)는 키 정책이 이미 계정 위임을 허용하므로 이 문제가 없다.
-- **미디어 버킷은 `challenge-verifications/` prefix만 공개 읽기로 연다**(#66). 나머지 prefix와 백업 버킷은 비공개 그대로다. 근거와 절차는 아래 [미디어 서빙] 절을 볼 것.
+- **미디어 버킷은 `challenge-verifications/`·`avatar/` 두 prefix만 공개 읽기로 연다**(#66, #231). 나머지 prefix와 백업 버킷은 비공개 그대로다. 근거와 절차는 아래 [미디어 서빙] 절을 볼 것.
 - **라이프사이클 규칙은 걸지 않는다.** 라이프사이클은 객체의 나이만 알고 DB가 참조하는지는 모르는데, 미참조 파일과 정상 인증 사진이 같은 날짜 prefix에 섞여 있다. 자동 삭제를 걸면 정상 인증 사진이 지워진다. 고아 파일은 **S3 목록과 DB를 대조**해 지운다 — 아래 [미참조 미디어 정리 (#19)] 절.
 
 ### 2) 정책 생성

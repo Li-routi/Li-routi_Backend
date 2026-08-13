@@ -59,6 +59,14 @@ class GroupPokeControllerIntegrationTest {
         entityManager.clear();
         assertThat(entityManager.find(GroupMember.class, targetMembership.getId()).getTotalPokeCount())
                 .isEqualTo(2L);
+        assertThat(entityManager.createNativeQuery("""
+                        select count(*) from group_poke
+                        where group_id = :groupId and sender_id = :senderId and recipient_id = :recipientId
+                        """)
+                .setParameter("groupId", group.getId())
+                .setParameter("senderId", requester.getId())
+                .setParameter("recipientId", target.getId())
+                .getSingleResult()).isEqualTo(2L);
     }
 
     @Test

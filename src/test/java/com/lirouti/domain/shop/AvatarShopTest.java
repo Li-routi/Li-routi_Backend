@@ -67,7 +67,7 @@ class AvatarShopTest {
 
     private Member me;
     private AvatarItem hat;      // HEAD · TOPAZ 300
-    private AvatarItem glasses;  // FACE · TOPAZ 300
+    private AvatarItem tumbler;  // HAND · TOPAZ 300
     private AvatarItem shirt;    // BODY · GEM   500
 
     @BeforeEach
@@ -80,7 +80,7 @@ class AvatarShopTest {
         em.persist(me);
 
         hat = item(AvatarSlot.HEAD, Currency.TOPAZ, 300, "모자");
-        glasses = item(AvatarSlot.FACE, Currency.TOPAZ, 300, "안경");
+        tumbler = item(AvatarSlot.HAND, Currency.TOPAZ, 300, "텀블러");
         shirt = item(AvatarSlot.BODY, Currency.GEM, 500, "티셔츠");
         em.flush();
     }
@@ -90,7 +90,7 @@ class AvatarShopTest {
     private AvatarItem item(AvatarSlot slot, Currency currency, int price, String name) {
         AvatarItem item = AvatarItem.builder()
                 .slot(slot).currency(currency).price(price)
-                .name(name).imageUrl("https://img/" + name)
+                .name(name).imageKey("avatar/item/" + name + "-v1.png")
                 .sortOrder(1).active(true).build();
         em.persist(item);
         return item;
@@ -136,7 +136,7 @@ class AvatarShopTest {
                 .socialId("other-sid-" + seq.get()).build();
         em.persist(other);
         em.persist(MemberAvatarEquipment.builder().member(me).avatarItem(hat).build());
-        em.persist(MemberAvatarEquipment.builder().member(me).avatarItem(glasses).build());
+        em.persist(MemberAvatarEquipment.builder().member(me).avatarItem(tumbler).build());
         em.persist(MemberAvatarEquipment.builder().member(other).avatarItem(shirt).build());
         em.flush();
         em.clear();
@@ -147,9 +147,10 @@ class AvatarShopTest {
         assertThat(result).extracting(equipment -> equipment.getMember().getId())
                 .containsExactly(me.getId(), me.getId(), other.getId());
         assertThat(result).extracting(MemberAvatarEquipment::getSlot)
-                .containsExactly(AvatarSlot.FACE, AvatarSlot.HEAD, AvatarSlot.BODY);
-        assertThat(result).extracting(equipment -> equipment.getAvatarItem().getImageUrl())
-                .containsExactly("https://img/안경", "https://img/모자", "https://img/티셔츠");
+                .containsExactly(AvatarSlot.HAND, AvatarSlot.HEAD, AvatarSlot.BODY);
+        assertThat(result).extracting(equipment -> equipment.getAvatarItem().getImageKey())
+                .containsExactly("avatar/item/텀블러-v1.png", "avatar/item/모자-v1.png",
+                        "avatar/item/티셔츠-v1.png");
     }
 
     // ── 구매 ──
@@ -216,12 +217,12 @@ class AvatarShopTest {
     void purchase_TouchesOnlyItsOwnSlot() {
         giveBalance(Currency.TOPAZ, 1000);
         shopCommandService.purchase(me.getId(), hat.getId());       // HEAD
-        shopCommandService.purchase(me.getId(), glasses.getId());   // FACE
+        shopCommandService.purchase(me.getId(), tumbler.getId());   // HAND
         em.flush();
 
         assertThat(equippedSlots())
                 .as("먼저 산 모자가 그대로 남아 있다")
-                .containsExactly(AvatarSlot.HEAD, AvatarSlot.FACE);
+                .containsExactly(AvatarSlot.HEAD, AvatarSlot.HAND);
     }
 
     // ── 착용 ──
@@ -230,15 +231,15 @@ class AvatarShopTest {
     @DisplayName("요청에 없는 자리는 벗겨진다 — 보낸 것이 곧 전체 착장이다")
     void equip_UnequipsSlotsNotInRequest() {
         own(hat);
-        own(glasses);
-        shopCommandService.equip(me.getId(), List.of(hat.getId(), glasses.getId()));
+        own(tumbler);
+        shopCommandService.equip(me.getId(), List.of(hat.getId(), tumbler.getId()));
         em.flush();
 
         shopCommandService.equip(me.getId(), List.of(hat.getId()));
         em.flush();
 
         assertThat(equippedSlots())
-                .as("FACE 는 보내지 않았으므로 벗는다")
+                .as("HAND 는 보내지 않았으므로 벗는다")
                 .containsExactly(AvatarSlot.HEAD);
     }
 
@@ -263,7 +264,7 @@ class AvatarShopTest {
         em.flush();
 
         assertThatThrownBy(() ->
-                shopCommandService.equip(me.getId(), List.of(hat.getId(), glasses.getId())))
+                shopCommandService.equip(me.getId(), List.of(hat.getId(), tumbler.getId())))
                 .isInstanceOf(ShopException.class);
 
         assertThat(equippedSlots())
@@ -296,6 +297,25 @@ class AvatarShopTest {
     }
 
     // ── 목록 ──
+
+    /**
+     * DB 에는 key 를 담고 응답에는 주소를 내린다. 이 둘이 같아지면 앱은 key 를 이미지 주소로
+     * 알고 그리려다 실패한다 — 조립이 빠졌다는 신호다.
+     */
+    @Test
+    @DisplayName("목록은 저장된 key 가 아니라 조립된 주소를 내린다")
+    void items_ReturnsResolvedUrlNotKey() {
+        ShopResDTO.Items items = shopQueryService.getItems(me.getId(), AvatarSlot.HEAD, false);
+
+        assertThat(items.items()).filteredOn(item -> item.id().equals(hat.getId()))
+                .singleElement()
+                .satisfies(item -> assertAll(
+                        () -> assertThat(item.imageUrl()).startsWith("http"),
+                        () -> assertThat(item.imageUrl()).endsWith(hat.getImageKey()),
+                        () -> assertThat(item.imageUrl())
+                                .as("key 를 그대로 내리면 앱이 그리지 못한다")
+                                .isNotEqualTo(hat.getImageKey())));
+    }
 
     @Test
     @DisplayName("판매가 종료돼도 보유한 것은 목록에 남는다 — 빠지면 조용히 벗겨진다")

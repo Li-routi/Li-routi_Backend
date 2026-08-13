@@ -25,6 +25,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 
 import com.lirouti.domain.member.entity.Member;
+import com.lirouti.domain.member.enums.Role;
 import com.lirouti.domain.member.exception.MemberException;
 import com.lirouti.domain.member.exception.code.error.MemberErrorCode;
 import com.lirouti.domain.member.repository.MemberRepository;
@@ -128,6 +129,9 @@ public class PerformanceTokenCommand {
             throw new MemberException(MemberErrorCode.WITHDRAWN_MEMBER);
         }
 
+        if (Role.ROLE_ADMIN.equals(member.getRole())) {
+            return jwtUtil.createDevAdminToken(member.getId());
+        }
         return jwtUtil.createDevToken(member.getId());
     }
 

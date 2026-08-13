@@ -224,6 +224,19 @@ public class MediaService {
     }
 
     /**
+     * 아바타 자산(캐릭터·알·둥지·아이템)의 볼 수 있는 주소.
+     *
+     * <p><b>서명하지 않는다.</b> 공개 prefix 라 주소를 조립하기만 하므로 S3 를 부르지 않고,
+     * 목록에서 행마다 불러도 비용이 얹히지 않는다.
+     *
+     * <p>용도를 부르는 쪽마다 적으면 같은 한 줄이 서비스마다 복사된다 — 실제로 상점·착용·
+     * 그룹 조회 넷이 같은 값을 필요로 한다.
+     */
+    public String resolveAvatarAssetUrl(String imageKey) {
+        return resolveViewUrl(imageKey, MediaPurpose.AVATAR_ASSET);
+    }
+
+    /**
      * 비공개 오브젝트를 한시적으로 열어 주는 서명 URL 을 만든다.
      *
      * <p><b>S3 를 호출하지 않는다.</b> 서명은 자격 증명으로 로컬에서 계산하는 HMAC 이라

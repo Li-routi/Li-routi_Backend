@@ -302,23 +302,6 @@ public class GroupRoutineAssignmentCommandService {
         }
     }
 
-    /** 실제 완료 전이와 현재 가입 회차 스트릭 갱신을 같은 트랜잭션으로 묶는다. */
-    @Transactional
-    public void completeAssignmentAndRecordActivity(
-            GroupRoutineAssignment assignment,
-            LocalDateTime verifiedAt
-    ) {
-        if (assignment == null) {
-            throw new IllegalArgumentException("그룹 루틴 할당은 필수입니다.");
-        }
-        completeAssignment(assignment.getId(), verifiedAt);
-        groupMemberActivityCommandService.recordStreakIfAllAssignmentsCompleted(
-                assignment.getGroupRoutine().getGroup().getId(),
-                assignment.getMember().getId(),
-                assignment.getAssignedDate()
-        );
-    }
-
     /**
      * 기준 시각에 마감된 할당을 먼저 미이행 처리한 뒤 시작된 할당을 진행 중으로 전이한다.
      *

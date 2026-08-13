@@ -20,6 +20,7 @@ import com.lirouti.domain.group.repository.GroupRoutineQueryRepository.RoutineSc
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.service.query.MemberQueryService;
 import com.lirouti.domain.shop.repository.MemberAvatarEquipmentRepository;
+import com.lirouti.domain.media.service.MediaService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -45,9 +46,11 @@ public class GroupQueryService {
     private final GroupRoutineQueryRepository groupRoutineQueryRepository;
     private final GroupRoutineCategoryRepository groupRoutineCategoryRepository;
     private final MemberAvatarEquipmentRepository memberAvatarEquipmentRepository;
+    private final MediaService mediaService;
     private final GroupValidationService groupValidationService;
     private final MemberQueryService memberQueryService;
     private final Clock clock;
+
 
     /** 로그인 회원의 ACTIVE 참여 그룹과 오늘·월간 활동 요약을 배치 조회한다. */
     @Transactional(readOnly = true)
@@ -137,7 +140,8 @@ public class GroupQueryService {
                 activeMemberIds.isEmpty()
                         ? List.of()
                         : memberAvatarEquipmentRepository
-                                .findAllByMemberIdInWithMemberAndAvatarItem(activeMemberIds)
+                                .findAllByMemberIdInWithMemberAndAvatarItem(activeMemberIds),
+                mediaService::resolveAvatarAssetUrl
         );
 
         log.debug("그룹 상세 정보를 조회했습니다. groupId={}, memberId={}, memberCount={}",
