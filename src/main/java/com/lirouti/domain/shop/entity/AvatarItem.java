@@ -80,4 +80,26 @@ public class AvatarItem extends BaseEntity {
         this.sortOrder = sortOrder;
         this.active = active;
     }
+
+    @Column(name = "sale_yn", nullable = false)
+    private boolean saleYn;
+
+    @Builder
+    private AvatarItem(AvatarSlot slot, Currency currency, int price,
+                       String name, String imageKey, int sortOrder, boolean active, boolean saleYn) {
+        if (saleYn && price <= 0) {
+            throw new IllegalArgumentException("판매 아이템의 가격은 1 이상이어야 합니다.");
+        }
+        if (!saleYn && price != 0) {
+            throw new IllegalArgumentException("업적 전용(비매) 아이템의 가격은 0이어야 합니다.");
+        }
+        this.slot = slot;
+        this.currency = currency;
+        this.price = price;
+        this.name = name;
+        this.imageKey = imageKey;
+        this.sortOrder = sortOrder;
+        this.active = active;
+        this.saleYn = saleYn;
+    }
 }
