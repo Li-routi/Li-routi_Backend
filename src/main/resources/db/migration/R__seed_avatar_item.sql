@@ -47,10 +47,10 @@ VALUES
 (17, 'BODY', 'TOPAZ', 300, '검정 앞치마', 'avatar/item/body/apron-black-v1.png', 6, 1, NOW(6), NOW(6)),
 (18, 'BODY', 'TOPAZ', 300, '분홍 앞치마', 'avatar/item/body/apron-pink-v1.png', 7, 1, NOW(6), NOW(6)),
 
--- 손 — 전부 무료. 베개 셋과 소품 둘이다.
-(7, 'HAND', 'TOPAZ', 200, '회색 베개', 'avatar/item/hand/pillow-gray-v1.png', 1, 1, NOW(6), NOW(6)),
-(8, 'HAND', 'TOPAZ', 200, '보라 베개', 'avatar/item/hand/pillow-purple-v1.png', 2, 1, NOW(6), NOW(6)),
-(19, 'HAND', 'TOPAZ', 200, '하늘 베개', 'avatar/item/hand/pillow-sky-v1.png', 3, 1, NOW(6), NOW(6)),
+-- 손 — 베개 셋(유료) + 소품 둘(무료)
+(7, 'HAND', 'GEM', 200, '회색 베개', 'avatar/item/hand/pillow-gray-v1.png', 1, 1, NOW(6), NOW(6)),
+(8, 'HAND', 'GEM', 200, '보라 베개', 'avatar/item/hand/pillow-purple-v1.png', 2, 1, NOW(6), NOW(6)),
+(19, 'HAND', 'GEM', 200, '하늘 베개', 'avatar/item/hand/pillow-sky-v1.png', 3, 1, NOW(6), NOW(6)),
 (20, 'HAND', 'TOPAZ', 150, '수박', 'avatar/item/hand/watermelon-v1.png', 4, 1, NOW(6), NOW(6)),
 (21, 'HAND', 'TOPAZ', 150, '비치볼', 'avatar/item/hand/beach-ball-v1.png', 5, 1, NOW(6), NOW(6)) AS new_row
 ON DUPLICATE KEY UPDATE `currency`   = new_row.`currency`,

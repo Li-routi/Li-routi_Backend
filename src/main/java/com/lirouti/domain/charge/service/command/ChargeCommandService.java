@@ -244,6 +244,6 @@ public class ChargeCommandService {
      */
     private String orderNameOf(ChargeProduct product) {
         int total = product.getRewardAmount() + product.getBonusAmount();
-        return "리라우티 재화 충전 " + total;
+        return "리루티 재화 충전 " + total;
     }
 }
