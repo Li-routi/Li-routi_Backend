@@ -167,8 +167,8 @@ class AvatarPurchaseConcurrencyTest {
      *
      * <pre>
      * T1 delete all           T2 delete all
-     * T1 insert HEAD          T2 insert FACE
-     * → HEAD + FACE           둘 다 "이것만 입겠다" 고 보냈는데 둘 다 입었다
+     * T1 insert HEAD          T2 insert BODY
+     * → HEAD + BODY           둘 다 "이것만 입겠다" 고 보냈는데 둘 다 입었다
      * </pre>
      *
      * <p>각 요청이 "이 하나만 입겠다" 이므로 <b>최종 상태는 반드시 한 벌</b>이어야 한다.
@@ -181,7 +181,7 @@ class AvatarPurchaseConcurrencyTest {
     @Test
     @DisplayName("동시에 착장을 저장해도 섞이지 않는다 — 어느 쪽도 보내지 않은 조합이 남지 않는다")
     void concurrentEquip_NeverMixesOutfits() throws InterruptedException {
-        AvatarSlot[] slots = {AvatarSlot.HEAD, AvatarSlot.FACE, AvatarSlot.BODY, AvatarSlot.HAND};
+        AvatarSlot[] slots = {AvatarSlot.HEAD, AvatarSlot.BODY, AvatarSlot.HAND};
         Long[] itemIds = new Long[slots.length];
         for (int i = 0; i < slots.length; i++) {
             AvatarItem item = avatarItemRepository.save(AvatarItem.builder()

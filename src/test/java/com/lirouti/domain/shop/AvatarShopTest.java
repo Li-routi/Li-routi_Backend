@@ -67,7 +67,7 @@ class AvatarShopTest {
 
     private Member me;
     private AvatarItem hat;      // HEAD · TOPAZ 300
-    private AvatarItem glasses;  // FACE · TOPAZ 300
+    private AvatarItem tumbler;  // HAND · TOPAZ 300
     private AvatarItem shirt;    // BODY · GEM   500
 
     @BeforeEach
@@ -80,7 +80,7 @@ class AvatarShopTest {
         em.persist(me);
 
         hat = item(AvatarSlot.HEAD, Currency.TOPAZ, 300, "모자");
-        glasses = item(AvatarSlot.FACE, Currency.TOPAZ, 300, "안경");
+        tumbler = item(AvatarSlot.HAND, Currency.TOPAZ, 300, "텀블러");
         shirt = item(AvatarSlot.BODY, Currency.GEM, 500, "티셔츠");
         em.flush();
     }
@@ -136,7 +136,7 @@ class AvatarShopTest {
                 .socialId("other-sid-" + seq.get()).build();
         em.persist(other);
         em.persist(MemberAvatarEquipment.builder().member(me).avatarItem(hat).build());
-        em.persist(MemberAvatarEquipment.builder().member(me).avatarItem(glasses).build());
+        em.persist(MemberAvatarEquipment.builder().member(me).avatarItem(tumbler).build());
         em.persist(MemberAvatarEquipment.builder().member(other).avatarItem(shirt).build());
         em.flush();
         em.clear();
@@ -147,9 +147,9 @@ class AvatarShopTest {
         assertThat(result).extracting(equipment -> equipment.getMember().getId())
                 .containsExactly(me.getId(), me.getId(), other.getId());
         assertThat(result).extracting(MemberAvatarEquipment::getSlot)
-                .containsExactly(AvatarSlot.FACE, AvatarSlot.HEAD, AvatarSlot.BODY);
+                .containsExactly(AvatarSlot.HAND, AvatarSlot.HEAD, AvatarSlot.BODY);
         assertThat(result).extracting(equipment -> equipment.getAvatarItem().getImageUrl())
-                .containsExactly("https://img/안경", "https://img/모자", "https://img/티셔츠");
+                .containsExactly("https://img/텀블러", "https://img/모자", "https://img/티셔츠");
     }
 
     // ── 구매 ──
@@ -216,12 +216,12 @@ class AvatarShopTest {
     void purchase_TouchesOnlyItsOwnSlot() {
         giveBalance(Currency.TOPAZ, 1000);
         shopCommandService.purchase(me.getId(), hat.getId());       // HEAD
-        shopCommandService.purchase(me.getId(), glasses.getId());   // FACE
+        shopCommandService.purchase(me.getId(), tumbler.getId());   // HAND
         em.flush();
 
         assertThat(equippedSlots())
                 .as("먼저 산 모자가 그대로 남아 있다")
-                .containsExactly(AvatarSlot.HEAD, AvatarSlot.FACE);
+                .containsExactly(AvatarSlot.HEAD, AvatarSlot.HAND);
     }
 
     // ── 착용 ──
@@ -230,15 +230,15 @@ class AvatarShopTest {
     @DisplayName("요청에 없는 자리는 벗겨진다 — 보낸 것이 곧 전체 착장이다")
     void equip_UnequipsSlotsNotInRequest() {
         own(hat);
-        own(glasses);
-        shopCommandService.equip(me.getId(), List.of(hat.getId(), glasses.getId()));
+        own(tumbler);
+        shopCommandService.equip(me.getId(), List.of(hat.getId(), tumbler.getId()));
         em.flush();
 
         shopCommandService.equip(me.getId(), List.of(hat.getId()));
         em.flush();
 
         assertThat(equippedSlots())
-                .as("FACE 는 보내지 않았으므로 벗는다")
+                .as("HAND 는 보내지 않았으므로 벗는다")
                 .containsExactly(AvatarSlot.HEAD);
     }
 
@@ -263,7 +263,7 @@ class AvatarShopTest {
         em.flush();
 
         assertThatThrownBy(() ->
-                shopCommandService.equip(me.getId(), List.of(hat.getId(), glasses.getId())))
+                shopCommandService.equip(me.getId(), List.of(hat.getId(), tumbler.getId())))
                 .isInstanceOf(ShopException.class);
 
         assertThat(equippedSlots())

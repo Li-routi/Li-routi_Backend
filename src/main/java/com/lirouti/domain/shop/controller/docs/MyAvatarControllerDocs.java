@@ -27,9 +27,9 @@ public interface MyAvatarControllerDocs {
                     **보낸 것이 곧 전체 착장이다.** 목록에 없는 자리는 벗는다.
 
                     ```
-                    지금       HEAD=12  FACE=47  BODY=88
+                    지금       HEAD=12  HAND=47  BODY=88
                     요청       [12, 47]
-                    저장 후     HEAD=12  FACE=47            ← BODY 는 벗겨진다
+                    저장 후     HEAD=12  HAND=47            ← BODY 는 벗겨진다
                     ```
 
                     그래서 **클라이언트는 항상 전체 착장을 보내야 한다.** 바뀐 것만 보내면
