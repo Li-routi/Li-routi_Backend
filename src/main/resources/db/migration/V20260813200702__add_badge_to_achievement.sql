@@ -22,3 +22,7 @@ CREATE TABLE member_badge (
                               CONSTRAINT fk_member_badge_member FOREIGN KEY (member_id) REFERENCES member (id),
                               CONSTRAINT fk_member_badge_badge FOREIGN KEY (badge_id) REFERENCES badge (id)
 );
+
+ALTER TABLE achievement
+    ADD CONSTRAINT fk_achievement_badge_code
+    FOREIGN KEY (badge_code) REFERENCES badge (code);
