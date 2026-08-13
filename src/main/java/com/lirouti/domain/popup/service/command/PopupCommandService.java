@@ -73,12 +73,16 @@ public class PopupCommandService {
      */
     @Transactional
     public void ack(Long memberId, List<Long> popupIds) {
-        LocalDateTime now = LocalDateTime.now(clock);
+        List<Long> distinctIds = popupIds.stream().distinct().toList();
+        List<PendingPopup> popups =
+                pendingPopupRepository.findAllByIdInAndMemberId(distinctIds, memberId);
 
-        popupIds.stream().distinct().forEach(popupId -> {
-            PendingPopup popup = pendingPopupRepository.findByIdAndMemberId(popupId, memberId)
-                    .orElseThrow(() -> new PopupException(PopupErrorCode.POPUP_NOT_FOUND));
-            popup.ack(now);
-        });
+        // 하나라도 못 찾았으면 남의 것이거나 없는 것이다. 무엇이 빠졌는지는 알려주지 않는다.
+        if (popups.size() != distinctIds.size()) {
+            throw new PopupException(PopupErrorCode.POPUP_NOT_FOUND);
+        }
+
+        LocalDateTime now = LocalDateTime.now(clock);
+        popups.forEach(popup -> popup.ack(now));
     }
 }

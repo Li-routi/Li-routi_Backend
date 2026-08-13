@@ -28,7 +28,7 @@ public class PopupQueryService {
     @Transactional(readOnly = true)
     public PopupResDTO.Popups getPending(Long memberId) {
         return PopupConverter.toPopups(
-                pendingPopupRepository.findAllByMemberIdAndAckedAtIsNullOrderByCreatedAtAsc(memberId),
+                pendingPopupRepository.findAllByMemberIdAndAckedAtIsNullOrderByCreatedAtAscIdAsc(memberId),
                 // 팝업 이미지는 공개 자산의 key 만 담는다. 서명 주소를 담으면 앱을 늦게 켠
                 // 사용자에게는 이미 만료된 주소가 간다 -- 팝업은 며칠 뒤에 열릴 수도 있다.
                 mediaService::resolvePublicUrl

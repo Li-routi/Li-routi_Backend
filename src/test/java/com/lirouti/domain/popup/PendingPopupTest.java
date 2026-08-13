@@ -173,6 +173,29 @@ class PendingPopupTest {
         assertThat(popupQueryService.getPending(me.getId()).popups()).isEmpty();
     }
 
+    /**
+     * 한 트랜잭션에서 둘을 발행하면 {@code created_at} 이 같은 값일 수 있다. 그때 순서가
+     * 조회마다 달라지면 앱이 팝업을 띄우는 순서가 흔들린다 — id 로 동점을 가른다.
+     */
+    @Test
+    @DisplayName("같은 시각에 발행돼도 순서가 흔들리지 않는다")
+    void getPending_HasStableOrder() {
+        popupCommandService.publish(unlocked(me.getId(), 1L));
+        popupCommandService.publish(unlocked(me.getId(), 2L));
+        popupCommandService.publish(unlocked(me.getId(), 3L));
+        em.flush();
+
+        List<Long> first = popupQueryService.getPending(me.getId()).popups().stream()
+                .map(PopupResDTO.Popup::id).toList();
+        em.clear();
+        List<Long> second = popupQueryService.getPending(me.getId()).popups().stream()
+                .map(PopupResDTO.Popup::id).toList();
+
+        assertAll(
+                () -> assertThat(first).isEqualTo(second),
+                () -> assertThat(first).isSorted());
+    }
+
     // ── 확인 ──
 
     @Test
@@ -232,7 +255,7 @@ class PendingPopupTest {
         popupCommandService.publish(unlocked(other.getId(), 1L));
         em.flush();
         Long othersPopupId = pendingPopupRepository
-                .findAllByMemberIdAndAckedAtIsNullOrderByCreatedAtAsc(other.getId())
+                .findAllByMemberIdAndAckedAtIsNullOrderByCreatedAtAscIdAsc(other.getId())
                 .getFirst().getId();
 
         assertThatThrownBy(() -> popupCommandService.ack(me.getId(), List.of(othersPopupId)))
@@ -259,7 +282,7 @@ class PendingPopupTest {
         em.flush();
 
         PendingPopup saved = pendingPopupRepository
-                .findAllByMemberIdAndAckedAtIsNullOrderByCreatedAtAsc(me.getId()).getFirst();
+                .findAllByMemberIdAndAckedAtIsNullOrderByCreatedAtAscIdAsc(me.getId()).getFirst();
 
         assertAll(
                 () -> assertThat(saved.isAcked()).isFalse(),
