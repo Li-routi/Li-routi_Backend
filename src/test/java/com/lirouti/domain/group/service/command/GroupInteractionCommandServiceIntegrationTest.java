@@ -15,6 +15,7 @@ import com.lirouti.domain.verification.entity.GroupRoutineVerification;
 import com.lirouti.domain.verification.entity.GroupRoutineVerificationLike;
 import com.lirouti.domain.verification.repository.GroupRoutineVerificationDisappointmentRepository;
 import com.lirouti.domain.verification.repository.GroupRoutineVerificationLikeRepository;
+import com.lirouti.domain.verification.service.command.GroupRoutineVerificationLikeCommandService;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.DisplayName;
@@ -35,6 +36,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @DisplayName("그룹 인증 아쉬워요 명령 통합 테스트")
 class GroupInteractionCommandServiceIntegrationTest {
     @Autowired private GroupInteractionCommandService groupInteractionCommandService;
+    @Autowired private GroupRoutineVerificationLikeCommandService likeCommandService;
     @Autowired private GroupRoutineVerificationLikeRepository likeRepository;
     @Autowired private GroupRoutineVerificationDisappointmentRepository disappointmentRepository;
 
@@ -72,6 +74,48 @@ class GroupInteractionCommandServiceIntegrationTest {
         assertThat(disappointmentRepository.countByVerificationId(fixture.verificationId())).isEqualTo(1L);
     }
 
+    @Test
+    @DisplayName("Like를 아쉬워요로 전환하면 작성자의 두 누적값이 정확히 교체된다")
+    void disappoint_FromLike_UpdatesBothAuthorTotals() {
+        Fixture fixture = fixture(false);
+
+        likeCommandService.like(fixture.actorId(), fixture.groupId(), fixture.verificationId());
+        groupInteractionCommandService.disappoint(fixture.actorId(), fixture.groupId(), fixture.verificationId());
+
+        assertThat(likeRepository.countByVerificationIds(java.util.List.of(fixture.verificationId())))
+                .doesNotContainKey(fixture.verificationId());
+        assertThat(disappointmentRepository.countByVerificationId(fixture.verificationId())).isEqualTo(1L);
+        assertThat(authorMembership(fixture.authorMembershipId()).getTotalLikeCount()).isZero();
+        assertThat(authorMembership(fixture.authorMembershipId()).getTotalDisappointmentCount()).isEqualTo(1L);
+    }
+
+    @Test
+    @DisplayName("아쉬워요를 Like로 전환하면 작성자의 두 누적값이 정확히 교체된다")
+    void like_FromDisappointment_UpdatesBothAuthorTotals() {
+        Fixture fixture = fixture(false);
+
+        groupInteractionCommandService.disappoint(fixture.actorId(), fixture.groupId(), fixture.verificationId());
+        likeCommandService.like(fixture.actorId(), fixture.groupId(), fixture.verificationId());
+
+        assertThat(disappointmentRepository.countByVerificationId(fixture.verificationId())).isZero();
+        assertThat(likeRepository.countByVerificationIds(java.util.List.of(fixture.verificationId()))
+                .getOrDefault(fixture.verificationId(), 0L)).isEqualTo(1L);
+        assertThat(authorMembership(fixture.authorMembershipId()).getTotalLikeCount()).isEqualTo(1L);
+        assertThat(authorMembership(fixture.authorMembershipId()).getTotalDisappointmentCount()).isZero();
+    }
+
+    @Test
+    @DisplayName("아쉬워요 취소는 실제 삭제 건수만큼 작성자의 누적 아쉬워요 수를 감소시킨다")
+    void undisappoint_DecreasesAuthorTotalDisappointmentCount() {
+        Fixture fixture = fixture(false);
+        groupInteractionCommandService.disappoint(fixture.actorId(), fixture.groupId(), fixture.verificationId());
+
+        groupInteractionCommandService.undisappoint(fixture.actorId(), fixture.groupId(), fixture.verificationId());
+
+        assertThat(disappointmentRepository.countByVerificationId(fixture.verificationId())).isZero();
+        assertThat(authorMembership(fixture.authorMembershipId()).getTotalDisappointmentCount()).isZero();
+    }
+
     private Fixture fixture(boolean withExistingLike) {
         String suffix = UUID.randomUUID().toString();
         Group group = Group.builder().name("아쉬워요 그룹")
@@ -80,8 +124,9 @@ class GroupInteractionCommandServiceIntegrationTest {
         entityManager.persist(group);
         Member author = member("author-" + suffix);
         Member actor = member("actor-" + suffix);
-        entityManager.persist(GroupMember.builder()
-                .group(group).member(author).role(GroupMemberRole.MEMBER).build());
+        GroupMember authorMembership = GroupMember.builder()
+                .group(group).member(author).role(GroupMemberRole.MEMBER).build();
+        entityManager.persist(authorMembership);
         entityManager.persist(GroupMember.builder()
                 .group(group).member(actor).role(GroupMemberRole.MEMBER).build());
         GroupRoutineCategory category = GroupRoutineCategory.builder()
@@ -103,7 +148,7 @@ class GroupInteractionCommandServiceIntegrationTest {
             entityManager.persist(GroupRoutineVerificationLike.builder()
                     .groupRoutineVerification(verification).member(actor).build());
         }
-        return new Fixture(group.getId(), actor.getId(), verification.getId());
+        return new Fixture(group.getId(), actor.getId(), author.getId(), authorMembership.getId(), verification.getId());
     }
 
     private Member member(String identifier) {
@@ -118,6 +163,18 @@ class GroupInteractionCommandServiceIntegrationTest {
         return member;
     }
 
-    private record Fixture(Long groupId, Long actorId, Long verificationId) {
+    private GroupMember authorMembership(Long authorMembershipId) {
+        entityManager.flush();
+        entityManager.clear();
+        return entityManager.find(GroupMember.class, authorMembershipId);
+    }
+
+    private record Fixture(
+            Long groupId,
+            Long actorId,
+            Long authorId,
+            Long authorMembershipId,
+            Long verificationId
+    ) {
     }
 }

@@ -1,6 +1,5 @@
 package com.lirouti.domain.group.service.command;
 
-import com.lirouti.domain.achievement.event.GroupAchievementProgressEvent;
 import com.lirouti.domain.group.entity.GroupMember;
 import com.lirouti.domain.group.entity.GroupRoutine;
 import com.lirouti.domain.group.entity.GroupRoutineAssignment;
@@ -15,7 +14,6 @@ import com.lirouti.domain.group.repository.GroupRoutineRepository;
 import com.lirouti.domain.group.repository.GroupRoutineScheduleRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -47,7 +45,6 @@ public class GroupRoutineAssignmentCommandService {
     private final GroupMemberRepository groupMemberRepository;
     private final GroupMemberActivityCommandService groupMemberActivityCommandService;
     private final GroupRoutineAssignmentStatusRefreshBatchService statusRefreshBatchService;
-    private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
 
     /** 루틴 삭제 시 완료되지 않은 모든 회원의 할당을 한 번에 물리 삭제한다. */
@@ -289,35 +286,19 @@ public class GroupRoutineAssignmentCommandService {
         throw new GroupException(GroupErrorCode.GROUP_ROUTINE_ASSIGNMENT_NOT_IN_PROGRESS);
     }
 
-    /** 실제 완료 전이와 현재 가입 회차 스트릭 갱신을 같은 트랜잭션으로 묶는다. */
-    @Transactional
-    public void completeAssignmentAndRecordActivity(
-            GroupRoutineAssignment assignment,
-            LocalDateTime verifiedAt
-    ) {
-        if (assignment == null) {
-            throw new IllegalArgumentException("그룹 루틴 할당은 필수입니다.");
+    /** 인증 저장은 증빙만 남기고 최종 완료 판정은 마감 batch에 맡긴다. */
+    public void validateAssignmentVerifiable(GroupRoutineAssignment assignment, LocalDateTime verifiedAt) {
+        if (assignment == null || verifiedAt == null) {
+            throw new IllegalArgumentException("그룹 루틴 할당과 인증 시각은 필수입니다.");
         }
-        completeAssignment(assignment.getId(), verifiedAt);
-
-        Long groupId = assignment.getGroupRoutine().getGroup().getId();
-        Long memberId = assignment.getMember().getId();
-        LocalDate assignedDate = assignment.getAssignedDate();
-
-        groupMemberActivityCommandService.recordStreakIfAllAssignmentsCompleted(
-                groupId, memberId, assignedDate);
-
-        // AC-009: 방 구성원 전체 인증 합계. sourceId로 assignment.getId()를 써서
-        // 재발행돼도 group_achievement_progress_event_log unique 제약이 중복 반영을 막는다.
-        eventPublisher.publishEvent(new GroupAchievementProgressEvent(
-                groupId, "ACH-AC-009", 1, "GROUP_ASSIGNMENT_COMPLETE", assignment.getId()));
-
-        // SP-004: 같은 날 구성원 전원 인증. "전원 완료" 판정 자체는
-        // recordStreakIfAllAssignmentsCompleted와 동일 조건이라 그 결과를 재사용해야 한다.
-        if (groupMemberActivityCommandService.isAllMembersCompletedToday(groupId, assignedDate)) {
-            eventPublisher.publishEvent(new GroupAchievementProgressEvent(
-                    groupId, "ACH-SP-004", 1, "GROUP_ALL_COMPLETE_DAY",
-                    groupId * 10_000_000L + assignedDate.toEpochDay())); // 그룹+날짜 합성 sourceId
+        if (assignment.getStatus() != GroupRoutineAssignmentStatus.PENDING
+                && assignment.getStatus() != GroupRoutineAssignmentStatus.IN_PROGRESS) {
+            throw new GroupException(GroupErrorCode.GROUP_ROUTINE_ASSIGNMENT_NOT_IN_PROGRESS);
+        }
+        if (!assignment.getAssignedDate().equals(verifiedAt.toLocalDate())
+                || assignment.getScheduledStartTime().isAfter(verifiedAt.toLocalTime())
+                || !assignment.getScheduledEndTime().isAfter(verifiedAt.toLocalTime())) {
+            throw new GroupException(GroupErrorCode.GROUP_ROUTINE_ASSIGNMENT_NOT_IN_PROGRESS);
         }
     }
 
@@ -327,24 +308,24 @@ public class GroupRoutineAssignmentCommandService {
      * @param currentDateTime 상태 전이 기준 시각
      */
     public void refreshAssignmentStatuses(LocalDateTime currentDateTime) {
-        int missedCount = 0;
+        int transitionedCount = 0;
         while (true) {
-            int batchMissedCount = statusRefreshBatchService
-                    .markExpiredAssignmentsMissed(
+            int batchTransitionedCount = statusRefreshBatchService
+                    .resolveExpiredAssignments(
                             currentDateTime,
                             EXPIRED_ASSIGNMENT_GROUP_BATCH_SIZE
                     );
-            if (batchMissedCount == 0) {
+            if (batchTransitionedCount == 0) {
                 break;
             }
-            missedCount += batchMissedCount;
+            transitionedCount += batchTransitionedCount;
         }
         int inProgressCount = statusRefreshBatchService
                 .markStartedAssignmentsInProgress(currentDateTime);
-        if (missedCount > 0 || inProgressCount > 0) {
+        if (transitionedCount > 0 || inProgressCount > 0) {
             log.info("그룹 루틴 할당 상태 갱신을 완료했습니다. "
-                            + "currentDateTime={}, missedCount={}, inProgressCount={}",
-                    currentDateTime, missedCount, inProgressCount);
+                            + "currentDateTime={}, transitionedCount={}, inProgressCount={}",
+                    currentDateTime, transitionedCount, inProgressCount);
         }
     }
 

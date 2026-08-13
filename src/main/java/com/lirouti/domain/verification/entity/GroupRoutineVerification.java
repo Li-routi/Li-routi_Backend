@@ -78,4 +78,11 @@ public class GroupRoutineVerification extends BaseEntity {
         this.imageUrl = imageUrl;
         this.content = content;
     }
+
+    /** 기존 피드·읽음 커서 참조를 유지한 채 인증 내용을 교체한다. */
+    public void reverify(String imageUrl, String content, LocalDateTime verifiedAt) {
+        this.imageUrl = imageUrl;
+        this.content = content;
+        this.verifiedAt = verifiedAt;
+    }
 }

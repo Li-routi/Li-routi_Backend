@@ -226,6 +226,7 @@ class GroupMemberTest {
         groupMember.recordStreakCompletion(LocalDate.of(2026, 8, 6));
         groupMember.increaseTotalLikeCount();
         groupMember.increaseTotalPokeCount();
+        groupMember.increaseTotalDisappointmentCount();
 
         groupMember.resetActivityForNewMembership();
 
@@ -234,6 +235,7 @@ class GroupMemberTest {
         assertThat(groupMember.getLastStreakCompletedDate()).isNull();
         assertThat(groupMember.getTotalLikeCount()).isZero();
         assertThat(groupMember.getTotalPokeCount()).isZero();
+        assertThat(groupMember.getTotalDisappointmentCount()).isZero();
     }
 
 }

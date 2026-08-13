@@ -112,6 +112,62 @@ public interface GroupMemberRepository extends JpaRepository<GroupMember, Long> 
             @Param("assignmentId") Long assignmentId
     );
 
+    @Modifying(flushAutomatically = true)
+    @Query(value = """
+            update group_member group_member
+            join group_routine_assignment assignment on assignment.id = :assignmentId
+            join group_routine routine on routine.id = assignment.group_routine_id
+               set group_member.total_disappointment_count = group_member.total_disappointment_count + :count
+             where group_member.id = :groupMemberId
+               and group_member.status = 'ACTIVE'
+               and group_member.member_id = assignment.member_id
+               and group_member.group_id = routine.group_id
+               and assignment.created_at >= group_member.joined_at
+            """, nativeQuery = true)
+    int incrementTotalDisappointmentCountForCurrentActiveMembership(
+            @Param("groupMemberId") Long groupMemberId,
+            @Param("assignmentId") Long assignmentId,
+            @Param("count") long count
+    );
+
+    @Modifying(flushAutomatically = true)
+    @Query(value = """
+            update group_member group_member
+            join group_routine_assignment assignment on assignment.id = :assignmentId
+            join group_routine routine on routine.id = assignment.group_routine_id
+               set group_member.total_disappointment_count = group_member.total_disappointment_count - :count
+             where group_member.id = :groupMemberId
+               and group_member.status = 'ACTIVE'
+               and group_member.member_id = assignment.member_id
+               and group_member.group_id = routine.group_id
+               and assignment.created_at >= group_member.joined_at
+               and group_member.total_disappointment_count >= :count
+            """, nativeQuery = true)
+    int decrementTotalDisappointmentCountForCurrentActiveMembershipIfPositive(
+            @Param("groupMemberId") Long groupMemberId,
+            @Param("assignmentId") Long assignmentId,
+            @Param("count") long count
+    );
+
+    @Modifying(flushAutomatically = true)
+    @Query(value = """
+            update group_member group_member
+            join group_routine_assignment assignment on assignment.id = :assignmentId
+            join group_routine routine on routine.id = assignment.group_routine_id
+               set group_member.total_like_count = group_member.total_like_count - :count
+             where group_member.id = :groupMemberId
+               and group_member.status = 'ACTIVE'
+               and group_member.member_id = assignment.member_id
+               and group_member.group_id = routine.group_id
+               and assignment.created_at >= group_member.joined_at
+               and group_member.total_like_count >= :count
+            """, nativeQuery = true)
+    int decrementTotalLikeCountForCurrentActiveMembershipIfPositive(
+            @Param("groupMemberId") Long groupMemberId,
+            @Param("assignmentId") Long assignmentId,
+            @Param("count") long count
+    );
+
     /** MISSED로 실제 전이된 현재 가입 회차의 ACTIVE 참여 관계만 ID 순서로 잠근다. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""

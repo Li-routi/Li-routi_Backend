@@ -56,7 +56,7 @@ public class RoutineVerificationService {
     /**
      * 그룹 루틴 인증.
      *
-     * <p>미디어 검증은 트랜잭션 밖에서 끝내고, Assignment 조회·잠금·인증 저장·완료 처리는
+     * <p>미디어 검증은 트랜잭션 밖에서 끝내고, Assignment 조회·잠금·인증 저장은
      * CommandService의 하나의 트랜잭션에서 수행한다. 탈퇴의 미완료 할당 삭제와 같은 행 잠금을
      * 공유해 먼저 확정된 요청의 결과를 따른다.
      */
@@ -73,7 +73,7 @@ public class RoutineVerificationService {
         LocalDate today = now.toLocalDate();
         LocalDateTime verifiedAt = now.toLocalDateTime();
 
-        GroupRoutineVerification saved = commandService.verifyGroupRoutineAndComplete(
+        GroupRoutineVerification saved = commandService.verifyGroupRoutine(
                 memberId,
                 groupId,
                 routineId,
@@ -83,8 +83,30 @@ public class RoutineVerificationService {
                 verifiedAt
         );
 
-        publishGroupVerificationNotifications(saved, memberId, groupId);
+        publishGroupVerificationNotifications(saved, memberId, groupId,
+                "group-verification:" + saved.getId());
 
+        return new VerificationResDTO.GroupRoutine(
+                saved.getId(), saved.getAssignment().getId(), saved.getImageUrl(),
+                saved.getContent(), saved.getVerifiedAt());
+    }
+
+    /** 기존 인증의 interaction을 비우고 사진·내용을 교체한다. */
+    public VerificationResDTO.GroupRoutine reverifyGroupRoutine(
+            Long memberId,
+            Long groupId,
+            Long routineId,
+            Long verificationId,
+            VerificationReqDTO.Verify request
+    ) {
+        mediaService.validateMediaKey(request.mediaKey(), MediaPurpose.GROUP_ROUTINE_VERIFICATION);
+        mediaService.validateUploadedBytes(request.mediaKey(), MediaPurpose.GROUP_ROUTINE_VERIFICATION);
+        ZonedDateTime now = ZonedDateTime.now(TimeUtil.KST);
+        GroupRoutineVerification saved = commandService.reverifyGroupRoutine(
+                memberId, groupId, routineId, verificationId, now.toLocalDate(), request.mediaKey(),
+                request.content(), now.toLocalDateTime());
+        publishGroupVerificationNotifications(saved, memberId, groupId,
+                "group-reverification:" + saved.getId() + ":" + saved.getVerifiedAt());
         return new VerificationResDTO.GroupRoutine(
                 saved.getId(), saved.getAssignment().getId(), saved.getImageUrl(),
                 saved.getContent(), saved.getVerifiedAt());
@@ -94,7 +116,8 @@ public class RoutineVerificationService {
     private void publishGroupVerificationNotifications(
             GroupRoutineVerification verification,
             Long verifierId,
-            Long groupId
+            Long groupId,
+            String deduplicationPrefix
     ) {
         String verifierNickname = verification.getAssignment().getMember().getNickname();
         String routineTitle = verification.getAssignment().getGroupRoutine().getTitle();
@@ -113,7 +136,7 @@ public class RoutineVerificationService {
                     groupId,
                     verification.getId(),
                     "GROUP_ROUTINE_VERIFICATION",
-                    "group-verification:" + verification.getId() + ":" + recipientId
+                    deduplicationPrefix + ":" + recipientId
             ));
         }
     }
