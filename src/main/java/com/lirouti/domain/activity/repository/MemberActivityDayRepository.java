@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
+import java.util.List;
 
 public interface MemberActivityDayRepository extends JpaRepository<MemberActivityDay, Long> {
 
@@ -60,4 +61,22 @@ public interface MemberActivityDayRepository extends JpaRepository<MemberActivit
      * 연속이 끊긴 것처럼 보인다.
      */
     long countByMemberIdAndAllCompletedTrueAndActivityDateAfter(Long memberId, LocalDate exclusiveFrom);
+
+    /**
+     * 최근 활동일을 최신순으로. <b>연속을 세는 쪽이 걸어가며 판단한다.</b>
+     *
+     * <p>상한을 둔 이유는 연속 조건의 최대가 100 이기 때문이다 — 그보다 훨씬 긴 구간까지
+     * 읽어도 답이 달라지지 않는데 행만 늘어난다.
+     *
+     * <p>엔티티가 아니라 날짜만 읽는다. 연속을 세는 데 다른 칸이 필요 없고, 영속성 컨텍스트에
+     * 쌓을 이유도 없다.
+     */
+    @Query(value = """
+            select activityDay.activityDate
+            from MemberActivityDay activityDay
+            where activityDay.memberId = :memberId
+            order by activityDay.activityDate desc
+            limit 400
+            """)
+    List<LocalDate> findRecentActivityDates(@Param("memberId") Long memberId);
 }
