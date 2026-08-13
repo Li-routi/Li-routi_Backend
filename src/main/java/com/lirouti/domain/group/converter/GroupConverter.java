@@ -24,6 +24,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
+import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
 
 public final class GroupConverter {
@@ -173,24 +174,27 @@ public final class GroupConverter {
     /** 장착하지 않은 회원도 빈 목록으로 포함해 그룹 조회용 아바타를 조립한다. */
     public static Map<Long, GroupResDTO.Avatar> toAvatarsByMemberId(
             List<Long> memberIds,
-            List<MemberAvatarEquipment> equipments
+            List<MemberAvatarEquipment> equipments,
+            UnaryOperator<String> toViewUrl
     ) {
         Map<Long, List<MemberAvatarEquipment>> equipmentsByMemberId = equipments.stream()
                 .collect(Collectors.groupingBy(equipment -> equipment.getMember().getId()));
 
         return memberIds.stream().distinct().collect(Collectors.toMap(
                 Function.identity(),
-                memberId -> toAvatar(equipmentsByMemberId.getOrDefault(memberId, List.of())),
+                memberId -> toAvatar(equipmentsByMemberId.getOrDefault(memberId, List.of()), toViewUrl),
                 (left, right) -> left,
                 LinkedHashMap::new
         ));
     }
 
-    private static GroupResDTO.Avatar toAvatar(List<MemberAvatarEquipment> equipments) {
+    private static GroupResDTO.Avatar toAvatar(List<MemberAvatarEquipment> equipments,
+                                               UnaryOperator<String> toViewUrl) {
         return GroupResDTO.Avatar.builder()
                 .equipped(equipments.stream()
                         .map(equipment -> new GroupResDTO.Equipped(
-                                equipment.getSlot(), equipment.getAvatarItem().getImageUrl()))
+                                equipment.getSlot(),
+                                toViewUrl.apply(equipment.getAvatarItem().getImageKey())))
                         .toList())
                 .build();
     }

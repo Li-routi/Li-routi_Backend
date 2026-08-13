@@ -51,8 +51,14 @@ public class AvatarItem extends BaseEntity {
     @Column(name = "name", nullable = false, length = 100)
     private String name;
 
-    @Column(name = "image_url", nullable = false, length = 2048)
-    private String imageUrl;
+    /**
+     * 이미지의 <b>S3 key</b>. 절대 URL 이 아니다.
+     *
+     * <p>오리진이 설정 하나로 갈리므로 조회에서 {@code resolveViewUrl} 로 조립한다. 절대
+     * URL 을 담으면 도메인을 바꾸거나 CDN 을 붙이는 순간 이 컬럼의 값이 전부 낡는다.
+     */
+    @Column(name = "image_key", nullable = false, length = 512)
+    private String imageKey;
 
     @Column(name = "sort_order", nullable = false)
     private int sortOrder;
@@ -62,7 +68,7 @@ public class AvatarItem extends BaseEntity {
 
     @Builder
     private AvatarItem(AvatarSlot slot, Currency currency, int price,
-                       String name, String imageUrl, int sortOrder, boolean active) {
+                       String name, String imageKey, int sortOrder, boolean active) {
         if (price <= 0) {
             throw new IllegalArgumentException("아이템 가격은 1 이상이어야 합니다.");
         }
@@ -70,7 +76,7 @@ public class AvatarItem extends BaseEntity {
         this.currency = currency;
         this.price = price;
         this.name = name;
-        this.imageUrl = imageUrl;
+        this.imageKey = imageKey;
         this.sortOrder = sortOrder;
         this.active = active;
     }
