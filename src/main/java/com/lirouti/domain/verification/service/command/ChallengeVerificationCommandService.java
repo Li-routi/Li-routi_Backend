@@ -16,6 +16,7 @@ import com.lirouti.domain.media.service.MediaService;
 import com.lirouti.domain.reward.service.command.RewardCommandService;
 import com.lirouti.global.util.TimeUtil;
 import com.lirouti.domain.activity.service.command.MemberActivityDayCommandService;
+import com.lirouti.domain.character.service.command.CharacterUnlockCommandService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -61,6 +62,7 @@ public class ChallengeVerificationCommandService {
     private static final String SOURCE_TYPE_CHALLENGE_VERIFICATION = "CHALLENGE_VERIFICATION";
     private final ApplicationEventPublisher eventPublisher;
     private final MemberActivityDayCommandService memberActivityDayCommandService;
+    private final CharacterUnlockCommandService characterUnlockCommandService;
 
     /**
      * 인증 저장과 스트릭 갱신. <b>이번 구간에 살아 있는 인증이 있으면 주기와 무관하게 409</b> 다.
@@ -200,6 +202,7 @@ public class ChallengeVerificationCommandService {
         //    되어, "며칠 했는가" 가 실제로 한 날보다 부풀어 오른다.
         if (!reverified) {
             memberActivityDayCommandService.record(memberId, today);
+            characterUnlockCommandService.evaluateAndUnlock(memberId);
         }
 
         // 보류 건은 아직 대기 prefix 에 있어 공개 주소가 없다. 그 주소로 열면 403 이므로

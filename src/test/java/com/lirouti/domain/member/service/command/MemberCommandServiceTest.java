@@ -14,6 +14,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
+import com.lirouti.domain.character.service.command.CharacterUnlockCommandService;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
@@ -43,6 +44,10 @@ class MemberCommandServiceTest {
 
     @Mock
     private ApplicationEventPublisher eventPublisher;
+
+    // 가입 직후 기본 캐릭터를 주는 판정이 붙었다. 이 단위 테스트의 관심사가 아니라 목으로 둔다.
+    @Mock
+    private CharacterUnlockCommandService characterUnlockCommandService;
 
     @InjectMocks
     private MemberCommandService memberCommandService;
