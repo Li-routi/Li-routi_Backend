@@ -1588,16 +1588,17 @@ WHERE member_id = :memberId
 
 > 중간 단계도, 부화도 두지 않는다. 난이도는 **해금 조건만으로** 잡는다.
 
-### `character`
+### `avatar_character`
 
 앱이 제공하는 마스터 데이터다. `R__` 시드가 단일 진실 공급원이며 id 는 `1~999` 대역에 고정한다.
+
+> **표 이름이 `character` 가 아니다.** MySQL 예약어라 백틱 없이는 `CREATE` 도 `SELECT` 도 실패한다. 감쌀 수는 있지만 시드·네이티브 쿼리 어디서든 한 번만 빠뜨리면 터지고, 자바에서도 클래스 이름이 `java.lang.Character` 와 겹친다. 자산 prefix 가 이미 `avatar/` 하나로 모여 있어 이름을 그쪽에 맞췄다. **참조 컬럼은 `character_id` 그대로다.**
 
 | 컬럼 | 타입 | NULL | 설명 |
 | --- | --- | --- | --- |
 | id | BIGINT | N | 기본 키. 시드가 직접 지정한다 |
 | code | VARCHAR(30) | N | 논리 키. 시드·조건이 참조한다 |
 | name | VARCHAR(30) | N | 이름 |
-| grade | VARCHAR(20) | N | `BASIC` · `RARE` · `EPIC` · `SPECIAL` |
 | egg_image_key | VARCHAR(512) | N | **잠긴 상태**로 보여줄 알 그림. 절대 URL 이 아니라 S3 key. **목록의 잠금 표시 전용이고 해금 뒤에는 어디에도 쓰지 않는다** |
 | adult_image_key | VARCHAR(512) | N | **해금 뒤** 보여줄 성체 그림 |
 | hidden | TINYINT(1) | N | 목록에 감출지. **지금 시드는 전부 `0` 이다**(아래) |
@@ -1605,7 +1606,9 @@ WHERE member_id = :memberId
 | active | TINYINT(1) | N | 사용 여부, 기본값 `1` |
 | created_at / updated_at | DATETIME(6) | N / N | 생성·수정 시각 |
 
-유니크: `uk_character_code` (`code`)
+유니크: `uk_avatar_character_code` (`code`)
+
+**등급 컬럼은 두지 않는다.** 기획에 등급 넷(기본·레어·에픽·특별)이 언급돼 있으나 화면에서 쓰는 곳이 정해지지 않았고, 캐릭터는 파는 것이 아니라 조건으로 여는 것이라 **난이도를 이미 해금 조건이 표현한다.** 필요해지면 그때 컬럼 하나를 더한다.
 
 **수집 속도를 정하는 것은 오직 해금 조건이다.** 기다리는 구간이 없으므로 조건 하나하나가 곧 난이도다. 첫 캐릭터를 이른 시점에 열어 주는 것이 중요하다 — 그전까지 목록이 알로만 차 있으면 **이 시스템이 무엇인지 알려 주는 순간이 오지 않는다.**
 
@@ -1616,7 +1619,7 @@ WHERE member_id = :memberId
 | 컬럼 | 타입 | NULL | 설명 |
 | --- | --- | --- | --- |
 | id | BIGINT | N | 기본 키 |
-| character_id | BIGINT | N | `character.id` FK |
+| character_id | BIGINT | N | `avatar_character.id` FK |
 | condition_key | VARCHAR(30) | N | 판정기 종류(아래) |
 | condition_param | VARCHAR(255) | Y | 키마다 뜻이 다르다. 없으면 `NULL` |
 | target_count | INT | N | 목표 수치 |
@@ -1691,7 +1694,7 @@ SELECT COUNT(*) FROM challenge_verification_like WHERE member_id = :memberId
 | --- | --- | --- | --- |
 | id | BIGINT | N | 기본 키 |
 | member_id | BIGINT | N | `member.id` FK |
-| character_id | BIGINT | N | `character.id` FK |
+| character_id | BIGINT | N | `avatar_character.id` FK |
 | unlocked_date | DATE | N | 해금된 날(KST) |
 | created_at / updated_at | DATETIME(6) | N / N | 생성·수정 시각 |
 
