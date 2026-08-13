@@ -107,6 +107,7 @@ public class Achievement extends BaseEntity {
                         String conditionDesc, AchievementProgressType progressType,
                         Integer targetCount, String conditionKey,
                         int topazReward, boolean badgeYn, boolean limitedOutfitYn,
+                        String badgeCode,
                         int sortOrder, boolean active) {
         this.code = code;
         this.category = category;
@@ -118,7 +119,12 @@ public class Achievement extends BaseEntity {
         this.topazReward = topazReward;
         this.badgeYn = badgeYn;
         this.limitedOutfitYn = limitedOutfitYn;
+        this.badgeCode = badgeCode;
         this.sortOrder = sortOrder;
         this.active = active;
     }
+
+    /** 이 업적 달성 시 지급할 배지 코드. 없으면 배지 없음(badgeYn=false와 항상 일치해야 함). */
+    @Column(name = "badge_code", length = 30)
+    private String badgeCode;
 }
