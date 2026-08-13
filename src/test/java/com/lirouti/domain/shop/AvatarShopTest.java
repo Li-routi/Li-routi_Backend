@@ -19,7 +19,6 @@ import com.lirouti.domain.shop.service.command.ShopCommandService;
 import com.lirouti.domain.shop.service.query.ShopQueryService;
 import com.lirouti.domain.wallet.enums.Currency;
 import com.lirouti.domain.wallet.enums.WalletTransactionType;
-import com.lirouti.domain.wallet.exception.WalletException;
 import com.lirouti.domain.wallet.repository.MemberWalletRepository;
 import com.lirouti.domain.wallet.service.WalletService;
 import com.lirouti.domain.wallet.service.command.WalletCommandService.WalletCommand;
