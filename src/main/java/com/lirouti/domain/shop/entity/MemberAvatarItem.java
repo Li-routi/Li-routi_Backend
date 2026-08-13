@@ -66,8 +66,4 @@ public class MemberAvatarItem extends BaseEntity {
         this.paidPrice = paidPrice;
         this.purchasedAt = purchasedAt;
     }
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "source", nullable = false, length = 20)
-    private AvatarItemSource source;
 }
