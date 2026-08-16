@@ -16,6 +16,7 @@ import com.lirouti.domain.chat.dto.response.ChatResDTO;
 import com.lirouti.domain.chat.entity.ChatEmoticon;
 import com.lirouti.domain.chat.entity.ChatMessage;
 import com.lirouti.domain.chat.enums.ChatMessageType;
+import com.lirouti.domain.chat.event.ChatEmoticonCacheInvalidatedEvent;
 import com.lirouti.domain.chat.exception.ChatException;
 import com.lirouti.domain.chat.exception.code.error.ChatErrorCode;
 import com.lirouti.domain.chat.repository.ChatEmoticonRepository;
@@ -61,14 +62,17 @@ public class ChatCommandService {
                 assetKey,
                 contentType
         );
+        ChatEmoticon savedEmoticon;
         try {
-            return chatEmoticonRepository.saveAndFlush(emoticon);
+            savedEmoticon = chatEmoticonRepository.saveAndFlush(emoticon);
         } catch (DataIntegrityViolationException e) {
             if (isEmoticonCodeUniqueViolation(e)) {
                 throw new ChatException(ChatErrorCode.DUPLICATE_EMOTICON_CODE);
             }
             throw e;
         }
+        eventPublisher.publishEvent(new ChatEmoticonCacheInvalidatedEvent());
+        return savedEmoticon;
     }
 
     /**
@@ -79,11 +83,15 @@ public class ChatCommandService {
     public void updateEmoticonStatus(Long emoticonId, boolean active) {
         ChatEmoticon emoticon = chatEmoticonRepository.findById(emoticonId)
                 .orElseThrow(() -> new ChatException(ChatErrorCode.EMOTICON_NOT_FOUND));
-        if (active) {
-            emoticon.activate();
+        if (emoticon.isActive() == active) {
             return;
         }
-        emoticon.deactivate();
+        if (active) {
+            emoticon.activate();
+        } else {
+            emoticon.deactivate();
+        }
+        eventPublisher.publishEvent(new ChatEmoticonCacheInvalidatedEvent());
     }
 
     /**
