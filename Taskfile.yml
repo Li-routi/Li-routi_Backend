@@ -84,6 +84,11 @@ tasks:
     cmds:
       - ./performance/jmeter/run.sh spike
 
+  performance-stress100:
+    desc: JMeter 100명 안정 부하 테스트 실행 (30초 ramp-up, 120초)
+    cmds:
+      - ./performance/jmeter/run.sh stress100
+
   monitoring-secrets:
     desc: 로컬 모니터링용 Actuator token·Grafana 비밀번호 파일 준비
     cmds:

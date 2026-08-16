@@ -8,7 +8,7 @@ fail() {
 }
 
 if [ "$#" -ne 1 ]; then
-    fail "사용법: $0 smoke|load|spike"
+    fail "사용법: $0 smoke|load|spike|stress100"
 fi
 
 scenario="$1"
@@ -32,8 +32,14 @@ case "$scenario" in
         duration_seconds=60
         think_time_millis=500
         ;;
+    stress100)
+        threads=100
+        ramp_up_seconds=30
+        duration_seconds=120
+        think_time_millis=500
+        ;;
     *)
-        fail "지원하지 않는 시나리오입니다: $scenario (smoke|load|spike)"
+        fail "지원하지 않는 시나리오입니다: $scenario (smoke|load|spike|stress100)"
         ;;
 esac
 

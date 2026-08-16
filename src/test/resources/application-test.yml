@@ -6,6 +6,13 @@ spring:
     username: ${DB_USERNAME:lirouti}
     password: ${DB_PASSWORD:lirouti1234}
     driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      # @SpringBootTest 컨텍스트가 여러 개 캐시되는 전체 테스트에서 각 컨텍스트가
+      # 기본 풀(최대 10개)을 유지하면 CI MySQL의 max_connections를 압박할 수 있다.
+      # 동시성 요청은 풀에서 대기할 수 있으므로 전체 테스트 JVM의 커넥션 수를 우선 제한한다.
+      maximum-pool-size: 8
+      # 유휴 커넥션을 컨텍스트마다 미리 확보하지 않는다.
+      minimum-idle: 0
 
   jpa:
     hibernate:
