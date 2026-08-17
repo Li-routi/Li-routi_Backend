@@ -219,7 +219,13 @@ sudo chmod 400 /opt/app/secrets/firebase-adminsdk.json   # 그 UID만 읽기 전
 
 `Caddy(80/443) → app(8080)` 구성이다. Caddy 가 Let's Encrypt 인증서를 자동 발급·갱신하므로 인증서 관리 부담은 없다.
 
-**개발 서버도 같은 구성이다.** 도메인만 다르고(`LIROUTI_DOMAIN`), Caddyfile·compose·절차는 아래 그대로다. 개발 도메인이 무료 도메인이라 생기는 인증서 한도 문제는 [`deploy/dev/README.md`](./dev/README.md#2-도메인) 에 따로 적었다.
+**개발 서버도 같은 구성이다.** 도메인만 다르고(`LIROUTI_DOMAIN`), Caddyfile·compose·절차는 아래 그대로다.
+
+> ⚠️ **운영 인증서는 Let's Encrypt 가 아니라 ZeroSSL 이 발급했다.** 운영 도메인 `lirouti.kro.kr` 이 무료 도메인이고, `kro.kr` 이 Public Suffix List 에 없어 Let's Encrypt 가 등록 도메인을 `kro.kr` 전체로 본다. 주 50장 한도를 그 서비스 사용자 전원과 나눠 쓰는데, 발급 시점에 이미 차 있어 429 를 맞았다(운영 Caddy 로그에 남아 있다).
+>
+> Caddy 가 자동으로 ZeroSSL 로 넘어가 받아왔지만, **그 폴백은 우리가 설정한 것이 아니라 Caddy 의 기본 동작이다.** 갱신 때 양쪽 다 실패하면 운영이 https 로 죽는다. 개발보다 운영의 만료가 먼저 온다.
+>
+> 배경·확인 방법·해결 선택지는 [`deploy/dev/README.md`](./dev/README.md#2-도메인) 에 한데 적었다. 개발 서버 문서에 있지만 **운영에 그대로, 더 큰 무게로 해당한다.**
 
 ### 순서를 지켜야 한다
 

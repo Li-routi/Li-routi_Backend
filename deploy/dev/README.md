@@ -29,7 +29,8 @@
 | 브랜치 | `main` | `develop` |
 | 인스턴스 | t4g.small (2GB) | t4g.small (2GB), 별도 |
 | 스토리지 | 30 GiB | **gp3 20 GiB** |
-| 도메인 | 있음 | **`lirouti-dev.kro.kr`** (무료 도메인) |
+| 도메인 | `lirouti.kro.kr` | `lirouti-dev.kro.kr` |
+| 인증서 | ZeroSSL (LE 한도 초과) | 동일 — [2단계](#2-도메인) 참고 |
 | 앞단 프록시 | Caddy (80·443) | 동일 |
 | S3 버킷 | `lirouti-prod-bucket` | `lirouti-dev-bucket` |
 | 백업 버킷 | `lirouti-db-backup` | **없음** |
@@ -132,11 +133,34 @@ echo | openssl s_client -connect lirouti-dev.kro.kr:443 -servername lirouti-dev.
   | openssl x509 -noout -issuer -dates
 ```
 
-> **근본 해결은 도메인을 옮기는 것이다.** 운영 도메인의 서브도메인(`dev.<운영도메인>`)을 쓰면 등록 도메인이 우리 것이 되어 한도를 우리만 쓴다. 추가 비용도 없고, A 레코드 하나면 된다.
+### ⚠️ 운영도 똑같다 — 개발만의 문제가 아니다
+
+**운영 도메인도 `lirouti.kro.kr` 이다.** 같은 무료 서비스이고 같은 등록 도메인(`kro.kr`) 아래에 있다.
+
+운영은 개발보다 먼저 이미 같은 일을 겪었다. 운영 Caddy 로그에 그대로 남아 있다.
+
+```
+{"level":"error","logger":"tls.obtain","identifier":"lirouti.kro.kr",
+ "issuer":"acme-v02.api.letsencrypt.org-directory",
+ "error":"HTTP 429 ... too many certificates (50) already issued for \"kro.kr\""}
+{"level":"info","logger":"tls.obtain","identifier":"lirouti.kro.kr",
+ "msg":"certificate obtained successfully","issuer":"acme.zerossl.com-v2-DV90"}
+```
+
+**두 서버 모두 Let's Encrypt 가 아니라 ZeroSSL 로 돌고 있다.**
+
+| | 발급자 | 만료 |
+| --- | --- | --- |
+| 운영 `lirouti.kro.kr` | ZeroSSL ECC DV SSL CA 2 | **2026-10-28** |
+| 개발 `lirouti-dev.kro.kr` | ZeroSSL ECC DV SSL CA 2 | 2026-11-15 |
+
+**운영 갱신이 먼저 온다.** ZeroSSL 마저 실패하면 개발이 아니라 **운영이 https 로 죽는다.** 위 "갱신 때마다 같은 도박을 한다" 는 운영에 그대로, 그리고 더 큰 무게로 해당한다.
+
+> **`dev.<운영도메인>` 으로 옮기는 것은 해결이 아니다.** 운영 도메인이 이미 `kro.kr` 이라 서브도메인을 파도 같은 등록 도메인 안이고 한도도 그대로 공유한다.
 >
-> 지금 `kro.kr` 을 고른 이유가 문서에 남아 있지 않다. 옮길지 판단할 때 그것부터 확인할 것 — 이유가 없다면 옮기는 편이 낫다.
->
-> **운영은 이 문제가 없다.** 직접 등록한 도메인이라 한도를 우리만 쓴다.
+> 실제 해결은 **`kro.kr` 을 벗어나는 것**뿐이다 — 유료 도메인을 등록하거나, PSL 에 등재된 무료 서비스(`duckdns.org` 등)로 옮긴다. 운영 도메인이 바뀌는 일이라 클라이언트 배포와 맞물리므로, **급하지 않을 때 미리 정해 둘 것.** 만료 직전에 결정하면 선택지가 없다.
+
+**두 서버의 `LETSENCRYPT_EMAIL` 을 모두 사람이 읽는 주소로 둔다.** 만료 임박 알림이 유일한 조기 경보이고, 이제 그 경보는 개발이 아니라 운영을 지키는 장치다.
 
 ## 3) 보안그룹
 
@@ -437,9 +461,9 @@ FROM flyway_schema_history WHERE version IS NULL GROUP BY script ORDER BY runs D
 
 접속 방식은 운영과 같다 — `https://lirouti-dev.kro.kr`. 클라이언트에 평문 HTTP 예외(iOS ATS·Android cleartext)를 요청할 필요가 없고, `X-Forwarded-*` 도 Caddy 가 덮어써 주므로 위조 경로가 없다.
 
-다만 **인증서를 Let's Encrypt 에서 받지 못하고 있다.** 첫 배포에서 `kro.kr` 의 주 50장 한도가 이미 차 있어 429 로 거절당했고, Caddy 가 ZeroSSL 로 폴백해 받아왔다. 자세한 것은 [2단계](#2-도메인) 참고.
+다만 **인증서를 Let's Encrypt 에서 받지 못하고 있다.** `kro.kr` 의 주 50장 한도가 차 있어 429 로 거절당했고, Caddy 가 ZeroSSL 로 폴백해 받아왔다. **이것은 개발과 운영의 차이가 아니다** — 운영도 같은 상태이고 만료가 더 빠르다. 자세한 것은 [2단계](#2-도메인) 참고.
 
-그래서 **개발 서버가 https 로 안 뜰 때 앱 코드부터 뒤지지 않는다.** 순서는 이렇다.
+그래서 **서버가 https 로 안 뜰 때 앱 코드부터 뒤지지 않는다.** 순서는 이렇다(운영도 같다).
 
 ```bash
 docker compose logs caddy | grep -iE "obtain|error|rate"   # 1. 발급이 됐는지
