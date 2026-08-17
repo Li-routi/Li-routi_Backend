@@ -2,10 +2,11 @@
 
 운영과 별개로 도는 개발 서버를 만드는 절차다. 운영 가이드([`deploy/README.md`](../README.md))를 대체하지 않고, **다른 점만** 적는다. 여기 없는 항목은 운영 문서를 그대로 따른다.
 
-> **워크플로는 이미 갈라져 있다.** `deploy-prod.yml`(main) 과 `deploy-dev.yml`(develop) 이 들어가
-> 있으므로, 남은 것은 아래 1~8단계다. **다 끝나기 전에는 `develop` 에 머지하지 않는다** — 배포가
-> 절반쯤 진행된 뒤에 막히면 개발 서버가 어중간한 상태로 남는다.
+> **이 서버는 구축이 끝나 돌고 있다.** 아래 1~8단계는 이제 *재구축* 절차다 — 인스턴스를
+> 갈아엎거나 두 번째 개발 서버를 만들 때 그대로 밟으면 된다. 처음 세울 때 밟은 순서 그대로이고,
+> 첫 배포에서 실제로 확인된 값은 각 절에 적어 두었다.
 >
+> 순서를 지키는 이유는 남아 있다. 배포가 절반쯤 진행된 뒤에 막히면 서버가 어중간한 상태로 남는다.
 > `deploy-dev.yml` 은 SSH 전에 `Verify dev target`(주소가 비었는지·운영과 같은지),
 > `Reject production bucket`, `Check Caddy env vars are set` 을 차례로 확인한다. 하나라도 빠뜨리면
 > 거기서 멈추므로 운영이 다치지는 않지만, 그 상황을 만들지 않는 편이 낫다.
@@ -88,21 +89,54 @@ dig +short lirouti-dev.kro.kr          # EIP 가 나와야 한다
 dig +short @1.1.1.1 lirouti-dev.kro.kr # 캐시가 아닌 외부 리졸버로도 확인
 ```
 
-### 무료 도메인이라 감수하는 것 — 인증서 발급 한도
+### 인증서는 Let's Encrypt 가 아니라 ZeroSSL 이 발급했다
 
-**`kro.kr` 은 Public Suffix List 에 없다.** PSL 에는 `co.kr`·`ne.kr`·`or.kr` 같은 것들과, 성격이 비슷한 무료 도메인 `duckdns.org` 는 등재돼 있는데 `kro.kr` 은 빠져 있다(직접 대조해 확인했다).
+**첫 배포부터 Let's Encrypt 가 막혔다.** 우려가 아니라 실측이다.
 
-그래서 Let's Encrypt 는 우리 도메인의 "등록 도메인"을 `lirouti-dev.kro.kr` 이 아니라 **`kro.kr` 전체**로 본다. 등록 도메인당 **주 50장** 한도를 `kro.kr` 을 쓰는 모든 사람과 나눠 쓴다는 뜻이다. 막히면 로그에 이렇게 나온다.
+**`kro.kr` 은 Public Suffix List 에 없다.** PSL 에는 `co.kr`·`ne.kr`·`or.kr` 같은 것들과, 성격이 비슷한 무료 도메인 `duckdns.org` 는 등재돼 있는데 `kro.kr` 은 빠져 있다(PSL 원본을 받아 대조했다).
+
+그래서 Let's Encrypt 는 우리 도메인의 "등록 도메인"을 `lirouti-dev.kro.kr` 이 아니라 **`kro.kr` 전체**로 본다. 등록 도메인당 **168시간당 50장** 한도를 `kro.kr` 을 쓰는 모든 사람과 나눠 쓴다. 첫 배포에서 그 한도가 이미 차 있었다.
 
 ```
-too many certificates already issued for "kro.kr"
+HTTP 429 urn:ietf:params:acme:error:rateLimited
+too many certificates (50) already issued for "kro.kr" in the last 168h0m0s,
+retry after 2026-08-17 15:23:42 UTC
 ```
 
-**우리가 고칠 수 있는 것이 아니므로 재배포로 풀리지 않는다.** 그때는 배포를 멈추고 `docker compose logs caddy` 를 본다. Caddy 는 Let's Encrypt 가 실패하면 ZeroSSL 로 자동 폴백하므로 대개 거기서 받아 온다. 양쪽 다 계속 실패하면 PSL 에 등재된 무료 도메인으로 옮기는 편이 빠르다.
+우리가 쓴 것은 이번 1장인데 나머지 49장은 남들이 썼다. **우리 쪽에서 고칠 수 있는 것이 없고, 재배포로도 풀리지 않는다.**
 
-> **운영은 이 문제가 없다.** 직접 등록한 도메인이라 한도를 우리만 쓴다. 개발에서만 감수하는 제약이다.
+살아난 것은 **Caddy 가 0.1초 만에 ZeroSSL 로 넘어갔기 때문**이다. EAB 자격을 자동으로 발급받고 HTTP-01 챌린지를 통과해 받아왔다. 발급까지 총 30초.
+
+```
+issuer   ZeroSSL ECC DV SSL CA 2
+subject  CN=lirouti-dev.kro.kr
+```
+
+이 폴백은 Caddy 의 기본 동작이라 우리가 설정한 것이 없다. **설정한 적 없는 것에 기대고 있다는 뜻이기도 하다.**
+
+### 그래서 갱신 때마다 같은 도박을 한다
+
+**한 번 성공했다고 끝난 문제가 아니다.** 인증서 수명은 90일이고, 갱신 시점에 두 가지가 동시에 어긋날 수 있다.
+
+1. Let's Encrypt 는 그때도 `kro.kr` 한도에 걸려 있을 가능성이 높다 — 우리가 통제하지 못한다
+2. ZeroSSL 마저 실패하면 **폴백할 곳이 없다**
+
+그 상황은 조용히 온다. 배포가 없어도 갱신은 백그라운드에서 돌고, 실패해도 기존 인증서가 만료 전까지는 살아 있어 아무도 눈치채지 못한다. **만료 당일에 개발 서버가 https 로 죽는다.**
+
+`LETSENCRYPT_EMAIL` 로 만료 임박 알림이 오게 해 둔 것이 이 때문이다. 그 메일을 무시하지 않는 것이 유일한 조기 경보다.
+
+**확인은 이렇게 한다.**
+
+```bash
+echo | openssl s_client -connect lirouti-dev.kro.kr:443 -servername lirouti-dev.kro.kr 2>/dev/null \
+  | openssl x509 -noout -issuer -dates
+```
+
+> **근본 해결은 도메인을 옮기는 것이다.** 운영 도메인의 서브도메인(`dev.<운영도메인>`)을 쓰면 등록 도메인이 우리 것이 되어 한도를 우리만 쓴다. 추가 비용도 없고, A 레코드 하나면 된다.
 >
-> 운영 도메인의 서브도메인(`dev.<운영도메인>`)을 쓰면 이 한도도 사라지고 추가 비용도 없다. 지금 그렇게 하지 않은 이유는 문서로 남아 있지 않으니, 옮길지 판단할 때 먼저 확인할 것.
+> 지금 `kro.kr` 을 고른 이유가 문서에 남아 있지 않다. 옮길지 판단할 때 그것부터 확인할 것 — 이유가 없다면 옮기는 편이 낫다.
+>
+> **운영은 이 문제가 없다.** 직접 등록한 도메인이라 한도를 우리만 쓴다.
 
 ## 3) 보안그룹
 
@@ -333,6 +367,29 @@ git rev-list --count origin/main..origin/develop   # develop 에만 있는 커�
 4. `https://lirouti-dev.kro.kr/health` 200 확인 (첫 인증서 발급에 수십 초 걸릴 수 있다)
 5. 개발이 정상인 것을 확인한 뒤 **릴리스 PR(`develop` → `main`)** → 운영 배포
 
+### 첫 배포에서 실제로 나온 값
+
+재구축할 때 "이 정도면 정상"의 기준으로 쓴다.
+
+| 구간 | 값 |
+| --- | --- |
+| 머지 → 이미지 push 완료 | 약 3분 (arm64 크로스 빌드) |
+| `.env` 기록 → `db` healthy | 약 20초 |
+| Flyway | **70개 적용**, 5.7초 (`V__` 전체 + `R__` 시드 8개) |
+| 앱 부팅 | 40.6초 |
+| 첫 인증서 발급 | 30초 (Let's Encrypt 429 → ZeroSSL 폴백 포함) |
+| `https://.../health` | 200, 응답 0.2초 |
+
+Flyway 로그의 `Integer display width is deprecated` 경고는 정상이다. MySQL 8.4 가 `int(11)` 같은 표기에 내는 것이고 동작에 영향이 없다.
+
+> **`app` 과 `caddy` 에는 healthcheck 가 없다.** `docker compose ps` 의 상태만 보고 "떴다"고 판단하면 안 된다 — `Up` 은 프로세스가 살아 있다는 뜻일 뿐이다. 실제 확인은 `curl https://lirouti-dev.kro.kr/health` 로 한다.
+
+### 이 검증이 덮지 못하는 것
+
+개발 DB 는 **빈 상태에서** 70개를 처음부터 적용했다. 운영 DB 는 **이미 데이터가 있는 상태에서** 밀린 것만 이어 붙인다. **성격이 다른 실행이다.**
+
+특히 **`R__` 시드가 기존 마스터 데이터를 덮어쓰는 경로는 여기서 확인되지 않는다.** 빈 표에 `INSERT` 하는 것과, 값이 들어 있는 행을 `ON DUPLICATE KEY UPDATE` 로 갈아치우는 것은 다른 일이다. 시드를 고친 배포를 운영에 넘길 때는 개발이 통과했다는 사실만으로 안심하지 않는다.
+
 ---
 
 # 운영과 달라서 생기는 것들
@@ -341,9 +398,19 @@ git rev-list --count origin/main..origin/develop   # develop 에만 있는 커�
 
 접속 방식은 운영과 같다 — `https://lirouti-dev.kro.kr`. 클라이언트에 평문 HTTP 예외(iOS ATS·Android cleartext)를 요청할 필요가 없고, `X-Forwarded-*` 도 Caddy 가 덮어써 주므로 위조 경로가 없다.
 
-다만 **인증서 발급 한도를 `kro.kr` 전체와 나눠 쓴다**(2단계 참고). 한도에 걸리면 우리가 할 수 있는 일이 없으므로, 개발 서버가 https 로 안 뜰 때 앱 코드부터 뒤지지 말고 `docker compose logs caddy` 를 먼저 본다.
+다만 **인증서를 Let's Encrypt 에서 받지 못하고 있다.** 첫 배포에서 `kro.kr` 의 주 50장 한도가 이미 차 있어 429 로 거절당했고, Caddy 가 ZeroSSL 로 폴백해 받아왔다. 자세한 것은 [2단계](#2-도메인) 참고.
 
-**도메인이 만료되면 같은 증상이 난다.** 무료 도메인이라 갱신 주기가 있다 — 갱신일을 알고 있는 사람이 없으면 그것부터 확인할 것.
+그래서 **개발 서버가 https 로 안 뜰 때 앱 코드부터 뒤지지 않는다.** 순서는 이렇다.
+
+```bash
+docker compose logs caddy | grep -iE "obtain|error|rate"   # 1. 발급이 됐는지
+echo | openssl s_client -connect lirouti-dev.kro.kr:443 \
+  -servername lirouti-dev.kro.kr 2>/dev/null \
+  | openssl x509 -noout -issuer -dates                     # 2. 누가 언제까지 발급했는지
+dig +short lirouti-dev.kro.kr                              # 3. 도메인이 아직 우리 것인지
+```
+
+**3번을 빼먹기 쉽다.** 무료 도메인이라 갱신 주기가 있고, 만료되면 인증서 문제와 똑같은 증상이 난다. 갱신일을 아는 사람이 없으면 그것부터 확인할 것.
 
 ## 백업이 없다
 
