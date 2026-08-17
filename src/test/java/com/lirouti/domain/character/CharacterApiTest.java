@@ -43,6 +43,11 @@ class CharacterApiTest {
     private static final long NOA = 2L;
     private static final long MINT = 6L;
 
+    /** application.yaml 의 avatar.nest.level2-days 기본값. */
+    private static final int NEST_LEVEL2_DAYS = 15;
+    /** 활동일은 KST 로 찍힌다 — 기준일도 같은 시간대로 잡아야 자정 언저리에 하루가 밀리지 않는다. */
+    private static final java.time.ZoneId KST = java.time.ZoneId.of("Asia/Seoul");
+
     @Autowired
     private CharacterQueryService characterQueryService;
     @Autowired
@@ -206,6 +211,51 @@ class CharacterApiTest {
     @DisplayName("연속이 모자라면 둥지는 레벨 1 이다")
     void layers_NestStaysLevelOneWithoutStreak() {
         unlock();
+
+        List<CharacterResDTO.Layer> layers =
+                avatarLayerAssembler.assembleAsResponse(me.getId(), List.of());
+
+        assertThat(layers).filteredOn(layer -> layer.layer() == AvatarLayer.NEST_BACK)
+                .singleElement()
+                .satisfies(layer -> assertThat(layer.imageUrl()).contains("level1-back"));
+    }
+
+    /**
+     * <b>오늘을 안 끝냈어도 레벨 2 다.</b>
+     *
+     * <p>창이 오늘까지면 창 길이와 임계값이 같아서 오늘 몫이 남은 아침마다 하나가 모자란다 —
+     * 하루도 빠뜨리지 않은 사람의 둥지가 매일 자정에 쪼그라들었다가 저녁에 돌아온다. 어제까지만
+     * 세면 어제 시점의 판정이 그날 하루 동안 유지된다.
+     */
+    @Test
+    @DisplayName("어제까지 창을 채웠으면 오늘 몫이 남아 있어도 둥지는 레벨 2 다")
+    void layers_NestReachesLevelTwoFromYesterdayWindow() {
+        unlock();
+        LocalDate yesterday = LocalDate.now(KST).minusDays(1);
+        for (int back = 0; back < NEST_LEVEL2_DAYS; back++) {
+            memberActivityDayRepository.record(me.getId(), yesterday.minusDays(back), true);
+        }
+
+        List<CharacterResDTO.Layer> layers =
+                avatarLayerAssembler.assembleAsResponse(me.getId(), List.of());
+
+        assertThat(layers).filteredOn(layer -> layer.layer() == AvatarLayer.NEST_BACK)
+                .singleElement()
+                .satisfies(layer -> assertThat(layer.imageUrl()).contains("level2-back"));
+    }
+
+    /** 하루가 비면 창이 차지 않는다 — 창 길이와 임계값이 같아 끊김을 따로 판정하지 않는다. */
+    @Test
+    @DisplayName("중간에 하루가 비면 둥지는 레벨 1 로 내려간다")
+    void layers_NestFallsBackWhenAnyDayIsMissing() {
+        unlock();
+        LocalDate yesterday = LocalDate.now(KST).minusDays(1);
+        for (int back = 0; back < NEST_LEVEL2_DAYS; back++) {
+            if (back == 3) {
+                continue;
+            }
+            memberActivityDayRepository.record(me.getId(), yesterday.minusDays(back), true);
+        }
 
         List<CharacterResDTO.Layer> layers =
                 avatarLayerAssembler.assembleAsResponse(me.getId(), List.of());

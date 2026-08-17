@@ -106,31 +106,37 @@ public class AvatarLayerAssembler {
                 .findAllById(selectedCharacterIds.values().stream().distinct().toList()).stream()
                 .collect(java.util.stream.Collectors.toMap(AvatarCharacter::getId, character -> character));
 
+        Map<Long, Integer> nestLevels = nestLevelsOf(memberIds);
+
         return memberIds.stream().distinct().collect(java.util.stream.Collectors.toMap(
                 memberId -> memberId,
                 memberId -> assembleOne(
-                        memberId,
                         Optional.ofNullable(selectedCharacterIds.get(memberId))
                                 .map(charactersById::get)
                                 .orElse(null),
+                        nestLevels.getOrDefault(memberId, 1),
                         equipmentsByMemberId.getOrDefault(memberId, List.of())),
                 (left, right) -> left,
                 java.util.LinkedHashMap::new
         ));
     }
 
-    private List<Layer> assembleOne(Long memberId,
-                                    AvatarCharacter character,
+    private List<Layer> assembleOne(AvatarCharacter character,
+                                    int nestLevel,
                                     List<MemberAvatarEquipment> equipments) {
-        List<Layer> layers = new ArrayList<>();
-
-        // 캐릭터가 없으면 둥지도 그리지 않는다. 캐릭터 없이 둥지만 뜨면 빈 둥지가 남는다.
-        if (character != null) {
-            int nestLevel = nestLevelOf(memberId);
-            layers.add(layer(AvatarLayer.NEST_BACK, nestBackKey(nestLevel)));
-            layers.add(layer(AvatarLayer.CHARACTER, character.getAdultImageKey()));
-            layers.add(layer(AvatarLayer.NEST_FRONT, nestFrontKey(nestLevel)));
+        // 캐릭터가 없으면 아무것도 그리지 않는다.
+        //
+        // 둥지만 두면 빈 둥지가 남고, 아이템만 두면 허공에 모자가 뜬다 — 둘 다 "무언가
+        // 잘못됐다" 로 보이는 화면이라 차라리 비우는 편이 낫다. 캐릭터는 가입 시점과 백필로
+        // 모두에게 들어가므로 여기 걸리는 사람은 없어야 하고, 걸린다면 그것이 신호다.
+        if (character == null) {
+            return List.of();
         }
+
+        List<Layer> layers = new ArrayList<>();
+        layers.add(layer(AvatarLayer.NEST_BACK, nestBackKey(nestLevel)));
+        layers.add(layer(AvatarLayer.CHARACTER, character.getAdultImageKey()));
+        layers.add(layer(AvatarLayer.NEST_FRONT, nestFrontKey(nestLevel)));
 
         equipments.forEach(equipment -> layers.add(layer(
                 AvatarLayer.of(equipment.getSlot()),
@@ -144,18 +150,32 @@ public class AvatarLayerAssembler {
     /**
      * 둥지 레벨. <b>저장하지 않고 지금 기록으로 계산한다.</b>
      *
-     * <p>강등이 있어 상태로 들고 다니면 "기록" 과 "카운터" 라는 진실이 둘이 된다. 최근 창에
-     * 완수한 날이 창 길이만큼 들어 있으면 연속이라는 뜻이라, 끊김을 따로 판정하지 않는다.
+     * <p>강등이 있어 상태로 들고 다니면 "기록" 과 "카운터" 라는 진실이 둘이 된다. 창 길이와
+     * 임계값이 같으므로 창이 가득 찼다는 것이 곧 연속이라는 뜻이고, 끊김을 따로 판정하지 않는다.
+     *
+     * <p><b>창은 어제까지다.</b> 오늘을 창에 넣으면 오늘 몫을 아직 못 끝낸 아침마다 하나가
+     * 모자라, 레벨 2 를 유지하던 사람의 둥지가 매일 자정에 쪼그라들었다가 저녁에 돌아온다.
+     * 어제까지만 보면 어제 시점의 판정이 하루 동안 그대로 유지된다. 대신 15일째를 끝낸 그날
+     * 저녁이 아니라 <b>다음 날부터</b> 레벨 2 가 된다 — 둥지가 하룻밤 사이에 자란다.
      *
      * <p>기준일을 애플리케이션이 넘긴다 — {@code CURRENT_DATE} 는 DB 세션 시간대를 따르는데
      * 활동일은 KST 로 찍혀서 자정 언저리에 하루가 밀린다.
      */
-    private int nestLevelOf(Long memberId) {
+    private Map<Long, Integer> nestLevelsOf(List<Long> memberIds) {
+        if (memberIds.isEmpty()) {
+            return Map.of();
+        }
         int windowDays = nestProperties.getLevel2Days();
-        LocalDate exclusiveFrom = LocalDate.now(clock).minusDays(windowDays);
-        long completed = memberActivityDayRepository
-                .countByMemberIdAndAllCompletedTrueAndActivityDateAfter(memberId, exclusiveFrom);
-        return completed >= windowDays ? 2 : 1;
+        LocalDate yesterday = LocalDate.now(clock).minusDays(1);
+        LocalDate inclusiveFrom = yesterday.minusDays(windowDays - 1L);
+
+        Map<Long, Integer> levels = new java.util.HashMap<>();
+        memberActivityDayRepository
+                .countCompletedDaysByMemberIds(memberIds.stream().distinct().toList(), inclusiveFrom, yesterday)
+                .forEach(row -> levels.put(
+                        (Long) row[0],
+                        ((Number) row[1]).longValue() >= windowDays ? 2 : 1));
+        return levels;
     }
 
     private String nestBackKey(int level) {

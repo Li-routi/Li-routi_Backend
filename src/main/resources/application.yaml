@@ -205,11 +205,12 @@ challenge:
     # DB 에서 직접 NULL 로 되돌려야 한다.
     hide-threshold: ${CHALLENGE_REPORT_HIDE_THRESHOLD:3}
 
-# 미참조 미디어 정리. 업로드는 됐지만 DB 어디서도 참조하지 않는 오브젝트를 지운다.
-# S3 목록과 DB를 대조하는 방식이라 s3:ListBucket·s3:DeleteObject 권한이 필요하다.
 # 둥지 자산과 레벨 기준. 둥지는 전 캐릭터·전 사용자가 같은 것을 쓰므로 마스터 표가 없다.
 # 레벨 일수는 실사용 데이터가 없어 지금 맞힐 수 없고, 강등이 있어 길수록 실수 한 번이
 # 비싸다 — 코드가 아니라 여기 두는 이유다.
+#
+# 자산 키를 바꾸면 그 오브젝트가 버킷에 있어야 한다. 시드가 참조하는 키가 아니라서
+# 마이그레이션과 함께 옮겨지지 않는다 — 개발 버킷에 없어서 둥지만 깨진 적이 있다.
 avatar:
   nest:
     level2-days: ${AVATAR_NEST_LEVEL2_DAYS:15}
@@ -218,6 +219,8 @@ avatar:
     level2-back-key: ${AVATAR_NEST_LEVEL2_BACK_KEY:avatar/nest/level2-back-v1.png}
     level2-front-key: ${AVATAR_NEST_LEVEL2_FRONT_KEY:avatar/nest/level2-front-v1.png}
 
+# 미참조 미디어 정리. 업로드는 됐지만 DB 어디서도 참조하지 않는 오브젝트를 지운다.
+# S3 목록과 DB를 대조하는 방식이라 s3:ListBucket·s3:DeleteObject 권한이 필요하다.
 media:
   cleanup:
     # 기본 꺼짐. 운영 IAM 역할에 아직 위 두 권한이 없어(deploy/iam-policy.json 최소 권한)

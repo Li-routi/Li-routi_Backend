@@ -27,7 +27,8 @@ public class CharacterSelectionCommandService {
      * 어떤 캐릭터가 존재하는지 알 수 있다.
      *
      * <p>이미 고른 것을 다시 골라도 성공이다 — 화면에서 같은 것을 두 번 누르는 것이 오류일
-     * 이유가 없다.
+     * 이유가 없다. 따닥으로 두 번 들어와도 마찬가지다: 회원당 한 행이라(기본 키) 갱신이 곧
+     * 교체이고, 첫 선택에서 두 요청이 겹쳐도 upsert 가 뒤엣것을 살린다.
      */
     @Transactional
     public void select(Long memberId, Long characterId) {
@@ -35,13 +36,6 @@ public class CharacterSelectionCommandService {
             throw new CharacterException(CharacterErrorCode.CHARACTER_NOT_OWNED);
         }
 
-        // 회원당 한 행이라(기본 키) 갱신이 곧 교체다.
-        MemberSelectedCharacter selected = memberSelectedCharacterRepository.findByMemberId(memberId)
-                .orElseGet(() -> MemberSelectedCharacter.builder()
-                        .memberId(memberId)
-                        .characterId(characterId)
-                        .build());
-        selected.changeTo(characterId);
-        memberSelectedCharacterRepository.save(selected);
+        memberSelectedCharacterRepository.upsert(memberId, characterId);
     }
 }
