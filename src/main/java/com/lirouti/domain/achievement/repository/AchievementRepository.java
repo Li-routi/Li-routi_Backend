@@ -8,12 +8,19 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
 public interface AchievementRepository extends JpaRepository<Achievement, Long> {
 
     Optional<Achievement> findByCode(String code);
+
+    /** 미디어 정리 후보 중 업적이 현재 참조하는 뱃지 이미지 key를 조회한다. */
+    @Query("select achievement.badgeImageKey from Achievement achievement "
+            + "where achievement.badgeImageKey in :keys")
+    List<String> findBadgeImageKeysIn(@Param("keys") Collection<String> keys);
+
     List<Achievement> findAllByActiveTrueOrderByCategoryAscSortOrderAsc();
     List<Achievement> findAllByActiveTrueAndCategoryOrderBySortOrderAsc(AchievementCategory category);
 

@@ -495,6 +495,25 @@ class MediaServiceTest {
         verifyNoInteractions(s3Client, s3Presigner);
     }
 
+    @Test
+    @DisplayName("업적 뱃지용 animated WEBP는 업로드 전에 거부한다")
+    void uploadServiceOwnedImage_AnimatedWebpAchievementBadge_RejectsBeforeUpload() {
+        byte[] animatedWebp = webpWithFeatureFlags(0x02);
+
+        assertThatThrownBy(() -> mediaService.uploadServiceOwnedImage(
+                MediaPurpose.ACHIEVEMENT_BADGE,
+                "image/webp",
+                "image/webp",
+                animatedWebp.length,
+                () -> new ByteArrayInputStream(animatedWebp)
+        )).isInstanceOf(MediaException.class)
+                .hasFieldOrPropertyWithValue(
+                        "code",
+                        MediaErrorCode.CONTENT_TYPE_NOT_ALLOWED_FOR_PURPOSE
+                );
+        verifyNoInteractions(s3Client, s3Presigner);
+    }
+
     private static byte[] webpWithFeatureFlags(int featureFlags) {
         return new byte[]{
                 0x52, 0x49, 0x46, 0x46, 0x16, 0x00, 0x00, 0x00,

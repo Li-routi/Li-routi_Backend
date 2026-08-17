@@ -6,8 +6,9 @@
 -- 운영 마스터(db/migration/R__seed_challenge.sql)와 달리 여기 있는 건 "화면이 돌아가는 걸 보기 위한"
 -- 데이터다. 회원·참여·인증처럼 실제로는 사용자가 만드는 데이터를 미리 넣어 둔다.
 --
--- id는 9000번대를 쓴다. 운영 마스터가 쓸 낮은 번호대와 겹치지 않게 해서,
+-- 일반 더미 id는 9000번대를 쓴다. 운영 마스터가 쓸 낮은 번호대와 겹치지 않게 해서,
 -- 나중에 기획 확정 목록이 들어와도 충돌하지 않는다.
+-- 예외로 개발 관리자 계정은 개발자용 JWT 발급 명령이 고정해서 참조할 수 있도록 id=1000을 쓴다.
 --
 -- R__ 마이그레이션이라 파일을 고칠 때마다 다시 실행된다. 그래서 전부 upsert로 쓴다.
 -- (한 파일에 몰아둔 것은 의도적이다. 파일을 나누면 R__는 이름 알파벳 순으로 실행되어
@@ -22,7 +23,7 @@
 --  * 새 행은 AS new_row 별칭으로 참조한다. VALUES(컬럼) 함수는 MySQL 8.0.19에서 deprecated 되어
 --    부팅마다 경고가 찍히고 향후 제거 예정이다(운영도 MySQL 8.4).
 --
---  * 갱신은 IF(테이블.id >= 9000, ...) 으로 더미 행에만 적용한다. ON DUPLICATE KEY UPDATE는
+--  * 갱신은 IF(테이블.id = 1000 OR 테이블.id >= 9000, ...) 으로 더미 행에만 적용한다. ON DUPLICATE KEY UPDATE는
 --    충돌한 행이 더미인지 확인하지 않으므로, 조건 없이 쓰면 누가 로컬에서 같은 id나 유니크 키
 --    (member의 email, social_provider+social_id)에 만들어 둔 데이터를 조용히 덮어쓴다.
 --    조건이 보는 id는 "이미 있던 행"의 id다. 그래서 다른 id를 가진 행이 유니크 키로 충돌해도
@@ -34,14 +35,15 @@
 INSERT INTO member (id, social_provider, social_id, email, nickname, role, is_active, onboarding_completed, created_at, updated_at)
 VALUES
   (9001, 'GOOGLE', 'dummy-google-9001', 'dummy1@lirouti.local', '더미유저1', 'ROLE_USER', TRUE, TRUE, NOW(), NOW()),
-  (9002, 'KAKAO',  'dummy-kakao-9002',  'dummy2@lirouti.local', '더미유저2', 'ROLE_USER', TRUE, TRUE, NOW(), NOW())
+  (9002, 'KAKAO',  'dummy-kakao-9002',  'dummy2@lirouti.local', '더미유저2', 'ROLE_USER', TRUE, TRUE, NOW(), NOW()),
+  (1000, 'GOOGLE', 'developer-admin-338b7aec-632b-44db-b091-4d78c311f681', 'admin-1000@lirouti.local', '리루티 관리자', 'ROLE_ADMIN', TRUE, TRUE, NOW(), NOW())
 AS new_row
 ON DUPLICATE KEY UPDATE
-  nickname             = IF(member.id >= 9000, new_row.nickname, member.nickname),
-  role                 = IF(member.id >= 9000, new_row.role, member.role),
-  is_active            = IF(member.id >= 9000, new_row.is_active, member.is_active),
-  onboarding_completed = IF(member.id >= 9000, new_row.onboarding_completed, member.onboarding_completed),
-  updated_at           = IF(member.id >= 9000, NOW(), member.updated_at);
+  nickname             = IF(member.id = 1000 OR member.id >= 9000, new_row.nickname, member.nickname),
+  role                 = IF(member.id = 1000 OR member.id >= 9000, new_row.role, member.role),
+  is_active            = IF(member.id = 1000 OR member.id >= 9000, new_row.is_active, member.is_active),
+  onboarding_completed = IF(member.id = 1000 OR member.id >= 9000, new_row.onboarding_completed, member.onboarding_completed),
+  updated_at           = IF(member.id = 1000 OR member.id >= 9000, NOW(), member.updated_at);
 
 -- 2) 챌린지 (로컬 전용 — 운영 마스터가 확정되면 그쪽이 진짜 목록이 된다)
 INSERT INTO challenge (id, name, description, category, routine_cycle, reward, active, created_at, updated_at)

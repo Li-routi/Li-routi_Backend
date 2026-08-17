@@ -777,7 +777,8 @@ public class MediaService {
             if (!contentType.matchesSignature(head)) {
                 throw new MediaException(MediaErrorCode.MEDIA_CONTENT_MISMATCH);
             }
-            if (purpose == MediaPurpose.CHAT_EMOTICON
+            if ((purpose == MediaPurpose.CHAT_EMOTICON
+                    || purpose == MediaPurpose.ACHIEVEMENT_BADGE)
                     && contentType == MediaContentType.WEBP
                     && isAnimatedWebp(head)) {
                 throw new MediaException(MediaErrorCode.CONTENT_TYPE_NOT_ALLOWED_FOR_PURPOSE);

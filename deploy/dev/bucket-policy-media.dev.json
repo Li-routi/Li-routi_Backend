@@ -6,21 +6,21 @@
       "Effect": "Allow",
       "Principal": "*",
       "Action": "s3:GetObject",
-      "Resource": "arn:aws:s3:::lirouti-prod-bucket/challenge-verifications/*"
+      "Resource": "arn:aws:s3:::lirouti-dev-bucket/challenge-verifications/*"
     },
     {
       "Sid": "PublicReadAvatarAssets",
       "Effect": "Allow",
       "Principal": "*",
       "Action": "s3:GetObject",
-      "Resource": "arn:aws:s3:::lirouti-prod-bucket/avatar/*"
+      "Resource": "arn:aws:s3:::lirouti-dev-bucket/avatar/*"
     },
     {
       "Sid": "PublicReadAchievementBadges",
       "Effect": "Allow",
       "Principal": "*",
       "Action": "s3:GetObject",
-      "Resource": "arn:aws:s3:::lirouti-prod-bucket/achievement-badges/*"
+      "Resource": "arn:aws:s3:::lirouti-dev-bucket/achievement-badges/*"
     }
   ]
 }

@@ -8,13 +8,13 @@
         "s3:PutObject",
         "s3:GetObject"
       ],
-      "Resource": "arn:aws:s3:::lirouti-prod-bucket/*"
+      "Resource": "arn:aws:s3:::lirouti-dev-bucket/*"
     },
     {
       "Sid": "MediaCleanupList",
       "Effect": "Allow",
       "Action": "s3:ListBucket",
-      "Resource": "arn:aws:s3:::lirouti-prod-bucket",
+      "Resource": "arn:aws:s3:::lirouti-dev-bucket",
       "Condition": {
         "StringLike": {
           "s3:prefix": [
@@ -30,17 +30,11 @@
       "Effect": "Allow",
       "Action": "s3:DeleteObject",
       "Resource": [
-        "arn:aws:s3:::lirouti-prod-bucket/challenge-verifications/*",
-        "arn:aws:s3:::lirouti-prod-bucket/challenge-verifications-staging/*",
-        "arn:aws:s3:::lirouti-prod-bucket/chat-emoticons/*",
-        "arn:aws:s3:::lirouti-prod-bucket/achievement-badges/*"
+        "arn:aws:s3:::lirouti-dev-bucket/challenge-verifications/*",
+        "arn:aws:s3:::lirouti-dev-bucket/challenge-verifications-staging/*",
+        "arn:aws:s3:::lirouti-dev-bucket/chat-emoticons/*",
+        "arn:aws:s3:::lirouti-dev-bucket/achievement-badges/*"
       ]
-    },
-    {
-      "Sid": "BackupObjectWrite",
-      "Effect": "Allow",
-      "Action": "s3:PutObject",
-      "Resource": "arn:aws:s3:::lirouti-db-backup/*"
     }
   ]
 }

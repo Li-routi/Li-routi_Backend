@@ -37,6 +37,7 @@ public class SecurityConfig {
             "/api/shop/charges/webhook"
     };
     private static final String ADMIN_CHAT_EMOTICON_URI = "/api/admin/chat/emoticons/**";
+    private static final String ADMIN_ACHIEVEMENT_URI = "/api/admin/achievements/**";
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -53,6 +54,7 @@ public class SecurityConfig {
                         // 로그인하지 않으면 내부 기능에 닿지 못하는 것이 정상이다.
                         auth.requestMatchers(PUBLIC_URIS).permitAll()
                                 .requestMatchers(ADMIN_CHAT_EMOTICON_URI).hasAuthority(Role.ROLE_ADMIN.name())
+                                .requestMatchers(ADMIN_ACHIEVEMENT_URI).hasAuthority(Role.ROLE_ADMIN.name())
                                 .anyRequest().authenticated()
                 )
                 // 인증·인가 실패를 ApiResponse 형태로 내보낸다. 등록하지 않으면 스프링 기본

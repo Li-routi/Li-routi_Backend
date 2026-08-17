@@ -18,16 +18,15 @@ public final class AchievementConverter {
     }
 
     /**
-     * 전체 업적 정의를 회원 진행도와 합쳐 카테고리별로 묶는다.
-     *
-     * <p>회원이 아직 진행 중이지 않은 업적(member_achievement 행이 없는 경우)도 IN_PROGRESS·
-     * progress 0 으로 화면에 보여야 한다 — "이런 업적이 있다"는 목록 자체가 동기부여라 행이
-     * 없다고 화면에서 빠지면 안 된다.
+     * 전체 업적 정의와 회원 진행도, 업적별 이미지 URL을 회원용 응답으로 조합한다.
+     * 회원이 아직 진행 중이지 않은 업적도 목록에 포함하며, 이미지 key가 없는 업적은
+     * URL map에 포함하지 않아 응답에서 {@code null}로 유지한다.
      */
     public static AchievementResDTO.Achievements toAchievements(
             List<Achievement> allAchievements,
             Map<Long, MemberAchievement> memberAchievementByAchievementId,
-            Map<Long, List<MemberAchievementCondition>> conditionProgressByMemberAchievementId
+            Map<Long, List<MemberAchievementCondition>> conditionProgressByMemberAchievementId,
+            Map<Long, String> badgeImageUrlByAchievementId
     ) {
         Map<com.lirouti.domain.achievement.enums.AchievementCategory, List<AchievementResDTO.AchievementItem>> grouped =
                 allAchievements.stream()
@@ -36,7 +35,8 @@ public final class AchievementConverter {
                                 LinkedHashMap::new,
                                 Collectors.mapping(
                                         a -> toItem(a, memberAchievementByAchievementId.get(a.getId()),
-                                                conditionProgressByMemberAchievementId),
+                                                conditionProgressByMemberAchievementId,
+                                                badgeImageUrlByAchievementId),
                                         Collectors.toList()
                                 )
                         ));
@@ -107,7 +107,8 @@ public final class AchievementConverter {
     private static AchievementResDTO.AchievementItem toItem(
             Achievement achievement,
             MemberAchievement memberAchievement,
-            Map<Long, List<MemberAchievementCondition>> conditionProgressByMemberAchievementId
+            Map<Long, List<MemberAchievementCondition>> conditionProgressByMemberAchievementId,
+            Map<Long, String> badgeImageUrlByAchievementId
     ) {
         MemberAchievementStatus status = memberAchievement != null
                 ? memberAchievement.getStatus()
@@ -144,6 +145,7 @@ public final class AchievementConverter {
                 .achievementId(achievement.getId())
                 .code(achievement.getCode())
                 .name(achievement.getName())
+                .badgeImageUrl(badgeImageUrlByAchievementId.get(achievement.getId()))
                 .conditionDesc(achievement.getConditionDesc())
                 .status(status)
                 .progress(progress)

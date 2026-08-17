@@ -18,6 +18,11 @@ public enum AchievementSuccessCode implements BaseSuccessCode {
             HttpStatus.OK,
             "업적 보상 수령에 성공했습니다.",
             "ACHIEVEMENT200_2"
+    ),
+    ACHIEVEMENT_BADGE_IMAGE_UPLOAD_SUCCESS(
+            HttpStatus.OK,
+            "업적 뱃지 이미지 업로드에 성공했습니다.",
+            "ACHIEVEMENT200_3"
     );
 
     private final HttpStatus httpStatus;

@@ -12,6 +12,7 @@ import lombok.NoArgsConstructor;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -90,6 +91,13 @@ public class Achievement extends BaseEntity {
     @Column(name = "badge_yn", nullable = false)
     private boolean badgeYn;
 
+    /** 이 업적 달성 시 지급할 배지 코드. 없으면 배지 없음(badgeYn=false와 항상 일치해야 함). */
+    @Column(name = "badge_code", length = 30)
+    private String badgeCode;
+
+    @Column(name = "badge_image_key", length = 500)
+    private String badgeImageKey;
+
     @Column(name = "limited_outfit_yn", nullable = false)
     private boolean limitedOutfitYn;
 
@@ -108,7 +116,7 @@ public class Achievement extends BaseEntity {
                         Integer targetCount, String conditionKey,
                         int topazReward, boolean badgeYn, boolean limitedOutfitYn,
                         String badgeCode,
-                        int sortOrder, boolean active) {
+                        int sortOrder, boolean active, String badgeImageKey) {
         this.code = code;
         this.category = category;
         this.name = name;
@@ -118,13 +126,14 @@ public class Achievement extends BaseEntity {
         this.conditionKey = conditionKey;
         this.topazReward = topazReward;
         this.badgeYn = badgeYn;
-        this.limitedOutfitYn = limitedOutfitYn;
         this.badgeCode = badgeCode;
+        this.limitedOutfitYn = limitedOutfitYn;
+        this.badgeImageKey = badgeImageKey;
         this.sortOrder = sortOrder;
         this.active = active;
     }
 
-    /** 이 업적 달성 시 지급할 배지 코드. 없으면 배지 없음(badgeYn=false와 항상 일치해야 함). */
-    @Column(name = "badge_code", length = 30)
-    private String badgeCode;
+    public void replaceBadgeImageKey(String badgeImageKey) {
+        this.badgeImageKey = Objects.requireNonNull(badgeImageKey, "badgeImageKey must not be null");
+    }
 }
