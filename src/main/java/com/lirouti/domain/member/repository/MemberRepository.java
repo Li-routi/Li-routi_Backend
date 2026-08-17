@@ -1,5 +1,30 @@
 package com.lirouti.domain.member.repository;
 
-public interface MemberRepository {
-    
+import com.lirouti.domain.member.entity.Member;
+import com.lirouti.domain.member.enums.SocialProvider;
+import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
+
+public interface MemberRepository extends JpaRepository<Member, Long> {
+    Optional<Member> findBySocialProviderAndSocialId(
+            SocialProvider socialProvider,
+            String socialId
+    );
+
+    boolean existsByEmail(String email);
+
+    // 회원 탈퇴 시 동시성 문제를 방지하기 위한 비관적 락 조회
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT member FROM Member member WHERE member.id = :memberId")
+    Optional<Member> findByIdForUpdate(@Param("memberId") Long memberId);
+
+    @Query("select m.profileImageKey from Member m where m.profileImageKey in :keys")
+    List<String> findProfileImageKeysIn(@Param("keys") Collection<String> keys);
 }

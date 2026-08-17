@@ -1,0 +1,63 @@
+spring:
+  datasource:
+    # CI는 이 기본값(3306/lirouti)의 서비스 컨테이너로 접속한다. 로컬 포트가 다르면(예: 3307)
+    # .env의 DB_URL로 덮어써서 쓴다 — 새 환경변수를 따로 만들지 않는다.
+    url: ${DB_URL:jdbc:mysql://localhost:3306/lirouti?serverTimezone=Asia/Seoul&characterEncoding=UTF-8&allowPublicKeyRetrieval=true&useSSL=false}
+    username: ${DB_USERNAME:lirouti}
+    password: ${DB_PASSWORD:lirouti1234}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      # Spring test context가 캐시되어도 각 context가 기본값(10)만큼 idle connection을
+      # 유지하지 않게 한다. 최대 pool 크기는 그대로 두어 동시성 테스트의 순간 수요는 보존한다.
+      minimum-idle: 1
+
+  jpa:
+    hibernate:
+      # 운영과 같은 경로로 검증한다. 스키마는 Flyway(db/migration)가 만들고 Hibernate는 대조만 한다.
+      # 그래야 "마이그레이션이 엔티티와 맞는가"를 CI가 매번 확인해 준다.
+      ddl-auto: ${JPA_DDL_AUTO:validate}
+    show-sql: ${JPA_SHOW_SQL:false}
+
+  # 테스트에는 로컬 더미(db/dummy)를 넣지 않는다. 테스트는 각자 필요한 데이터를 직접 만들고,
+  # 고정 id를 가진 더미 행이 섞이면 건수 검증 같은 단언이 흔들린다.
+  # (locations를 명시하지 않으면 application.yaml의 db/migration만 적용된다.)
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+
+jwt:
+  secret: ${JWT_SECRET:test-only-jwt-secret-key-with-at-least-32-bytes}
+
+oauth:
+  kakao:
+    app-id: ${KAKAO_APP_ID:1}
+  google:
+    web-client-id: ${GOOGLE_WEB_CLIENT_ID:test-google-client-id}
+    allowed-issuers: ${GOOGLE_ALLOWED_ISSUERS:https://accounts.google.com,accounts.google.com}
+
+# 통합 테스트에서는 업로드 바이트 검증(#22)을 끈다.
+# 켜두면 @SpringBootTest의 인증 경로가 실제 S3를 호출하는데, 테스트에는 자격증명도
+# 업로드된 오브젝트도 없다. 검증 로직 자체는 MediaServiceTest에서 S3Client를 목으로
+# 두고 단위 테스트한다(성공·형식불일치·미업로드·조회실패·비활성 경로 전부).
+aws:
+  s3:
+    byte-validation-enabled: false
+
+# 통합 테스트에서는 레이트 리밋을 끈다(#23). 카운터가 Redis에 남아 테스트 간에 누적되면
+# 실행 순서에 따라 결과가 달라진다. 제한이 실제로 걸리는지는 RateLimitIntegrationTest가
+# @TestPropertySource로 다시 켜서 검증한다.
+rate-limit:
+  enabled: false
+
+# 테스트에서는 보류를 끈다. 테스트의 S3 는 mock 이라 심사용 사진 읽기가 늘 실패하는데,
+# 그것을 보류로 다루면 인증을 다루는 모든 테스트가 PENDING 이 되어 원래 보려던 것을 못 본다.
+# 실제 장애가 아니라 테스트 환경의 성질이다.
+#
+# 보류 자체를 보는 테스트는 @TestPropertySource 로 이 값을 켠다.
+ai:
+  review:
+    pending:
+      enabled: false

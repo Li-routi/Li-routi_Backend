@@ -1,0 +1,226 @@
+package com.lirouti.domain.verification.repository;
+
+import static com.lirouti.domain.member.repository.MemberQuerySupport.activeMember;
+import static com.lirouti.domain.verification.repository.VerificationQuerySupport.notHidden;
+import static com.lirouti.domain.verification.repository.VerificationQuerySupport.notDeleted;
+import static com.lirouti.domain.verification.repository.VerificationQuerySupport.notPending;
+
+import java.util.List;
+
+import com.lirouti.domain.verification.entity.ChallengeVerification;
+import com.lirouti.domain.verification.entity.QChallengeVerification;
+import com.lirouti.domain.verification.enums.ReviewStatus;
+import com.lirouti.domain.verification.entity.QChallengeVerificationLike;
+import com.lirouti.domain.verification.entity.QChallengeVerificationReport;
+import com.lirouti.domain.challenge.entity.QMemberChallenge;
+import com.lirouti.domain.member.entity.QMember;
+import com.querydsl.core.types.dsl.BooleanExpression;
+import com.querydsl.jpa.JPAExpressions;
+import com.querydsl.jpa.impl.JPAQueryFactory;
+
+import lombok.RequiredArgsConstructor;
+
+@RequiredArgsConstructor
+public class ChallengeVerificationRepositoryImpl implements ChallengeVerificationRepositoryCustom {
+    private final JPAQueryFactory queryFactory;
+
+    private static final QChallengeVerification verification = QChallengeVerification.challengeVerification;
+    private static final QMemberChallenge memberChallenge = QMemberChallenge.memberChallenge;
+    private static final QMember member = QMember.member;
+    private static final QChallengeVerificationReport report =
+            QChallengeVerificationReport.challengeVerificationReport;
+    private static final QChallengeVerificationLike like =
+            QChallengeVerificationLike.challengeVerificationLike;
+    // 좋아요를 누른 회원. 위 member 는 인증 작성자라 별칭을 나눠야 한다.
+    private static final QMember liker = new QMember("liker");
+
+    @Override
+    public List<ChallengeVerification> findFeedByCursor(
+            Long challengeId,
+            Long viewerId,
+            Long cursor,
+            int limit
+    ) {
+        // 참여(member_challenge)와 회원을 fetch join으로 함께 읽는다.
+        // 피드 카드가 닉네임을 쓰므로, 없으면 항목마다 회원을 조회하는 N+1이 된다.
+        // 둘 다 ToOne 연관이라 fetch join과 limit을 같이 써도 페이징이 메모리로 새지 않는다.
+        return queryFactory
+                .selectFrom(verification)
+                .join(verification.memberChallenge, memberChallenge).fetchJoin()
+                .join(memberChallenge.member, member).fetchJoin()
+                .where(
+                        memberChallenge.challenge.id.eq(challengeId),
+                        activeMember(member),
+                        notHidden(verification),
+                        // 승격되지 않아 공개 주소가 없다. 담으면 열리지 않는 사진이 나간다.
+                        notPending(verification),
+                        notDeleted(verification),
+                        notReportedBy(viewerId),
+                        cursorLt(cursor)
+                )
+                .orderBy(verification.id.desc())
+                .limit(limit)
+                .fetch();
+    }
+
+    /**
+     * 조회자가 신고한 인증을 제외한다. 신고는 인증을 지우지 않는다.
+     * 임계값만큼 쌓여 전체에게 가려지는 것은 이 조건이 아니라 notHidden 이 처리한다.
+     *
+     * 조인이 아니라 NOT EXISTS를 쓰는 이유는 두 가지다. 조인은 신고가 없는 인증을 걸러내려면
+     * left join + is null이 되어 fetch join과 섞였을 때 읽기 어려워지고, 한 인증에 신고가
+     * 여러 건이면 행이 부풀어 limit이 어긋난다. NOT EXISTS는 유니크 제약
+     * (challenge_verification_id, reporter_id)의 앞 두 컬럼을 그대로 타므로 인덱스도 쓴다.
+     *
+     * viewerId가 null이면 조건을 걸지 않는다. 모든 챌린지 경로가 인증을 요구하므로 null이
+     * 오지 않지만, 조건 자체는 그대로 둔다 — 방어를 전 계층에서 지우면 정책이 바뀔 때 NPE로 터진다.
+     */
+    private BooleanExpression notReportedBy(Long viewerId) {
+        if (viewerId == null) {
+            return null;
+        }
+        return JPAExpressions
+                .selectOne()
+                .from(report)
+                .where(
+                        report.challengeVerification.eq(verification),
+                        report.reporter.id.eq(viewerId)
+                )
+                .notExists();
+    }
+
+    @Override
+    public List<ChallengeVerification> findMineByCursor(
+            Long memberChallengeId,
+            Long cursor,
+            int limit,
+            ReviewStatus statusFilter
+    ) {
+        // 피드와 달리 fetch join이 없다. 응답에 닉네임을 싣지 않으므로 회원을 읽을 일이 없고,
+        // 참여(member_challenge)도 서비스가 이미 조회해 두었다.
+        return queryFactory
+                .selectFrom(verification)
+                .where(
+                        verification.memberChallenge.id.eq(memberChallengeId),
+                        notHidden(verification),
+                        // 본인이 내린 글이다. 지운 사람에게도 보이면 삭제가 아니다.
+                        notDeleted(verification),
+                        // 보류를 빼지 않는다. 방금 올린 사진이 화면에서 사라지면 안 된다 —
+                        // 대신 상태를 함께 내려 "심사 중" 을 그리게 한다.
+                        statusEq(statusFilter),
+                        cursorLt(cursor)
+                )
+                .orderBy(verification.id.desc())
+                .limit(limit)
+                .fetch();
+    }
+
+    /** 상태 필터. 주지 않으면 전부 담는다 — 기본값이 바뀌면 기존 클라이언트 화면이 조용히 달라진다. */
+    private BooleanExpression statusEq(ReviewStatus statusFilter) {
+        return (statusFilter != null) ? verification.reviewStatus.eq(statusFilter) : null;
+    }
+
+    /**
+     * 좋아요순 상위 N개. <b>커서를 받지 않는다</b> — 정렬 키가 스크롤 도중 바뀌어
+     * 페이지를 이어 붙일 수 없다({@link com.lirouti.domain.verification.enums.VerificationSort}).
+     *
+     * <p><b>표시용 집계와 같은 규칙으로 센다.</b> 탈퇴 회원의 좋아요를 빼는 조건이
+     * {@code activeMember} 한 곳에 있고 여기서도 그것을 쓴다 — 규칙이 갈리면 정렬은 5개
+     * 기준인데 화면에는 3개로 보이는 상태가 된다.
+     *
+     * <p>좋아요가 없는 인증도 나와야 하므로 {@code left join} 이다. 탈퇴 회원의 좋아요는
+     * {@code on} 절에서 뗀다 — {@code where} 로 옮기면 그 좋아요만 달린 인증이 통째로 빠진다.
+     */
+    @Override
+    public List<ChallengeVerification> findFeedByLikes(
+            Long challengeId,
+            Long viewerId,
+            Long cursorLikeCount,
+            Long cursorId,
+            int limit
+    ) {
+        return queryFactory
+                .selectFrom(verification)
+                .join(verification.memberChallenge, memberChallenge).fetchJoin()
+                .join(memberChallenge.member, member).fetchJoin()
+                .leftJoin(like).on(like.challengeVerification.eq(verification))
+                .leftJoin(like.member, liker)
+                .where(
+                        memberChallenge.challenge.id.eq(challengeId),
+                        activeMember(member),
+                        notHidden(verification),
+                        notPending(verification),
+                        notDeleted(verification),
+                        notReportedBy(viewerId)
+                )
+                .groupBy(verification.id, memberChallenge.id, member.id)
+                .having(afterLikeCursor(cursorLikeCount, cursorId))
+                // 같은 수면 최신순으로 가른다. 안 그러면 같은 요청에도 순서가 흔들린다.
+                .orderBy(likeCountOf().desc(), verification.id.desc())
+                .limit(limit)
+                .fetch();
+    }
+
+    /** 내 인증 목록의 좋아요순. 피드와 같은 셈법이고 보이는 범위만 다르다. */
+    @Override
+    public List<ChallengeVerification> findMineByLikes(
+            Long memberChallengeId,
+            Long cursorLikeCount,
+            Long cursorId,
+            int limit,
+            ReviewStatus statusFilter
+    ) {
+        return queryFactory
+                .selectFrom(verification)
+                .leftJoin(like).on(like.challengeVerification.eq(verification))
+                .leftJoin(like.member, liker)
+                .where(
+                        verification.memberChallenge.id.eq(memberChallengeId),
+                        notHidden(verification),
+                        notDeleted(verification),
+                        statusEq(statusFilter)
+                )
+                .groupBy(verification.id)
+                .having(afterLikeCursor(cursorLikeCount, cursorId))
+                .orderBy(likeCountOf().desc(), verification.id.desc())
+                .limit(limit)
+                .fetch();
+    }
+
+    /**
+     * 좋아요순 커서. <b>정렬 키가 좋아요 수 하나로는 부족하다</b> — 0개가 대부분이라 값이
+     * 겹쳐서 "어디까지 봤는지"를 못 가린다. {@code (좋아요 수, id)} 조합은 유일하다.
+     *
+     * <p>정렬이 {@code 좋아요 desc, id desc} 이므로 "그 좌표보다 뒤" 는
+     * <b>좋아요가 더 적거나, 같으면서 id 가 더 작은</b> 것이다.
+     *
+     * <p>집계값으로 거르는 것이라 {@code where} 가 아니라 {@code having} 에 들어간다.
+     *
+     * <p>첫 요청이면 {@code null} 을 돌려 조건을 걸지 않는다.
+     */
+    private BooleanExpression afterLikeCursor(Long cursorLikeCount, Long cursorId) {
+        if (cursorLikeCount == null || cursorId == null) {
+            return null;
+        }
+        return likeCountOf().lt(cursorLikeCount)
+                .or(likeCountOf().eq(cursorLikeCount).and(verification.id.lt(cursorId)));
+    }
+
+    /**
+     * 정렬에 쓰는 좋아요 수. <b>탈퇴 회원은 빼고 센다</b>(표시용 집계와 같은 규칙).
+     *
+     * <p>{@code count(liker.id)} 라 살아 있는 회원의 좋아요만 세어진다 —
+     * {@code left join} 이므로 탈퇴 회원의 좋아요는 {@code null} 이 되어 count 에서 빠지고,
+     * 좋아요가 하나도 없는 인증은 0 이 된다.
+     */
+    private com.querydsl.core.types.dsl.NumberExpression<Long> likeCountOf() {
+        return new com.querydsl.core.types.dsl.CaseBuilder()
+                .when(activeMember(liker)).then(liker.id)
+                .otherwise((Long) null)
+                .count();
+    }
+
+    private BooleanExpression cursorLt(Long cursor) {
+        return (cursor != null) ? verification.id.lt(cursor) : null;
+    }
+}

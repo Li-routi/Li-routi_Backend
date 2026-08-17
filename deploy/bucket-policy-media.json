@@ -1,0 +1,26 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "PublicReadChallengeVerifications",
+      "Effect": "Allow",
+      "Principal": "*",
+      "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::lirouti-prod-bucket/challenge-verifications/*"
+    },
+    {
+      "Sid": "PublicReadAvatarAssets",
+      "Effect": "Allow",
+      "Principal": "*",
+      "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::lirouti-prod-bucket/avatar/*"
+    },
+    {
+      "Sid": "PublicReadAchievementBadges",
+      "Effect": "Allow",
+      "Principal": "*",
+      "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::lirouti-prod-bucket/achievement-badges/*"
+    }
+  ]
+}

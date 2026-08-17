@@ -1,7 +1,7 @@
 package com.lirouti.global.config;
 
-import tools.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
-import tools.jackson.databind.jsontype.PolymorphicTypeValidator;
+import io.lettuce.core.api.StatefulConnection;
+import org.apache.commons.pool2.impl.GenericObjectPoolConfig;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.EnableCaching;
@@ -11,16 +11,18 @@ import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
+import org.springframework.data.redis.connection.lettuce.LettuceClientConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
+import org.springframework.data.redis.connection.lettuce.LettucePoolingClientConfiguration;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.serializer.GenericJacksonJsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
-import org.springframework.data.redis.connection.lettuce.LettuceClientConfiguration;
-import org.springframework.data.redis.connection.lettuce.LettucePoolingClientConfiguration;
-import org.apache.commons.pool2.impl.GenericObjectPoolConfig;
-import io.lettuce.core.api.StatefulConnection;
 import org.springframework.data.redis.serializer.RedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
+import tools.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
+import tools.jackson.databind.jsontype.PolymorphicTypeValidator;
+
 import java.time.Duration;
 
 @Configuration
@@ -64,9 +66,23 @@ public class RedisConfig {
 		redisTemplate.setConnectionFactory(connectionFactory);
 
 		redisTemplate.setKeySerializer(new StringRedisSerializer());
-		redisTemplate.setValueSerializer(serializer); 
+		redisTemplate.setValueSerializer(serializer);
 		redisTemplate.setHashKeySerializer(new StringRedisSerializer());
 		redisTemplate.setHashValueSerializer(serializer);
+
+		return redisTemplate;
+	}
+
+	// auth용 RedisTemplate를 별도로 생성하여 auth 관련 데이터만 관리하도록 설정
+	@Bean
+	public StringRedisTemplate authRedisTemplate(RedisConnectionFactory connectionFactory) {
+		// StringRedisTemplate를 사용하여 Redis에 문자열 데이터를 저장하고 조회할 수 있도록 설정
+		StringRedisTemplate redisTemplate = new StringRedisTemplate();
+		redisTemplate.setConnectionFactory(connectionFactory);
+		redisTemplate.setKeySerializer(new StringRedisSerializer());
+		redisTemplate.setValueSerializer(new StringRedisSerializer());
+		redisTemplate.setHashKeySerializer(new StringRedisSerializer());
+		redisTemplate.setHashValueSerializer(new StringRedisSerializer());
 
 		return redisTemplate;
 	}
@@ -97,7 +113,7 @@ public class RedisConfig {
 				.allowIfSubType("com.lirouti") // 허용된 패키지
 				.allowIfSubType("java.util")
 				.build();
-        
+
         // GenericJacksonJsonRedisSerializer를 사용하여 JSON 직렬화 및 역직렬화
 		return GenericJacksonJsonRedisSerializer.builder()
 				.enableDefaultTyping(ptv)

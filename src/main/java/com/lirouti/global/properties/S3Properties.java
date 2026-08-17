@@ -1,0 +1,110 @@
+package com.lirouti.global.properties;
+
+import jakarta.validation.constraints.*;
+import lombok.Getter;
+import lombok.Setter;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.validation.annotation.Validated;
+
+import java.time.Duration;
+
+@Getter
+@Setter
+@Validated
+@Configuration
+@ConfigurationProperties(prefix = "aws.s3")
+public class S3Properties {
+    /**
+     * 환경변수 미주입을 부팅 시점에 잡기 위해 형식까지 검증한다.
+     * 기본값 없이 ${AWS_S3_BUCKET}만 선언하면 부팅이 실패할 것 같지만, 실제로는
+     * 해석되지 못한 플레이스홀더가 "${AWS_S3_BUCKET}" 문자열 그대로 바인딩된다.
+     * @NotBlank만으로는 이를 통과시키므로, S3 버킷 명명 규칙으로 걸러낸다.
+     */
+    @NotBlank(message = "S3 버킷 이름은 필수입니다. AWS_S3_BUCKET 환경변수를 주입하세요.")
+    @Pattern(
+            regexp = "^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$",
+            message = "S3 버킷 이름 형식이 올바르지 않습니다. AWS_S3_BUCKET 환경변수가 주입되지 않았을 수 있습니다."
+    )
+    private String bucket;
+
+    @NotNull(message = "presigned URL 유효 시간은 필수입니다.")
+    private Duration presignedUrlExpiration;
+
+    /**
+     * 비공개 미디어를 <b>읽는</b> 서명 URL 의 유효 시간. 업로드용과 분리한 이유는 수명이 다르기 때문이다.
+     *
+     * <p>업로드 URL 은 발급 직후 PUT 한 번에 쓰이고 끝나 짧을수록 좋다. 반면 조회 URL 은 목록
+     * 응답에 실려 나가 화면에 머무는 동안 계속 쓰인다 — 업로드와 같은 5분을 주면 사용자가
+     * 잠깐 다른 앱을 보고 돌아왔을 때 사진이 전부 깨진다.
+     *
+     * <p>그렇다고 길게 잡으면 URL 하나가 유출됐을 때 그만큼 오래 열려 있다. 비공개 사진은
+     * 그 노출 창이 곧 위험이라, 화면 한 번 보는 시간 정도로 짧게 둔다.
+     */
+    @NotNull(message = "미디어 조회 서명 URL 유효 시간은 필수입니다.")
+    private Duration viewUrlExpiration;
+
+    // 카테고리별 최대 업로드 용량(바이트). 사진과 영상은 파일 크기가 크게 달라 한도를 분리한다.
+    @Positive(message = "최대 이미지 업로드 용량은 양수여야 합니다.")
+    private long maxImageSize;
+
+    // 영상은 아직 사용하지 않지만, 켜질 때 바로 쓰도록 한도를 미리 둔다.
+    @Positive(message = "최대 영상 업로드 용량은 양수여야 합니다.")
+    private long maxVideoSize;
+
+    /**
+     * 미디어를 읽을 때 사용할 공개 주소(CloudFront 등).
+     * DB에는 오브젝트 key만 저장하고 읽기 URL은 이 값 + key로 조립한다.
+     * 미주입 시 application.yaml이 버킷·리전으로 S3 가상 호스팅 주소를 계산해 채우므로 항상 값이 있다
+     * (설정 없이도 앱이 부팅되게 하기 위함). 여기서는 그렇게 채워진 값이 유효한 URL 형식인지만 확인한다 —
+     * 해석되지 못한 플레이스홀더가 문자열로 바인딩되는 것을 스킴 검증으로 걸러낸다.
+     */
+    @NotBlank(message = "미디어 공개 주소가 비어 있습니다. AWS_S3_BUCKET이 주입되지 않았을 수 있습니다.")
+    @Pattern(
+            regexp = "^https?://[^\\s${}]+$",
+            message = "미디어 공개 주소 형식이 올바르지 않습니다. AWS_S3_BUCKET/AWS_S3_PUBLIC_BASE_URL 주입 상태를 확인하세요."
+    )
+    private String publicBaseUrl;
+
+    /**
+     * 업로드된 바이트가 선언한 형식과 실제로 맞는지 검사할지 여부(#22).
+     *
+     * 기본은 켜짐이다. 검증이 목적인 기능이라 꺼진 채로 도는 것이 기본값이면 의미가 없다.
+     * 끌 수 있게 둔 이유는 탈출구다 — S3 권한·네트워크 문제로 검증이 전부 실패하면
+     * 인증 API가 통째로 막히는데, 그때 이미지 롤백보다 이 값 하나를 끄는 편이 빠르다.
+     * (운영에서는 ENV_FILE에 AWS_S3_BYTE_VALIDATION_ENABLED=false를 넣고 재배포)
+     */
+    private boolean byteValidationEnabled = true;
+
+    // S3 presigned URL은 최대 7일이다.
+    private static final Duration MAX_PRESIGNED_EXPIRATION = Duration.ofDays(7);
+
+    /**
+     * presigned URL 유효 시간을 부팅 시점에 검증한다.
+     * {@code @NotNull}만으로는 0·음수·7일 초과를 통과시키고, 그 경우 URL 발급 시점에야
+     * 실패한다. S3 서명 방식(SigV4)상 유효 시간은 최대 7일이므로 그 범위를 강제한다.
+     */
+    @AssertTrue(message = "presigned URL 유효 시간은 1초 이상 7일 이하여야 합니다.")
+    public boolean isPresignedUrlExpirationInRange() {
+        // null은 @NotNull이 별도로 잡으므로 여기서는 통과시킨다(중복 위반 메시지 방지).
+        if (presignedUrlExpiration == null) {
+            return true;
+        }
+        return isWithinSigningLimit(presignedUrlExpiration);
+    }
+
+    /** 조회용 서명도 같은 SigV4 한도를 받는다. 발급 시점이 아니라 부팅 때 걸러야 하는 것도 같다. */
+    @AssertTrue(message = "미디어 조회 서명 URL 유효 시간은 1초 이상 7일 이하여야 합니다.")
+    public boolean isViewUrlExpirationInRange() {
+        if (viewUrlExpiration == null) {
+            return true;
+        }
+        return isWithinSigningLimit(viewUrlExpiration);
+    }
+
+    private static boolean isWithinSigningLimit(Duration duration) {
+        return !duration.isZero()
+                && !duration.isNegative()
+                && duration.compareTo(MAX_PRESIGNED_EXPIRATION) <= 0;
+    }
+}

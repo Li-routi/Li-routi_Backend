@@ -1,0 +1,46 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "MediaObjectReadWrite",
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject",
+        "s3:GetObject"
+      ],
+      "Resource": "arn:aws:s3:::lirouti-prod-bucket/*"
+    },
+    {
+      "Sid": "MediaCleanupList",
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::lirouti-prod-bucket",
+      "Condition": {
+        "StringLike": {
+          "s3:prefix": [
+            "challenge-verifications/*",
+            "chat-emoticons/*",
+            "achievement-badges/*"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "MediaCleanupDelete",
+      "Effect": "Allow",
+      "Action": "s3:DeleteObject",
+      "Resource": [
+        "arn:aws:s3:::lirouti-prod-bucket/challenge-verifications/*",
+        "arn:aws:s3:::lirouti-prod-bucket/challenge-verifications-staging/*",
+        "arn:aws:s3:::lirouti-prod-bucket/chat-emoticons/*",
+        "arn:aws:s3:::lirouti-prod-bucket/achievement-badges/*"
+      ]
+    },
+    {
+      "Sid": "BackupObjectWrite",
+      "Effect": "Allow",
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::lirouti-db-backup/*"
+    }
+  ]
+}

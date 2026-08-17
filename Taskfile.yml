@@ -1,0 +1,271 @@
+# https://taskfile.dev — 크로스플랫폼 태스크 러너
+# 설치:  macOS) brew install go-task/tap/go-task
+#        Windows) winget install Task.Task  또는  scoop install task
+# 사용:  task            # 태스크 목록
+#        task <이름>     # 실행
+version: '3'
+
+vars:
+  # OS에 따라 gradle wrapper 실행 파일 선택 (mac/linux: ./gradlew, windows: gradlew.bat)
+  GRADLEW: '{{if eq OS "windows"}}cmd /c gradlew.bat{{else}}./gradlew{{end}}'
+  # 로컬 compose 호출. 개인 포트 override(docker-compose.local.override.yml)가 있으면 자동 병합.
+  DC_LOCAL:
+    sh: printf 'docker compose -f docker-compose.local.yml%s' "$([ -f docker-compose.local.override.yml ] && printf ' -f docker-compose.local.override.yml')"
+
+  # Flyway CLI를 컨테이너로 부른다(#48). Gradle 플러그인 대신 이 방식을 쓰는 이유는
+  # 플러그인이 build.gradle에 접속 정보를 또 적게 만들어 application.yaml과 설정이 두 벌이 되기 때문이다.
+  #
+  # --network container:lirouti-mysql 은 MySQL 컨테이너의 네트워크를 그대로 공유한다.
+  # compose 네트워크 이름(프로젝트 디렉터리명에서 파생)에 의존하지 않아 clone 위치가 달라도 동작한다.
+  #
+  # 로컬은 db/migration 과 db/dummy 를 모두 건다. migration 만 걸면 이미 적용된 더미가
+  # "Missing" 으로 잡혀 멀쩡한 DB가 망가진 것처럼 보인다.
+  FLYWAY: >-
+    docker run --rm --network container:lirouti-mysql
+    -v "$PWD/src/main/resources/db/migration:/flyway/sql:ro"
+    -v "$PWD/src/main/resources/db/dummy:/flyway/dummy:ro"
+    flyway/flyway:11
+    -url=jdbc:mysql://localhost:3306/lirouti -user=lirouti -password=lirouti1234
+    -locations=filesystem:/flyway/sql,filesystem:/flyway/dummy -connectRetries=2
+
+tasks:
+  default:
+    desc: 사용 가능한 태스크 목록 출력
+    cmds:
+      - task --list
+    silent: true
+
+  setup:
+    desc: 개발 환경 초기화 (git hook 설치 등) — clone 후 최초 1회 실행
+    cmds:
+      - pre-commit install
+      - cmd: echo "✅ pre-commit git hook 설치 완료"
+        silent: true
+
+  build:
+    desc: 전체 빌드 (컴파일 + 테스트)
+    cmds:
+      - '{{.GRADLEW}} build'
+
+  compile:
+    desc: 메인 소스만 빠르게 컴파일 (커밋 전 검증용)
+    cmds:
+      - '{{.GRADLEW}} compileJava'
+
+  test:
+    desc: 테스트 실행
+    cmds:
+      - '{{.GRADLEW}} test'
+
+  run:
+    desc: 애플리케이션 실행 (MySQL·Redis 필요)
+    cmds:
+      - '{{.GRADLEW}} bootRun'
+
+  performance-smoke:
+    desc: JMeter Smoke Test 실행 (1명, 20초)
+    cmds:
+      - ./performance/jmeter/run.sh smoke
+
+  performance-token:
+    desc: 로컬 테스트 회원의 개발 토큰 발급 (기본 memberId=9001)
+    env:
+      PERFORMANCE_MEMBER_ID: '{{if .MEMBER_ID}}{{.MEMBER_ID}}{{else}}9001{{end}}'
+    cmds:
+      - '{{.GRADLEW}} issuePerformanceToken'
+
+  performance-load:
+    desc: JMeter Load Test 실행 (5명, 120초)
+    cmds:
+      - ./performance/jmeter/run.sh load
+
+  performance-spike:
+    desc: JMeter Spike Test 실행 (30명, 60초)
+    cmds:
+      - ./performance/jmeter/run.sh spike
+
+  monitoring-secrets:
+    desc: 로컬 모니터링용 Actuator token·Grafana 비밀번호 파일 준비
+    cmds:
+      - ./performance/monitoring/run.sh secrets
+
+  monitoring-check:
+    desc: 모니터링 secret·Compose·Prometheus 설정 검사
+    cmds:
+      - ./performance/monitoring/run.sh check
+
+  monitoring-up:
+    desc: Prometheus·Grafana 설정 검사 후 기동
+    cmds:
+      - ./performance/monitoring/run.sh up
+
+  monitoring-status:
+    desc: Prometheus·Grafana 컨테이너 상태 확인
+    cmds:
+      - ./performance/monitoring/run.sh status
+
+  monitoring-logs:
+    desc: Prometheus·Grafana 최근 로그와 새 로그 확인
+    cmds:
+      - ./performance/monitoring/run.sh logs
+
+  monitoring-down:
+    desc: Prometheus·Grafana 중지 (7일 지표와 Grafana 데이터 보존)
+    cmds:
+      - ./performance/monitoring/run.sh down
+
+  docker-up:
+    desc: 로컬 MySQL·Redis 컨테이너 기동 (백그라운드)
+    cmds:
+      - '{{.DC_LOCAL}} up -d'
+
+  docker-down:
+    desc: 로컬 MySQL·Redis 컨테이너 중지 (데이터 보존)
+    cmds:
+      - '{{.DC_LOCAL}} down'
+
+  docker-reset:
+    desc: 로컬 컨테이너 및 볼륨(데이터)까지 완전 삭제
+    cmds:
+      - '{{.DC_LOCAL}} down -v'
+
+  docker-logs:
+    desc: 로컬 컨테이너 로그 실시간 확인
+    cmds:
+      - '{{.DC_LOCAL}} logs -f'
+
+  db-history:
+    desc: 로컬 DB에 적용된 Flyway 마이그레이션 이력 확인
+    # 계정은 docker-compose.local.yml의 로컬 개발 기본값(운영 비밀값 아님).
+    # 앱을 한 번도 안 띄웠으면 이력 테이블이 없다 — task run 으로 띄우면 생긴다.
+    cmds:
+      - '{{.DC_LOCAL}} exec -T mysql mysql -ulirouti -plirouti1234 lirouti -e "SELECT installed_rank, version, description, type, success, installed_on FROM flyway_schema_history ORDER BY installed_rank;"'
+
+  db-info:
+    desc: 로컬 Flyway 상태 확인 (적용·미적용·체크섬 불일치)
+    # db-history 가 이력 테이블을 그대로 보여준다면, 이쪽은 파일과 DB를 대조한다.
+    # Pending(파일은 있는데 미적용) · Missing(적용됐는데 파일이 없음) ·
+    # Failed(중간에 죽음)를 구분해 주므로 부팅이 막혔을 때 원인을 여기서 먼저 본다.
+    cmds:
+      - '{{.FLYWAY}} info'
+
+  db-repair:
+    desc: 로컬 Flyway 이력 복구 (체크섬 재계산 · 실패 행 정리)
+    # repair 는 이력 테이블만 고친다 — 실제 스키마는 건드리지 않는다.
+    #
+    # 1) 체크섬 불일치: 적용된 V__ 를 고쳐 부팅이 막힌 경우. 여기서는 바로 써도 된다.
+    #    단 바꾸려던 스키마 변경은 새 V__ 로 추가해야 한다(repair 가 반영해 주지 않는다).
+    #
+    # 2) 마이그레이션 실패(success=0): 바로 쓰면 안 된다. MySQL 은 DDL 이 롤백되지 않아
+    #    죽기 전까지 실행된 문장이 이미 반영돼 있다. 실패 기록만 지우고 재실행하면
+    #    "Table already exists" 로 또 죽거나 절반만 적용된 스키마 위에 나머지가 얹힌다.
+    #    db-info 로 실패 버전을 확인하고 → 적용된 부분을 되돌리거나 재실행 안전하게 고친 뒤
+    #    → repair → 같은 V__ 를 다시 실행시킨다(새 번호를 만들지 않는다).
+    #    자세한 절차는 deploy/README.md 의 "Flyway 운영" 절에 있다.
+    cmds:
+      - cmd: echo "⚠️  실패한 마이그레이션(success=0)이면 먼저 db-info 로 확인하고, 부분 적용된 스키마를 정리한 뒤 실행하세요."
+        silent: true
+      - '{{.FLYWAY}} repair'
+      - cmd: echo "✅ 이력 테이블을 복구했습니다. 실제 스키마는 바뀌지 않았습니다."
+        silent: true
+
+  db-check-duplicates:
+    desc: 마이그레이션 버전 번호 중복 검사 (CI에서도 실행)
+    # git 이 안 잡아주는 충돌을 막는다. 두 브랜치가 각각 V4__a.sql · V4__b.sql 을 추가하면
+    # 파일명이 달라 자동 병합이 되고, 리뷰에서도 CI 테스트에서도 걸리지 않는다.
+    # 그리고 develop 머지 후 부팅에서 죽는다 — Found more than one migration with version 4.
+    silent: true
+    cmds:
+      - |
+        # 버전은 숫자뿐 아니라 점·밑줄로 나뉠 수 있다(V2.1__, V1_1__). 숫자만 받으면
+        # 그런 파일이 매칭에서 빠져 중복을 놓친다. sort는 문자열 정렬로 충분하다 —
+        # uniq -d 가 필요한 건 같은 값이 인접하는 것뿐이고, -n 은 2.1 과 2.10 을 같게 본다.
+        dup=$(ls src/main/resources/db/migration/V*.sql 2>/dev/null \
+          | sed 's|.*/V\([0-9][0-9._]*\)__.*|\1|' | sort | uniq -d)
+        if [ -n "$dup" ]; then
+          echo "❌ 마이그레이션 버전이 중복됩니다: $dup"
+          # 버전의 '.'은 정규식 메타문자라 이스케이프한다(V2.1 이 V231 을 잡지 않도록).
+          pattern=$(printf '%s' "$dup" | sed 's/\./\\./g' | paste -sd'|' -)
+          ls src/main/resources/db/migration/V*.sql | grep -E "/V($pattern)__"
+          echo "   빈 번호로 하나를 바꾸세요. 이대로 머지되면 부팅이 실패합니다."
+          exit 1
+        fi
+        echo "✅ 마이그레이션 버전 중복 없음"
+
+  db-check-format:
+    desc: 마이그레이션 파일명이 타임스탬프 형식인지 검사 (CI에서도 실행)
+    # 중복 검사만으로는 옛 순번 방식이 다시 섞이는 것을 못 잡는다. V14__ 하나가 들어와도
+    # 그 순간에는 중복이 아니라 통과하고, 다음 사람이 같은 번호를 집을 때 비로소 걸린다.
+    # 그때는 이미 develop 에 들어가 있어 고치는 비용이 커진다.
+    silent: true
+    cmds:
+      - |
+        # develop 에 이미 있는 파일은 검사하지 않는다. 이미 적용된 마이그레이션은 이름을 바꿀 수
+        # 없고(체크섬), 순번 시절 파일과 이 규칙보다 먼저 머지된 파일도 여기 포함된다.
+        # 범위를 하드코딩하면(V1~V13 식) 그런 파일이 들어오는 순간 검사가 막아버린다.
+        legacy=""
+        if git rev-parse --verify --quiet origin/develop >/dev/null; then
+          legacy=$(git ls-tree --name-only origin/develop -- src/main/resources/db/migration/ 2>/dev/null \
+            | while read -r p; do basename "$p"; done)
+        else
+          echo "⚠️  origin/develop 을 찾지 못해 형식 검사를 건너뜁니다(git fetch origin develop)."
+          exit 0
+        fi
+
+        bad=""
+        for f in src/main/resources/db/migration/V*.sql; do
+          [ -e "$f" ] || continue
+          name=$(basename "$f")
+          printf '%s\n' "$legacy" | grep -qxF "$name" && continue
+          version=$(printf '%s' "$name" | sed 's|^V\([0-9][0-9._]*\)__.*|\1|')
+          # 새 파일은 14자리 타임스탬프여야 한다(yyyyMMddHHmmss).
+          case "$version" in
+            [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]) ;;
+            *) bad="$bad $f" ;;
+          esac
+        done
+        if [ -n "$bad" ]; then
+          echo "❌ 마이그레이션 버전은 타임스탬프(yyyyMMddHHmmss)로 씁니다."
+          for f in $bad; do echo "   $f"; done
+          echo "   순번을 쓰면 두 사람이 같은 번호를 집습니다(database-schema.md 참고)."
+          echo "   task db-new -- add_something 으로 만드세요."
+          exit 1
+        fi
+        echo "✅ 마이그레이션 버전 형식 정상"
+
+  db-new:
+    desc: 새 마이그레이션 파일 만들기 — task db-new -- add_something
+    # 손으로 타임스탬프를 치면 초를 빠뜨리거나 UTC 로 적기 쉽다. 이 태스크가 KST 로 찍어준다.
+    silent: true
+    cmds:
+      - |
+        name="{{.CLI_ARGS}}"
+        if [ -z "$name" ]; then
+          echo "❌ 설명을 주세요. 예) task db-new -- add_profile_image_key_to_member"
+          exit 1
+        fi
+        stamp=$(TZ=Asia/Seoul date +%Y%m%d%H%M%S)
+        file="src/main/resources/db/migration/V${stamp}__${name}.sql"
+        printf -- '-- %s\n-- 왜 이 변경이 필요한지 여기에 적습니다.\n\n' "$name" > "$file"
+        echo "✅ $file"
+
+  clean:
+    desc: build 산출물 및 QueryDSL 생성물 삭제
+    cmds:
+      - '{{.GRADLEW}} clean'
+
+  check:
+    desc: 커밋/PR 전 검증 (pre-commit 전체 + 빌드)
+    cmds:
+      - task: precommit
+      - task: build
+
+  precommit:
+    desc: pre-commit 훅을 전체 파일에 대해 수동 실행
+    cmds:
+      - pre-commit run --all-files
+
+  wrapper:
+    desc: gradle-wrapper.jar 이 없을 때 재생성 (시스템 gradle 필요)
+    cmds:
+      - gradle wrapper --gradle-version 9.5.1

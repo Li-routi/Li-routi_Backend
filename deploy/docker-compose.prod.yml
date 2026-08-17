@@ -1,0 +1,166 @@
+# 서버 운영용 compose (레퍼런스). 서버에서는 이 파일을 /opt/app/docker-compose.yml 로 복사해 쓴다.
+# 비밀값은 같은 폴더의 .env 에서 주입한다(.env.example 참고, 실제 .env 는 레포에 커밋 금지).
+#
+#   scp deploy/docker-compose.prod.yml  ubuntu@<서버>:/opt/app/docker-compose.yml
+#   (서버에서) cp .env.example .env  → 실제 값 입력  → docker compose up -d
+#
+# 메모리 예산(t4g.small 2GB): JVM(힙768m+메타192m) + MySQL(buffer 256m) + Redis(≤200m).
+# 빠듯하므로 아래 상한들을 임의로 늘리지 말 것.
+services:
+  db:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: lirouti
+      MYSQL_USER: lirouti
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      TZ: Asia/Seoul
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --innodb-buffer-pool-size=256M
+    volumes:
+      - dbdata:/var/lib/mysql
+    # 운영 트래픽은 compose 내부 네트워크(db:3306)로만 흐른다. 아래 매핑은 127.0.0.1 에만
+    # 바인딩하므로 퍼블릭 IP·보안그룹으로는 열리지 않고, SSH 터널(로컬 GUI 도구)로만 닿는다.
+    # 0.0.0.0 또는 포트만 적는 형태("3306:3306")로 바꾸면 인터넷에 DB가 노출된다.
+    ports:
+      - "127.0.0.1:3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    # auth(refresh 토큰) 저장소. 2GB 예산을 지키려 maxmemory 상한. 토큰 유실 방지 위해 noeviction.
+    command: ["redis-server", "--maxmemory", "200mb", "--maxmemory-policy", "noeviction", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    # ports 매핑 없음 — redis:6379 내부 전용
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  app:
+    # 정상 배포에서는 워크플로가 .env에 커밋 sha로 덧붙인다(사람이 관리하지 않는다).
+    # 임시 롤백은 이 값을 이전 커밋 sha로 바꾼 뒤 `docker compose pull && docker compose up -d`.
+    # (배포가 prune -af로 옛 이미지를 정리하므로 로컬에 없을 수 있어 pull이 필요하다. 다음 배포에서 원복됨)
+    image: ghcr.io/li-routi/li-routi_backend:${APP_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # DB·Redis는 compose 내부 네트워크 이름으로 접속
+      DB_URL: jdbc:mysql://db:3306/lirouti?serverTimezone=Asia/Seoul&characterEncoding=UTF-8&allowPublicKeyRetrieval=true&useSSL=false
+      DB_USERNAME: lirouti
+      DB_PASSWORD: ${DB_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ""
+      # fail-fast 필수 비밀값 — 없으면 부팅 실패한다
+      JWT_SECRET: ${JWT_SECRET}
+      KAKAO_APP_ID: ${KAKAO_APP_ID}
+      GOOGLE_WEB_CLIENT_ID: ${GOOGLE_WEB_CLIENT_ID}
+      GOOGLE_ALLOWED_ISSUERS: ${GOOGLE_ALLOWED_ISSUERS}
+      AWS_S3_BUCKET: ${AWS_S3_BUCKET}
+      # 미설정/빈 값이면 버킷·리전으로 S3 주소를 계산해 넣는다(앱이 무조건 부팅되게).
+      # path-style(s3.리전/버킷) — 버킷명에 '.'이 있어도 TLS가 깨지지 않는 형식.
+      # CloudFront 등을 붙이면 .env에 AWS_S3_PUBLIC_BASE_URL을 넣어 이 오리진을 덮어쓴다.
+      AWS_S3_PUBLIC_BASE_URL: ${AWS_S3_PUBLIC_BASE_URL:-https://s3.${AWS_REGION:-ap-northeast-2}.amazonaws.com/${AWS_S3_BUCKET}}
+      AWS_REGION: ${AWS_REGION:-ap-northeast-2}
+      # 비공개 미디어(루틴 인증 사진) 조회용 서명 URL 유효 시간.
+      # 업로드용(5분)과 분리한 이유는 수명이 다르기 때문이다 — 조회 URL은 목록 응답에 실려
+      # 화면에 머무는 동안 계속 쓰인다. 짧으면 사진이 깨지고, 길면 유출 시 그만큼 오래 열린다.
+      AWS_S3_VIEW_URL_EXPIRATION: ${AWS_S3_VIEW_URL_EXPIRATION:-PT15M}
+      # 인증 사진 AI 심사. 키는 fail-fast 필수값이라 기본값을 두지 않는다.
+      #
+      # 이 블록에 적지 않으면 .env 에 있어도 컨테이너에 들어가지 않는다 — compose 는 여기
+      # 나열한 것만 넘긴다. 실제로 그 실수를 한 적이 있다: ENV_FILE 에는 키가 있는데 앱에는
+      # 없어서, 미해결 플레이스홀더가 그대로 바인딩된 채 부팅됐고 심사가 조용히 꺼진 상태로
+      # 돌았다(fail-open 이라 전부 통과). 값을 추가할 때 이 목록도 함께 본다.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      AI_REVIEW_ENABLED: ${AI_REVIEW_ENABLED:-true}
+      AI_REVIEW_MODEL: ${AI_REVIEW_MODEL:-claude-haiku-4-5-20251001}
+      AI_REVIEW_TIMEOUT: ${AI_REVIEW_TIMEOUT:-PT20S}
+      AI_REVIEW_MAX_IMAGE_DIMENSION: ${AI_REVIEW_MAX_IMAGE_DIMENSION:-1568}
+      # 재화 충전 결제(포트원 V2). 이것도 fail-fast 필수 비밀값이다 — 없으면 부팅이 막힌다.
+      # 여기서 막히는 편이 낫다: 검증 없이 지급되면 재화가 공짜가 되므로 fail-open 이 아니다.
+      PORTONE_API_SECRET: ${PORTONE_API_SECRET}
+      PORTONE_STORE_ID: ${PORTONE_STORE_ID}
+      PORTONE_CHANNEL_KEY: ${PORTONE_CHANNEL_KEY}
+      PORTONE_ENABLED: ${PORTONE_ENABLED:-true}
+      # 신고 누적 자동 숨김 임계값
+      CHALLENGE_REPORT_HIDE_THRESHOLD: ${CHALLENGE_REPORT_HIDE_THRESHOLD:-3}
+      # FCM 푸시 알림. 서비스 계정 키가 없는 동안은 기본 꺼짐(안전한 기본값) —
+      # 키 파일은 .env(ENV_FILE)에 넣지 않고 아래 volumes로 별도 마운트한다(8번 섹션 참고).
+      FCM_ENABLED: ${FCM_ENABLED:-false}
+      FCM_PROJECT_ID: ${FCM_PROJECT_ID:-}
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/firebase-adminsdk.json
+      # 미참조 미디어 정리
+      MEDIA_CLEANUP_ENABLED: ${MEDIA_CLEANUP_ENABLED:-false}
+      MEDIA_CLEANUP_DRY_RUN: ${MEDIA_CLEANUP_DRY_RUN:-true}
+      # 운영 설정
+      SPRING_PROFILES_ACTIVE: prod
+      # 스키마는 Flyway(db/migration의 V__/R__)가 만든다. Hibernate는 엔티티와 맞는지 대조만 한다.
+      # update로 되돌리면 Hibernate가 스키마를 임의로 고쳐 마이그레이션과 실제가 어긋나므로 쓰지 않는다.
+      # 다만 마이그레이션 문제로 부팅이 막히면 배포가 통째로 멈추므로, .env에 JPA_DDL_AUTO=update를
+      # 넣어 한시적으로 우회할 수 있게 열어 둔다(우회 후에는 반드시 마이그레이션으로 정리할 것).
+      JPA_DDL_AUTO: ${JPA_DDL_AUTO:-validate}
+      JPA_SHOW_SQL: "false"
+      TZ: Asia/Seoul
+      # 2GB 인스턴스에서 힙 상한 필수 — 미설정 시 OOM
+      JAVA_TOOL_OPTIONS: "-Xmx768m -XX:MaxMetaspaceSize=192m"
+    # 외부 트래픽은 Caddy(80·443) 로만 들어온다. 아래 매핑은 127.0.0.1 에만 바인딩하므로
+    # 퍼블릭 IP 로는 닫히고, 배포 헬스체크(localhost:8080)와 SSH 터널만 닿는다.
+    # Caddy 는 compose 내부 네트워크(app:8080)로 붙으므로 이 매핑과 무관하다.
+    #
+    # 보안그룹에서도 8080 을 닫았지만 여기서 한 겹 더 좁힌다. 나중에 누가 디버깅하려고
+    # 보안그룹을 잠깐 열었다가 그대로 두면, 그 순간 X-Forwarded-* 위조 경로가 되살아난다
+    # (server.forward-headers-strategy 는 헤더를 보낸 주체를 따지지 않는다).
+    #
+    # 0.0.0.0 또는 포트만 적는 형태("8080:8080")로 되돌리면 그 방어가 사라진다.
+    # db 가 이미 같은 방식이다.
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      # FCM 서비스 계정 키. .env(ENV_FILE)는 평문 key=value라 JSON 파일을 담기 부적합해서
+      # Caddyfile처럼 별도로 scp하는 파일로 둔다(8번 섹션). FCM_ENABLED=false인 동안은
+      # 앱이 이 경로를 읽지 않으므로, 파일이 없으면 아래 줄 전체를 주석 처리해도 된다 —
+      # 있는 채로 소스 파일이 없으면 Docker가 그 경로에 빈 디렉터리를 만들어 버린다.
+      - ${FCM_CREDENTIALS_HOST_PATH:-./secrets/firebase-adminsdk.json}:/run/secrets/firebase-adminsdk.json:ro
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - app
+    environment:
+      # 없으면 Caddy 가 뜨지 않는다. 배포 워크플로가 먼저 확인한다.
+      LIROUTI_DOMAIN: ${LIROUTI_DOMAIN}
+      LETSENCRYPT_EMAIL: ${LETSENCRYPT_EMAIL:-}
+      TZ: Asia/Seoul
+    ports:
+      - "80:80"     # Let's Encrypt HTTP-01 챌린지 + http→https 리다이렉트에 필요하다
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # 인증서 영속화. 이 볼륨이 없으면 컨테이너를 다시 만들 때마다 재발급되고,
+      # Let's Encrypt 의 주당 발급 한도에 걸려 사이트가 통째로 죽는다.
+      - caddydata:/data
+      - caddyconfig:/config
+
+volumes:
+  dbdata:
+  redisdata:
+  caddydata:
+  caddyconfig:

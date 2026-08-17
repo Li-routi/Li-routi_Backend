@@ -34,8 +34,8 @@ public class SwaggerConfig {
 
     private Info apiInfo() {
         return new Info()
-                .title("Ri-routi API") // API 문서의 제목
-                .description("Ri-routi 프로젝트 API 문서입니다.") // API 문서의 설명
+                .title("Li-Routi API") // API 문서의 제목
+                .description("Li-Routi 프로젝트 API 문서입니다.") // API 문서의 설명
                 .version("1.0.0"); // API 문서의 버전
     }
 
@@ -44,7 +44,7 @@ public class SwaggerConfig {
         // 인증이 필요하지 않은 API들을 그룹핑
         return GroupedOpenApi.builder()
                 .group("1. 인증 불필요")
-                .pathsToMatch("/api/v1/auth/**") // 해당 경로로 시작하는 모든 API를 이 그룹에 포함
+                .pathsToMatch("/api/auth/**") // 해당 경로로 시작하는 모든 API를 이 그룹에 포함
                 .build();
     }
 
@@ -53,8 +53,17 @@ public class SwaggerConfig {
         // 인증이 필요한 API들을 그룹핑
         return GroupedOpenApi.builder()
                 .group("2. JWT 인증 필요")
-                .pathsToMatch("/api/v1/**")
-                .pathsToExclude("/api/v1/auth/**") // 해당 경로는 이 그룹에서 제외
+                .pathsToMatch("/api/**")
+                .pathsToExclude("/api/auth/**", "/api/admin/**") // 공개·관리자 경로는 별도 그룹에서 제공
+                .build();
+    }
+
+    @Bean
+    public GroupedOpenApi adminAPI() {
+        // 관리자 전용 API들을 일반 인증 API와 분리
+        return GroupedOpenApi.builder()
+                .group("3. 관리자 전용")
+                .pathsToMatch("/api/admin/**")
                 .build();
     }
 }
