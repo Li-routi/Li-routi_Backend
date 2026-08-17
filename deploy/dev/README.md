@@ -342,20 +342,35 @@ gh secret set DEV_ENV_FILE < <작성한 파일>       # 등록 후 그 파일은
 워크플로 자체는 이미 갈라져 있다(`deploy-prod.yml` · `deploy-dev.yml` · 공용 `build.yml`).
 남은 것은 브랜치 상태와 실행 순서다.
 
-### `main` 이 한참 뒤처져 있다
+### `main` 은 배포 소스였던 적이 없다
 
-`main` 브랜치는 존재하지만 **초기 세팅 커밋에서 멈춰 있다.** 확인 방법은 이렇다.
+`main` 브랜치는 존재하지만 **초기 세팅 커밋에서 멈춰 있다.** Flyway 도입 이전이라 마이그레이션
+파일이 한 장도 없다.
+
+**여기서 커밋 수를 세면 위험도를 거꾸로 읽게 된다.**
 
 ```bash
-git fetch origin main develop
-git rev-list --count origin/main..origin/develop   # develop 에만 있는 커밋 수
+git rev-list --count origin/main..origin/develop   # 320 — 겁나는 숫자지만 오해를 부른다
 ```
 
-이 상태로 `main` 에 푸시하면 **그 옛 코드가 운영에 배포된다.** 게다가 운영 DB 는 최신 마이그레이션까지
-적용돼 있는데 jar 이 옛것이면 Flyway `validate` 가 어긋남을 잡아 **부팅이 막히고 재시작 루프**가 된다.
+옛 `deploy.yml` 이 **`develop` 머지마다 운영에 배포**했으므로, **운영은 이미 `develop` 수준이다.**
+`main` 은 그동안 아무 데도 쓰이지 않고 방치된 브랜치다. 실제로 봐야 할 것은 `main` 이 아니라
+**운영이 지금 돌리는 커밋**이다.
 
-그래서 `main` 을 먼저 `develop` 수준으로 올린다 — **릴리스 PR(`develop` → `main`)** 을 연다.
-이후로도 운영 배포는 이 경로로만 한다.
+```bash
+ssh li-routi 'grep ^APP_IMAGE_TAG /opt/app/.env'          # 운영 실행본 sha
+git log --oneline <그sha>..origin/develop                  # 진짜로 새로 나갈 것
+git diff --name-status <그sha> origin/develop -- src/main/resources/db/migration/
+```
+
+첫 릴리스 PR 때 이렇게 재어 보니 **커밋 1개, 마이그레이션 0개, Java 변경 0개**였다. 320 이 아니었다.
+
+그러니 `main` 을 `develop` 수준으로 올리는 **릴리스 PR(`develop` → `main`)** 은 "밀린 320개를
+운영에 쏟는 일"이 아니라 **`main` 을 배포 가능한 기준선으로 세우는 일**이다. 이후로도 운영 배포는
+이 경로로만 한다.
+
+> **다음부터는 이 오해가 생기지 않는다.** `main` 이 한 번 정렬되고 나면 `origin/main..origin/develop`
+> 이 곧 "운영에 새로 나갈 것" 과 같아진다. 위의 `APP_IMAGE_TAG` 대조가 필요한 것은 이번 한 번뿐이다.
 
 ### 순서
 
@@ -384,11 +399,35 @@ Flyway 로그의 `Integer display width is deprecated` 경고는 정상이다. M
 
 > **`app` 과 `caddy` 에는 healthcheck 가 없다.** `docker compose ps` 의 상태만 보고 "떴다"고 판단하면 안 된다 — `Up` 은 프로세스가 살아 있다는 뜻일 뿐이다. 실제 확인은 `curl https://lirouti-dev.kro.kr/health` 로 한다.
 
-### 이 검증이 덮지 못하는 것
+### 이 검증이 덮지 못하는 것 — `R__` 덮어쓰기
 
 개발 DB 는 **빈 상태에서** 70개를 처음부터 적용했다. 운영 DB 는 **이미 데이터가 있는 상태에서** 밀린 것만 이어 붙인다. **성격이 다른 실행이다.**
 
-특히 **`R__` 시드가 기존 마스터 데이터를 덮어쓰는 경로는 여기서 확인되지 않는다.** 빈 표에 `INSERT` 하는 것과, 값이 들어 있는 행을 `ON DUPLICATE KEY UPDATE` 로 갈아치우는 것은 다른 일이다. 시드를 고친 배포를 운영에 넘길 때는 개발이 통과했다는 사실만으로 안심하지 않는다.
+특히 `R__` 시드가 그렇다. 빈 표에 `INSERT` 하는 것과, 값이 들어 있는 행을 `ON DUPLICATE KEY UPDATE` 로 갈아치우는 것은 다른 일이다. **개발 서버는 앞의 것만 해 보고, 운영은 뒤의 것을 한다.**
+
+그리고 뒤의 것은 가정이 아니다. 운영 `flyway_schema_history` 를 세어 보면 이미 여러 번 일어났다.
+
+```sql
+SELECT script, COUNT(*) AS runs, MIN(installed_on), MAX(installed_on)
+FROM flyway_schema_history WHERE version IS NULL GROUP BY script ORDER BY runs DESC;
+```
+
+| 시드 | 재실행 | 기간 |
+| --- | --- | --- |
+| `R__seed_challenge.sql` | **4회** | 2026-07-26 ~ 08-13 |
+| `R__seed_avatar_item.sql` | **4회** | 2026-08-11 ~ 08-13 |
+| `R__seed_character.sql` | **2회** | 2026-08-13 |
+| 나머지 넷 | 각 1회 | |
+
+**한 달도 안 되는 사이에 마스터 데이터를 열 번 넘게 갈아엎었다는 뜻이다.** `R__` 는 파일 내용이 바뀌면 다시 도는 것이 정상 동작이므로, 이 기록 자체는 사고가 아니다. 요점은 **그 경로가 운영에서 상시로 열려 있고, 개발 서버가 그것을 재현하지 못한다**는 것이다.
+
+그래서 **시드를 고친 배포를 운영에 넘길 때는 개발이 초록불이라는 사실이 근거가 되지 않는다.** 최소한 이것을 손으로 본다.
+
+- 바뀐 시드가 건드리는 표에 **운영에만 있는 행**(백오피스 입력, 사용자 생성분)이 있는가
+- `id` 를 바꾸지 않았는가 — 남의 보유·참여 행이 다른 것을 가리키게 된다
+- 지우는 행이 있다면, 그 행을 참조하는 데이터가 운영에 있는가
+
+> 개발 서버로 이것까지 잡으려면 **운영 백업을 복원한 DB 위에서** 배포해 봐야 한다. 그때 반드시 `fcm_device` 를 비워야 하는 이유는 아래 [운영 데이터를 개발로 가져올 때](#운영-데이터를-개발로-가져올-때) 를 볼 것.
 
 ---
 
