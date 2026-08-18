@@ -1,5 +1,6 @@
 package com.lirouti.global.auth.filter;
 
+import com.lirouti.domain.achievement.service.command.MidnightAccessCommandService;
 import com.lirouti.domain.auth.exception.AuthException;
 import com.lirouti.domain.auth.exception.code.error.AuthErrorCode;
 import com.lirouti.global.auth.CustomUserDetails;
@@ -39,12 +40,14 @@ class JwtAuthFilterTest {
     private FilterChain filterChain;
     @Mock
     private Claims claims;
+    @Mock
+    private MidnightAccessCommandService midnightAccessCommandService;
 
     private JwtAuthFilter jwtAuthFilter;
 
     @BeforeEach
     void setUp() {
-        jwtAuthFilter = new JwtAuthFilter(jwtUtil, redisUtil);
+        jwtAuthFilter = new JwtAuthFilter(jwtUtil, redisUtil, midnightAccessCommandService);
         when(request.getHeader("Authorization")).thenReturn("Bearer " + TOKEN);
         when(jwtUtil.getClaims(TOKEN)).thenReturn(claims);
     }
