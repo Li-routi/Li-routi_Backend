@@ -5,7 +5,6 @@ import com.lirouti.domain.group.enums.GroupJoinUnavailableReason;
 import com.lirouti.domain.group.enums.GroupMemberRole;
 import com.lirouti.domain.group.enums.GroupMemberStatus;
 import com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus;
-import com.lirouti.domain.home.dto.response.HomeResDTO;
 import com.lirouti.domain.routine.enums.RoutineCategoryColor;
 import com.lirouti.domain.character.dto.response.CharacterResDTO;
 import com.lirouti.domain.shop.enums.AvatarSlot;
@@ -94,7 +93,7 @@ public final class GroupResDTO {
             long totalDisappointmentCount,
             DailyProgress dailyProgress,
             @Schema(description = "대표로 설정한 업적. 설정 안 했으면 null", nullable = true)
-            HomeResDTO.RepresentativeAchievement representativeAchievement
+            RepresentativeAchievement representativeAchievement
     ) {
     }
 
