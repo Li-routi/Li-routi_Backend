@@ -179,9 +179,9 @@ ai:
     # 인증 요청 하나가 이만큼 늦어질 수 있다. 사용자가 그 시간을 그대로 기다린다.
     # 초과하면 심사를 못 한 것으로 보고 통과시킨다(fail-open) — 막히지는 않는다.
     timeout: ${AI_REVIEW_TIMEOUT:PT20S}
-    # AI 에 보내기 전에 줄일 긴 변 픽셀. 심사기가 자기 쪽에서 줄여 주지 않으므로 이 값이 곧
-    # 이미지 비용이다. 낮출수록 싸지지만 작게 찍힌 신분증 같은 것을 놓치면 유해 판정이
-    # 헐거워진다 — 비용만 보고 내리지 않는다. 원본은 S3 에 그대로 남는다.
+    # AI 에 보내기 전에 줄일 긴 변 픽셀. 성능이 아니라 비용을 정하는 값이다 —
+    # 근거는 AiReviewProperties.maxImageDimension 에 있다.
+    # 배포에는 docker-compose.prod.yml 의 기본값이 적용되므로 두 값을 같이 옮긴다.
     max-image-dimension: ${AI_REVIEW_MAX_IMAGE_DIMENSION:1024}
     # 심사가 장애로 답을 못 주면 통과시키지 않고 보류한 뒤, 복구되면 다시 심사한다.
     pending:

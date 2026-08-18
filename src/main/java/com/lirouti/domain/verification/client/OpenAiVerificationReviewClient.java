@@ -41,12 +41,11 @@ public class OpenAiVerificationReviewClient {
     private static final String SCHEMA_NAME = "verification_review";
 
     /**
-     * 이미지 해상도 정책.
+     * 이미지 해상도 정책. <b>고정이며 설정으로 열지 않는다.</b>
      *
-     * <p><b>{@code auto} 는 모델이 원본 패치 수를 그대로 쓴다는 뜻이다</b> — 서버가 패치 예산이나
-     * 픽셀 상한으로 줄여 주지 않는다. 그래서 비용을 정하는 것은 우리가 보내기 전에 줄이는
-     * {@code max-image-dimension} 하나뿐이고, 조절 손잡이를 이 값과 둘로 나누지 않으려고
-     * 여기서 고정한다. 손잡이가 둘이면 서로 상쇄돼 어느 쪽이 듣는지 알 수 없다.
+     * <p>{@code auto} 는 모델이 원본 패치 수를 그대로 쓴다는 뜻이라, 크기를 줄이는 손잡이가
+     * {@link AiReviewProperties#getMaxImageDimension()} 하나만 남는다. 손잡이가 둘이면 서로
+     * 상쇄돼 어느 쪽이 듣는지 알 수 없다. 비용 근거는 그 설정 쪽에 적혀 있다.
      */
     private static final String IMAGE_DETAIL = "auto";
 
@@ -203,8 +202,10 @@ public class OpenAiVerificationReviewClient {
      * <p>순서가 중요하다. <b>거부 파트를 텍스트 파트보다 먼저 본다</b> — 거부를 못 알아보면
      * 판정 JSON 이 없다는 이유로 "해석 실패"가 되고, 그건 fail-open 이라 통과가 된다.
      */
+    // package-private 인 것은 테스트 때문이다. 이 메서드의 거부 분기가 이 클래스에서 가장
+    // 중요한데, 호출 경로 전체를 목으로 덮으면 그 분기가 한 번도 실행되지 않는다.
     @SuppressWarnings("unchecked")
-    private VerificationReview parse(Map<String, Object> response, String challengeName) {
+    VerificationReview parse(Map<String, Object> response, String challengeName) {
         if (response == null) {
             return unparsable("응답이 비어 있습니다", challengeName);
         }
@@ -249,10 +250,15 @@ public class OpenAiVerificationReviewClient {
         try {
             values = objectMapper.readValue(reviewJson, Map.class);
         } catch (Exception e) {
+            // 본문은 남기지 않는다 — 사진에 대한 서술이 들어 있을 수 있다. 계약이 바뀌어
+            // 보류가 쌓일 때 "빈 응답인가, 형식이 깨진 긴 응답인가"만 가릴 수 있으면 된다.
+            log.debug("판정 JSON 을 파싱하지 못했습니다. 길이={}", reviewJson.length());
             return unparsable("판정 JSON 을 읽지 못했습니다", challengeName);
         }
 
         if (!(values.get("approved") instanceof Boolean decision)) {
+            // 값이 아니라 키 이름만 남긴다. 스키마가 바뀐 것인지 필드가 빠진 것인지 가른다.
+            log.debug("판정 JSON 에 approved 가 없습니다. 키={}", values.keySet());
             return unparsable("approved 가 없습니다", challengeName);
         }
         if (decision) {
