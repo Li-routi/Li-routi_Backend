@@ -40,7 +40,14 @@ public class RedisConfig implements CachingConfigurer {
 	private static final Duration ROUTINE_TEMPLATES_TTL = Duration.ofHours(6);
 	private static final Duration CHAT_EMOTICONS_TTL = Duration.ofMinutes(30);
 	private static final String CACHE_KEY_PREFIX = "lirouti:cache:";
-	private static final String CACHE_VERSION = ":v1::";
+	private static final String DEFAULT_CACHE_VERSION = ":v1::";
+	/*
+	 * R__seed_routine.sql이 고정 루틴의 이름·활성 상태·노출 순서를 바꾸면
+	 * ROUTINE_TEMPLATES_CACHE_VERSION만 올려 routineTemplates namespace를 교체한다.
+	 * 캐시 payload 구조가 바뀌는 경우에도 해당 캐시의 버전을 올린다.
+	 */
+	private static final String ROUTINE_TEMPLATES_CACHE_VERSION = ":v1::";
+	private static final String CHAT_EMOTICONS_CACHE_VERSION = ":v1::";
 
 	@Value("${spring.data.redis.host}")
 	private String host;
@@ -111,7 +118,7 @@ public class RedisConfig implements CachingConfigurer {
 						.fromSerializer(new StringRedisSerializer()))
 				.serializeValuesWith(
 						RedisSerializationContext.SerializationPair.fromSerializer(serializer))
-				.computePrefixWith(cacheName -> CACHE_KEY_PREFIX + cacheName + CACHE_VERSION)
+				.computePrefixWith(cacheName -> CACHE_KEY_PREFIX + cacheName + cacheVersion(cacheName))
 				.disableCachingNullValues()
 				.entryTtl(DEFAULT_CACHE_TTL);
 
@@ -126,6 +133,14 @@ public class RedisConfig implements CachingConfigurer {
 				.withInitialCacheConfigurations(cacheConfigurations)
 				.enableStatistics()
 				.build();
+	}
+
+	private static String cacheVersion(String cacheName) {
+		return switch (cacheName) {
+			case ROUTINE_TEMPLATES_CACHE -> ROUTINE_TEMPLATES_CACHE_VERSION;
+			case CHAT_EMOTICONS_CACHE -> CHAT_EMOTICONS_CACHE_VERSION;
+			default -> DEFAULT_CACHE_VERSION;
+		};
 	}
 
 	@Bean
