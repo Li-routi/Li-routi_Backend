@@ -23,7 +23,10 @@ CREATE TABLE `avatar_purchase`
     -- 이것이 없으면 키 재사용이 공짜 아이템이 된다. 지갑은 같은 키를 "이미 처리한 요청" 으로
     -- 보아 차감 없이 예전 결과를 돌려주는데, 그 전제는 "같은 요청" 이다. 장바구니가 달라졌는데
     -- 키가 같으면 전제가 깨져 보유 행만 생기고 값이 빠지지 않는다.
-    `item_fingerprint` CHAR(64)     NOT NULL,
+    --
+    -- 길이가 늘 64 라 CHAR 가 맞아 보이지만 VARCHAR 로 둔다. 엔티티의 @Column(length = 64) 를
+    -- Hibernate 가 varchar 로 읽으므로, CHAR 로 만들면 ddl-auto=validate 와 어긋날 수 있다.
+    `item_fingerprint` VARCHAR(64)  NOT NULL,
 
     `purchased_at`     DATETIME(6)  NOT NULL,
     `created_at`       DATETIME(6)  NOT NULL,

@@ -45,6 +45,14 @@ public interface ShopControllerDocs {
                     두 번 결제되지 않고, 새 구매는 새 키로 보낸다. 아이템 id 로 만들면 같은
                     묶음을 다시 사는 정상 요청이 조용히 건너뛰어진다.
 
+                    **같은 키로 같은 장바구니를 다시 보내면 처음 결과가 그대로 나간다**
+                    (200). 응답을 못 받아 다시 보내는 경우라, 이미 가졌다는 오류가 아니라
+                    성공이 나가야 한다.
+
+                    **장바구니를 바꿨으면 반드시 새 키를 만들어야 한다.** 같은 키에 다른
+                    아이템을 담아 보내면 `SHOP409_4` 로 거절한다 — 그대로 진행하면 보유만
+                    생기고 값이 빠지지 않아 아이템이 공짜가 된다.
+
                     **입히지 않는다.** 같은 자리 아이템을 둘 이상 함께 사면 어느 쪽을 입힐지
                     정할 수 없기 때문이다. 착용은 `PUT /api/members/me/avatar` 가 맡는다.
 
@@ -58,6 +66,13 @@ public interface ShopControllerDocs {
                     - `SHOP409_3` 재화 부족 → `result.shortages` 에 **모자란 재화를 전부**
                       담는다(`required`·`balance`·`shortfall`). 하나씩 알려주면 충전하고
                       돌아왔을 때 다른 재화로 또 막히기 때문이다
+
+                    아래 둘은 **`result` 가 비어 있다.** 고칠 대상이 특정 아이템이 아니라
+                    요청 자체이기 때문이다.
+
+                    - `SHOP400_3` 빈 장바구니
+                    - `SHOP409_4` **이미 쓴 키를 다른 장바구니로 보냄** → 새 키를 만들어
+                      다시 보낸다. 같은 키로 다시 보내도 계속 거절된다
                     """
     )
     ApiResponse<ShopResDTO.PurchaseResult> purchase(ShopReqDTO.Purchase request,

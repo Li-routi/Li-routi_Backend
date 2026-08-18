@@ -62,6 +62,19 @@ public enum ShopErrorCode implements BaseErrorCode {
     ),
 
     /**
+     * 빈 장바구니로 구매를 부른 경우.
+     *
+     * <p>요청 DTO 의 {@code @NotEmpty} 가 정상 경로를 막지만, <b>그 방어는 컨트롤러를 거칠
+     * 때만 있다.</b> 다른 호출부가 생기면 빈 목록이 그대로 들어와 서버 오류로 나가므로,
+     * 서비스 진입에서도 도메인 오류로 명시해 거절한다.
+     */
+    EMPTY_CART(
+            HttpStatus.BAD_REQUEST,
+            "구매할 아이템을 하나 이상 선택해야 합니다.",
+            "SHOP400_3"
+    ),
+
+    /**
      * 재화가 모자라 구매를 거절한 경우.
      *
      * <p>지갑의 {@code WALLET409_1} 을 그대로 쓰지 않는 이유는 <b>부족분을 함께 실어야</b>

@@ -96,6 +96,12 @@ public class ShopCommandService {
         Member member = lockMember(memberId);
 
         List<Long> requestedIds = itemIds == null ? List.of() : itemIds;
+        // 요청 DTO 의 @NotEmpty 가 정상 경로를 막지만 그 방어는 컨트롤러를 거칠 때만 있다.
+        // 여기서 걸러 두지 않으면 빈 목록이 아래 지문 계산까지 내려가 서버 오류로 나간다.
+        if (requestedIds.isEmpty()) {
+            throw new ShopException(ShopErrorCode.EMPTY_CART);
+        }
+
         // 착용과 달리 중복을 조용히 합치지 않는다. 화면이 이미 개수와 금액을 보여준 뒤라,
         // 말없이 하나를 지우면 사용자가 본 금액과 실제 결제액이 어긋난다.
         List<Long> duplicated = duplicatesOf(requestedIds);
