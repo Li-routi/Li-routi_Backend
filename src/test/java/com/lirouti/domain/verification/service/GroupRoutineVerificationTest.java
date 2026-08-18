@@ -30,6 +30,7 @@ import com.lirouti.domain.member.enums.Role;
 import com.lirouti.domain.member.enums.SocialProvider;
 import com.lirouti.domain.verification.dto.request.VerificationReqDTO;
 import com.lirouti.domain.verification.dto.response.VerificationResDTO;
+import com.lirouti.domain.verification.entity.GroupRoutineVerification;
 import com.lirouti.domain.verification.exception.VerificationException;
 import com.lirouti.domain.verification.exception.code.error.VerificationErrorCode;
 import com.lirouti.domain.verification.repository.GroupRoutineVerificationRepository;
@@ -191,6 +192,26 @@ class GroupRoutineVerificationTest {
     }
 
     @Test
+    @DisplayName("신규 인증 저장 시 auditing createdAt을 그룹의 마지막 인증 등록 시각으로 보관한다")
+    void verify_UpdatesGroupLastVerificationAtWithVerificationCreatedAt() {
+        Member member = member();
+        GroupRoutineAssignment assignment = assignment(member, GroupRoutineAssignmentStatus.IN_PROGRESS);
+        Long groupId = groupIdOf(assignment);
+
+        verificationService.verifyGroupRoutine(member.getId(), groupId, routineIdOf(assignment), request());
+
+        em.flush();
+        em.clear();
+
+        GroupRoutineVerification persistedVerification = verificationRepository
+                .findByAssignmentId(assignment.getId())
+                .orElseThrow();
+        assertThat(persistedVerification.getCreatedAt()).isNotNull();
+        assertThat(em.find(Group.class, groupId).getLastVerificationAt())
+                .isEqualTo(persistedVerification.getCreatedAt());
+    }
+
+    @Test
     @DisplayName("이미 인증한 할당은 다시 인증할 수 없다")
     void verify_Twice_IsBlocked() {
         // given
@@ -296,5 +317,10 @@ class GroupRoutineVerificationTest {
         GroupMember authorMembership = em.find(GroupMember.class, authorMembershipId);
         assertThat(authorMembership.getTotalLikeCount()).isZero();
         assertThat(authorMembership.getTotalDisappointmentCount()).isZero();
+        GroupRoutineVerification persistedVerification = verificationRepository
+                .findById(verified.verificationId())
+                .orElseThrow();
+        assertThat(em.find(Group.class, groupId).getLastVerificationAt())
+                .isEqualTo(persistedVerification.getCreatedAt());
     }
 }

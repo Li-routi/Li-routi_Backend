@@ -27,7 +27,7 @@ import com.lirouti.domain.member.repository.MemberRepository;
 import com.lirouti.domain.notification.enums.NotificationCategory;
 import com.lirouti.domain.notification.enums.NotificationType;
 import com.lirouti.domain.notification.event.NotificationRequestedEvent;
-import com.lirouti.domain.verification.client.AnthropicVerificationReviewClient;
+import com.lirouti.domain.verification.client.OpenAiVerificationReviewClient;
 import com.lirouti.domain.verification.client.ReviewOutcome;
 import com.lirouti.domain.verification.client.ReviewRejection;
 import com.lirouti.domain.verification.client.VerificationReview;
@@ -77,7 +77,7 @@ public class ChallengeVerificationService {
     private final ChallengeReportProperties challengeReportProperties;
     private final AiReviewProperties aiReviewProperties;
     private final PendingReviewProperties pendingReviewProperties;
-    private final AnthropicVerificationReviewClient reviewClient;
+    private final OpenAiVerificationReviewClient reviewClient;
     // 인증 저장의 트랜잭션 경계는 이 빈에 있다. 자기 호출로는 트랜잭션이 걸리지 않아 분리했다.
     private final ChallengeVerificationCommandService challengeVerificationCommandService;
     // 미디어 key의 발급 규칙·공개 URL 조립은 media 도메인이 소유한다. DB를 다루지 않는 유틸성 서비스다.
@@ -199,7 +199,7 @@ public class ChallengeVerificationService {
      *
      * <h3>심사기가 답을 못 주면 통과시킨다</h3>
      * 장애·타임아웃·설정 꺼짐은 전부 통과다. 외부 API 하나가 인증 기능 전체를 멈추게 두지
-     * 않는다는 결정이다. 막는 쪽으로 두면 Anthropic 이 죽는 순간 아무도 인증을 못 하는데,
+     * 않는다는 결정이다. 막는 쪽으로 두면 심사기가 죽는 순간 아무도 인증을 못 하는데,
      * 그때 어차피 킬 스위치를 켜서 통과시키게 된다. 그럴 거면 처음부터 통과시키고 로그로
      * 드러내는 편이 정직하다.
      *

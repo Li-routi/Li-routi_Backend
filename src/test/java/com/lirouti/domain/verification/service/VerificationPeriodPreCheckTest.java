@@ -10,7 +10,7 @@ import com.lirouti.domain.member.enums.SocialProvider;
 import com.lirouti.domain.media.service.MediaImage;
 import com.lirouti.domain.media.service.MediaImageLoad;
 import com.lirouti.domain.media.service.MediaService;
-import com.lirouti.domain.verification.client.AnthropicVerificationReviewClient;
+import com.lirouti.domain.verification.client.OpenAiVerificationReviewClient;
 import com.lirouti.domain.verification.dto.request.ChallengeVerificationReqDTO;
 import com.lirouti.domain.verification.client.VerificationReview;
 import com.lirouti.domain.verification.entity.ChallengeVerification;
@@ -66,7 +66,7 @@ class VerificationPeriodPreCheckTest {
     private ChallengeVerificationService challengeVerificationService;
 
     @MockitoBean
-    private AnthropicVerificationReviewClient reviewClient;
+    private OpenAiVerificationReviewClient reviewClient;
     @MockitoBean
     private MediaService mediaService;
 

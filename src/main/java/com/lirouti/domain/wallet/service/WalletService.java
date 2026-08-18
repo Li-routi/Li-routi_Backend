@@ -1,5 +1,6 @@
 package com.lirouti.domain.wallet.service;
 
+import com.lirouti.domain.wallet.enums.Currency;
 import com.lirouti.domain.wallet.service.command.WalletCommandService;
 import com.lirouti.domain.wallet.service.command.WalletCommandService.WalletCommand;
 import lombok.RequiredArgsConstructor;
@@ -44,6 +45,18 @@ public class WalletService {
         } catch (DataIntegrityViolationException e) {
             return recover(command, e, () -> walletCommandService.deduct(command, amount));
         }
+    }
+
+    /**
+     * 차감 전에 잔액을 확인한다. <b>차감과 같은 잠금을 건다.</b>
+     *
+     * <p>여러 재화를 한 번에 쓰는 호출부가 <b>모자란 재화를 한꺼번에</b> 모으기 위한 것이다.
+     * 자세한 이유는 {@code WalletCommandService#lockedBalanceOf} 를 볼 것.
+     *
+     * <p>여기서는 예외를 감싸지 않는다 — 읽기만 하므로 지갑 생성 경합이 일어날 자리가 없다.
+     */
+    public int lockedBalanceOf(Long memberId, Currency currency) {
+        return walletCommandService.lockedBalanceOf(memberId, currency);
     }
 
     /**

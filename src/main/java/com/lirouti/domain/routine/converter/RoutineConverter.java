@@ -1,6 +1,7 @@
 package com.lirouti.domain.routine.converter;
 
 import com.lirouti.domain.member.entity.Member;
+import com.lirouti.domain.routine.cache.RoutineTemplateCacheReader.CachedTemplate;
 import com.lirouti.domain.routine.dto.request.RoutineReqDTO;
 import com.lirouti.domain.routine.dto.response.RoutineResDTO;
 import com.lirouti.domain.routine.entity.MemberRoutine;
@@ -105,6 +106,23 @@ public final class RoutineConverter {
     }
 
     /**
+     * 캐시된 기본 루틴 공통 값에 요청 회원의 추가 상태를 조합한다.
+     * 캐시 목록의 노출 순서를 그대로 유지한다.
+     */
+    public static RoutineResDTO.TemplateList toTemplateListFromCache(
+            List<CachedTemplate> templates,
+            Set<Long> addedTemplateIds
+    ) {
+        return RoutineResDTO.TemplateList.builder()
+                .templates(templates.stream()
+                        .map(template -> toTemplate(
+                                template,
+                                addedTemplateIds.contains(template.templateId())))
+                        .toList())
+                .build();
+    }
+
+    /**
      * 벌크 생성 결과를 응답으로 변환한다.
      *
      * @param routines 저장된 개인 루틴 목록. 요청 순서를 유지한다
@@ -148,6 +166,19 @@ public final class RoutineConverter {
                 .categoryId(template.getCategory().getId())
                 .categoryName(template.getCategory().getName())
                 .name(template.getName())
+                .alreadyAdded(alreadyAdded)
+                .build();
+    }
+
+    private static RoutineResDTO.Template toTemplate(
+            CachedTemplate template,
+            boolean alreadyAdded
+    ) {
+        return RoutineResDTO.Template.builder()
+                .templateId(template.templateId())
+                .categoryId(template.categoryId())
+                .categoryName(template.categoryName())
+                .name(template.name())
                 .alreadyAdded(alreadyAdded)
                 .build();
     }
