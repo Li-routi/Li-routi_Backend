@@ -15,6 +15,9 @@
 --
 -- unlocked_date 를 KST 로 못박는다. CURRENT_DATE 는 DB 세션 시간대를 따르는데, 이 열의
 -- 다른 값들은 애플리케이션이 KST 로 넣는다. 세션이 UTC 인 환경에서 돌면 하루가 밀린다.
+--
+-- 탈퇴 회원(is_active = 0)은 뺀다. 화면을 볼 사람이 없어 채워도 쓰이지 않고, 탈퇴 계정에
+-- 새 데이터를 만드는 것은 탈퇴의 뜻과 어긋난다.
 INSERT INTO member_character (member_id, character_id, unlocked_date, created_at, updated_at)
 SELECT m.id,
        c.id,
@@ -23,7 +26,8 @@ SELECT m.id,
        NOW(6)
 FROM member m
          CROSS JOIN `avatar_character` c
-WHERE c.active = 1
+WHERE m.is_active = 1
+  AND c.active = 1
   AND NOT EXISTS (SELECT 1
                   FROM character_unlock_condition cc
                   WHERE cc.character_id = c.id)
@@ -40,13 +44,18 @@ WHERE c.active = 1
 -- 업적 보상으로 캐릭터를 먼저 받아 보유만 있고 선택이 빈 회원도 여기서 함께 메워진다.
 --
 -- 복합 FK 가 member_character 를 참조하므로 보유가 먼저다. 순서를 뒤집으면 실패한다.
+--
+-- 여기서도 탈퇴 회원을 뺀다. 위에서 보유를 안 넣었어도, 탈퇴 전에 캐릭터를 얻어 두고 선택만
+-- 비어 있는 계정이 있을 수 있다.
 INSERT INTO member_selected_character (member_id, character_id, created_at, updated_at)
 SELECT mc.member_id,
        MIN(mc.character_id),
        NOW(6),
        NOW(6)
 FROM member_character mc
-WHERE NOT EXISTS (SELECT 1
+         JOIN member m ON m.id = mc.member_id
+WHERE m.is_active = 1
+  AND NOT EXISTS (SELECT 1
                   FROM member_selected_character msc
                   WHERE msc.member_id = mc.member_id)
 GROUP BY mc.member_id;
