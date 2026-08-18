@@ -90,4 +90,13 @@ public class NotificationController implements NotificationControllerDocs {
         return ApiResponse.onSuccess(GeneralSuccessCode.OK,
                 commandService.markAllRead(user.getMemberId()));
     }
+
+    /** 시스템 알림을 눌러 앱에 들어왔음을 기록한다. 알림 클릭 기반 업적(까루) 진행도에 반영된다. */
+    @Override
+    @PostMapping("/{notificationId}/click")
+    public ApiResponse<Void> markClicked(@AuthenticationPrincipal CustomUserDetails user,
+                                         @PathVariable Long notificationId) {
+        commandService.markClicked(user.getMemberId(), notificationId);
+        return ApiResponse.onSuccess(GeneralSuccessCode.OK, null);
+    }
 }

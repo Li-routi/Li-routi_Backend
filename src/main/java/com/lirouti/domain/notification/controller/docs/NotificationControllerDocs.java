@@ -310,4 +310,9 @@ public interface NotificationControllerDocs {
     ApiResponse<NotificationResDTO.ReadAll> markAllRead(
             @Parameter(hidden = true) CustomUserDetails user
     );
+
+    ApiResponse<Void> markClicked(
+            @Parameter(hidden = true) CustomUserDetails user,
+            @Parameter(description = "클릭된 알림 ID") Long notificationId
+    );
 }
