@@ -5,8 +5,10 @@ import com.lirouti.domain.achievement.dto.request.AchievementReqDTO;
 import com.lirouti.domain.achievement.dto.response.AchievementResDTO;
 import com.lirouti.domain.achievement.exception.code.success.AchievementSuccessCode;
 import com.lirouti.domain.achievement.service.AchievementClaimService;
+import com.lirouti.domain.achievement.service.command.RepresentativeAchievementCommandService;
 import com.lirouti.domain.achievement.service.command.WaveRoutineCommandService;
 import com.lirouti.domain.achievement.service.query.AchievementQueryService;
+import com.lirouti.domain.achievement.service.query.RepresentativeAchievementQueryService;
 import com.lirouti.domain.achievement.service.query.WaveRoutineQueryService;
 import com.lirouti.global.apiPayload.ApiResponse;
 import com.lirouti.global.auth.CustomUserDetails;
@@ -25,6 +27,9 @@ public class AchievementController implements AchievementControllerDocs {
 
     private final WaveRoutineCommandService waveRoutineCommandService;
     private final WaveRoutineQueryService waveRoutineQueryService;
+
+    private final RepresentativeAchievementCommandService representativeAchievementCommandService;
+    private final RepresentativeAchievementQueryService representativeAchievementQueryService;
 
     @Override
     @GetMapping
@@ -69,5 +74,31 @@ public class AchievementController implements AchievementControllerDocs {
     ) {
         AchievementResDTO.WaveRoutineStatus result = waveRoutineQueryService.getStatus(userDetails.getMemberId());
         return ApiResponse.onSuccess(AchievementSuccessCode.WAVE_ROUTINE_FETCH_SUCCESS, result);
+    }
+
+    @PutMapping("/representative")
+    public ApiResponse<Void> selectRepresentative(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @Valid @RequestBody AchievementReqDTO.SelectRepresentativeAchievement request
+    ) {
+        representativeAchievementCommandService.select(userDetails.getMemberId(), request.achievementId());
+        return ApiResponse.onSuccess(AchievementSuccessCode.REPRESENTATIVE_SELECT_SUCCESS, null);
+    }
+
+    @DeleteMapping("/representative")
+    public ApiResponse<Void> clearRepresentative(
+            @AuthenticationPrincipal CustomUserDetails userDetails
+    ) {
+        representativeAchievementCommandService.clear(userDetails.getMemberId());
+        return ApiResponse.onSuccess(AchievementSuccessCode.REPRESENTATIVE_CLEAR_SUCCESS, null);
+    }
+
+    @GetMapping("/representative/selectable")
+    public ApiResponse<AchievementResDTO.ClaimedBadgeAchievements> getSelectableRepresentative(
+            @AuthenticationPrincipal CustomUserDetails userDetails
+    ) {
+        AchievementResDTO.ClaimedBadgeAchievements result =
+                representativeAchievementQueryService.getSelectableBadges(userDetails.getMemberId());
+        return ApiResponse.onSuccess(AchievementSuccessCode.REPRESENTATIVE_LIST_FETCH_SUCCESS, result);
     }
 }

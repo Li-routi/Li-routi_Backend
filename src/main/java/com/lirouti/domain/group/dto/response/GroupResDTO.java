@@ -5,6 +5,7 @@ import com.lirouti.domain.group.enums.GroupJoinUnavailableReason;
 import com.lirouti.domain.group.enums.GroupMemberRole;
 import com.lirouti.domain.group.enums.GroupMemberStatus;
 import com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus;
+import com.lirouti.domain.home.dto.response.HomeResDTO;
 import com.lirouti.domain.routine.enums.RoutineCategoryColor;
 import com.lirouti.domain.character.dto.response.CharacterResDTO;
 import com.lirouti.domain.shop.enums.AvatarSlot;
@@ -91,7 +92,18 @@ public final class GroupResDTO {
             long totalLikeCount,
             long totalPokeCount,
             long totalDisappointmentCount,
-            DailyProgress dailyProgress
+            DailyProgress dailyProgress,
+            @Schema(description = "대표로 설정한 업적. 설정 안 했으면 null", nullable = true)
+            HomeResDTO.RepresentativeAchievement representativeAchievement
+    ) {
+    }
+
+    /** 그룹 프로필에 노출할 구성원의 대표 업적이다. */
+    @Builder
+    @Schema(name = "GroupMemberRepresentativeAchievement", description = "그룹 구성원 대표 업적")
+    public record RepresentativeAchievement(
+            String name,
+            String badgeImageUrl
     ) {
     }
 

@@ -1,5 +1,6 @@
 package com.lirouti.domain.group.service.query;
 
+import com.lirouti.domain.achievement.entity.Achievement;
 import com.lirouti.domain.group.converter.GroupConverter;
 import com.lirouti.domain.group.dto.response.GroupResDTO;
 import com.lirouti.domain.group.entity.GroupMember;
@@ -17,6 +18,7 @@ import com.lirouti.domain.group.repository.GroupListQueryRepository.MyGroupProje
 import com.lirouti.domain.group.repository.GroupRoutineQueryRepository;
 import com.lirouti.domain.group.repository.GroupRoutineQueryRepository.GroupRoutineProjection;
 import com.lirouti.domain.group.repository.GroupRoutineQueryRepository.RoutineScheduleProjection;
+import com.lirouti.domain.media.enums.MediaPurpose;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.service.query.MemberQueryService;
 import com.lirouti.domain.shop.repository.MemberAvatarEquipmentRepository;
@@ -55,6 +57,8 @@ public class GroupQueryService {
     private final MemberQueryService memberQueryService;
     private final Clock clock;
 
+    private final com.lirouti.domain.member.repository.MemberRepository memberRepository;
+    private final com.lirouti.domain.achievement.repository.AchievementRepository achievementRepository;
 
     /** 로그인 회원의 ACTIVE 참여 그룹과 오늘·월간 활동 요약을 배치 조회한다. */
     @Transactional(readOnly = true)
@@ -156,14 +160,59 @@ public class GroupQueryService {
                 mediaService::resolveAvatarAssetUrl
         );
 
+        // 구성원의 대표 업적 배치 조회 - 사람 수만큼 따로 조회하면 N+1이 된다.
+        Map<Long, GroupResDTO.RepresentativeAchievement> representativeAchievementsByMemberId =
+                resolveRepresentativeAchievements(activeMemberIds);
+
         log.debug("그룹 상세 정보를 조회했습니다. groupId={}, memberId={}, memberCount={}",
                 groupId, memberId, memberDetails.size());
         return GroupConverter.toGroupDetail(
                 memberDetails,
                 progresses,
                 avatarsByMemberId,
+                representativeAchievementsByMemberId,
                 currentMembership.getRole()
         );
+    }
+
+    /**
+     * 활성 구성원들의 대표 업적을 한 번에 조회한다. representative_achievement_id를 설정한
+     * 회원만 걸러서 achievement를 배치 조회하고, key → URL 변환은 다른 조회(예:
+     * AchievementQueryService)와 동일하게 MediaService를 재사용한다.
+     */
+    private Map<Long, GroupResDTO.RepresentativeAchievement> resolveRepresentativeAchievements(
+            List<Long> memberIds
+    ) {
+        if (memberIds.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<Long, Long> representativeAchievementIdByMemberId = memberRepository
+                .findAllById(memberIds).stream()
+                .filter(member -> member.getRepresentativeAchievementId() != null)
+                .collect(Collectors.toMap(Member::getId, Member::getRepresentativeAchievementId));
+
+        if (representativeAchievementIdByMemberId.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<Long, Achievement> achievementById = achievementRepository
+                .findAllById(representativeAchievementIdByMemberId.values()).stream()
+                .collect(Collectors.toMap(Achievement::getId, Function.identity()));
+
+        Map<Long, GroupResDTO.RepresentativeAchievement> result = new HashMap<>();
+        for (Map.Entry<Long, Long> entry : representativeAchievementIdByMemberId.entrySet()) {
+            Achievement achievement = achievementById.get(entry.getValue());
+            if (achievement == null) {
+                continue; // 대표로 설정된 업적이 그 사이 삭제된 경우 - 조용히 생략
+            }
+            result.put(entry.getKey(), GroupResDTO.RepresentativeAchievement.builder()
+                    .name(achievement.getName())
+                    .badgeImageUrl(mediaService.resolveViewUrl(
+                            achievement.getBadgeImageKey(), MediaPurpose.ACHIEVEMENT_BADGE))
+                    .build());
+        }
+        return result;
     }
 
     /** ACTIVE OWNER가 관리 중인 ACTIVE 그룹의 활성 루틴과 반복 일정을 조회한다. */

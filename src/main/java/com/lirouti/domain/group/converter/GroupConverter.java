@@ -130,6 +130,7 @@ public final class GroupConverter {
             List<GroupMemberDetailProjection> memberDetails,
             List<TodayMemberProgressProjection> progresses,
             Map<Long, GroupResDTO.Avatar> avatarsByMemberId,
+            Map<Long, GroupResDTO.RepresentativeAchievement> representativeAchievementsByMemberId,
             GroupMemberRole myRole
     ) {
         GroupMemberDetailProjection group = memberDetails.getFirst();
@@ -149,7 +150,8 @@ public final class GroupConverter {
                                 member,
                                 progressByMemberId.get(member.memberId()),
                                 avatarsByMemberId.getOrDefault(
-                                        member.memberId(), new GroupResDTO.Avatar(List.of(), List.of()))))
+                                        member.memberId(), new GroupResDTO.Avatar(List.of(), List.of())),
+                                representativeAchievementsByMemberId.get(member.memberId())))
                         .toList())
                 .build();
     }
@@ -157,7 +159,8 @@ public final class GroupConverter {
     private static GroupResDTO.MemberActivity toMemberActivity(
             GroupMemberDetailProjection member,
             TodayMemberProgressProjection progress,
-            GroupResDTO.Avatar avatar
+            GroupResDTO.Avatar avatar,
+            GroupResDTO.RepresentativeAchievement representativeAchievement
     ) {
         long completedCount = progress == null ? 0L : progress.completedCount();
         long totalCount = progress == null ? 0L : progress.totalCount();

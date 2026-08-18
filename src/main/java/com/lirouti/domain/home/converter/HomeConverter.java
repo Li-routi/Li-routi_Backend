@@ -9,10 +9,14 @@ import java.util.List;
 
 public class HomeConverter {
 
-    public static HomeResDTO.UserInfo toUserInfo(Member member) {
+    public static HomeResDTO.UserInfo toUserInfo(
+            Member member,
+            HomeResDTO.RepresentativeAchievement representativeAchievement
+    ) {
         return HomeResDTO.UserInfo.builder()
                 .memberId(member.getId())
                 .nickname(member.getNickname())
+                .representativeAchievement(representativeAchievement)
                 .build();
     }
 

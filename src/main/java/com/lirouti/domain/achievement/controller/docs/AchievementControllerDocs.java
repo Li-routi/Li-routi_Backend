@@ -1,5 +1,6 @@
 package com.lirouti.domain.achievement.controller.docs;
 
+import com.lirouti.domain.achievement.dto.request.AchievementReqDTO;
 import com.lirouti.domain.achievement.dto.response.AchievementResDTO;
 import com.lirouti.global.apiPayload.ApiResponse;
 import com.lirouti.global.auth.CustomUserDetails;
@@ -45,5 +46,85 @@ public interface AchievementControllerDocs {
     ApiResponse<AchievementResDTO.Claim> claim(
             @AuthenticationPrincipal CustomUserDetails userDetails,
             @PathVariable Long achievementId
+    );
+
+    @Operation(
+            summary = "대표 업적 선택",
+            description = """
+                마이 > 업적 화면의 "달성" 탭에서 대표 업적을 선택합니다.
+                배지 이미지가 등록되어 있고, 본인이 실제로 CLAIMED(보상 수령 완료)한
+                업적만 선택할 수 있습니다. 이미 다른 업적이 대표로 설정되어 있으면
+                이번에 선택한 업적으로 덮어씁니다(한 번에 하나만 유지).
+                """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "대표 업적 선택 성공"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "400",
+                    description = "배지 이미지가 없는 업적을 선택 시도"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401",
+                    description = "유효하지 않거나 만료된 인증 토큰"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404",
+                    description = "존재하지 않는 업적이거나 회원의 진행 기록이 없음"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "409",
+                    description = "아직 보상을 수령(CLAIMED)하지 않은 업적을 선택 시도"
+            )
+    })
+    ApiResponse<Void> selectRepresentative(
+            @Parameter(hidden = true) CustomUserDetails userDetails,
+            AchievementReqDTO.SelectRepresentativeAchievement request
+    );
+
+    @Operation(
+            summary = "대표 업적 해제",
+            description = """
+                설정되어 있던 대표 업적을 해제합니다. 이미 해제된 상태에서 다시
+                호출해도 안전합니다(멱등) — 그냥 값이 비어있는 상태를 유지합니다.
+                """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "대표 업적 해제 성공"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401",
+                    description = "유효하지 않거나 만료된 인증 토큰"
+            )
+    })
+    ApiResponse<Void> clearRepresentative(
+            @Parameter(hidden = true) CustomUserDetails userDetails
+    );
+
+    @Operation(
+            summary = "대표 업적 선택 가능 목록 조회",
+            description = """
+                마이 > 업적 화면 "달성" 탭에 노출할, 대표 업적으로 선택 가능한
+                업적 목록을 조회합니다. 배지 이미지가 등록되어 있고 CLAIMED된
+                업적만 반환하며, 현재 대표로 설정된 업적에는 representative=true가
+                표시됩니다.
+                """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "선택 가능한 대표 업적 목록 조회 성공"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401",
+                    description = "유효하지 않거나 만료된 인증 토큰"
+            )
+    })
+    ApiResponse<AchievementResDTO.ClaimedBadgeAchievements> getSelectableRepresentative(
+            @Parameter(hidden = true) CustomUserDetails userDetails
     );
 }
