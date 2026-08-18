@@ -52,7 +52,8 @@ public final class GroupConverter {
                         todayCompletedCounts.getOrDefault(group.groupId(), 0L),
                         group.currentStreak(),
                         monthlyAchievementRates.getOrDefault(group.groupId(), 0),
-                        todayVerificationCounts.getOrDefault(group.groupId(), 0L)
+                        todayVerificationCounts.getOrDefault(group.groupId(), 0L),
+                        group.lastVerificationAt()
                 ))
                 .toList());
     }

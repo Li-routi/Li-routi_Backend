@@ -1,5 +1,6 @@
 package com.lirouti.domain.group.entity;
 
+import java.time.LocalDateTime;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -16,6 +17,7 @@ class GroupTest {
 
         // then
         assertThat(group.isLocked()).isFalse();
+        assertThat(group.getLastVerificationAt()).isNull();
     }
 
     @Test
@@ -37,6 +39,20 @@ class GroupTest {
         // then
         assertThat(group.isLocked()).isFalse();
         assertThat(group.getInviteCode()).isEqualTo("LOCK001");
+    }
+
+    @Test
+    @DisplayName("최근 인증 등록 시각은 더 최신 저장 시각으로만 갱신한다")
+    void updateLastVerificationAt_KeepsLatestValue() {
+        Group group = group();
+        LocalDateTime first = LocalDateTime.of(2026, 8, 18, 9, 0);
+        LocalDateTime latest = LocalDateTime.of(2026, 8, 18, 10, 0);
+
+        group.updateLastVerificationAt(latest);
+        group.updateLastVerificationAt(first);
+        group.updateLastVerificationAt(null);
+
+        assertThat(group.getLastVerificationAt()).isEqualTo(latest);
     }
 
     private Group group() {

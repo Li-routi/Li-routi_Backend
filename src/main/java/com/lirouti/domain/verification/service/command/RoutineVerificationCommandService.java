@@ -116,6 +116,9 @@ public class RoutineVerificationCommandService {
         assignment.attachVerification(verification);
         GroupRoutineVerification saved =
                 save(() -> groupRoutineVerificationRepository.saveAndFlush(verification));
+        // saveAndFlush는 기존처럼 DB 제약 위반을 여기서 VERIFICATION_CONFLICT로 변환하기 위해 유지한다.
+        // createdAt 자체는 AuditingEntityListener의 @PrePersist에서 채워지므로 별도 flush는 필요 없다.
+        assignment.getGroupRoutine().getGroup().updateLastVerificationAt(saved.getCreatedAt());
         publishDeadlineLastMinuteEventIfApplicable(
                 assignment.getMember().getId(), saved.getVerifiedAt(),
                 SOURCE_TYPE_GROUP_ROUTINE_VERIFICATION, saved.getId(),

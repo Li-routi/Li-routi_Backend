@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doNothing;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -30,6 +31,7 @@ import com.lirouti.domain.member.enums.Role;
 import com.lirouti.domain.member.enums.SocialProvider;
 import com.lirouti.domain.verification.dto.request.VerificationReqDTO;
 import com.lirouti.domain.verification.dto.response.VerificationResDTO;
+import com.lirouti.domain.verification.entity.GroupRoutineVerification;
 import com.lirouti.domain.verification.exception.VerificationException;
 import com.lirouti.domain.verification.exception.code.error.VerificationErrorCode;
 import com.lirouti.domain.verification.repository.GroupRoutineVerificationRepository;
@@ -191,6 +193,26 @@ class GroupRoutineVerificationTest {
     }
 
     @Test
+    @DisplayName("신규 인증 저장 시 auditing createdAt을 그룹의 마지막 인증 등록 시각으로 보관한다")
+    void verify_UpdatesGroupLastVerificationAtWithVerificationCreatedAt() {
+        Member member = member();
+        GroupRoutineAssignment assignment = assignment(member, GroupRoutineAssignmentStatus.IN_PROGRESS);
+        Long groupId = groupIdOf(assignment);
+
+        verificationService.verifyGroupRoutine(member.getId(), groupId, routineIdOf(assignment), request());
+
+        GroupRoutineVerification verification = verificationRepository.findByAssignmentId(assignment.getId())
+                .orElseThrow();
+        LocalDateTime verificationCreatedAt = verification.getCreatedAt();
+        assertThat(verificationCreatedAt).isNotNull();
+        em.flush();
+        em.clear();
+
+        assertThat(em.find(Group.class, groupId).getLastVerificationAt())
+                .isEqualTo(verificationCreatedAt);
+    }
+
+    @Test
     @DisplayName("이미 인증한 할당은 다시 인증할 수 없다")
     void verify_Twice_IsBlocked() {
         // given
@@ -267,6 +289,10 @@ class GroupRoutineVerificationTest {
 
         VerificationResDTO.GroupRoutine verified = verificationService.verifyGroupRoutine(
                 author.getId(), groupId, routineId, request());
+        LocalDateTime verificationCreatedAt = verificationRepository
+                .findById(verified.verificationId())
+                .orElseThrow()
+                .getCreatedAt();
         likeCommandService.like(firstLiker.getId(), groupId, verified.verificationId());
         likeCommandService.like(secondLiker.getId(), groupId, verified.verificationId());
         groupInteractionCommandService.disappoint(
@@ -296,5 +322,7 @@ class GroupRoutineVerificationTest {
         GroupMember authorMembership = em.find(GroupMember.class, authorMembershipId);
         assertThat(authorMembership.getTotalLikeCount()).isZero();
         assertThat(authorMembership.getTotalDisappointmentCount()).isZero();
+        assertThat(em.find(Group.class, groupId).getLastVerificationAt())
+                .isEqualTo(verificationCreatedAt);
     }
 }

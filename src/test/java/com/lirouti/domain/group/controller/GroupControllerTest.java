@@ -31,6 +31,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.matchesPattern;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -73,7 +74,8 @@ class GroupControllerTest {
                 .andExpect(jsonPath("$.result.groups[0].todayAssignedRoutineCount").value(1))
                 .andExpect(jsonPath("$.result.groups[0].todayCompletedRoutineCount").value(1))
                 .andExpect(jsonPath("$.result.groups[0].monthlyAchievementRate").value(100))
-                .andExpect(jsonPath("$.result.groups[0].todayGroupVerificationCount").value(0));
+                .andExpect(jsonPath("$.result.groups[0].todayGroupVerificationCount").value(0))
+                .andExpect(jsonPath("$.result.groups[0].lastVerificationAt").value(nullValue()));
     }
 
     @Test
@@ -111,7 +113,10 @@ class GroupControllerTest {
                 .andExpect(jsonPath("$.components.schemas.MyGroup.properties.todayCompletedRoutineCount").exists())
                 .andExpect(jsonPath("$.components.schemas.MyGroup.properties.currentStreak").exists())
                 .andExpect(jsonPath("$.components.schemas.MyGroup.properties.monthlyAchievementRate").exists())
-                .andExpect(jsonPath("$.components.schemas.MyGroup.properties.todayGroupVerificationCount").exists());
+                .andExpect(jsonPath("$.components.schemas.MyGroup.properties.todayGroupVerificationCount").exists())
+                .andExpect(jsonPath("$.components.schemas.MyGroup.properties.lastVerificationAt").exists())
+                .andExpect(jsonPath("$.components.schemas.MyGroup.properties.lastVerificationAt.type").value("string"))
+                .andExpect(jsonPath("$.components.schemas.MyGroup.properties.lastVerificationAt.format").value("date-time"));
     }
 
     @Test

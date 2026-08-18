@@ -326,8 +326,8 @@ class GroupQueryServiceTest {
         when(memberQueryService.getActiveMember(MEMBER_ID)).thenReturn(member);
         when(member.getId()).thenReturn(MEMBER_ID);
         when(groupListQueryRepository.findActiveGroupsByMemberId(MEMBER_ID)).thenReturn(List.of(
-                new MyGroupProjection(firstGroupId, "아침 모임", 4),
-                new MyGroupProjection(secondGroupId, "저녁 모임", 1)
+                new MyGroupProjection(firstGroupId, "아침 모임", 4, LocalDateTime.of(2026, 7, 24, 9, 30)),
+                new MyGroupProjection(secondGroupId, "저녁 모임", 1, null)
         ));
         when(groupListQueryRepository.countActiveMembersByGroupIds(groupIds)).thenReturn(List.of(
                 new GroupCountProjection(firstGroupId, 4L),
@@ -357,8 +357,9 @@ class GroupQueryServiceTest {
 
         // then
         assertThat(result.groups()).containsExactly(
-                new GroupResDTO.MyGroup(firstGroupId, "아침 모임", 4L, 6L, 3L, 2L, 4, 20, 8L),
-                new GroupResDTO.MyGroup(secondGroupId, "저녁 모임", 2L, 0L, 0L, 0L, 1, 0, 0L)
+                new GroupResDTO.MyGroup(firstGroupId, "아침 모임", 4L, 6L, 3L, 2L, 4, 20, 8L,
+                        LocalDateTime.of(2026, 7, 24, 9, 30)),
+                new GroupResDTO.MyGroup(secondGroupId, "저녁 모임", 2L, 0L, 0L, 0L, 1, 0, 0L, null)
         );
         verify(groupListQueryRepository).findActiveGroupsByMemberId(MEMBER_ID);
         verify(groupListQueryRepository).countActiveMembersByGroupIds(groupIds);
@@ -407,7 +408,7 @@ class GroupQueryServiceTest {
         when(memberQueryService.getActiveMember(MEMBER_ID)).thenReturn(member);
         when(member.getId()).thenReturn(MEMBER_ID);
         when(groupListQueryRepository.findActiveGroupsByMemberId(MEMBER_ID)).thenReturn(List.of(
-                new MyGroupProjection(301L, "월말 그룹", 2)
+                new MyGroupProjection(301L, "월말 그룹", 2, null)
         ));
         when(groupListQueryRepository.countActiveMembersByGroupIds(groupIds)).thenReturn(List.of());
         when(groupListQueryRepository.countActiveRoutinesByGroupIds(groupIds)).thenReturn(List.of());
@@ -436,7 +437,7 @@ class GroupQueryServiceTest {
         when(memberQueryService.getActiveMember(MEMBER_ID)).thenReturn(member);
         when(member.getId()).thenReturn(MEMBER_ID);
         when(groupListQueryRepository.findActiveGroupsByMemberId(MEMBER_ID)).thenReturn(List.of(
-                new MyGroupProjection(301L, "분모 없는 그룹", 0)
+                new MyGroupProjection(301L, "분모 없는 그룹", 0, null)
         ));
         when(groupListQueryRepository.countActiveMembersByGroupIds(groupIds)).thenReturn(List.of());
         when(groupListQueryRepository.countActiveRoutinesByGroupIds(groupIds)).thenReturn(List.of());
