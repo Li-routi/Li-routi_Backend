@@ -9,6 +9,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
+import com.lirouti.domain.achievement.service.command.MidnightAccessCommandService;
 import com.lirouti.domain.auth.exception.AuthException;
 import com.lirouti.domain.auth.exception.code.error.AuthErrorCode;
 import com.lirouti.domain.member.enums.Role;
@@ -23,12 +24,15 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class JwtAuthFilter extends OncePerRequestFilter {
     private final JwtUtil jwtUtil;
     private final RedisUtil redisUtil;
+    private final MidnightAccessCommandService midnightAccessCommandService;
 
     @Override
     protected void doFilterInternal(
@@ -55,11 +59,6 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             String memberId = claims.getSubject();
 
             if (memberId != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-                /*
-                * 짧은 만료 시간의 액세스 토큰은 회원 DB를 매 요청마다 조회하지 않고,
-                * JWT 서명·클레임과 Redis 블랙리스트만 검증해 인증 정보를 구성한다.
-                * DB 회원 상태 변경은 토큰 만료 후 반영되지만, 블랙리스트에 등록된 토큰은 다음 요청부터 차단된다.
-                */            
                 CustomUserDetails userDetails = new CustomUserDetails(
                         parseMemberId(memberId),
                         parseRole(claims)
@@ -73,6 +72,15 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 SecurityContext context = SecurityContextHolder.createEmptyContext();
                 context.setAuthentication(auth);
                 SecurityContextHolder.setContext(context);
+
+                // ACH-EG-009(자정의 방문자) 판정. 요청 처리를 절대 막으면 안 되므로 실패해도
+                // 로그만 남기고 넘어간다 - 히든 업적 하나 못 잡는 것보다 API 전체가 막히는
+                // 사고가 훨씬 크다.
+                try {
+                    midnightAccessCommandService.recordIfMidnight(userDetails.getMemberId());
+                } catch (RuntimeException e) {
+                    log.warn("자정 접속 판정 중 오류가 발생했습니다. memberId={}", userDetails.getMemberId(), e);
+                }
             }
         }
 
