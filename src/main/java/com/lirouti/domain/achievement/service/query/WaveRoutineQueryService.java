@@ -24,7 +24,7 @@ public class WaveRoutineQueryService {
     public AchievementResDTO.WaveRoutineStatus getStatus(Long memberId) {
         MemberWaveRoutineStreak streak = memberWaveRoutineStreakRepository
                 .findByMemberId(memberId)
-                .orElseThrow(() -> new AchievementException(AchievementErrorCode.NOT_FOUND));
+                .orElseThrow(() -> new AchievementException(AchievementErrorCode.WAVE_ROUTINE_NOT_SELECTED));
 
         MemberRoutine routine = memberRoutineRepository.findById(streak.getMemberRoutineId())
                 .orElseThrow(() -> new AchievementException(AchievementErrorCode.NOT_FOUND));

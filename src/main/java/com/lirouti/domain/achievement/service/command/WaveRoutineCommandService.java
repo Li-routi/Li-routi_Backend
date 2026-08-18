@@ -2,6 +2,7 @@ package com.lirouti.domain.achievement.service.command;
 
 import com.lirouti.domain.achievement.entity.MemberWaveRoutineStreak;
 import com.lirouti.domain.achievement.repository.MemberWaveRoutineStreakRepository;
+import com.lirouti.domain.member.repository.MemberRepository;
 import com.lirouti.domain.routine.entity.MemberRoutine;
 import com.lirouti.domain.routine.exception.RoutineException;
 import com.lirouti.domain.routine.exception.code.error.RoutineErrorCode;
@@ -23,12 +24,15 @@ public class WaveRoutineCommandService {
 
     private final MemberWaveRoutineStreakRepository memberWaveRoutineStreakRepository;
     private final MemberRoutineRepository memberRoutineRepository;
+    private final MemberRepository memberRepository;
 
     @Transactional
     public void selectRoutine(Long memberId, Long memberRoutineId) {
         MemberRoutine routine = memberRoutineRepository
                 .findByIdAndMemberIdAndActiveTrue(memberRoutineId, memberId)
                 .orElseThrow(() -> new RoutineException(RoutineErrorCode.ROUTINE_NOT_FOUND));
+
+        memberRepository.findByIdForUpdate(memberId);
 
         MemberWaveRoutineStreak streak = memberWaveRoutineStreakRepository
                 .findByMemberIdForUpdate(memberId)

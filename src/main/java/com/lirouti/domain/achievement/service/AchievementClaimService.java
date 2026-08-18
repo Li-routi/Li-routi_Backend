@@ -50,11 +50,15 @@ public class AchievementClaimService {
         MemberAchievement memberAchievement = loadAndValidate(memberId, achievementId);
         Achievement achievement = memberAchievement.getAchievement();
 
+        // 캐릭터알 지급을 먼저 시도한다. 캐릭터알을 주는 업적(EGG)은 topazReward가 항상 0이라
+        // 지갑을 건드리지 않으므로, 여기서 실패해 claim 전체를 중단시켜도 "이미 성공한
+        // 코인 지급"을 되돌리는 문제가 생기지 않는다 - 애초에 지갑 호출이 없다.
+        // 실패하면 예외를 그대로 전파해 상태를 CLAIMED로 바꾸지 않는다(재시도 가능하게).
+        characterUnlockService.unlockByAchievementClaim(memberId, achievement.getCode());
+
         WalletResult walletResult = grantTopazIfAny(memberId, achievement);
 
         markClaimedIfNeeded(memberAchievement);
-
-        grantCharacterIfNeeded(memberId, achievement);
 
         return new ClaimResult(achievement.getId(), walletResult.freeBalance(), walletResult.applied());
     }
@@ -65,7 +69,13 @@ public class AchievementClaimService {
      * freeBalanceAfter가 뜬금없이 0으로 나가면 "잔액이 초기화됐다"로 보일 수 있다.
      */
     private WalletResult grantTopazIfAny(Long memberId, Achievement achievement) {
-        if (achievement.getTopazReward() <= 0) {
+        int topazReward = achievement.getTopazReward();
+        if (topazReward < 0) {
+            log.error("업적 topazReward가 음수입니다 - 데이터 설정 오류. achievementCode={}, topazReward={}",
+                    achievement.getCode(), topazReward);
+            throw new IllegalStateException("업적 " + achievement.getCode() + "의 topazReward가 음수입니다.");
+        }
+        if (topazReward == 0) {
             int currentBalance = memberWalletRepository
                     .findByMemberIdAndCurrency(memberId, Currency.TOPAZ)
                     .map(MemberWallet::getFreeBalance)

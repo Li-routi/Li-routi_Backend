@@ -32,7 +32,7 @@ public class MidnightAccessCommandService {
     private static final String CONDITION_KEY_MIDNIGHT_ACCESS = "MIDNIGHT_ACCESS";
     private static final String SOURCE_TYPE_APP_ACCESS = "APP_ACCESS";
     private static final LocalTime MIDNIGHT_WINDOW_START = LocalTime.of(0, 0, 0);
-    private static final LocalTime MIDNIGHT_WINDOW_END = LocalTime.of(0, 0, 59);
+    private static final LocalTime MIDNIGHT_WINDOW_END_EXCLUSIVE = LocalTime.of(0, 1);
 
     private final ApplicationEventPublisher eventPublisher;
 
@@ -48,7 +48,7 @@ public class MidnightAccessCommandService {
     public void recordIfMidnight(Long memberId) {
         LocalDateTime now = LocalDateTime.now(TimeUtil.KST);
         LocalTime time = now.toLocalTime();
-        if (time.isBefore(MIDNIGHT_WINDOW_START) || time.isAfter(MIDNIGHT_WINDOW_END)) {
+        if (time.isBefore(MIDNIGHT_WINDOW_START) || !time.isBefore(MIDNIGHT_WINDOW_END_EXCLUSIVE)) {
             return;
         }
 

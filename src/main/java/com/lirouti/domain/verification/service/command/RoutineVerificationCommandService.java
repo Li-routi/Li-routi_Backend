@@ -116,10 +116,6 @@ public class RoutineVerificationCommandService {
         assignment.attachVerification(verification);
         GroupRoutineVerification saved =
                 save(() -> groupRoutineVerificationRepository.saveAndFlush(verification));
-
-        publishEarlyMorningEventIfApplicable(
-                assignment.getMember().getId(), saved.getVerifiedAt(),
-                SOURCE_TYPE_GROUP_ROUTINE_VERIFICATION, saved.getId());
         publishDeadlineLastMinuteEventIfApplicable(
                 assignment.getMember().getId(), saved.getVerifiedAt(),
                 SOURCE_TYPE_GROUP_ROUTINE_VERIFICATION, saved.getId(),
@@ -191,9 +187,6 @@ public class RoutineVerificationCommandService {
         publishRoutineCompleteEvent(routine, saved);
 
         Long memberId = routine.getMember().getId();
-        publishEarlyMorningEventIfApplicable(
-                memberId, saved.getVerifiedAt(),
-                SOURCE_TYPE_MEMBER_ROUTINE_VERIFICATION, saved.getId());
         publishDeadlineLastMinuteEventIfApplicable(
                 memberId, saved.getVerifiedAt(),
                 SOURCE_TYPE_MEMBER_ROUTINE_VERIFICATION, saved.getId(),
@@ -229,21 +222,6 @@ public class RoutineVerificationCommandService {
                 saved.getId(),
                 routine.getCategory().getId(),
                 saved.getVerifiedAt()
-        ));
-    }
-
-    /**
-     * "일찍 일어난 새"(ACH-EG-003) 진행도. 개인·그룹 루틴 인증 모두에 적용한다 —
-     * 스펙상 "오전 7시 이전에 루틴을 완료"이지 개인 루틴으로 한정하지 않는다.
-     */
-    private void publishEarlyMorningEventIfApplicable(
-            Long memberId, LocalDateTime verifiedAt, String sourceType, Long sourceId
-    ) {
-        if (eventPublisher == null || !verifiedAt.toLocalTime().isBefore(EARLY_MORNING_CUTOFF)) {
-            return;
-        }
-        eventPublisher.publishEvent(new AchievementProgressEvent(
-                memberId, CONDITION_KEY_EARLY_MORNING_COMPLETE_COUNT, 1, sourceType, sourceId
         ));
     }
 
