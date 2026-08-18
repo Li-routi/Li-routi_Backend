@@ -1,5 +1,6 @@
 package com.lirouti.domain.group.controller;
 
+import com.lirouti.domain.achievement.service.command.MidnightAccessCommandService;
 import com.lirouti.domain.group.dto.request.GroupReqDTO;
 import com.lirouti.domain.group.dto.response.GroupResDTO;
 import com.lirouti.domain.group.exception.GroupException;
@@ -70,6 +71,8 @@ class GroupCreationControllerWebTest {
     private RedisUtil redisUtil;
     @MockitoBean
     private JpaMetamodelMappingContext jpaMappingContext;
+    @MockitoBean
+    private MidnightAccessCommandService midnightAccessCommandService;
 
     @Test
     @DisplayName("유효한 요청은 201 공통 응답을 반환하며 초대코드를 노출하지 않는다")

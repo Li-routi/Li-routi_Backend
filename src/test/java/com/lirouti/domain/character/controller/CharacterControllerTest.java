@@ -1,5 +1,6 @@
 package com.lirouti.domain.character.controller;
 
+import com.lirouti.domain.achievement.service.command.MidnightAccessCommandService;
 import com.lirouti.domain.character.exception.CharacterException;
 import com.lirouti.domain.character.exception.code.error.CharacterErrorCode;
 import com.lirouti.domain.character.service.command.CharacterSelectionCommandService;
@@ -66,6 +67,8 @@ class CharacterControllerTest {
     private RedisUtil redisUtil;
     @MockitoBean
     private JpaMetamodelMappingContext jpaMappingContext;
+    @MockitoBean
+    private MidnightAccessCommandService midnightAccessCommandService;
 
     @Test
     @DisplayName("보유한 캐릭터를 고르면 200 과 선택 성공 코드가 나간다")

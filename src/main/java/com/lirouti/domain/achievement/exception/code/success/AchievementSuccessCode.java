@@ -23,6 +23,16 @@ public enum AchievementSuccessCode implements BaseSuccessCode {
             HttpStatus.OK,
             "업적 뱃지 이미지 업로드에 성공했습니다.",
             "ACHIEVEMENT200_3"
+    ),
+    WAVE_ROUTINE_SELECT_SUCCESS(
+            HttpStatus.OK,
+            "파도 업적 추적 루틴 선택에 성공했습니다.",
+            "ACHIEVEMENT200_4"
+    ),
+    WAVE_ROUTINE_FETCH_SUCCESS(
+            HttpStatus.OK,
+            "파도 업적 진행 상황 조회에 성공했습니다.",
+            "ACHIEVEMENT200_5"
     );
 
     private final HttpStatus httpStatus;

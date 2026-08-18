@@ -55,6 +55,7 @@ public final class AchievementResDTO {
             int topazReward,
             boolean badgeYn,
             boolean limitedOutfitYn,
+            boolean hiddenYn,
             LocalDateTime achievedAt,
             LocalDateTime claimedAt
     ) {
@@ -91,6 +92,15 @@ public final class AchievementResDTO {
             Long achievementId,
             String code,
             String badgeImageUrl
+    ) {
+    }
+
+    @Builder
+    public record WaveRoutineStatus(
+            Long memberRoutineId,
+            String routineName,
+            int currentStreak,
+            int targetStreak
     ) {
     }
 }

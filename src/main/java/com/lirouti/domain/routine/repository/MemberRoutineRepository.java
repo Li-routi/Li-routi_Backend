@@ -139,4 +139,39 @@ public interface MemberRoutineRepository extends JpaRepository<MemberRoutine, Lo
     List<MemberRoutine> findDueForNotification(@Param("day") DayOfWeek day,
                                                @Param("time") LocalTime time,
                                                @Param("deadline") boolean deadline);
+
+    /**
+     * 노아(ACH-EG-003) 배치용. 그 요일에 "기상 루틴"(마감이 cutoff 이전)이 예정된
+     * 활성 루틴을 가진 회원 id 목록을 조회한다.
+     */
+    @Query("""
+        select distinct routine.member.id
+        from MemberRoutine routine
+        join routine.schedules schedule
+        where routine.active = true
+          and routine.endTime < :cutoff
+          and schedule.repeatDay = :day
+        """)
+    List<Long> findMemberIdsWithActiveMorningRoutineScheduledOn(
+            @Param("cutoff") LocalTime cutoff,
+            @Param("day") DayOfWeek day
+    );
+
+    /**
+     * 파도(ACH-EG-013) 배치용. 특정 루틴이 그 요일에 활성 상태로 예정돼 있었는지 확인한다.
+     * 루틴이 그 사이 비활성화되거나 반복 요일에서 빠졌으면 "예정 안 됨"으로 본다 —
+     * 세부조건상 예정 안 된 날은 연속 기록에 영향을 주지 않는다.
+     */
+    @Query("""
+        select case when count(routine) > 0 then true else false end
+        from MemberRoutine routine
+        join routine.schedules schedule
+        where routine.id = :routineId
+          and routine.active = true
+          and schedule.repeatDay = :day
+        """)
+    boolean existsActiveScheduledOn(
+            @Param("routineId") Long routineId,
+            @Param("day") DayOfWeek day
+    );
 }
