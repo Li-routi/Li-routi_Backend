@@ -16,6 +16,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -122,9 +123,16 @@ public class NotificationDeliveryService {
         return LocalDateTime.now(clock).truncatedTo(ChronoUnit.MICROS);
     }
 
-    private Map<String, String> data(Notification n) {
-        return Map.of("notificationId", String.valueOf(n.getId()),
-                "category", n.getCategory().name(), "type", n.getType().name());
+    /** Android가 읽음 처리와 상세 화면 이동에 사용할 FCM data payload를 만든다. */
+    Map<String, String> data(Notification n) {
+        Map<String, String> data = new HashMap<>();
+        data.put("notificationId", String.valueOf(n.getId()));
+        data.put("category", n.getCategory().name());
+        data.put("type", n.getType().name());
+        if (n.getReferenceId() != null) {
+            data.put("referenceId", String.valueOf(n.getReferenceId()));
+        }
+        return Map.copyOf(data);
     }
 
     private void deactivateInvalidTokens(List<FcmDevice> devices, BatchResponse response, LocalDateTime now) {

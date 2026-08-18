@@ -1,6 +1,9 @@
 package com.lirouti.domain.notification.service;
 
 import com.google.firebase.messaging.FirebaseMessaging;
+import com.lirouti.domain.notification.entity.Notification;
+import com.lirouti.domain.notification.enums.NotificationCategory;
+import com.lirouti.domain.notification.enums.NotificationType;
 import com.lirouti.domain.notification.enums.PushStatus;
 import com.lirouti.domain.notification.repository.FcmDeviceRepository;
 import com.lirouti.domain.notification.repository.NotificationRepository;
@@ -11,6 +14,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -18,6 +22,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -97,5 +102,25 @@ class NotificationDeliveryServiceTest {
                 now,
                 expiredBefore
         );
+    }
+
+    @Test
+    @DisplayName("상세 화면 이동에 필요한 참조 ID를 FCM data에 포함한다")
+    void data_WithReferenceId_IncludesReferenceId() {
+        Notification notification = Notification.builder()
+                .category(NotificationCategory.CHALLENGE)
+                .type(NotificationType.CHALLENGE_VERIFICATION_LIKED)
+                .title("좋아요 알림")
+                .body("회원님의 인증에 좋아요가 달렸어요.")
+                .referenceId(77L)
+                .referenceType("CHALLENGE_VERIFICATION")
+                .deduplicationKey("fcm-reference-id-test")
+                .build();
+        ReflectionTestUtils.setField(notification, "id", 42L);
+
+        assertThat(deliveryService.data(notification))
+                .containsEntry("notificationId", "42")
+                .containsEntry("referenceId", "77")
+                .containsEntry("type", NotificationType.CHALLENGE_VERIFICATION_LIKED.name());
     }
 }
