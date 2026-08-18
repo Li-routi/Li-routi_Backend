@@ -6,7 +6,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doNothing;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -201,15 +200,15 @@ class GroupRoutineVerificationTest {
 
         verificationService.verifyGroupRoutine(member.getId(), groupId, routineIdOf(assignment), request());
 
-        GroupRoutineVerification verification = verificationRepository.findByAssignmentId(assignment.getId())
-                .orElseThrow();
-        LocalDateTime verificationCreatedAt = verification.getCreatedAt();
-        assertThat(verificationCreatedAt).isNotNull();
         em.flush();
         em.clear();
 
+        GroupRoutineVerification persistedVerification = verificationRepository
+                .findByAssignmentId(assignment.getId())
+                .orElseThrow();
+        assertThat(persistedVerification.getCreatedAt()).isNotNull();
         assertThat(em.find(Group.class, groupId).getLastVerificationAt())
-                .isEqualTo(verificationCreatedAt);
+                .isEqualTo(persistedVerification.getCreatedAt());
     }
 
     @Test
@@ -289,10 +288,6 @@ class GroupRoutineVerificationTest {
 
         VerificationResDTO.GroupRoutine verified = verificationService.verifyGroupRoutine(
                 author.getId(), groupId, routineId, request());
-        LocalDateTime verificationCreatedAt = verificationRepository
-                .findById(verified.verificationId())
-                .orElseThrow()
-                .getCreatedAt();
         likeCommandService.like(firstLiker.getId(), groupId, verified.verificationId());
         likeCommandService.like(secondLiker.getId(), groupId, verified.verificationId());
         groupInteractionCommandService.disappoint(
@@ -322,7 +317,10 @@ class GroupRoutineVerificationTest {
         GroupMember authorMembership = em.find(GroupMember.class, authorMembershipId);
         assertThat(authorMembership.getTotalLikeCount()).isZero();
         assertThat(authorMembership.getTotalDisappointmentCount()).isZero();
+        GroupRoutineVerification persistedVerification = verificationRepository
+                .findById(verified.verificationId())
+                .orElseThrow();
         assertThat(em.find(Group.class, groupId).getLastVerificationAt())
-                .isEqualTo(verificationCreatedAt);
+                .isEqualTo(persistedVerification.getCreatedAt());
     }
 }
