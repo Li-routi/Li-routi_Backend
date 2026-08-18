@@ -6,7 +6,6 @@ import com.lirouti.domain.achievement.enums.MemberAchievementStatus;
 import com.lirouti.domain.achievement.exception.AchievementException;
 import com.lirouti.domain.achievement.exception.code.error.AchievementErrorCode;
 import com.lirouti.domain.achievement.repository.MemberAchievementRepository;
-import com.lirouti.domain.badge.service.BadgeGrantService;
 import com.lirouti.domain.character.service.CharacterUnlockService;
 import com.lirouti.domain.wallet.enums.Currency;
 import com.lirouti.domain.wallet.enums.WalletTransactionType;
@@ -38,7 +37,6 @@ public class AchievementClaimService {
 
     private final MemberAchievementRepository memberAchievementRepository;
     private final WalletService walletService;
-    private final BadgeGrantService badgeGrantService;
     private final CharacterUnlockService characterUnlockService;
 
     public ClaimResult claim(Long memberId, Long achievementId) {
@@ -59,22 +57,9 @@ public class AchievementClaimService {
 
         markClaimedIfNeeded(memberAchievement);
 
-        grantBadgeIfNeeded(memberId, achievement);
         grantCharacterIfNeeded(memberId, achievement);
 
         return new ClaimResult(achievement.getId(), walletResult.freeBalance(), walletResult.applied());
-    }
-
-    private void grantBadgeIfNeeded(Long memberId, Achievement achievement) {
-        if (!achievement.isBadgeYn() || achievement.getBadgeCode() == null) {
-            return;
-        }
-        try {
-            badgeGrantService.grant(memberId, achievement.getBadgeCode());
-        } catch (RuntimeException e) {
-            log.error("배지 지급 실패 - memberId={}, achievementCode={}",
-                    memberId, achievement.getCode(), e);
-        }
     }
 
     /**
