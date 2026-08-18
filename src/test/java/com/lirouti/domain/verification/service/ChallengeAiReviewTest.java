@@ -21,7 +21,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.lirouti.domain.verification.client.AnthropicVerificationReviewClient;
+import com.lirouti.domain.verification.client.OpenAiVerificationReviewClient;
 import com.lirouti.domain.verification.client.ReviewRejection;
 import com.lirouti.domain.verification.client.VerificationReview;
 import com.lirouti.domain.challenge.entity.Challenge;
@@ -49,7 +49,7 @@ import com.lirouti.domain.verification.exception.code.error.ChallengeVerificatio
  * <p>가장 중요한 것은 <b>심사기가 죽었을 때 인증이 막히지 않는가</b>이다(fail-open).
  * 반려 동작만 검증하면 장애 시 서비스가 멈추는 구현도 통과한다.
  *
- * <p>실제 Anthropic 호출은 하지 않는다. 외부 API 응답에 테스트가 매달리면 결정적이지 않고,
+ * <p>실제 OpenAI 호출은 하지 않는다. 외부 API 응답에 테스트가 매달리면 결정적이지 않고,
  * 여기서 보려는 것은 우리 쪽 분기이지 모델의 판단력이 아니다.
  */
 @SpringBootTest
@@ -68,7 +68,7 @@ class ChallengeAiReviewTest {
     private ChallengeVerificationRepository verificationRepository;
 
     @MockitoBean
-    private AnthropicVerificationReviewClient reviewClient;
+    private OpenAiVerificationReviewClient reviewClient;
     @MockitoBean
     private MediaService mediaService;
 

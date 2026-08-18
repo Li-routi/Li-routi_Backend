@@ -115,7 +115,7 @@ tasks.named('test') {
 	systemProperty 'GOOGLE_WEB_CLIENT_ID', 'test-google-web-client-id'
 	systemProperty 'GOOGLE_ALLOWED_ISSUERS', 'https://accounts.google.com'
 	systemProperty 'AWS_S3_BUCKET', 'lirouti-test'
-	systemProperty 'ANTHROPIC_API_KEY', 'sk-ant-test-only-do-not-use'
+	systemProperty 'OPENAI_API_KEY', 'sk-test-only-do-not-use'
 	systemProperty 'PORTONE_API_SECRET', 'portone-test-only-do-not-use-secret'
 	systemProperty 'PORTONE_STORE_ID', 'store-test-only'
 	systemProperty 'PORTONE_CHANNEL_KEY', 'channel-key-test-only'

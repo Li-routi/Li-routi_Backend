@@ -16,7 +16,7 @@ import lombok.Setter;
 /**
  * 인증 사진 AI 심사 설정.
  *
- * 사진이 그 챌린지의 의도에 맞는지 Claude 에게 물어 통과 여부를 정한다.
+ * 사진이 그 챌린지의 의도에 맞는지 OpenAI 에게 물어 통과 여부를 정한다.
  */
 @Getter
 @Setter
@@ -35,9 +35,9 @@ public class AiReviewProperties {
     private boolean enabled = true;
 
     /**
-     * Anthropic API 키.
+     * OpenAI API 키.
      *
-     * <p><b>@NotBlank 만으로는 미주입을 잡지 못한다.</b> 기본값 없이 {@code ${ANTHROPIC_API_KEY}}
+     * <p><b>@NotBlank 만으로는 미주입을 잡지 못한다.</b> 기본값 없이 {@code ${OPENAI_API_KEY}}
      * 만 선언하면 부팅이 실패할 것 같지만, 해석되지 못한 플레이스홀더가 그 문자열 그대로
      * 바인딩된다. 빈 값이 아니므로 검증을 통과하고 앱이 정상 부팅한다.
      *
@@ -46,12 +46,17 @@ public class AiReviewProperties {
      * 이 변수를 적지 않아 .env 에 있어도 컨테이너에 들어가지 않았다.
      *
      * <p>그래서 형식까지 본다. S3 버킷 이름에 같은 이유로 걸어 둔 검증과 같은 목적이다.
+     *
+     * <p>접두사를 {@code sk-} 까지만 보는 것은 의도다. 발급 경로에 따라 그 뒤가 달라지는데
+     * (개인 키·프로젝트 키·서비스 계정 키), 여기서 잡으려는 것은 <b>미주입</b>이지 키의 종류가
+     * 아니다. 더 좁히면 멀쩡한 키로 부팅이 막히고, 그때 원인이 이 정규식이라는 것을 알아내기
+     * 어렵다. 미해결 플레이스홀더는 {@code $}·{@code &#123;} 때문에 이 형식에 걸린다.
      */
-    @NotBlank(message = "Anthropic API 키는 필수입니다. ANTHROPIC_API_KEY 환경변수를 주입하세요.")
+    @NotBlank(message = "OpenAI API 키는 필수입니다. OPENAI_API_KEY 환경변수를 주입하세요.")
     @Pattern(
-            regexp = "^sk-ant-[A-Za-z0-9_-]+$",
-            message = "Anthropic API 키 형식이 올바르지 않습니다. "
-                    + "ANTHROPIC_API_KEY 가 주입되지 않았거나(플레이스홀더가 그대로 남았거나) 값이 잘못됐습니다."
+            regexp = "^sk-[A-Za-z0-9_-]+$",
+            message = "OpenAI API 키 형식이 올바르지 않습니다. "
+                    + "OPENAI_API_KEY 가 주입되지 않았거나(플레이스홀더가 그대로 남았거나) 값이 잘못됐습니다."
     )
     private String apiKey;
 
@@ -71,12 +76,19 @@ public class AiReviewProperties {
     /**
      * AI 에 보내기 전에 줄일 이미지의 긴 변 픽셀.
      *
-     * <p>Anthropic 은 긴 변이 이 크기를 넘는 이미지를 <b>어차피 자기가 축소해서</b> 본다.
-     * 즉 원본을 그대로 보내도 판정 품질은 같고 전송만 느려진다. 게다가 이미지 한 장에
-     * 크기 상한이 있어 큰 사진은 요청 자체가 거부된다.
+     * <p><b>이 값이 심사 비용을 정한다.</b> 심사기는 받은 이미지를 자기 쪽에서 줄이지 않고
+     * 원본 패치 수를 그대로 쓰므로, 큰 사진을 보내면 보낸 만큼 토큰을 더 쓴다. 줄이는 주체가
+     * 우리뿐이라는 뜻이다.
+     *
+     * <p>예전 값(1568)은 정반대 근거로 정해져 있었다 — 그때 쓰던 심사기가 그 크기를 넘는
+     * 이미지를 어차피 자기가 축소해서 봤기 때문에, 우리 축소는 전송 속도만을 위한 것이었다.
+     * 제공자를 바꾸면서 그 전제가 사라졌으므로 값과 근거를 함께 바꾼다.
+     *
+     * <p>1024 는 출발점이고 실측으로 다시 정해야 한다. 낮출수록 싸지지만, 타인의 신분증처럼
+     * 작게 찍힌 것을 놓치면 유해 판정이 헐거워진다. 비용만 보고 내리면 안 되는 값이다.
      *
      * <p>원본은 S3 에 그대로 남는다. 줄인 것은 이 호출에만 쓰고 버린다.
      */
     @Positive(message = "AI 심사 이미지 최대 변 길이는 양수여야 합니다.")
-    private int maxImageDimension = 1568;
+    private int maxImageDimension = 1024;
 }
