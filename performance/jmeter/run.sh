@@ -8,7 +8,7 @@ fail() {
 }
 
 if [ "$#" -ne 1 ]; then
-    fail "사용법: $0 smoke|load|spike"
+    fail "사용법: $0 smoke|load|spike|stress100|cache"
 fi
 
 scenario="$1"
@@ -32,10 +32,35 @@ case "$scenario" in
         duration_seconds=60
         think_time_millis=500
         ;;
+    stress100)
+        threads=100
+        ramp_up_seconds=30
+        duration_seconds=120
+        think_time_millis=500
+        all_apis=true
+        ;;
+    cache)
+        threads="${JMETER_THREADS:-10}"
+        case "$threads" in
+            5|6|7|8|9|10)
+                ;;
+            *)
+                fail "cache 시나리오의 JMETER_THREADS는 5~10 사이여야 합니다: $threads"
+                ;;
+        esac
+        ramp_up_seconds=10
+        duration_seconds=120
+        think_time_millis=500
+        all_apis=false
+        ;;
     *)
-        fail "지원하지 않는 시나리오입니다: $scenario (smoke|load|spike)"
+        fail "지원하지 않는 시나리오입니다: $scenario (smoke|load|spike|stress100|cache)"
         ;;
 esac
+
+if [ "$scenario" = "smoke" ] || [ "$scenario" = "load" ] || [ "$scenario" = "spike" ]; then
+    all_apis=true
+fi
 
 script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 project_root="$(CDPATH= cd -- "$script_dir/../.." && pwd)"
@@ -81,6 +106,7 @@ set +e
     -JrampUpSeconds="$ramp_up_seconds" \
     -JdurationSeconds="$duration_seconds" \
     -JthinkTimeMillis="$think_time_millis" \
+    -JallApis="$all_apis" \
     -JconnectTimeoutMillis=3000 \
     -JresponseTimeoutMillis=5000 \
     -Jaggregate_rpt_pct1=50 \

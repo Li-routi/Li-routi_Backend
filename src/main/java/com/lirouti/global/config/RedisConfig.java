@@ -1,10 +1,15 @@
 package com.lirouti.global.config;
 
-import io.lettuce.core.api.StatefulConnection;
+import java.time.Duration;
+import java.util.Map;
+
 import org.apache.commons.pool2.impl.GenericObjectPoolConfig;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.CacheManager;
+import org.springframework.cache.annotation.CachingConfigurer;
 import org.springframework.cache.annotation.EnableCaching;
+import org.springframework.cache.interceptor.CacheErrorHandler;
+import org.springframework.cache.interceptor.LoggingCacheErrorHandler;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
@@ -20,14 +25,30 @@ import org.springframework.data.redis.serializer.GenericJacksonJsonRedisSerializ
 import org.springframework.data.redis.serializer.RedisSerializationContext;
 import org.springframework.data.redis.serializer.RedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
+
+import io.lettuce.core.api.StatefulConnection;
 import tools.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 import tools.jackson.databind.jsontype.PolymorphicTypeValidator;
 
-import java.time.Duration;
-
 @Configuration
 @EnableCaching
-public class RedisConfig {
+public class RedisConfig implements CachingConfigurer {
+	public static final String ROUTINE_TEMPLATES_CACHE = "routineTemplates";
+	public static final String CHAT_EMOTICONS_CACHE = "chatEmoticons";
+
+	private static final Duration DEFAULT_CACHE_TTL = Duration.ofHours(1);
+	private static final Duration ROUTINE_TEMPLATES_TTL = Duration.ofHours(6);
+	private static final Duration CHAT_EMOTICONS_TTL = Duration.ofMinutes(30);
+	private static final String CACHE_KEY_PREFIX = "lirouti:cache:";
+	private static final String DEFAULT_CACHE_VERSION = ":v1::";
+	/*
+	 * R__seed_routine.sql이 고정 루틴의 이름·활성 상태·노출 순서를 바꾸면
+	 * ROUTINE_TEMPLATES_CACHE_VERSION만 올려 routineTemplates namespace를 교체한다.
+	 * 캐시 payload 구조가 바뀌는 경우에도 해당 캐시의 버전을 올린다.
+	 */
+	private static final String ROUTINE_TEMPLATES_CACHE_VERSION = ":v1::";
+	private static final String CHAT_EMOTICONS_CACHE_VERSION = ":v1::";
+
 	@Value("${spring.data.redis.host}")
 	private String host;
 
@@ -92,18 +113,40 @@ public class RedisConfig {
 			RedisConnectionFactory connectionFactory,
 			RedisSerializer<Object> serializer
 	) {
-        // 키와 값의 직렬화 방식 및 TTL 설정
-		RedisCacheConfiguration config = RedisCacheConfiguration.defaultCacheConfig()
+		RedisCacheConfiguration defaultConfig = RedisCacheConfiguration.defaultCacheConfig()
 				.serializeKeysWith(RedisSerializationContext.SerializationPair
 						.fromSerializer(new StringRedisSerializer()))
 				.serializeValuesWith(
 						RedisSerializationContext.SerializationPair.fromSerializer(serializer))
-				.entryTtl(Duration.ofHours(1));
+				.computePrefixWith(cacheName -> CACHE_KEY_PREFIX + cacheName + cacheVersion(cacheName))
+				.disableCachingNullValues()
+				.entryTtl(DEFAULT_CACHE_TTL);
+
+		Map<String, RedisCacheConfiguration> cacheConfigurations = Map.of(
+				ROUTINE_TEMPLATES_CACHE, defaultConfig.entryTtl(ROUTINE_TEMPLATES_TTL),
+				CHAT_EMOTICONS_CACHE, defaultConfig.entryTtl(CHAT_EMOTICONS_TTL)
+		);
 
 		return RedisCacheManager.RedisCacheManagerBuilder
 				.fromConnectionFactory(connectionFactory)
-				.cacheDefaults(config)
+				.cacheDefaults(defaultConfig)
+				.withInitialCacheConfigurations(cacheConfigurations)
+				.enableStatistics()
 				.build();
+	}
+
+	private static String cacheVersion(String cacheName) {
+		return switch (cacheName) {
+			case ROUTINE_TEMPLATES_CACHE -> ROUTINE_TEMPLATES_CACHE_VERSION;
+			case CHAT_EMOTICONS_CACHE -> CHAT_EMOTICONS_CACHE_VERSION;
+			default -> DEFAULT_CACHE_VERSION;
+		};
+	}
+
+	@Bean
+	@Override
+	public CacheErrorHandler errorHandler() {
+		return new LoggingCacheErrorHandler(RedisConfig.class.getName(), true);
 	}
 
 	@Bean

@@ -1,6 +1,6 @@
 package com.lirouti.domain.chat.converter;
 
-import java.time.LocalDate;
+import com.lirouti.domain.chat.cache.ChatEmoticonCacheReader.CachedEmoticon;
 import com.lirouti.domain.chat.dto.request.ChatReqDTO;
 import com.lirouti.domain.chat.dto.response.ChatResDTO;
 import com.lirouti.domain.chat.entity.ChatEmoticon;
@@ -9,6 +9,7 @@ import com.lirouti.domain.chat.entity.ChatRead;
 import com.lirouti.domain.group.entity.Group;
 import com.lirouti.domain.member.entity.Member;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
@@ -192,6 +193,22 @@ public final class ChatConverter {
     }
 
     /**
+     * 캐시된 이모티콘 공통 값에 요청 시점의 자산 URL을 조합한다.
+     * 캐시 목록의 노출 순서를 그대로 유지한다.
+     */
+    public static ChatResDTO.EmoticonList toEmoticonListFromCache(
+            List<CachedEmoticon> emoticons,
+            Map<Long, String> assetUrls
+    ) {
+        List<ChatResDTO.Emoticon> results = emoticons.stream()
+                .map(emoticon -> toEmoticon(emoticon, assetUrls.get(emoticon.id())))
+                .toList();
+        return ChatResDTO.EmoticonList.builder()
+                .emoticons(results)
+                .build();
+    }
+
+    /**
      * private object key 대신 조회 시점에 발급한 URL을 사용하는 관리자 응답으로 변환한다.
      */
     public static ChatResDTO.AdminEmoticon toAdminEmoticon(
@@ -233,6 +250,19 @@ public final class ChatConverter {
         return ChatResDTO.Sender.builder()
                 .memberId(sender.getId())
                 .nickname(sender.getNickname())
+                .build();
+    }
+
+    private static ChatResDTO.Emoticon toEmoticon(
+            CachedEmoticon emoticon,
+            String assetUrl
+    ) {
+        return ChatResDTO.Emoticon.builder()
+                .id(emoticon.id())
+                .code(emoticon.code())
+                .assetUrl(assetUrl)
+                .contentType(emoticon.contentType())
+                .animated(emoticon.animated())
                 .build();
     }
 }

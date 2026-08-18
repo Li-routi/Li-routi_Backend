@@ -25,6 +25,7 @@ import org.mockito.InjectMocks;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 
 import com.lirouti.domain.chat.dto.request.ChatReqDTO;
@@ -33,6 +34,7 @@ import com.lirouti.domain.chat.dto.response.ChatResDTO;
 import com.lirouti.domain.chat.entity.ChatEmoticon;
 import com.lirouti.domain.chat.entity.ChatMessage;
 import com.lirouti.domain.chat.enums.ChatMessageType;
+import com.lirouti.domain.chat.event.ChatEmoticonCacheInvalidatedEvent;
 import com.lirouti.domain.chat.exception.ChatException;
 import com.lirouti.domain.chat.exception.code.error.ChatErrorCode;
 import com.lirouti.domain.chat.repository.ChatEmoticonRepository;
@@ -68,6 +70,8 @@ class ChatCommandServiceTest {
     @Mock
     private MediaService mediaService;
     @Mock
+    private ApplicationEventPublisher eventPublisher;
+    @Mock
     private ChatMessage message;
     @Mock
     private Group group;
@@ -96,6 +100,7 @@ class ChatCommandServiceTest {
         assertThat(result.getAnimated()).isFalse();
         assertThat(result.isActive()).isTrue();
         assertThat(result.getDisplayOrder()).isEqualTo(10);
+        verify(eventPublisher).publishEvent(any(ChatEmoticonCacheInvalidatedEvent.class));
     }
 
     @Test
@@ -114,6 +119,7 @@ class ChatCommandServiceTest {
         )).isInstanceOf(ChatException.class)
                 .extracting("code")
                 .isEqualTo(ChatErrorCode.DUPLICATE_EMOTICON_CODE);
+        verify(eventPublisher, never()).publishEvent(any(ChatEmoticonCacheInvalidatedEvent.class));
     }
 
     @Test
@@ -131,6 +137,7 @@ class ChatCommandServiceTest {
                 EMOTICON_KEY,
                 "image/png"
         )).isSameAs(exception);
+        verify(eventPublisher, never()).publishEvent(any(ChatEmoticonCacheInvalidatedEvent.class));
     }
 
     @Test
@@ -144,6 +151,7 @@ class ChatCommandServiceTest {
         chatCommandService.updateEmoticonStatus(EMOTICON_ID, true);
 
         assertThat(emoticon.isActive()).isTrue();
+        verify(eventPublisher).publishEvent(any(ChatEmoticonCacheInvalidatedEvent.class));
     }
 
     @Test
@@ -157,6 +165,7 @@ class ChatCommandServiceTest {
         chatCommandService.updateEmoticonStatus(EMOTICON_ID, false);
 
         assertThat(emoticon.isActive()).isFalse();
+        verify(eventPublisher).publishEvent(any(ChatEmoticonCacheInvalidatedEvent.class));
     }
 
     @Test
@@ -171,6 +180,7 @@ class ChatCommandServiceTest {
         )).isInstanceOf(ChatException.class)
                 .extracting("code")
                 .isEqualTo(ChatErrorCode.EMOTICON_NOT_FOUND);
+        verify(eventPublisher, never()).publishEvent(any(ChatEmoticonCacheInvalidatedEvent.class));
     }
 
     @Test
