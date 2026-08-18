@@ -7,6 +7,8 @@ import com.lirouti.domain.mypage.exception.SuggestionException;
 import com.lirouti.domain.mypage.exception.code.error.SuggestionErrorCode;
 import com.lirouti.domain.mypage.repository.SuggestionCategoryRepository;
 import com.lirouti.domain.mypage.repository.SuggestionRepository;
+import com.lirouti.global.apiPayload.code.GeneralErrorCode;
+import com.lirouti.global.apiPayload.exception.GeneralException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
@@ -44,6 +46,12 @@ public class SuggestionQueryService {
      */
     @Transactional(readOnly = true)
     public SuggestionResDTO.Listing getMySuggestions(Long memberId, Long cursor, int size) {
+        // memberId 가 비면 조건이 아무것도 못 걸러 빈 목록이 정상처럼 나간다. 그것을 "건의가
+        // 없다" 로 읽으면 격리가 깨진 것을 알아챌 기회가 사라진다.
+        if (memberId == null) {
+            throw new GeneralException(GeneralErrorCode.BAD_REQUEST);
+        }
+
         // 상한이 없으면 큰 값을 넣는 것만으로 자기 건의 전부를 한 번에 끌어갈 수 있다.
         // 조용히 깎지 않고 거절한다 — 요청한 수와 받은 수가 다르면 그 이유를 알 수 없다.
         if (size < MIN_PAGE_SIZE || size > MAX_PAGE_SIZE) {

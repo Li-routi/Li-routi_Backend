@@ -12,6 +12,8 @@ import com.lirouti.domain.mypage.exception.SuggestionException;
 import com.lirouti.domain.mypage.exception.code.error.SuggestionErrorCode;
 import com.lirouti.domain.mypage.repository.SuggestionCategoryRepository;
 import com.lirouti.domain.mypage.repository.SuggestionRepository;
+import com.lirouti.global.apiPayload.code.GeneralErrorCode;
+import com.lirouti.global.apiPayload.exception.GeneralException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,6 +21,9 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class SuggestionCommandService {
+
+    /** 요청 DTO 의 {@code @Size} 와 컬럼 길이에 맞춘다. 셋이 어긋나면 안 된다. */
+    private static final int MAX_CONTENT_LENGTH = 2000;
 
     private final SuggestionRepository suggestionRepository;
     private final SuggestionCategoryRepository suggestionCategoryRepository;
@@ -35,6 +40,15 @@ public class SuggestionCommandService {
      */
     @Transactional
     public SuggestionResDTO.Suggestion create(Long memberId, Long categoryId, String content) {
+        // 요청 DTO 의 검증은 컨트롤러를 거칠 때만 있다. 서비스를 직접 부르는 경로가 생기면
+        // 빈 본문이 그대로 저장되거나 상한 초과가 도메인 오류가 아닌 DB 오류로 나간다.
+        if (memberId == null || categoryId == null) {
+            throw new GeneralException(GeneralErrorCode.BAD_REQUEST);
+        }
+        if (content == null || content.isBlank() || content.length() > MAX_CONTENT_LENGTH) {
+            throw new SuggestionException(SuggestionErrorCode.INVALID_CONTENT);
+        }
+
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new MemberException(MemberErrorCode.MEMBER_NOT_FOUND));
 

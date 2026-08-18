@@ -10,6 +10,7 @@ import com.lirouti.domain.mypage.exception.SuggestionException;
 import com.lirouti.domain.mypage.exception.code.error.SuggestionErrorCode;
 import com.lirouti.domain.mypage.service.command.SuggestionCommandService;
 import com.lirouti.domain.mypage.service.query.SuggestionQueryService;
+import com.lirouti.global.apiPayload.exception.GeneralException;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.BeforeEach;
@@ -112,6 +113,28 @@ class SuggestionTest {
                         .isEqualTo(SuggestionErrorCode.CATEGORY_NOT_ACTIVE));
     }
 
+    /**
+     * <b>요청 DTO 의 검증은 컨트롤러를 거칠 때만 있다.</b> 서비스를 직접 부르는 경로가 생기면
+     * 빈 본문이 그대로 저장되거나 상한 초과가 도메인 오류가 아닌 DB 오류로 나간다.
+     */
+    @Test
+    @DisplayName("서비스를 직접 불러도 빈 본문과 상한 초과는 거절한다")
+    void create_ValidatesContentAtServiceEntry() {
+        String tooLong = "가".repeat(2001);
+
+        assertAll(
+                () -> assertThatThrownBy(() -> suggestionCommandService.create(me.getId(), BUG, "  "))
+                        .isInstanceOf(SuggestionException.class)
+                        .satisfies(e -> assertThat(((SuggestionException) e).getCode())
+                                .isEqualTo(SuggestionErrorCode.INVALID_CONTENT)),
+                () -> assertThatThrownBy(() -> suggestionCommandService.create(me.getId(), BUG, tooLong))
+                        .isInstanceOf(SuggestionException.class)
+                        .satisfies(e -> assertThat(((SuggestionException) e).getCode())
+                                .isEqualTo(SuggestionErrorCode.INVALID_CONTENT)),
+                () -> assertThatThrownBy(() -> suggestionCommandService.create(me.getId(), null, "내용"))
+                        .isInstanceOf(GeneralException.class));
+    }
+
     // ── 목록 ──
 
     /**
@@ -158,6 +181,26 @@ class SuggestionTest {
                 () -> assertThat(second.suggestions())
                         .extracting(SuggestionResDTO.Suggestion::content)
                         .as("여분은 응답에 실리지 않는다").containsExactly("건의 3", "건의 2"));
+    }
+
+    /** 비면 조건이 아무것도 못 걸러 빈 목록이 정상처럼 나간다 — 격리가 깨진 것을 못 알아챈다. */
+    @Test
+    @DisplayName("memberId 없이 부르면 빈 목록이 아니라 거절이다")
+    void list_RejectsMissingMember() {
+        assertThatThrownBy(() -> suggestionQueryService.getMySuggestions(null, null, 20))
+                .isInstanceOf(GeneralException.class);
+    }
+
+    @Test
+    @DisplayName("size 가 범위를 벗어나면 거절한다")
+    void list_RejectsOutOfRangeSize() {
+        assertAll(
+                () -> assertThatThrownBy(
+                        () -> suggestionQueryService.getMySuggestions(me.getId(), null, 0))
+                        .isInstanceOf(SuggestionException.class),
+                () -> assertThatThrownBy(
+                        () -> suggestionQueryService.getMySuggestions(me.getId(), null, 51))
+                        .isInstanceOf(SuggestionException.class));
     }
 
     @Test
