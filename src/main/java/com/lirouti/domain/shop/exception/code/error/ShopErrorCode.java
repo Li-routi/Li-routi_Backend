@@ -72,6 +72,23 @@ public enum ShopErrorCode implements BaseErrorCode {
             HttpStatus.CONFLICT,
             "재화가 부족합니다.",
             "SHOP409_3"
+    ),
+
+    /**
+     * 이미 쓴 멱등 키를 <b>다른 장바구니</b>로 다시 보낸 경우.
+     *
+     * <p>같은 장바구니면 앞서 성사된 구매를 그대로 돌려주는 것이 맞지만, 장바구니가 다르면
+     * 그럴 수 없다. 지갑이 같은 키를 "이미 처리한 요청" 으로 보아 <b>차감 없이 예전 결과를
+     * 돌려주므로</b>, 그대로 진행하면 보유 행만 생기고 값이 빠지지 않는다.
+     *
+     * <p><b>조용히 둘 중 하나를 고르지 않는다.</b> 앞의 구매를 돌려주면 사용자가 방금 고른 것을
+     * 못 받고, 새로 진행하면 공짜가 된다. 어느 쪽도 사용자가 뜻한 바가 아니므로 드러내 거절하고
+     * 클라이언트가 새 키로 다시 보내게 한다.
+     */
+    IDEMPOTENCY_KEY_REUSED(
+            HttpStatus.CONFLICT,
+            "이미 사용한 요청 키입니다. 새 키로 다시 시도해 주세요.",
+            "SHOP409_4"
     );
 
     private final HttpStatus httpStatus;

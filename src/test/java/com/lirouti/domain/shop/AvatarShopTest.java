@@ -15,6 +15,8 @@ import com.lirouti.domain.shop.exception.ShopItemRejectedException;
 import com.lirouti.domain.shop.exception.code.error.ShopErrorCode;
 import com.lirouti.domain.shop.repository.MemberAvatarEquipmentRepository;
 import com.lirouti.domain.shop.repository.MemberAvatarItemRepository;
+import com.lirouti.domain.shop.repository.AvatarPurchaseRepository;
+import com.lirouti.domain.shop.entity.AvatarPurchase;
 import com.lirouti.domain.shop.service.command.ShopCommandService;
 import com.lirouti.domain.shop.service.query.ShopQueryService;
 import com.lirouti.domain.wallet.enums.Currency;
@@ -57,6 +59,8 @@ class AvatarShopTest {
     private ShopQueryService shopQueryService;
     @Autowired
     private MemberAvatarItemRepository memberAvatarItemRepository;
+    @Autowired
+    private AvatarPurchaseRepository avatarPurchaseRepository;
     @Autowired
     private MemberAvatarEquipmentRepository memberAvatarEquipmentRepository;
     @Autowired
@@ -442,5 +446,106 @@ class AvatarShopTest {
                         .containsExactly(hat.getId()),
                 () -> assertThat(owned.items()).allMatch(ShopResDTO.Item::owned)
         );
+    }
+
+    // ── 멱등 ──
+
+    /**
+     * 응답을 못 받은 클라이언트가 같은 요청을 다시 보내는 상황이다. 예전에는 보유 검사가
+     * {@code ALREADY_OWNED} 를 던져, 정상 재시도가 오류로 보였다.
+     */
+    @Test
+    @DisplayName("같은 키로 같은 장바구니를 다시 보내면 처음 결과를 그대로 돌려준다")
+    void purchase_SameKeySameCart_ReplaysFirstResult() {
+        giveBalance(Currency.TOPAZ, 1000);
+
+        ShopResDTO.PurchaseResult first = shopCommandService.purchase(
+                me.getId(), List.of(hat.getId(), tumbler.getId()), "buy-1");
+        em.flush();
+        em.clear();
+
+        ShopResDTO.PurchaseResult again = shopCommandService.purchase(
+                me.getId(), List.of(hat.getId(), tumbler.getId()), "buy-1");
+        em.flush();
+
+        assertAll(
+                () -> assertThat(again.purchasedItemIds())
+                        .as("처음과 같은 아이템을 같은 순서로")
+                        .containsExactlyElementsOf(first.purchasedItemIds()),
+                () -> assertThat(balance(Currency.TOPAZ))
+                        .as("두 번 빠지지 않는다").isEqualTo(400),
+                () -> assertThat(memberAvatarItemRepository
+                        .findOwnedItemIdsIn(me.getId(), List.of(hat.getId(), tumbler.getId())))
+                        .as("보유가 늘지도 않는다").hasSize(2)
+        );
+    }
+
+    /**
+     * <b>이것이 재화가 공짜로 나가던 길이다.</b> 지갑은 같은 키를 "이미 처리한 요청" 으로 보아
+     * 차감 없이 예전 결과를 돌려주는데, 그 전제는 "같은 요청" 이다. 장바구니가 달라졌는데 키가
+     * 같으면 전제가 깨져 보유 행만 생기고 값이 빠지지 않는다.
+     */
+    @Test
+    @DisplayName("같은 키로 다른 장바구니를 보내면 거절한다 — 통과시키면 공짜가 된다")
+    void purchase_SameKeyDifferentCart_IsRejected() {
+        giveBalance(Currency.TOPAZ, 1000);
+
+        shopCommandService.purchase(me.getId(), List.of(hat.getId()), "buy-1");
+        em.flush();
+        em.clear();
+
+        assertThatThrownBy(() -> shopCommandService.purchase(
+                me.getId(), List.of(tumbler.getId()), "buy-1"))
+                .isInstanceOf(ShopException.class)
+                .satisfies(e -> assertThat(((ShopException) e).getCode())
+                        .isEqualTo(ShopErrorCode.IDEMPOTENCY_KEY_REUSED));
+
+        em.clear();
+        assertAll(
+                () -> assertThat(balance(Currency.TOPAZ))
+                        .as("첫 구매분만 빠져 있다").isEqualTo(700),
+                () -> assertThat(memberAvatarItemRepository
+                        .findOwnedItemIdsIn(me.getId(), List.of(tumbler.getId())))
+                        .as("거절된 아이템은 보유되지 않는다").isEmpty()
+        );
+    }
+
+    @Test
+    @DisplayName("담은 순서가 달라도 같은 장바구니다")
+    void purchase_CartOrderDoesNotChangeIdentity() {
+        giveBalance(Currency.TOPAZ, 1000);
+
+        shopCommandService.purchase(me.getId(), List.of(hat.getId(), tumbler.getId()), "buy-1");
+        em.flush();
+        em.clear();
+
+        // 순서만 뒤집어 다시 보낸다 — 거절이 아니라 재시도로 받아야 한다.
+        ShopResDTO.PurchaseResult again = shopCommandService.purchase(
+                me.getId(), List.of(tumbler.getId(), hat.getId()), "buy-1");
+
+        assertAll(
+                () -> assertThat(again.purchasedItemIds())
+                        .containsExactlyInAnyOrder(hat.getId(), tumbler.getId()),
+                () -> assertThat(balance(Currency.TOPAZ)).isEqualTo(400)
+        );
+    }
+
+    @Test
+    @DisplayName("구매한 아이템은 그 구매를 가리킨다")
+    void purchase_LinksItemsToPurchase() {
+        giveBalance(Currency.TOPAZ, 1000);
+
+        shopCommandService.purchase(me.getId(), List.of(hat.getId(), tumbler.getId()), "buy-1");
+        em.flush();
+        em.clear();
+
+        AvatarPurchase purchase = avatarPurchaseRepository
+                .findByMemberIdAndIdempotencyKey(me.getId(), "buy-1").orElseThrow();
+
+        assertThat(memberAvatarItemRepository
+                .findAllByAvatarPurchaseIdOrderByIdAsc(purchase.getId()))
+                .as("여섯 개를 사도 한 구매 아래로 묶인다")
+                .extracting(item -> item.getAvatarItem().getId())
+                .containsExactly(hat.getId(), tumbler.getId());
     }
 }

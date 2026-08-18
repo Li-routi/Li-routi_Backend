@@ -9,6 +9,9 @@ import com.lirouti.domain.shop.enums.AvatarSlot;
 import com.lirouti.domain.shop.repository.AvatarItemRepository;
 import com.lirouti.domain.shop.repository.MemberAvatarEquipmentRepository;
 import com.lirouti.domain.shop.repository.MemberAvatarItemRepository;
+import com.lirouti.domain.shop.exception.ShopItemRejectedException;
+import com.lirouti.domain.shop.exception.code.error.ShopErrorCode;
+import com.lirouti.domain.shop.repository.AvatarPurchaseRepository;
 import com.lirouti.domain.shop.service.command.ShopCommandService;
 import com.lirouti.domain.wallet.enums.Currency;
 import com.lirouti.domain.wallet.enums.WalletTransactionType;
@@ -61,6 +64,8 @@ class AvatarPurchaseConcurrencyTest {
     @Autowired
     private MemberAvatarItemRepository memberAvatarItemRepository;
     @Autowired
+    private AvatarPurchaseRepository avatarPurchaseRepository;
+    @Autowired
     private MemberAvatarEquipmentRepository memberAvatarEquipmentRepository;
     @Autowired
     private MemberWalletRepository memberWalletRepository;
@@ -103,6 +108,9 @@ class AvatarPurchaseConcurrencyTest {
                 memberAvatarEquipmentRepository.findAllByMemberId(memberId));
         memberAvatarItemRepository.deleteAll(memberAvatarItemRepository.findAll().stream()
                 .filter(mi -> mi.getMember().getId().equals(memberId)).toList());
+        // 보유 행이 구매를 참조하므로 구매보다 먼저 지워야 한다.
+        avatarPurchaseRepository.deleteAll(avatarPurchaseRepository.findAll().stream()
+                .filter(purchase -> purchase.getMember().getId().equals(memberId)).toList());
         walletTransactionRepository.deleteAll(walletTransactionRepository.findAll().stream()
                 .filter(t -> t.getMember().getId().equals(memberId)).toList());
         memberWalletRepository.findByMemberIdAndCurrency(memberId, Currency.TOPAZ)
@@ -121,6 +129,9 @@ class AvatarPurchaseConcurrencyTest {
         CountDownLatch done = new CountDownLatch(THREADS);
         AtomicInteger success = new AtomicInteger();
         AtomicInteger rejected = new AtomicInteger();
+        // 예상 못 한 예외는 따로 모아 테스트를 실패시킨다.
+        List<RuntimeException> unexpected =
+                java.util.Collections.synchronizedList(new ArrayList<>());
 
         for (int i = 0; i < THREADS; i++) {
             // 멱등 키를 스레드마다 다르게 준다. 같은 키를 주면 지갑의 멱등이 두 번째 차감을
@@ -135,8 +146,17 @@ class AvatarPurchaseConcurrencyTest {
                 } catch (InterruptedException ignored) {
                     Thread.currentThread().interrupt();
                 } catch (RuntimeException e) {
-                    // 애플리케이션 분기(ALREADY_OWNED)든 유니크 제약이든 거절이면 된다.
-                    rejected.incrementAndGet();
+                    // 거절로 세는 것은 "이미 보유" 뿐이다. 애플리케이션 분기든 유니크 제약이든
+                    // 결국 이 코드로 나온다.
+                    //
+                    // RuntimeException 전체를 거절로 세면 잠금 실패나 내부 오류까지 통과시킨다 —
+                    // 성공 1 · 거절 N-1 이라는 단언이 "아무도 못 샀다" 를 못 걸러낸다.
+                    if (e instanceof ShopItemRejectedException rejection
+                            && rejection.getCode() == ShopErrorCode.ALREADY_OWNED) {
+                        rejected.incrementAndGet();
+                    } else {
+                        unexpected.add(e);
+                    }
                 } finally {
                     done.countDown();
                 }
@@ -156,6 +176,7 @@ class AvatarPurchaseConcurrencyTest {
         assertAll(
                 () -> assertThat(workersReady).isTrue(),
                 () -> assertThat(finished).isTrue(),
+                () -> assertThat(unexpected).as("예상 못 한 예외가 없어야 한다").isEmpty(),
                 () -> assertThat(success.get()).as("성공은 정확히 한 번").isEqualTo(1),
                 () -> assertThat(rejected.get()).isEqualTo(THREADS - 1),
                 () -> assertThat(owned).as("보유 행도 하나뿐").isEqualTo(1),

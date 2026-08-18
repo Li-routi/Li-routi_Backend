@@ -9,6 +9,7 @@ import com.lirouti.domain.shop.dto.response.ShopResDTO;
 import com.lirouti.domain.shop.entity.AvatarItem;
 import com.lirouti.domain.shop.entity.MemberAvatarEquipment;
 import com.lirouti.domain.shop.entity.MemberAvatarItem;
+import com.lirouti.domain.shop.entity.AvatarPurchase;
 import com.lirouti.domain.shop.enums.AvatarSlot;
 import com.lirouti.domain.shop.exception.ShopException;
 import com.lirouti.domain.shop.exception.ShopInsufficientBalanceException;
@@ -17,6 +18,7 @@ import com.lirouti.domain.shop.exception.code.error.ShopErrorCode;
 import com.lirouti.domain.shop.repository.AvatarItemRepository;
 import com.lirouti.domain.shop.repository.MemberAvatarEquipmentRepository;
 import com.lirouti.domain.shop.repository.MemberAvatarItemRepository;
+import com.lirouti.domain.shop.repository.AvatarPurchaseRepository;
 import com.lirouti.domain.wallet.enums.Currency;
 import com.lirouti.domain.wallet.enums.WalletTransactionType;
 import com.lirouti.domain.wallet.service.WalletResult;
@@ -37,6 +39,7 @@ import java.util.EnumSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -60,6 +63,7 @@ public class ShopCommandService {
     private final WalletService walletService;
     private final MediaService mediaService;
     private final AvatarLayerAssembler avatarLayerAssembler;
+    private final AvatarPurchaseRepository avatarPurchaseRepository;
 
 
     /**
@@ -99,6 +103,25 @@ public class ShopCommandService {
             throw new ShopItemRejectedException(ShopErrorCode.DUPLICATE_ITEM, duplicated);
         }
 
+        // 구매를 선점한다. 여기부터가 "이 구매" 라는 실체다.
+        //
+        // 조회한 뒤 없으면 저장하는데, 이것이 안전한 이유는 위에서 회원 행을 FOR UPDATE 로
+        // 잠갔기 때문이다 — 같은 회원의 두 요청은 여기서 줄을 서고, 다른 회원끼리는 유니크가
+        // (회원, 키) 라 애초에 부딪히지 않는다. 유니크 제약은 그래도 최종 방어선으로 남는다.
+        String fingerprint = CartFingerprint.of(requestedIds);
+        Optional<AvatarPurchase> claimed =
+                avatarPurchaseRepository.findByMemberIdAndIdempotencyKey(memberId, idempotencyKey);
+        if (claimed.isPresent()) {
+            AvatarPurchase previous = claimed.get();
+            // 같은 키인데 장바구니가 다르면 진행할 수 없다. 지갑이 같은 키를 "이미 처리한
+            // 요청" 으로 보아 차감 없이 예전 결과를 돌려주므로, 그대로 두면 보유 행만 생기고
+            // 값이 빠지지 않는다.
+            if (!previous.hasSameItems(fingerprint)) {
+                throw new ShopException(ShopErrorCode.IDEMPOTENCY_KEY_REUSED);
+            }
+            return replayOf(memberId, previous, idempotencyKey);
+        }
+
         // 요청 순서를 지킨다 — 응답의 아이템 순서가 화면의 선택 순서와 같아야 대조하기 쉽다.
         List<AvatarItem> items = itemsInRequestedOrder(requestedIds);
         rejectUnavailable(memberId, items);
@@ -114,12 +137,20 @@ public class ShopCommandService {
         rejectIfShort(memberId, totals);
 
         LocalDateTime purchasedAt = LocalDateTime.now(TimeUtil.KST);
+        AvatarPurchase purchase = avatarPurchaseRepository.save(AvatarPurchase.builder()
+                .member(member)
+                .idempotencyKey(idempotencyKey)
+                .itemFingerprint(fingerprint)
+                .purchasedAt(purchasedAt)
+                .build());
+
         for (AvatarItem item : items) {
             // 유니크 제약이 최종 방어선이다. 위 검사는 흔한 경우를 예외 없이 넘기기 위한
             // 것이고, 동시에 들어오면 둘 다 통과하므로 제약이 하나를 떨군다.
             memberAvatarItemRepository.save(MemberAvatarItem.builder()
                     .member(member)
                     .avatarItem(item)
+                    .avatarPurchase(purchase)
                     .currency(item.getCurrency())
                     .paidPrice(item.getPrice())
                     .purchasedAt(purchasedAt)
@@ -136,11 +167,56 @@ public class ShopCommandService {
             // 참조는 비운다 — 묶음 구매에는 대표할 아이템이 하나로 정해지지 않는다.
             WalletResult result = walletService.deduct(new WalletCommand(
                     memberId, total.getKey(), WalletTransactionType.PURCHASE,
-                    "avatar:purchase:" + idempotencyKey, null, null), total.getValue());
+                    walletIdempotencyKey(idempotencyKey), null, null), total.getValue());
             payments.add(ShopConverter.toPayment(total.getKey(), total.getValue(), result));
         }
 
         return ShopConverter.toPurchaseResult(items, payments);
+    }
+
+    /**
+     * 앞서 성사된 구매를 그대로 돌려준다. <b>같은 키·같은 장바구니로 다시 들어왔을 때다.</b>
+     *
+     * <p>보유 검사를 다시 하지 않는다 — 이미 그 구매로 갖게 된 것이라 {@code ALREADY_OWNED} 가
+     * 나가면 정상 재시도가 오류로 보인다. 이 API 가 멱등 키를 받는 이유가 그것이다.
+     *
+     * <p><b>금액은 마스터가 아니라 구매 시점 스냅샷으로 센다.</b> 그 사이 운영이 가격을 바꿨어도
+     * 처음 응답과 같은 값이 나가야 한다.
+     *
+     * <p>지갑은 다시 부른다. 같은 키라 <b>차감 없이 처음 거래를 돌려주므로</b>({@code applied}
+     * 가 {@code false}) 잔액이 두 번 빠지지 않고, 지금 잔액이 응답에 실린다.
+     */
+    private ShopResDTO.PurchaseResult replayOf(Long memberId, AvatarPurchase purchase,
+                                               String idempotencyKey) {
+        List<MemberAvatarItem> owned =
+                memberAvatarItemRepository.findAllByAvatarPurchaseIdOrderByIdAsc(purchase.getId());
+
+        Map<Currency, Integer> totals = new EnumMap<>(Currency.class);
+        for (MemberAvatarItem item : owned) {
+            totals.merge(item.getCurrency(), item.getPaidPrice(), Integer::sum);
+        }
+
+        List<ShopResDTO.Payment> payments = new ArrayList<>();
+        for (Map.Entry<Currency, Integer> total : totals.entrySet()) {
+            WalletResult result = walletService.deduct(new WalletCommand(
+                    memberId, total.getKey(), WalletTransactionType.PURCHASE,
+                    walletIdempotencyKey(idempotencyKey), null, null), total.getValue());
+            payments.add(ShopConverter.toPayment(total.getKey(), total.getValue(), result));
+        }
+
+        return ShopConverter.toPurchaseResult(
+                owned.stream().map(MemberAvatarItem::getAvatarItem).toList(), payments);
+    }
+
+    /**
+     * 지갑 원장에 남길 키.
+     *
+     * <p>접두어를 붙여 다른 도메인의 키와 섞이지 않게 한다. 요청 DTO 가 클라이언트 키를 64자로
+     * 제한하므로 접두어 16자를 더해도 {@code wallet_transaction.idempotency_key} 의 150자 안에
+     * 들어간다 — 그 상한을 넓히려면 여기를 함께 봐야 한다.
+     */
+    private String walletIdempotencyKey(String idempotencyKey) {
+        return "avatar:purchase:" + idempotencyKey;
     }
 
     /** 두 번 이상 담긴 아이템. 화면에서 지울 대상을 알려주려고 id 를 모은다. */
