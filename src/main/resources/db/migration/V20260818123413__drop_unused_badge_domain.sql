@@ -2,6 +2,7 @@
 -- member_achievement.status == CLAIMED 자체가 "배지를 받았다"는 뜻이라
 -- 별도 회원별 배지 보유 테이블이 필요 없었다는 게 결론이다.
 
+ALTER TABLE achievement DROP FOREIGN KEY fk_achievement_badge_code;
 ALTER TABLE achievement DROP COLUMN badge_code;
 
 DROP TABLE IF EXISTS member_badge;
