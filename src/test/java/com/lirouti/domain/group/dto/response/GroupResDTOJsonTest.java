@@ -17,7 +17,7 @@ class GroupResDTOJsonTest {
     void joinPreviewAvatar_ExcludesShopItemFields() throws Exception {
         GroupResDTO.JoinPreviewMember member = new GroupResDTO.JoinPreviewMember(
                 new GroupResDTO.Avatar(List.of(
-                        new GroupResDTO.Equipped(AvatarSlot.HEAD, "https://img/hat.png"))));
+                        new GroupResDTO.Equipped(AvatarSlot.HEAD, "https://img/hat.png")), List.of()));
 
         String json = new ObjectMapper().writeValueAsString(member);
 

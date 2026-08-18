@@ -48,4 +48,9 @@ public class MemberSelectedCharacter extends BaseEntity {
         this.memberId = memberId;
         this.characterId = characterId;
     }
+
+    /** 회원당 한 행이라 교체가 곧 갱신이다. 보유 확인은 부르는 쪽이 한다. */
+    public void changeTo(Long characterId) {
+        this.characterId = characterId;
+    }
 }

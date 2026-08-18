@@ -31,6 +31,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import com.lirouti.domain.character.service.query.AvatarLayerAssembler;
 import com.lirouti.domain.media.service.MediaService;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -63,6 +64,8 @@ class GroupQueryServiceTest {
     @Mock
     private MediaService mediaService;
     @Mock
+    private AvatarLayerAssembler avatarLayerAssembler;
+    @Mock
     private GroupValidationService groupValidationService;
     @Mock
     private MemberQueryService memberQueryService;
@@ -85,6 +88,7 @@ class GroupQueryServiceTest {
                 categoryRepository,
                 memberAvatarEquipmentRepository,
                 mediaService,
+                avatarLayerAssembler,
                 groupValidationService,
                 memberQueryService,
                 clock
@@ -141,10 +145,10 @@ class GroupQueryServiceTest {
                 new GroupResDTO.MemberActivity(
                         MEMBER_ID, "리루티", new GroupResDTO.Avatar(List.of(
                                 new GroupResDTO.Equipped(
-                                        AvatarSlot.HEAD, "https://cdn/hat.png"))), "오늘도 완료",
+                                        AvatarSlot.HEAD, "https://cdn/hat.png")), List.of()), "오늘도 완료",
                         4, 12L, 7L, 2L, new GroupResDTO.DailyProgress(2L, 3L)),
                 new GroupResDTO.MemberActivity(
-                        2L, "동료", new GroupResDTO.Avatar(List.of()), null,
+                        2L, "동료", new GroupResDTO.Avatar(List.of(), List.of()), null,
                         1, 3L, 0L, 1L, new GroupResDTO.DailyProgress(0L, 0L))
         );
     }
@@ -393,6 +397,7 @@ class GroupQueryServiceTest {
                 categoryRepository,
                 memberAvatarEquipmentRepository,
                 mediaService,
+                avatarLayerAssembler,
                 groupValidationService,
                 memberQueryService,
                 monthEndClock

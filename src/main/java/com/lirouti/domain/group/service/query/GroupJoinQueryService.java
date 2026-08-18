@@ -16,6 +16,9 @@ import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.service.query.MemberQueryService;
 import com.lirouti.domain.shop.repository.MemberAvatarEquipmentRepository;
 import com.lirouti.domain.media.service.MediaService;
+import com.lirouti.domain.character.dto.response.CharacterResDTO;
+import com.lirouti.domain.character.service.query.AvatarLayerAssembler;
+import com.lirouti.domain.shop.entity.MemberAvatarEquipment;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -35,6 +38,7 @@ public class GroupJoinQueryService {
     private final GroupRoutineRepository groupRoutineRepository;
     private final MemberAvatarEquipmentRepository memberAvatarEquipmentRepository;
     private final MediaService mediaService;
+    private final AvatarLayerAssembler avatarLayerAssembler;
     private final MemberQueryService memberQueryService;
 
 
@@ -60,12 +64,20 @@ public class GroupJoinQueryService {
         List<Long> activeMemberIds = groupMemberRepository
                 .findMemberIdsByGroupIdAndStatusOrderByJoinedAtAscIdAsc(
                         group.getId(), GroupMemberStatus.ACTIVE);
+        List<MemberAvatarEquipment> equipments = activeMemberIds.isEmpty()
+                ? List.of()
+                : memberAvatarEquipmentRepository
+                        .findAllByMemberIdInWithMemberAndAvatarItem(activeMemberIds);
+        // 구성원마다 따로 조립하면 사람 수만큼 조회가 나간다.
+        Map<Long, List<CharacterResDTO.Layer>> layersByMemberId =
+                avatarLayerAssembler.assembleAllAsResponse(activeMemberIds,
+                        equipments.stream().collect(java.util.stream.Collectors.groupingBy(
+                                equipment -> equipment.getMember().getId())));
+
         Map<Long, GroupResDTO.Avatar> avatarsByMemberId = GroupConverter.toAvatarsByMemberId(
                 activeMemberIds,
-                activeMemberIds.isEmpty()
-                        ? List.of()
-                        : memberAvatarEquipmentRepository
-                                .findAllByMemberIdInWithMemberAndAvatarItem(activeMemberIds),
+                equipments,
+                layersByMemberId,
                 mediaService::resolveAvatarAssetUrl
         );
         long totalRoutineCount = groupRoutineRepository.countByGroupIdAndActiveTrue(group.getId());
