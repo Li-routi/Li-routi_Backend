@@ -8,6 +8,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -39,6 +40,10 @@ public class Group extends BaseEntity {
     @Column(nullable = false, length = 20)
     private GroupStatus status;
 
+    /** 그룹 루틴 인증이 마지막으로 새로 등록된 시각이다. 인증 이력이 없으면 null이다. */
+    @Column(name = "last_verification_at")
+    private LocalDateTime lastVerificationAt;
+
     @OneToMany(mappedBy = "group", cascade = CascadeType.REMOVE)
     private List<GroupMember> members = new ArrayList<>();
 
@@ -58,6 +63,14 @@ public class Group extends BaseEntity {
 
     public void updateName(String name) {
         this.name = name;
+    }
+
+    /** 더 최근에 새로 등록된 그룹 루틴 인증 시각만 보관한다. */
+    public void updateLastVerificationAt(LocalDateTime verificationCreatedAt) {
+        if (verificationCreatedAt != null
+                && (lastVerificationAt == null || verificationCreatedAt.isAfter(lastVerificationAt))) {
+            this.lastVerificationAt = verificationCreatedAt;
+        }
     }
 
     /** 신규 참여를 차단하기 위해 그룹을 잠근다. */

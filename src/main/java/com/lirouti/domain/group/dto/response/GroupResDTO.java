@@ -13,6 +13,7 @@ import lombok.Builder;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 
@@ -40,8 +41,10 @@ public final class GroupResDTO {
             long todayCompletedRoutineCount,
             int currentStreak,
             int monthlyAchievementRate,
-            long todayGroupVerificationCount
-    ) {
+            long todayGroupVerificationCount,
+            @Schema(description = "그룹 루틴 인증이 마지막으로 새로 등록된 시각. 인증 이력이 없으면 null", nullable = true)
+            LocalDateTime lastVerificationAt
+        ) {
     }
 
     /** 그룹에서 사용할 수 있는 카테고리와 추가 가능 개수다. */

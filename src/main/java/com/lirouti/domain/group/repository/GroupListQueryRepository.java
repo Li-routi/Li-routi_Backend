@@ -19,6 +19,7 @@ import org.springframework.stereotype.Repository;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 /** 로그인 회원의 참여 그룹 목록 화면에 필요한 읽기 모델을 고정 횟수 배치 조회한다. */
@@ -44,7 +45,8 @@ public class GroupListQueryRepository {
                         MyGroupProjection.class,
                         group.id,
                         group.name,
-                        groupMember.currentStreak
+                        groupMember.currentStreak,
+                        group.lastVerificationAt
                 ))
                 .from(groupMember)
                 .join(groupMember.group, group)
@@ -204,7 +206,12 @@ public class GroupListQueryRepository {
                 .fetch();
     }
 
-    public record MyGroupProjection(Long groupId, String groupName, int currentStreak) {
+    public record MyGroupProjection(
+            Long groupId,
+            String groupName,
+            int currentStreak,
+            LocalDateTime lastVerificationAt
+    ) {
     }
 
     public record GroupCountProjection(Long groupId, long count) {

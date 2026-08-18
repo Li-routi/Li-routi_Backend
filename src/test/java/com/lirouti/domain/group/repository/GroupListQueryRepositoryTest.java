@@ -57,6 +57,8 @@ class GroupListQueryRepositoryTest {
         Group newerGroup = group("LIST002");
         Group deletedGroup = group("LIST003");
         deletedGroup.delete();
+        LocalDateTime olderGroupLastVerificationAt = TODAY.minusDays(1).atTime(20, 0);
+        olderGroup.updateLastVerificationAt(olderGroupLastVerificationAt);
 
         GroupMember olderMembership = membership(requester, olderGroup, TODAY.atTime(10, 0));
         membership(requester, newerGroup, TODAY.atTime(14, 0));
@@ -104,6 +106,10 @@ class GroupListQueryRepositoryTest {
 
         assertThat(groups).extracting(MyGroupProjection::groupId)
                 .containsExactly(newerGroup.getId(), olderGroup.getId());
+        assertThat(groups).filteredOn(group -> group.groupId().equals(olderGroup.getId()))
+                .singleElement()
+                .extracting(MyGroupProjection::lastVerificationAt)
+                .isEqualTo(olderGroupLastVerificationAt);
         assertThat(groupListQueryRepository.countActiveMembersByGroupIds(groupIds))
                 .containsExactlyInAnyOrder(
                         new GroupCountProjection(olderGroup.getId(), 2L),

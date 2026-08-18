@@ -21,6 +21,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -82,7 +83,8 @@ class GroupControllerUnitTest {
     void getMyGroups_AuthenticatedMember_ReturnsMyGroupList() {
         CustomUserDetails principal = new CustomUserDetails(MEMBER_ID, Role.ROLE_USER);
         GroupResDTO.MyGroupList result = new GroupResDTO.MyGroupList(List.of(
-                new GroupResDTO.MyGroup(GROUP_ID, "아침 모임", 3L, 2L, 2L, 1L, 4, 50, 3L)
+                new GroupResDTO.MyGroup(GROUP_ID, "아침 모임", 3L, 2L, 2L, 1L, 4, 50, 3L,
+                        LocalDateTime.of(2026, 8, 18, 19, 45))
         ));
         when(groupQueryService.getMyGroups(MEMBER_ID)).thenReturn(result);
 
