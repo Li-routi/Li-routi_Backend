@@ -91,7 +91,18 @@ public final class GroupResDTO {
             long totalLikeCount,
             long totalPokeCount,
             long totalDisappointmentCount,
-            DailyProgress dailyProgress
+            DailyProgress dailyProgress,
+            @Schema(description = "대표로 설정한 업적. 설정 안 했으면 null", nullable = true)
+            RepresentativeAchievement representativeAchievement
+    ) {
+    }
+
+    /** 그룹 프로필에 노출할 구성원의 대표 업적이다. */
+    @Builder
+    @Schema(name = "GroupMemberRepresentativeAchievement", description = "그룹 구성원 대표 업적")
+    public record RepresentativeAchievement(
+            String name,
+            String badgeImageUrl
     ) {
     }
 

@@ -77,6 +77,9 @@ public class Member extends BaseEntity {
     @Column(name = "like_notification_enabled", nullable = false)
     private boolean likeNotificationEnabled;
 
+    @Column(name = "representative_achievement_id")
+    private Long representativeAchievementId;
+
     @Builder
     private Member(
             String email,
@@ -164,5 +167,18 @@ public class Member extends BaseEntity {
         if (likeEnabled != null) {
             this.likeNotificationEnabled = likeEnabled;
         }
+    }
+
+    /**
+     * 홈 화면·그룹 프로필에 노출할 대표 업적을 설정한다. 배지 이미지가 있는 CLAIMED
+     * 업적인지 검증은 호출부(RepresentativeAchievementCommandService)의 책임이다 -
+     * 엔티티는 단순히 값을 갖는다.
+     */
+    public void selectRepresentativeAchievement(Long achievementId) {
+        this.representativeAchievementId = achievementId;
+    }
+
+    public void clearRepresentativeAchievement() {
+        this.representativeAchievementId = null;
     }
 }

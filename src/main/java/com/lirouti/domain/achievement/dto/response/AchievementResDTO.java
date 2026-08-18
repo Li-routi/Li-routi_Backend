@@ -103,4 +103,20 @@ public final class AchievementResDTO {
             int targetStreak
     ) {
     }
+
+    @Builder
+    public record ClaimedBadgeAchievement(
+            Long achievementId,
+            String name,
+            String badgeImageUrl,
+            boolean representative
+    ) {
+    }
+
+    @Builder
+    public record ClaimedBadgeAchievements(
+            int totalCount,
+            List<ClaimedBadgeAchievement> achievements
+    ) {
+    }
 }

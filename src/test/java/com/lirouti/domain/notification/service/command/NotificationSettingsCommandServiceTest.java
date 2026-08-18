@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -35,6 +36,8 @@ class NotificationSettingsCommandServiceTest {
     private NotificationRepository notificationRepository;
     @Mock
     private MemberRepository memberRepository;
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     private NotificationCommandService commandService;
 
@@ -45,7 +48,8 @@ class NotificationSettingsCommandServiceTest {
                 fcmDeviceRepository,
                 notificationRepository,
                 memberRepository,
-                clock
+                clock,
+                eventPublisher
         );
     }
 

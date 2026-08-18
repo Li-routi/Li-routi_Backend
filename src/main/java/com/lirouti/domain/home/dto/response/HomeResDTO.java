@@ -30,7 +30,8 @@ public final class HomeResDTO {
     @Builder
     public record UserInfo(
             Long memberId,
-            String nickname
+            String nickname,
+            RepresentativeAchievement representativeAchievement
     ) {
     }
 
@@ -51,6 +52,15 @@ public final class HomeResDTO {
     public record GroupRoutines(
             List<GroupResDTO.TodayRoutine> routines,
             boolean isEmpty
+    ) {
+    }
+
+    /** 홈 화면에 노출할 대표 업적. 설정 안 했으면 null. */
+    @Builder
+    public record RepresentativeAchievement(
+            Long achievementId,
+            String name,
+            String badgeImageUrl
     ) {
     }
 }

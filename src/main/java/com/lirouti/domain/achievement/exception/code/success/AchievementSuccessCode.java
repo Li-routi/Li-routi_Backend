@@ -33,6 +33,21 @@ public enum AchievementSuccessCode implements BaseSuccessCode {
             HttpStatus.OK,
             "파도 업적 진행 상황 조회에 성공했습니다.",
             "ACHIEVEMENT200_5"
+    ),
+    REPRESENTATIVE_SELECT_SUCCESS(
+            HttpStatus.OK,
+            "대표 업적 선택에 성공했습니다.",
+            "ACHIEVEMENT200_6"
+    ),
+    REPRESENTATIVE_CLEAR_SUCCESS(
+            HttpStatus.OK,
+            "대표 업적 해제에 성공했습니다.",
+            "ACHIEVEMENT200_7"
+    ),
+    REPRESENTATIVE_LIST_FETCH_SUCCESS(
+            HttpStatus.OK,
+            "선택 가능한 대표 업적 목록 조회에 성공했습니다.",
+            "ACHIEVEMENT200_8"
     );
 
     private final HttpStatus httpStatus;

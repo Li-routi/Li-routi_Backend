@@ -1,5 +1,6 @@
 package com.lirouti.domain.group.service.query;
 
+import com.lirouti.domain.achievement.repository.AchievementRepository;
 import com.lirouti.domain.group.dto.response.GroupResDTO;
 import com.lirouti.domain.group.entity.GroupMember;
 import com.lirouti.domain.group.enums.GroupMemberRole;
@@ -22,6 +23,7 @@ import com.lirouti.domain.group.service.GroupValidationService;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.exception.MemberException;
 import com.lirouti.domain.member.exception.code.error.MemberErrorCode;
+import com.lirouti.domain.member.repository.MemberRepository;
 import com.lirouti.domain.member.service.query.MemberQueryService;
 import com.lirouti.domain.shop.entity.AvatarItem;
 import com.lirouti.domain.shop.entity.MemberAvatarEquipment;
@@ -71,6 +73,10 @@ class GroupQueryServiceTest {
     private MemberQueryService memberQueryService;
     @Mock
     private Member member;
+    @Mock
+    private MemberRepository memberRepository;
+    @Mock
+    private AchievementRepository achievementRepository;
 
     private GroupQueryService groupQueryService;
 
@@ -91,7 +97,9 @@ class GroupQueryServiceTest {
                 avatarLayerAssembler,
                 groupValidationService,
                 memberQueryService,
-                clock
+                clock,
+                memberRepository,
+                achievementRepository
         );
     }
 
@@ -127,6 +135,7 @@ class GroupQueryServiceTest {
         when(equipment.getSlot()).thenReturn(AvatarSlot.HEAD);
         when(memberAvatarEquipmentRepository.findAllByMemberIdInWithMemberAndAvatarItem(
                 List.of(MEMBER_ID, 2L))).thenReturn(List.of(equipment));
+        when(memberRepository.findAllById(anyList())).thenReturn(List.of());
 
         // when
         GroupResDTO.Detail result = groupQueryService.getGroupDetail(groupId, MEMBER_ID);
@@ -144,12 +153,12 @@ class GroupQueryServiceTest {
         assertThat(result.members()).containsExactly(
                 new GroupResDTO.MemberActivity(
                         MEMBER_ID, "리루티", new GroupResDTO.Avatar(List.of(
-                                new GroupResDTO.Equipped(
-                                        AvatarSlot.HEAD, "https://cdn/hat.png")), List.of()), "오늘도 완료",
-                        4, 12L, 7L, 2L, new GroupResDTO.DailyProgress(2L, 3L)),
+                        new GroupResDTO.Equipped(
+                                AvatarSlot.HEAD, "https://cdn/hat.png")), List.of()), "오늘도 완료",
+                        4, 12L, 7L, 2L, new GroupResDTO.DailyProgress(2L, 3L), null),
                 new GroupResDTO.MemberActivity(
                         2L, "동료", new GroupResDTO.Avatar(List.of(), List.of()), null,
-                        1, 3L, 0L, 1L, new GroupResDTO.DailyProgress(0L, 0L))
+                        1, 3L, 0L, 1L, new GroupResDTO.DailyProgress(0L, 0L), null)
         );
     }
 
@@ -401,7 +410,9 @@ class GroupQueryServiceTest {
                 avatarLayerAssembler,
                 groupValidationService,
                 memberQueryService,
-                monthEndClock
+                monthEndClock,
+                memberRepository,
+                achievementRepository
         );
         LocalDate monthEnd = LocalDate.of(2026, 7, 31);
         List<Long> groupIds = List.of(301L);

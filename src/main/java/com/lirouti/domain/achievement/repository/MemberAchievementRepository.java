@@ -28,4 +28,18 @@ public interface MemberAchievementRepository extends JpaRepository<MemberAchieve
     @Query("select ma from MemberAchievement ma where ma.member.id = :memberId and ma.achievement.id = :achievementId")
     Optional<MemberAchievement> findForUpdate(@Param("memberId") Long memberId,
                                               @Param("achievementId") Long achievementId);
+
+    /**
+     * 대표 업적 선택 화면("달성" 탭)용. 배지 이미지가 있고 CLAIMED 상태인 것만 가져온다.
+     */
+    @Query("""
+        select ma from MemberAchievement ma
+        join fetch ma.achievement a
+        where ma.member.id = :memberId
+        and ma.status = com.lirouti.domain.achievement.enums.MemberAchievementStatus.CLAIMED
+        and a.badgeImageKey is not null
+        and a.category != com.lirouti.domain.achievement.enums.AchievementCategory.EGG
+        order by ma.claimedAt desc
+        """)
+    List<MemberAchievement> findClaimedWithBadgeByMemberId(@Param("memberId") Long memberId);
 }

@@ -1,5 +1,6 @@
 package com.lirouti.domain.group.service.query;
 
+import com.lirouti.domain.achievement.repository.AchievementRepository;
 import com.lirouti.domain.group.dto.response.GroupResDTO;
 import com.lirouti.domain.group.entity.Group;
 import com.lirouti.domain.group.entity.GroupRoutineCategory;
@@ -11,6 +12,7 @@ import com.lirouti.domain.group.repository.GroupDetailQueryRepository;
 import com.lirouti.domain.group.repository.GroupListQueryRepository;
 import com.lirouti.domain.group.repository.GroupRoutineQueryRepository;
 import com.lirouti.domain.group.service.GroupValidationService;
+import com.lirouti.domain.member.repository.MemberRepository;
 import com.lirouti.domain.member.service.query.MemberQueryService;
 import com.lirouti.domain.shop.repository.MemberAvatarEquipmentRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -45,6 +47,8 @@ class GroupCategoryQueryServiceTest {
     @Mock private AvatarLayerAssembler avatarLayerAssembler;
     @Mock private GroupValidationService validationService;
     @Mock private MemberQueryService memberQueryService;
+    @Mock private MemberRepository memberRepository;
+    @Mock private AchievementRepository achievementRepository;
 
     private GroupQueryService queryService;
 
@@ -61,7 +65,9 @@ class GroupCategoryQueryServiceTest {
                 avatarLayerAssembler,
                 validationService,
                 memberQueryService,
-                Clock.systemUTC()
+                Clock.systemUTC(),
+                memberRepository,
+                achievementRepository
         );
     }
 

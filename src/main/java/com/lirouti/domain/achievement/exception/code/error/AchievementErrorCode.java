@@ -40,6 +40,12 @@ public enum AchievementErrorCode implements BaseErrorCode {
             HttpStatus.CONFLICT,
             "이미 보상을 수령한 업적입니다.",
             "ACHIEVEMENT409_2"
+    ),
+
+    BADGE_IMAGE_NOT_AVAILABLE(
+            HttpStatus.BAD_REQUEST,
+        "배지 이미지가 없는 업적은 대표로 선택할 수 없습니다.",
+                "ACHIEVEMENT400_3"
     );
 
     private final HttpStatus httpStatus;

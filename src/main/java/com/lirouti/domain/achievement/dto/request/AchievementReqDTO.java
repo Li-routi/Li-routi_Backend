@@ -13,4 +13,11 @@ public final class AchievementReqDTO {
             Long memberRoutineId
     ) {
     }
+
+    public record SelectRepresentativeAchievement(
+            @NotNull(message = "업적 ID는 필수입니다.")
+            @Positive(message = "업적 ID는 양수여야 합니다.")
+            Long achievementId
+    ) {
+    }
 }
