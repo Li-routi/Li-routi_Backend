@@ -3,6 +3,8 @@ package com.lirouti.domain.mypage.service.query;
 import com.lirouti.domain.mypage.converter.SuggestionConverter;
 import com.lirouti.domain.mypage.dto.response.SuggestionResDTO;
 import com.lirouti.domain.mypage.entity.Suggestion;
+import com.lirouti.domain.mypage.exception.SuggestionException;
+import com.lirouti.domain.mypage.exception.code.error.SuggestionErrorCode;
 import com.lirouti.domain.mypage.repository.SuggestionCategoryRepository;
 import com.lirouti.domain.mypage.repository.SuggestionRepository;
 import lombok.RequiredArgsConstructor;
@@ -16,6 +18,9 @@ import java.util.List;
 @Service
 @RequiredArgsConstructor
 public class SuggestionQueryService {
+
+    private static final int MIN_PAGE_SIZE = 1;
+    private static final int MAX_PAGE_SIZE = 50;
 
     private final SuggestionRepository suggestionRepository;
     private final SuggestionCategoryRepository suggestionCategoryRepository;
@@ -39,6 +44,12 @@ public class SuggestionQueryService {
      */
     @Transactional(readOnly = true)
     public SuggestionResDTO.Listing getMySuggestions(Long memberId, Long cursor, int size) {
+        // 상한이 없으면 큰 값을 넣는 것만으로 자기 건의 전부를 한 번에 끌어갈 수 있다.
+        // 조용히 깎지 않고 거절한다 — 요청한 수와 받은 수가 다르면 그 이유를 알 수 없다.
+        if (size < MIN_PAGE_SIZE || size > MAX_PAGE_SIZE) {
+            throw new SuggestionException(SuggestionErrorCode.INVALID_PAGE_SIZE);
+        }
+
         List<Suggestion> found =
                 new ArrayList<>(suggestionRepository.findMine(memberId, cursor, Limit.of(size + 1)));
 

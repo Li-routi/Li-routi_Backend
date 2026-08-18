@@ -26,6 +26,23 @@ public enum SuggestionErrorCode implements BaseErrorCode {
             HttpStatus.CONFLICT,
             "더 이상 사용할 수 없는 분류입니다.",
             "SUGGESTION409_1"
+    ),
+
+    /**
+     * 목록 요청의 {@code size} 가 범위를 벗어난 경우.
+     *
+     * <p><b>조용히 상한으로 깎지 않는다.</b> 그러면 클라이언트가 요청한 수와 받은 수가 다른
+     * 이유를 알 수 없다.
+     *
+     * <p>파라미터 제약({@code @Min}·{@code @Max})으로 두지 않는 이유는, 이 컨트롤러가 Swagger
+     * 문서 인터페이스를 구현하는데 <b>구현 쪽에서만 파라미터 제약을 더하면 Bean Validation 이
+     * 거부하기 때문</b>이다({@code HV000151}). 그렇다고 문서 인터페이스에 검증을 두면 "Docs 에는
+     * 문서화 어노테이션만" 이라는 규칙이 깨진다. 그래서 서비스가 검증한다.
+     */
+    INVALID_PAGE_SIZE(
+            HttpStatus.BAD_REQUEST,
+            "한 번에 받을 수 있는 개수는 1~50 입니다.",
+            "SUGGESTION400_1"
     );
 
     private final HttpStatus httpStatus;
