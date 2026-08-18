@@ -89,6 +89,11 @@ tasks:
     cmds:
       - ./performance/jmeter/run.sh stress100
 
+  performance-cache:
+    desc: JMeter 캐시 대상 API 부하 테스트 실행 (기본 10명, 120초)
+    cmds:
+      - ./performance/jmeter/run.sh cache
+
   monitoring-secrets:
     desc: 로컬 모니터링용 Actuator token·Grafana 비밀번호 파일 준비
     cmds:
