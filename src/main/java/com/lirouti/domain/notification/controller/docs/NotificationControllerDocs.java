@@ -311,6 +311,29 @@ public interface NotificationControllerDocs {
             @Parameter(hidden = true) CustomUserDetails user
     );
 
+    @Operation(
+            summary = "시스템 알림 클릭 기록",
+            description = """
+                인증 회원 소유의 시스템 알림 클릭을 기록합니다. 시스템 알림을 눌러
+                앱에 진입했을 때만 호출되어야 하며, 알림 클릭 기반 업적(까루) 진행
+                이벤트를 발행합니다. 앱 아이콘으로 직접 실행한 경우는 이 API 자체가
+                호출되지 않으므로 진행도에 반영되지 않습니다.
+                """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "알림 클릭 기록 성공"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401",
+                    description = "유효하지 않거나 만료된 인증 토큰"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404",
+                    description = "알림이 존재하지 않거나 다른 회원 소유"
+            )
+    })
     ApiResponse<Void> markClicked(
             @Parameter(hidden = true) CustomUserDetails user,
             @Parameter(description = "클릭된 알림 ID") Long notificationId
