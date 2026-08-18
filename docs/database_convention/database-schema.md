@@ -2820,6 +2820,19 @@ POST /api/groups/{gid}/routines/{rid}/verifications
 
 **내린 분류도 지우지 않는다.** `active = 0` 으로 목록에서만 빼면, 그 분류로 이미 보낸 건의가 참조를 잃지 않는다. 아바타 아이템의 판매 종료와 같은 방식이다.
 
+#### 시드는 "무엇에 대한 건의인가" 가 아니라 "어떤 종류의 건의인가" 로 나눈다
+
+| id | code | name |
+| --- | --- | --- |
+| 1 | `BUG` | 버그 신고 |
+| 2 | `FEATURE` | 기능 제안 |
+| 3 | `INCONVENIENCE` | 불편 사항 |
+| 4 | `ETC` | 기타 |
+
+**화면 단위(루틴·챌린지·상점…)로 나누는 안도 있었다.** 그쪽이 "어디가 문제인지" 를 바로 알려 주지만, 화면이 늘 때마다 분류가 늘고 **여러 화면에 걸친 건의를 넣을 자리가 없다.** 종류로 나누면 개수가 안정적이고, 어디인지는 본문이 말해 준다.
+
+**이 판단은 되돌리기 싸다.** `R__` 시드 한 줄이라 배포만으로 바뀐다 — 실사용 건의가 쌓인 뒤에 다시 보는 편이 낫다. 다만 **`id` 는 재사용하지 않는다.** 이미 그 분류로 보낸 건의가 다른 뜻을 가리키게 된다.
+
 ### `suggestion`
 
 | 컬럼 | 타입 | NULL | 설명 |
@@ -2858,6 +2871,14 @@ POST /api/groups/{gid}/routines/{rid}/verifications
 **이미지 첨부도 없다.** 글만 받는다. 넣으려면 `MediaPurpose` 하나와 버킷 정책·미참조 정리 대상이 함께 따라온다.
 
 #### 목록은 내 것만, 커서로 넘긴다
+
+```text
+GET  /api/members/me/suggestions/categories   분류 목록
+POST /api/members/me/suggestions              등록
+GET  /api/members/me/suggestions              내 건의 목록
+```
+
+**경로를 `/api/members/me` 아래에 둔다.** 이미 그 아래에 내 정보(`GET /me`)와 아바타(`/me/avatar`)가 있어, 마이페이지 화면이 쓰는 것이 한자리에 모인다.
 
 ```sql
 SELECT * FROM suggestion
