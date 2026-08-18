@@ -29,13 +29,15 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
-/** V20260818194500의 backfill DML을 이전 데이터가 있는 상태에서 검증한다. */
+/** last_verification_at migration과 repair DML을 이전 데이터가 있는 상태에서 검증한다. */
 @SpringBootTest
 @Transactional
 @DisplayName("그룹 마지막 인증 시각 Flyway migration 테스트")
 class GroupLastVerificationAtMigrationTest {
-    private static final String MIGRATION_PATH =
+    private static final String INITIAL_MIGRATION_PATH =
             "db/migration/V20260818194500__add_group_last_verification_at.sql";
+    private static final String REPAIR_MIGRATION_PATH =
+            "db/migration/V20260818203000__repair_group_last_verification_at_backfill.sql";
     private static final String BACKFILL_STATEMENT = "UPDATE `member_group`";
 
     @Autowired private GroupRepository groupRepository;
@@ -74,7 +76,7 @@ class GroupLastVerificationAtMigrationTest {
                 fixture.group().getId());
 
         // when
-        executeBackfillDml();
+        executeBackfillDml(INITIAL_MIGRATION_PATH);
         entityManager.clear();
 
         // then
@@ -92,7 +94,7 @@ class GroupLastVerificationAtMigrationTest {
                 fixture.group().getId());
 
         // when
-        executeBackfillDml();
+        executeBackfillDml(INITIAL_MIGRATION_PATH);
 
         // then
         Boolean isNull = jdbcTemplate.queryForObject(
@@ -102,8 +104,37 @@ class GroupLastVerificationAtMigrationTest {
         assertThat(isNull).isTrue();
     }
 
-    private void executeBackfillDml() throws Exception {
-        String migrationSql = new ClassPathResource(MIGRATION_PATH).getContentAsString(StandardCharsets.UTF_8);
+    @Test
+    @DisplayName("repair backfill은 기존 마지막 인증 시각이 더 최신이면 유지한다")
+    void repairMigration_PreservesNewerLastVerificationAt() throws Exception {
+        // given
+        Fixture fixture = fixture();
+        GroupRoutineAssignment assignment = assignment(fixture, "repair 인증");
+        GroupRoutineVerification verification = verificationRepository.save(verification(assignment));
+        LocalDateTime backfillCreatedAt = LocalDateTime.of(2026, 8, 18, 19, 45, 0, 123_000_000);
+        LocalDateTime existingLastVerificationAt = backfillCreatedAt.plusMinutes(1);
+
+        entityManager.flush();
+        jdbcTemplate.update(
+                "update group_routine_verification set created_at = ? where id = ?",
+                backfillCreatedAt,
+                verification.getId());
+        jdbcTemplate.update(
+                "update member_group set last_verification_at = ? where id = ?",
+                existingLastVerificationAt,
+                fixture.group().getId());
+
+        // when
+        executeBackfillDml(REPAIR_MIGRATION_PATH);
+        entityManager.clear();
+
+        // then
+        assertThat(groupRepository.findById(fixture.group().getId()).orElseThrow().getLastVerificationAt())
+                .isEqualTo(existingLastVerificationAt);
+    }
+
+    private void executeBackfillDml(String migrationPath) throws Exception {
+        String migrationSql = new ClassPathResource(migrationPath).getContentAsString(StandardCharsets.UTF_8);
         int backfillStart = migrationSql.indexOf(BACKFILL_STATEMENT);
         assertThat(backfillStart).isGreaterThanOrEqualTo(0);
         jdbcTemplate.execute(migrationSql.substring(backfillStart));
