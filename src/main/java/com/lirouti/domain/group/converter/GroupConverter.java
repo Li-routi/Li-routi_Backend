@@ -174,6 +174,7 @@ public final class GroupConverter {
                 .totalPokeCount(member.totalPokeCount())
                 .totalDisappointmentCount(member.totalDisappointmentCount())
                 .dailyProgress(new GroupResDTO.DailyProgress(completedCount, totalCount))
+                .representativeAchievement(representativeAchievement)
                 .build();
     }
 
