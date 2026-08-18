@@ -3,6 +3,7 @@ package com.lirouti.domain.chat.controller;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
+import com.lirouti.domain.achievement.service.command.MidnightAccessCommandService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -73,6 +74,9 @@ class ChatAdminControllerTest {
 
     @MockitoBean
     private JpaMetamodelMappingContext jpaMappingContext;
+
+    @MockitoBean
+    private MidnightAccessCommandService midnightAccessCommandService;
 
     @Test
     @DisplayName("관리자는 활성·비활성 이모티콘 전체를 조회하고 assetKey를 받지 않는다")

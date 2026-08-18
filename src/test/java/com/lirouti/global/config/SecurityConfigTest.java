@@ -1,5 +1,6 @@
 package com.lirouti.global.config;
 
+import com.lirouti.domain.achievement.service.command.MidnightAccessCommandService;
 import com.lirouti.domain.auth.controller.AuthController;
 import com.lirouti.domain.auth.dto.response.AuthResDTO;
 import com.lirouti.domain.auth.service.AuthService;
@@ -68,6 +69,9 @@ class SecurityConfigTest {
 
     @MockitoBean
     private MemberProfileService memberProfileService;
+
+    @MockitoBean
+    private MidnightAccessCommandService midnightAccessCommandService;
 
     @Test
     @DisplayName("인증 없이 공개 인증 API에 접근할 수 있다")

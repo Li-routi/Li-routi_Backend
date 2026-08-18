@@ -2,6 +2,7 @@ package com.lirouti.domain.achievement.controller;
 
 import com.lirouti.domain.achievement.dto.response.AchievementResDTO;
 import com.lirouti.domain.achievement.service.AchievementBadgeImageAdminService;
+import com.lirouti.domain.achievement.service.command.MidnightAccessCommandService;
 import com.lirouti.domain.member.enums.Role;
 import com.lirouti.global.apiPayload.ApiErrorResponseWriter;
 import com.lirouti.global.auth.AccessDeniedHandlerImpl;
@@ -60,6 +61,9 @@ class AchievementAdminControllerTest {
 
     @MockitoBean
     private JpaMetamodelMappingContext jpaMappingContext;
+
+    @MockitoBean
+    private MidnightAccessCommandService midnightAccessCommandService;
 
     @Test
     @DisplayName("관리자는 이미지 파일을 전달하고 업적 뱃지 URL을 받는다")
