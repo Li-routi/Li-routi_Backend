@@ -1,6 +1,8 @@
 package com.lirouti.domain.achievement.service.command;
 
+import com.lirouti.domain.achievement.entity.Achievement;
 import com.lirouti.domain.achievement.entity.MemberAchievement;
+import com.lirouti.domain.achievement.enums.AchievementCategory;
 import com.lirouti.domain.achievement.enums.MemberAchievementStatus;
 import com.lirouti.domain.achievement.exception.AchievementException;
 import com.lirouti.domain.achievement.exception.code.error.AchievementErrorCode;
@@ -34,7 +36,11 @@ public class RepresentativeAchievementCommandService {
             throw new AchievementException(AchievementErrorCode.NOT_ACHIEVED);
         }
 
-        if (memberAchievement.getAchievement().getBadgeImageKey() == null) {
+        Achievement achievement = memberAchievement.getAchievement();
+        if (achievement.getCategory() == AchievementCategory.EGG) {
+            throw new AchievementException(AchievementErrorCode.BADGE_IMAGE_NOT_AVAILABLE);
+        }
+        if (achievement.getBadgeImageKey() == null) {
             throw new AchievementException(AchievementErrorCode.BADGE_IMAGE_NOT_AVAILABLE);
         }
 

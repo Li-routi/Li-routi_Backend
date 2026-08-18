@@ -38,6 +38,7 @@ public interface MemberAchievementRepository extends JpaRepository<MemberAchieve
         where ma.member.id = :memberId
         and ma.status = com.lirouti.domain.achievement.enums.MemberAchievementStatus.CLAIMED
         and a.badgeImageKey is not null
+        and a.category != com.lirouti.domain.achievement.enums.AchievementCategory.EGG
         order by ma.claimedAt desc
         """)
     List<MemberAchievement> findClaimedWithBadgeByMemberId(@Param("memberId") Long memberId);
