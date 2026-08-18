@@ -23,7 +23,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.lirouti.domain.media.service.MediaImageLoad;
-import com.lirouti.domain.verification.client.AnthropicVerificationReviewClient;
+import com.lirouti.domain.verification.client.OpenAiVerificationReviewClient;
 import com.lirouti.domain.verification.client.VerificationReview;
 import com.lirouti.domain.challenge.dto.response.ChallengeResDTO;
 import com.lirouti.domain.challenge.entity.Challenge;
@@ -80,7 +80,7 @@ class RejoinDailyOnceTest {
     @MockitoBean
     private MediaService mediaService;
     @MockitoBean
-    private AnthropicVerificationReviewClient reviewClient;
+    private OpenAiVerificationReviewClient reviewClient;
 
     @PersistenceContext
     private EntityManager em;

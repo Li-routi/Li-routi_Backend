@@ -1,6 +1,6 @@
 package com.lirouti.domain.verification.service;
 
-import com.lirouti.domain.verification.client.AnthropicVerificationReviewClient;
+import com.lirouti.domain.verification.client.OpenAiVerificationReviewClient;
 import com.lirouti.domain.verification.client.VerificationReview;
 import com.lirouti.domain.challenge.entity.Challenge;
 import com.lirouti.domain.media.enums.MediaPurpose;
@@ -44,7 +44,7 @@ import java.util.List;
 public class PendingReviewService {
     private final ChallengeVerificationRepository challengeVerificationRepository;
     private final PendingReviewCommandService pendingReviewCommandService;
-    private final AnthropicVerificationReviewClient reviewClient;
+    private final OpenAiVerificationReviewClient reviewClient;
     private final MediaService mediaService;
     private final AiReviewProperties aiReviewProperties;
     private final PendingReviewProperties pendingReviewProperties;

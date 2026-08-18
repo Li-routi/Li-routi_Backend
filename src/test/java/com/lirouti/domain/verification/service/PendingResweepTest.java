@@ -1,6 +1,6 @@
 package com.lirouti.domain.verification.service;
 
-import com.lirouti.domain.verification.client.AnthropicVerificationReviewClient;
+import com.lirouti.domain.verification.client.OpenAiVerificationReviewClient;
 import com.lirouti.domain.verification.client.ReviewRejection;
 import com.lirouti.domain.verification.client.VerificationReview;
 import com.lirouti.domain.challenge.entity.Challenge;
@@ -70,7 +70,7 @@ class PendingResweepTest {
     private MediaService mediaService;
 
     @MockitoBean
-    private AnthropicVerificationReviewClient reviewClient;
+    private OpenAiVerificationReviewClient reviewClient;
 
     @PersistenceContext
     private EntityManager em;

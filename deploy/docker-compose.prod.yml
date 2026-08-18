@@ -88,11 +88,14 @@ services:
       # 나열한 것만 넘긴다. 실제로 그 실수를 한 적이 있다: ENV_FILE 에는 키가 있는데 앱에는
       # 없어서, 미해결 플레이스홀더가 그대로 바인딩된 채 부팅됐고 심사가 조용히 꺼진 상태로
       # 돌았다(fail-open 이라 전부 통과). 값을 추가할 때 이 목록도 함께 본다.
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
       AI_REVIEW_ENABLED: ${AI_REVIEW_ENABLED:-true}
-      AI_REVIEW_MODEL: ${AI_REVIEW_MODEL:-claude-haiku-4-5-20251001}
+      AI_REVIEW_MODEL: ${AI_REVIEW_MODEL:-gpt-5.6-luna}
       AI_REVIEW_TIMEOUT: ${AI_REVIEW_TIMEOUT:-PT20S}
-      AI_REVIEW_MAX_IMAGE_DIMENSION: ${AI_REVIEW_MAX_IMAGE_DIMENSION:-1568}
+      # 이 줄의 기본값이 앱의 기본값을 이긴다. .env 에 변수가 없으면 여기 적힌 값이 그대로
+      # 들어가므로, application.yaml 만 고치면 배포에는 아무 효과가 없다. 실제로 그렇게
+      # 놓친 적이 있다 — 두 값은 항상 같이 옮긴다.
+      AI_REVIEW_MAX_IMAGE_DIMENSION: ${AI_REVIEW_MAX_IMAGE_DIMENSION:-1024}
       # 재화 충전 결제(포트원 V2). 이것도 fail-fast 필수 비밀값이다 — 없으면 부팅이 막힌다.
       # 여기서 막히는 편이 낫다: 검증 없이 지급되면 재화가 공짜가 되므로 fail-open 이 아니다.
       PORTONE_API_SECRET: ${PORTONE_API_SECRET}

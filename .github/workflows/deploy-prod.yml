@@ -111,8 +111,8 @@ jobs:
               | sed -n "s/^[[:space:]]*$1[[:space:]]*=//p" | tail -1 \
               | tr -d '\r"'"'" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'
           }
-          if [ -z "$(read_var ANTHROPIC_API_KEY)" ]; then
-            echo "::error::ENV_FILE에 ANTHROPIC_API_KEY가 없습니다. 앱이 부팅하지 못합니다."
+          if [ -z "$(read_var OPENAI_API_KEY)" ]; then
+            echo "::error::ENV_FILE에 OPENAI_API_KEY가 없습니다. 앱이 부팅하지 못합니다."
             exit 1
           fi
           echo "필수 비밀값 확인 완료"
