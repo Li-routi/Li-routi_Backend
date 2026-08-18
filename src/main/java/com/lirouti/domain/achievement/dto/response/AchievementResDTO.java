@@ -55,6 +55,7 @@ public final class AchievementResDTO {
             int topazReward,
             boolean badgeYn,
             boolean limitedOutfitYn,
+            boolean hiddenYn,
             LocalDateTime achievedAt,
             LocalDateTime claimedAt
     ) {

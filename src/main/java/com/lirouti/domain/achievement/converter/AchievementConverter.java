@@ -114,45 +114,52 @@ public final class AchievementConverter {
                 ? memberAchievement.getStatus()
                 : MemberAchievementStatus.IN_PROGRESS;
 
+        // 히든 업적인데 아직 달성 전이면 이름·조건·진행도·배지 이미지를 가린다.
+        boolean isMaskedHidden = achievement.isHiddenYn()
+                && status == MemberAchievementStatus.IN_PROGRESS;
+
         AchievementResDTO.Progress progress = null;
         List<AchievementResDTO.ConditionProgress> conditionProgresses = List.of();
 
-        if (achievement.getProgressType() == AchievementProgressType.COMPOSITE) {
-            List<MemberAchievementCondition> progresses = memberAchievement != null
-                    ? conditionProgressByMemberAchievementId.getOrDefault(memberAchievement.getId(), List.of())
-                    : List.of();
-            Map<String, Integer> currentByKey = progresses.stream()
-                    .collect(Collectors.toMap(MemberAchievementCondition::getConditionKey,
-                            MemberAchievementCondition::getCurrentValue));
+        if (!isMaskedHidden) {
+            if (achievement.getProgressType() == AchievementProgressType.COMPOSITE) {
+                List<MemberAchievementCondition> progresses = memberAchievement != null
+                        ? conditionProgressByMemberAchievementId.getOrDefault(memberAchievement.getId(), List.of())
+                        : List.of();
+                Map<String, Integer> currentByKey = progresses.stream()
+                        .collect(Collectors.toMap(MemberAchievementCondition::getConditionKey,
+                                MemberAchievementCondition::getCurrentValue));
 
-            conditionProgresses = achievement.getConditions().stream()
-                    .sorted(Comparator.comparingInt(AchievementCondition::getSortOrder))
-                    .map(c -> AchievementResDTO.ConditionProgress.builder()
-                            .conditionKey(c.getConditionKey())
-                            .current(currentByKey.getOrDefault(c.getConditionKey(), 0))
-                            .target(c.getTargetCount())
-                            .build())
-                    .toList();
-        } else if (achievement.getProgressType() != AchievementProgressType.NONE) {
-            int current = memberAchievement != null ? memberAchievement.getCurrentProgress() : 0;
-            progress = AchievementResDTO.Progress.builder()
-                    .current(current)
-                    .target(achievement.getTargetCount())
-                    .build();
+                conditionProgresses = achievement.getConditions().stream()
+                        .sorted(Comparator.comparingInt(AchievementCondition::getSortOrder))
+                        .map(c -> AchievementResDTO.ConditionProgress.builder()
+                                .conditionKey(c.getConditionKey())
+                                .current(currentByKey.getOrDefault(c.getConditionKey(), 0))
+                                .target(c.getTargetCount())
+                                .build())
+                        .toList();
+            } else if (achievement.getProgressType() != AchievementProgressType.NONE) {
+                int current = memberAchievement != null ? memberAchievement.getCurrentProgress() : 0;
+                progress = AchievementResDTO.Progress.builder()
+                        .current(current)
+                        .target(achievement.getTargetCount())
+                        .build();
+            }
         }
 
         return AchievementResDTO.AchievementItem.builder()
                 .achievementId(achievement.getId())
                 .code(achievement.getCode())
-                .name(achievement.getName())
-                .badgeImageUrl(badgeImageUrlByAchievementId.get(achievement.getId()))
-                .conditionDesc(achievement.getConditionDesc())
+                .name(isMaskedHidden ? "숨겨진 업적" : achievement.getName())
+                .conditionDesc(isMaskedHidden ? null : achievement.getConditionDesc())
                 .status(status)
                 .progress(progress)
                 .conditionProgresses(conditionProgresses)
                 .topazReward(achievement.getTopazReward())
                 .badgeYn(achievement.isBadgeYn())
                 .limitedOutfitYn(achievement.isLimitedOutfitYn())
+                .hiddenYn(achievement.isHiddenYn())
+                .badgeImageUrl(isMaskedHidden ? null : badgeImageUrlByAchievementId.get(achievement.getId()))
                 .achievedAt(memberAchievement != null ? memberAchievement.getAchievedAt() : null)
                 .claimedAt(memberAchievement != null ? memberAchievement.getClaimedAt() : null)
                 .build();

@@ -103,6 +103,9 @@ public class Achievement extends BaseEntity {
     @Column(name = "active", nullable = false)
     private boolean active;
 
+    @Column(name = "hidden_yn", nullable = false)
+    private boolean hiddenYn;
+
     @OneToMany(mappedBy = "achievement", fetch = FetchType.LAZY)
     private List<AchievementCondition> conditions = new ArrayList<>();
 
@@ -111,6 +114,7 @@ public class Achievement extends BaseEntity {
                         String conditionDesc, AchievementProgressType progressType,
                         Integer targetCount, String conditionKey,
                         int topazReward, boolean badgeYn, boolean limitedOutfitYn,
+                        boolean hiddenYn,
                         int sortOrder, boolean active, String badgeImageKey) {
         this.code = code;
         this.category = category;
@@ -122,6 +126,7 @@ public class Achievement extends BaseEntity {
         this.topazReward = topazReward;
         this.badgeYn = badgeYn;
         this.limitedOutfitYn = limitedOutfitYn;
+        this.hiddenYn = hiddenYn;
         this.badgeImageKey = badgeImageKey;
         this.sortOrder = sortOrder;
         this.active = active;
