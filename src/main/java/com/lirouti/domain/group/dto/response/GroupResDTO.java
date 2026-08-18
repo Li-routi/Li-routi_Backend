@@ -6,6 +6,7 @@ import com.lirouti.domain.group.enums.GroupMemberRole;
 import com.lirouti.domain.group.enums.GroupMemberStatus;
 import com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus;
 import com.lirouti.domain.routine.enums.RoutineCategoryColor;
+import com.lirouti.domain.character.dto.response.CharacterResDTO;
 import com.lirouti.domain.shop.enums.AvatarSlot;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
@@ -96,7 +97,12 @@ public final class GroupResDTO {
     @Schema(name = "GroupMemberAvatar", description = "그룹 구성원의 현재 아바타 착용 상태")
     public record Avatar(
             @Schema(description = "착용 중인 아이템. 안 입은 자리는 실리지 않는다")
-            List<Equipped> equipped
+            List<Equipped> equipped,
+
+            @Schema(description = """
+                    **받은 순서대로 겹쳐 그리면 된다.** 캐릭터와 둥지까지 포함한 전체 그림이다.
+                    슬롯 이름으로 깊이를 판단하지 않는다.""")
+            List<CharacterResDTO.Layer> layers
     ) {
     }
 

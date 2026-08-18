@@ -63,6 +63,31 @@ public interface MemberActivityDayRepository extends JpaRepository<MemberActivit
     long countByMemberIdAndAllCompletedTrueAndActivityDateAfter(Long memberId, LocalDate exclusiveFrom);
 
     /**
+     * 여러 사람의 완수일 수를 <b>한 번에</b>. 둥지 레벨이 이것을 쓴다.
+     *
+     * <p>사람마다 세면 그룹 화면에서 구성원 수만큼 COUNT 가 나간다 — 아바타 조립이 나머지
+     * 조회를 이미 배치로 묶어 두었는데 여기서 다시 N+1 이 된다.
+     *
+     * <p><b>완수일이 하루도 없는 사람은 행이 나오지 않는다.</b> {@code group by} 라 0 건인
+     * 사람은 결과에서 빠지므로, 부르는 쪽이 없는 키를 레벨 1 로 읽어야 한다.
+     *
+     * <p>구간 양끝을 모두 애플리케이션이 넘긴다. {@code CURRENT_DATE} 를 쓰면 DB 세션의
+     * 시간대가 기준이 되는데 {@code activity_date} 는 KST 로 찍힌 값이라, 자정 언저리에
+     * 하루가 밀려 연속이 끊긴 것처럼 보인다.
+     */
+    @Query("""
+            select activityDay.memberId, count(activityDay)
+            from MemberActivityDay activityDay
+            where activityDay.memberId in :memberIds
+              and activityDay.allCompleted = true
+              and activityDay.activityDate between :inclusiveFrom and :inclusiveTo
+            group by activityDay.memberId
+            """)
+    List<Object[]> countCompletedDaysByMemberIds(@Param("memberIds") List<Long> memberIds,
+                                                 @Param("inclusiveFrom") LocalDate inclusiveFrom,
+                                                 @Param("inclusiveTo") LocalDate inclusiveTo);
+
+    /**
      * 최근 활동일을 최신순으로. <b>연속을 세는 쪽이 걸어가며 판단한다.</b>
      *
      * <p>상한을 둔 이유는 연속 조건의 최대가 100 이기 때문이다 — 그보다 훨씬 긴 구간까지

@@ -1,0 +1,87 @@
+name: Build & push image
+
+# 배포 워크플로 둘(deploy-prod · deploy-dev)이 공유하는 이미지 빌드 단계다.
+# 한 곳에만 두는 이유는 test.yml 과 같다 — 빌드 방식이 두 벌이면 운영과 개발이 조용히 갈리고,
+# "개발에서는 됐는데 운영에서 안 되는" 차이가 이미지에서 생긴다.
+on:
+  workflow_call:
+    inputs:
+      push_latest:
+        description: ":latest 태그를 함께 올릴지. 운영 배포에서만 true 다."
+        type: boolean
+        default: false
+    outputs:
+      image:
+        description: "GHCR 이미지 경로(태그 제외)"
+        value: ${{ jobs.build.outputs.image }}
+
+jobs:
+  build:
+    name: Build & push image
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.img.outputs.image }}
+    steps:
+      # 이 잡은 GITHUB_TOKEN을 git config에 남길 필요가 없다(bootJar가 서드파티 코드를 돌리므로 유출면 축소).
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # 실행 jar만 만든다(테스트는 test.yml 담당). plain jar는 build.gradle에서 비활성화됨.
+      - name: Build jar
+        run: ./gradlew bootJar --no-daemon
+
+      # GHCR 이미지 경로는 소문자만 허용 — 레포명(Li-routi/...)을 소문자로 변환한다.
+      #
+      # 서버가 실제로 받는 것은 :<커밋sha>다. :latest 는 사람이 최신 배포본을 가리킬 때 쓰는
+      # 이동형 태그라 운영 배포에서만 올린다 — 개발 배포까지 이 태그를 옮기면 "최신 운영본"
+      # 이라는 뜻이 사라진다.
+      - name: Resolve image name and tags
+        id: img
+        env:
+          PUSH_LATEST: ${{ inputs.push_latest }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          image="ghcr.io/$(printf '%s' "$REPO" | tr '[:upper:]' '[:lower:]')"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          {
+            echo "tags<<EOF"
+            echo "$image:$SHA"
+            if [ "$PUSH_LATEST" = "true" ]; then
+              echo "$image:latest"
+            fi
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU (arm64 크로스 빌드)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # t4g(Graviton)는 ARM이므로 반드시 linux/arm64로 빌드한다. amd64 이미지는 서버에서 실행 불가.
+      # 운영·개발 서버가 같은 인스턴스 타입이라 이미지 하나를 둘이 함께 쓴다.
+      - name: Build and push (linux/arm64)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/arm64
+          push: true
+          tags: ${{ steps.img.outputs.tags }}

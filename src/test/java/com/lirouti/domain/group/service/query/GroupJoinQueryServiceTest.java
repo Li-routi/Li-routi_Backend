@@ -22,6 +22,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
+import com.lirouti.domain.character.service.query.AvatarLayerAssembler;
 import com.lirouti.domain.media.service.MediaService;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -50,6 +51,7 @@ class GroupJoinQueryServiceTest {
     @Mock private GroupRoutineRepository groupRoutineRepository;
     @Mock private MemberAvatarEquipmentRepository memberAvatarEquipmentRepository;
     @Mock private MediaService mediaService;
+    @Mock private AvatarLayerAssembler avatarLayerAssembler;
     @Mock private MemberQueryService memberQueryService;
     @Mock private Member member;
     @Mock private Group group;
@@ -88,11 +90,11 @@ class GroupJoinQueryServiceTest {
                 6,
                 2,
                 List.of(
-                        new GroupResDTO.JoinPreviewMember(new GroupResDTO.Avatar(List.of())),
-                        new GroupResDTO.JoinPreviewMember(new GroupResDTO.Avatar(List.of())),
-                        new GroupResDTO.JoinPreviewMember(new GroupResDTO.Avatar(List.of())),
-                        new GroupResDTO.JoinPreviewMember(new GroupResDTO.Avatar(List.of())),
-                        new GroupResDTO.JoinPreviewMember(new GroupResDTO.Avatar(List.of()))
+                        new GroupResDTO.JoinPreviewMember(new GroupResDTO.Avatar(List.of(), List.of())),
+                        new GroupResDTO.JoinPreviewMember(new GroupResDTO.Avatar(List.of(), List.of())),
+                        new GroupResDTO.JoinPreviewMember(new GroupResDTO.Avatar(List.of(), List.of())),
+                        new GroupResDTO.JoinPreviewMember(new GroupResDTO.Avatar(List.of(), List.of())),
+                        new GroupResDTO.JoinPreviewMember(new GroupResDTO.Avatar(List.of(), List.of()))
                 ),
                 true,
                 null));
@@ -122,10 +124,10 @@ class GroupJoinQueryServiceTest {
         GroupResDTO.JoinPreview result = groupJoinQueryService.getJoinPreview(MEMBER_ID, INVITE_CODE);
 
         assertThat(result.members()).containsExactly(
-                new GroupResDTO.JoinPreviewMember(new GroupResDTO.Avatar(List.of())),
+                new GroupResDTO.JoinPreviewMember(new GroupResDTO.Avatar(List.of(), List.of())),
                 new GroupResDTO.JoinPreviewMember(new GroupResDTO.Avatar(List.of(
-                        new GroupResDTO.Equipped(AvatarSlot.HEAD, "https://cdn/hat.png")))),
-                new GroupResDTO.JoinPreviewMember(new GroupResDTO.Avatar(List.of()))
+                        new GroupResDTO.Equipped(AvatarSlot.HEAD, "https://cdn/hat.png")), List.of())),
+                new GroupResDTO.JoinPreviewMember(new GroupResDTO.Avatar(List.of(), List.of()))
         );
         assertThat(GroupResDTO.JoinPreviewMember.class.getRecordComponents())
                 .extracting(RecordComponent::getName)

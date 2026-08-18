@@ -1,6 +1,7 @@
 package com.lirouti.domain.group.converter;
 
 import com.lirouti.domain.group.dto.request.GroupReqDTO;
+import com.lirouti.domain.character.dto.response.CharacterResDTO;
 import com.lirouti.domain.group.dto.response.GroupResDTO;
 import com.lirouti.domain.group.entity.Group;
 import com.lirouti.domain.group.entity.GroupRoutine;
@@ -147,7 +148,7 @@ public final class GroupConverter {
                                 member,
                                 progressByMemberId.get(member.memberId()),
                                 avatarsByMemberId.getOrDefault(
-                                        member.memberId(), new GroupResDTO.Avatar(List.of()))))
+                                        member.memberId(), new GroupResDTO.Avatar(List.of(), List.of()))))
                         .toList())
                 .build();
     }
@@ -176,6 +177,7 @@ public final class GroupConverter {
     public static Map<Long, GroupResDTO.Avatar> toAvatarsByMemberId(
             List<Long> memberIds,
             List<MemberAvatarEquipment> equipments,
+            Map<Long, List<CharacterResDTO.Layer>> layersByMemberId,
             UnaryOperator<String> toViewUrl
     ) {
         Map<Long, List<MemberAvatarEquipment>> equipmentsByMemberId = equipments.stream()
@@ -183,15 +185,20 @@ public final class GroupConverter {
 
         return memberIds.stream().distinct().collect(Collectors.toMap(
                 Function.identity(),
-                memberId -> toAvatar(equipmentsByMemberId.getOrDefault(memberId, List.of()), toViewUrl),
+                memberId -> toAvatar(
+                        equipmentsByMemberId.getOrDefault(memberId, List.of()),
+                        layersByMemberId.getOrDefault(memberId, List.of()),
+                        toViewUrl),
                 (left, right) -> left,
                 LinkedHashMap::new
         ));
     }
 
     private static GroupResDTO.Avatar toAvatar(List<MemberAvatarEquipment> equipments,
+                                               List<CharacterResDTO.Layer> layers,
                                                UnaryOperator<String> toViewUrl) {
         return GroupResDTO.Avatar.builder()
+                .layers(layers)
                 .equipped(equipments.stream()
                         .map(equipment -> new GroupResDTO.Equipped(
                                 equipment.getSlot(),
@@ -463,7 +470,7 @@ public final class GroupConverter {
                 .totalRoutineCount((int) totalRoutineCount)
                 .members(activeMemberIds.stream()
                         .map(memberId -> new GroupResDTO.JoinPreviewMember(
-                                avatarsByMemberId.getOrDefault(memberId, new GroupResDTO.Avatar(List.of()))))
+                                avatarsByMemberId.getOrDefault(memberId, new GroupResDTO.Avatar(List.of(), List.of()))))
                         .toList())
                 .joinable(joinable)
                 .unavailableReason(unavailableReason)

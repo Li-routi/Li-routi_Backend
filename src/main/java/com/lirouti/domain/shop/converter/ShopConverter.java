@@ -1,5 +1,6 @@
 package com.lirouti.domain.shop.converter;
 
+import com.lirouti.domain.character.dto.response.CharacterResDTO;
 import com.lirouti.domain.shop.dto.response.ShopResDTO;
 import com.lirouti.domain.shop.entity.AvatarItem;
 import com.lirouti.domain.shop.entity.MemberAvatarEquipment;
@@ -82,11 +83,13 @@ public final class ShopConverter {
 
     /** 안 입은 자리는 실리지 않는다. 빈 목록이 정상 상태다. */
     public static ShopResDTO.Avatar toAvatar(List<MemberAvatarEquipment> equipments,
+                                             List<CharacterResDTO.Layer> layers,
                                              UnaryOperator<String> toViewUrl) {
         return ShopResDTO.Avatar.builder()
                 .equipped(equipments.stream()
                         .map(equipment -> toEquipped(equipment, toViewUrl))
                         .toList())
+                .layers(layers)
                 .build();
     }
 
@@ -94,6 +97,7 @@ public final class ShopConverter {
     public static Map<Long, ShopResDTO.Avatar> toAvatarsByMemberId(
             List<Long> memberIds,
             List<MemberAvatarEquipment> equipments,
+            Map<Long, List<CharacterResDTO.Layer>> layersByMemberId,
             UnaryOperator<String> toViewUrl
     ) {
         Map<Long, List<MemberAvatarEquipment>> equipmentsByMemberId = equipments.stream()
@@ -101,7 +105,10 @@ public final class ShopConverter {
 
         return memberIds.stream().distinct().collect(Collectors.toMap(
                 Function.identity(),
-                memberId -> toAvatar(equipmentsByMemberId.getOrDefault(memberId, List.of()), toViewUrl),
+                memberId -> toAvatar(
+                        equipmentsByMemberId.getOrDefault(memberId, List.of()),
+                        layersByMemberId.getOrDefault(memberId, List.of()),
+                        toViewUrl),
                 (left, right) -> left,
                 LinkedHashMap::new
         ));

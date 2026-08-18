@@ -1,5 +1,6 @@
 package com.lirouti.domain.shop.dto.response;
 
+import com.lirouti.domain.character.dto.response.CharacterResDTO;
 import com.lirouti.domain.shop.enums.AvatarSlot;
 import com.lirouti.domain.shop.enums.ShopCategory;
 import com.lirouti.domain.shop.enums.ShopCategorySource;
@@ -81,8 +82,21 @@ public final class ShopResDTO {
     @Schema(name = "MemberAvatar", description = "내 아바타 착용 상태")
     @Builder
     public record Avatar(
-            @Schema(description = "착용 중인 아이템. 안 입은 자리는 실리지 않는다")
-            List<Equipped> equipped
+            @Schema(description = """
+                    착용 중인 아이템. 안 입은 자리는 실리지 않는다.
+
+                    **그리는 데는 `layers` 를 쓴다.** 이 목록은 순서를 담지 않아 겹쳐 그릴 수
+                    없다 — 무엇을 입었는지 다루는 화면(상점의 보유 표시 등)에만 쓴다.""")
+            List<Equipped> equipped,
+
+            @Schema(description = """
+                    **받은 순서대로 겹쳐 그리면 된다.** 캐릭터와 둥지까지 포함한 전체 그림이다.
+
+                    슬롯 이름으로 깊이를 판단하지 않는다 — 레이어가 늘어도 앱을 고치지 않게
+                    하려는 계약이다. 모르는 `layer` 값이 와도 그대로 그린다.
+
+                    캐릭터를 아직 하나도 못 열었으면 캐릭터·둥지가 빠진다.""")
+            List<CharacterResDTO.Layer> layers
     ) {
     }
 

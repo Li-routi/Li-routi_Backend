@@ -10,6 +10,7 @@ import com.lirouti.domain.shop.repository.AvatarItemRepository;
 import com.lirouti.domain.shop.repository.MemberAvatarEquipmentRepository;
 import com.lirouti.domain.shop.repository.MemberAvatarItemRepository;
 import com.lirouti.domain.media.service.MediaService;
+import com.lirouti.domain.character.service.query.AvatarLayerAssembler;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,6 +26,7 @@ public class ShopQueryService {
     private final MemberAvatarItemRepository memberAvatarItemRepository;
     private final MemberAvatarEquipmentRepository memberAvatarEquipmentRepository;
     private final MediaService mediaService;
+    private final AvatarLayerAssembler avatarLayerAssembler;
 
 
     /**
@@ -70,6 +72,8 @@ public class ShopQueryService {
     public ShopResDTO.Avatar getMyAvatar(Long memberId) {
         List<MemberAvatarEquipment> equipped =
                 memberAvatarEquipmentRepository.findAllByMemberId(memberId);
-        return ShopConverter.toAvatar(equipped, mediaService::resolveAvatarAssetUrl);
+        return ShopConverter.toAvatar(equipped,
+                avatarLayerAssembler.assembleAsResponse(memberId, equipped),
+                mediaService::resolveAvatarAssetUrl);
     }
 }
