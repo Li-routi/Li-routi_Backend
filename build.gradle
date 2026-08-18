@@ -104,6 +104,10 @@ tasks.named('test') {
 	// 통합 테스트가 스프링 컨텍스트를 띄운 채 데이터를 쌓아 기본 힙(512MB)으로는 모자란다.
 	// 넘치면 코드와 무관한 자리에서 컨텍스트 로딩이 실패해 원인이 안 보인다.
 	maxHeapSize = "2560m"
+	// 이 앱은 시각을 KST 로 다룬다(TimeUtil.KST, Clock 이 서울). 운영 JVM 도 KST 로 돌지만
+	// CI 러너는 UTC 라, 고정하지 않으면 "그 시간대에 완료했는가" 같은 판정이 아홉 시간 밀린다.
+	// 로컬(KST)에서는 통과하고 CI 에서만 깨져 원인이 늦게 드러난다.
+	systemProperty 'user.timezone', 'Asia/Seoul'
 	systemProperty 'spring.profiles.active', 'test'
 	systemProperty 'JWT_SECRET', 'test-only-jwt-secret-please-do-not-use-in-production'
 	systemProperty 'KAKAO_APP_ID', '1234567890'

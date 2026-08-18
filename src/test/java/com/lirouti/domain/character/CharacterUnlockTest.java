@@ -35,6 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertAll;
 class CharacterUnlockTest {
 
     private static final long ROUTI = 1L;
+    private static final long NOA = 2L;
     private static final long MINT = 6L;
     private static final long SOLA = 7L;
 
@@ -137,6 +138,54 @@ class CharacterUnlockTest {
                         .filteredOn(id -> id.equals(MINT)).hasSize(1),
                 () -> assertThat(popupQueryService.getPending(me.getId()).popups())
                         .filteredOn(popup -> MINT == popup.referenceId()).hasSize(1));
+    }
+
+    /**
+     * 캐릭터를 여는 경로가 둘이다 — 이 엔진(조건을 센다)과 업적 claim(직접 넣는다). 조건 표에
+     * 두 종류가 섞여 있는데, 남의 키까지 AND 로 묶으면 이 경로가 영영 미달이 된다. 판정기가
+     * 없으니 언제나 false 이고 오류도 로그도 없이 캐릭터가 안 열린다.
+     */
+    @Test
+    @DisplayName("남의 경로가 건 조건은 이 엔진을 막지 않는다")
+    void unlock_IgnoresConditionsOwnedByOtherMechanism() {
+        em.createNativeQuery("""
+                        insert into character_unlock_condition
+                            (character_id, condition_key, condition_param, target_count,
+                             sort_order, created_at, updated_at)
+                        values (:characterId, 'ACHIEVEMENT_CLAIMED', 'ACH-EG-001', 1, 9,
+                                NOW(6), NOW(6))
+                        """)
+                .setParameter("characterId", MINT)
+                .executeUpdate();
+        memberActivityDayRepository.record(me.getId(), LocalDate.of(2026, 8, 13), false);
+
+        unlock();
+
+        assertThat(memberCharacterRepository.findCharacterIdsByMemberId(me.getId()))
+                .as("활동일 조건을 채웠으면 열려야 한다").contains(MINT);
+    }
+
+    /** 셀 수 있는 조건이 하나도 없는 캐릭터를 "조건 없음" 으로 읽어 열어 주면 안 된다. */
+    @Test
+    @DisplayName("남의 조건만 걸린 캐릭터는 이 경로로 열지 않는다")
+    void unlock_DoesNotOpenCharacterOwnedByOtherMechanism() {
+        em.createNativeQuery("delete from character_unlock_condition where character_id = :characterId")
+                .setParameter("characterId", NOA)
+                .executeUpdate();
+        em.createNativeQuery("""
+                        insert into character_unlock_condition
+                            (character_id, condition_key, condition_param, target_count,
+                             sort_order, created_at, updated_at)
+                        values (:characterId, 'ACHIEVEMENT_CLAIMED', 'ACH-EG-003', 1, 1,
+                                NOW(6), NOW(6))
+                        """)
+                .setParameter("characterId", NOA)
+                .executeUpdate();
+
+        unlock();
+
+        assertThat(memberCharacterRepository.findCharacterIdsByMemberId(me.getId()))
+                .as("업적이 열 캐릭터를 기본 캐릭터로 오해하면 안 된다").doesNotContain(NOA);
     }
 
     /**

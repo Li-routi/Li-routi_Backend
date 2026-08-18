@@ -29,7 +29,8 @@
 | 브랜치 | `main` | `develop` |
 | 인스턴스 | t4g.small (2GB) | t4g.small (2GB), 별도 |
 | 스토리지 | 30 GiB | **gp3 20 GiB** |
-| 도메인 | 있음 | **`lirouti-dev.kro.kr`** (무료 도메인) |
+| 도메인 | `lirouti.kro.kr` | `lirouti-dev.kro.kr` |
+| 인증서 | ZeroSSL (LE 한도 초과) | 동일 — [2단계](#2-도메인) 참고 |
 | 앞단 프록시 | Caddy (80·443) | 동일 |
 | S3 버킷 | `lirouti-prod-bucket` | `lirouti-dev-bucket` |
 | 백업 버킷 | `lirouti-db-backup` | **없음** |
@@ -132,11 +133,38 @@ echo | openssl s_client -connect lirouti-dev.kro.kr:443 -servername lirouti-dev.
   | openssl x509 -noout -issuer -dates
 ```
 
-> **근본 해결은 도메인을 옮기는 것이다.** 운영 도메인의 서브도메인(`dev.<운영도메인>`)을 쓰면 등록 도메인이 우리 것이 되어 한도를 우리만 쓴다. 추가 비용도 없고, A 레코드 하나면 된다.
->
-> 지금 `kro.kr` 을 고른 이유가 문서에 남아 있지 않다. 옮길지 판단할 때 그것부터 확인할 것 — 이유가 없다면 옮기는 편이 낫다.
->
-> **운영은 이 문제가 없다.** 직접 등록한 도메인이라 한도를 우리만 쓴다.
+### ⚠️ 운영도 똑같다 — 개발만의 문제가 아니다
+
+**운영 도메인도 `lirouti.kro.kr` 이다.** 같은 무료 서비스이고 같은 등록 도메인(`kro.kr`) 아래에 있다.
+
+운영은 개발보다 먼저 이미 같은 일을 겪었다. 운영 Caddy 로그에 그대로 남아 있다.
+
+```
+{"level":"error","logger":"tls.obtain","identifier":"lirouti.kro.kr",
+ "issuer":"acme-v02.api.letsencrypt.org-directory",
+ "error":"HTTP 429 ... too many certificates (50) already issued for \"kro.kr\""}
+{"level":"info","logger":"tls.obtain","identifier":"lirouti.kro.kr",
+ "msg":"certificate obtained successfully","issuer":"acme.zerossl.com-v2-DV90"}
+```
+
+**두 서버 모두 Let's Encrypt 가 아니라 ZeroSSL 로 돌고 있다.**
+
+| | 발급자 | 만료 |
+| --- | --- | --- |
+| 운영 `lirouti.kro.kr` | ZeroSSL ECC DV SSL CA 2 | **2026-10-28** |
+| 개발 `lirouti-dev.kro.kr` | ZeroSSL ECC DV SSL CA 2 | 2026-11-15 |
+
+**운영 갱신이 먼저 온다.** ZeroSSL 마저 실패하면 개발이 아니라 **운영이 https 로 죽는다.** 위 "갱신 때마다 같은 도박을 한다" 는 운영에 그대로, 그리고 더 큰 무게로 해당한다.
+
+> **`dev.<운영도메인>` 으로 옮기는 것은 해결이 아니다.** 운영 도메인이 이미 `kro.kr` 이라 서브도메인을 파도 같은 등록 도메인 안이고 한도도 그대로 공유한다. 실제 해결은 `kro.kr` 을 벗어나는 것(유료 도메인 등록, 또는 PSL 에 등재된 무료 서비스로 이전)뿐이다.
+
+### 옮기지 않기로 했다
+
+**서비스를 곧 접을 예정이라 이 위험을 감수한다.** 운영 인증서 만료(2026-10-28)보다 서비스 종료가 먼저이거나 비슷한 시기라, 도메인을 옮기는 비용(운영 도메인 변경 + 클라이언트 재배포)이 얻는 것보다 크다.
+
+**그래서 이 절은 조치 항목이 아니라 배경 설명이다.** 다만 그동안 https 가 갑자기 죽으면 원인이 여기일 수 있으니, 위 진단 순서만 기억해 두면 된다.
+
+> **서비스를 계속 이어 가기로 방향이 바뀌면 이 판단부터 다시 본다.** 그때는 만료가 실제 기한이 되고, 도메인 변경이 클라이언트 배포와 맞물리므로 여유를 두고 정해야 한다.
 
 ## 3) 보안그룹
 
@@ -369,8 +397,32 @@ git diff --name-status <그sha> origin/develop -- src/main/resources/db/migratio
 운영에 쏟는 일"이 아니라 **`main` 을 배포 가능한 기준선으로 세우는 일**이다. 이후로도 운영 배포는
 이 경로로만 한다.
 
-> **다음부터는 이 오해가 생기지 않는다.** `main` 이 한 번 정렬되고 나면 `origin/main..origin/develop`
-> 이 곧 "운영에 새로 나갈 것" 과 같아진다. 위의 `APP_IMAGE_TAG` 대조가 필요한 것은 이번 한 번뿐이다.
+### 릴리스 PR 은 **merge commit** 으로 넣는다 (squash 금지)
+
+**기능 PR 은 squash 가 맞다.** 커밋 하나로 눌러 히스토리를 깔끔하게 두는 것이 이 팀의 관행이고
+`develop` 은 그렇게 쌓여 있다. **릴리스 PR(`develop` → `main`)만 예외다.**
+
+squash 는 **조상 관계를 남기지 않는다.** 내용만 커밋 하나로 옮겨 담으므로, git 이 보기에 `main` 은
+여전히 `develop` 의 커밋을 하나도 갖고 있지 않다. 그래서 이런 일이 생긴다.
+
+```bash
+git rev-list --count origin/main..origin/develop
+# 정렬 직후인데 321 — 내용은 똑같은데도(git diff 가 비어 있다) 줄지 않는다
+```
+
+첫 릴리스(#274)를 실제로 squash 로 머지해서 이 상태가 됐다. 결과는 셋이다.
+
+1. **커밋 수로 위험도를 잴 수 없다.** 위의 `APP_IMAGE_TAG` 대조를 계속 해야 한다
+2. **다음 릴리스 PR 에서 충돌이 날 수 있다.** 머지 베이스가 옛 공통 조상 그대로라, git 이 이미
+   들어가 있는 변경을 `main` 에 다시 얹으려 시도한다. 대개 자동 해소되지만 양쪽이 건드린 파일에서 걸린다
+3. **`main` 히스토리에 개별 커밋이 없다.** 운영에 언제 무엇이 들어갔는지 `main` 만 봐서는 알 수 없다
+
+**머지 방식은 리포지토리 설정이 아니라 머지 버튼에서 고르는 값이다**(`allow_merge_commit` 은 이미
+켜져 있다). 그래서 이것을 막아 주는 장치가 없다 — **릴리스 PR 을 머지하는 사람이 기억해야 한다.**
+
+> **지금 상태를 되돌리지는 않는다.** `main` 을 force push 해야 하는데 그만한 값이 없다.
+> **다음 릴리스 PR 을 merge commit 으로 넣으면 그때 조상 관계가 이어지고, 이후로는 커밋 수가
+> 정상으로 나온다.** 그때까지는 `APP_IMAGE_TAG` 대조가 유일하게 믿을 수 있는 방법이다.
 
 ### 순서
 
@@ -437,9 +489,9 @@ FROM flyway_schema_history WHERE version IS NULL GROUP BY script ORDER BY runs D
 
 접속 방식은 운영과 같다 — `https://lirouti-dev.kro.kr`. 클라이언트에 평문 HTTP 예외(iOS ATS·Android cleartext)를 요청할 필요가 없고, `X-Forwarded-*` 도 Caddy 가 덮어써 주므로 위조 경로가 없다.
 
-다만 **인증서를 Let's Encrypt 에서 받지 못하고 있다.** 첫 배포에서 `kro.kr` 의 주 50장 한도가 이미 차 있어 429 로 거절당했고, Caddy 가 ZeroSSL 로 폴백해 받아왔다. 자세한 것은 [2단계](#2-도메인) 참고.
+다만 **인증서를 Let's Encrypt 에서 받지 못하고 있다.** `kro.kr` 의 주 50장 한도가 차 있어 429 로 거절당했고, Caddy 가 ZeroSSL 로 폴백해 받아왔다. **이것은 개발과 운영의 차이가 아니다** — 운영도 같은 상태이고 만료가 더 빠르다. 자세한 것은 [2단계](#2-도메인) 참고.
 
-그래서 **개발 서버가 https 로 안 뜰 때 앱 코드부터 뒤지지 않는다.** 순서는 이렇다.
+그래서 **서버가 https 로 안 뜰 때 앱 코드부터 뒤지지 않는다.** 순서는 이렇다(운영도 같다).
 
 ```bash
 docker compose logs caddy | grep -iE "obtain|error|rate"   # 1. 발급이 됐는지

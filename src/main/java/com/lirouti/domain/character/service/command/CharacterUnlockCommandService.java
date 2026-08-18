@@ -122,18 +122,25 @@ public class CharacterUnlockCommandService {
      * {@code condition_param} 안에서 표현한다.
      */
     private boolean isSatisfied(Long memberId, List<CharacterUnlockCondition> conditions) {
-        return conditions.stream().allMatch(condition -> {
-            UnlockConditionEvaluator evaluator = evaluatorsByKey.get(condition.getConditionKey());
-            if (evaluator == null) {
-                // 판정기가 없는 키가 데이터에 있을 수 있다(백오피스). 터뜨리면 인증 자체가
-                // 실패하므로 조용히 미달로 본다.
-                log.debug("판정기가 없는 해금 조건을 건너뜁니다. conditionKey={}",
-                        condition.getConditionKey());
-                return false;
-            }
-            return evaluator.count(memberId, condition.getConditionParam())
-                    >= condition.getTargetCount();
-        });
+        // 캐릭터를 여는 경로가 둘이다. 이 엔진은 조건을 세서 열고, 업적 도메인은 claim 순간에
+        // 직접 넣는다(CharacterUnlockService). 그래서 조건 표에는 두 종류가 섞여 있다.
+        //
+        // ⚠️ 남의 키까지 AND 로 묶으면 이 경로가 영영 미달이 된다 — 판정기가 없으니 언제나
+        //    false 이고, 오류도 로그도 없이 캐릭터가 안 열린다. 각자 자기 조건만 본다.
+        List<CharacterUnlockCondition> mine = conditions.stream()
+                .filter(condition -> evaluatorsByKey.containsKey(condition.getConditionKey()))
+                .toList();
+
+        // 셀 수 있는 조건이 하나도 없으면 이 경로가 열 캐릭터가 아니다. 빈 목록을 "조건 없음"
+        // 으로 읽어 열어 주면 남의 조건이 걸린 캐릭터가 전부 기본 캐릭터가 된다.
+        if (mine.isEmpty()) {
+            return conditions.isEmpty();
+        }
+
+        return mine.stream().allMatch(condition ->
+                evaluatorsByKey.get(condition.getConditionKey())
+                        .count(memberId, condition.getConditionParam())
+                        >= condition.getTargetCount());
     }
 
     /**
