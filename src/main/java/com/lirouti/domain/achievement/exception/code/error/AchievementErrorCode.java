@@ -25,6 +25,12 @@ public enum AchievementErrorCode implements BaseErrorCode {
             "존재하지 않는 업적입니다.",
             "ACHIEVEMENT404_1"
     ),
+    WAVE_ROUTINE_NOT_SELECTED(
+            HttpStatus.NOT_FOUND,
+            "아직 파도 업적 추적 루틴을 선택하지 않았습니다.",
+            "ACHIEVEMENT404_2"
+    ),
+
     NOT_ACHIEVED(
             HttpStatus.CONFLICT,
             "아직 달성하지 않은 업적입니다.",

@@ -94,4 +94,13 @@ public final class AchievementResDTO {
             String badgeImageUrl
     ) {
     }
+
+    @Builder
+    public record WaveRoutineStatus(
+            Long memberRoutineId,
+            String routineName,
+            int currentStreak,
+            int targetStreak
+    ) {
+    }
 }

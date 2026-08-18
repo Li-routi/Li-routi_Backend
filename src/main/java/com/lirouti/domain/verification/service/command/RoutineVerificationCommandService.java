@@ -7,6 +7,8 @@ import java.time.LocalTime;
 
 import com.lirouti.domain.achievement.event.AchievementProgressEvent;
 import com.lirouti.domain.achievement.service.command.MemberRoutineStreakCommandService;
+import com.lirouti.domain.achievement.service.command.MorningRoutineStreakCommandService;
+import com.lirouti.domain.achievement.service.command.WaveRoutineStreakCommandService;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -75,6 +77,9 @@ public class RoutineVerificationCommandService {
     private final MemberActivityDayCommandService memberActivityDayCommandService;
     private final CharacterUnlockCommandService characterUnlockCommandService;
 
+    private final MorningRoutineStreakCommandService morningRoutineStreakCommandService;
+    private final WaveRoutineStreakCommandService waveRoutineStreakCommandService;
+
     @Transactional
     public GroupRoutineVerification verifyGroupRoutine(
             Long memberId, Long groupId, Long routineId, LocalDate assignedDate,
@@ -119,6 +124,12 @@ public class RoutineVerificationCommandService {
                 assignment.getMember().getId(), saved.getVerifiedAt(),
                 SOURCE_TYPE_GROUP_ROUTINE_VERIFICATION, saved.getId(),
                 assignment.getAssignedDate().atTime(assignment.getScheduledEndTime()));
+
+        if (assignment.getScheduledEndTime().isBefore(MorningRoutineStreakCommandService.MORNING_ROUTINE_END_TIME_CUTOFF)) {
+            morningRoutineStreakCommandService.recordCompletion(
+                    assignment.getMember().getId(), verifiedAt.toLocalDate(), verifiedAt,
+                    SOURCE_TYPE_GROUP_ROUTINE_VERIFICATION, saved.getId());
+        }
 
         memberActivityDayCommandService.record(
                 assignment.getMember().getId(), verifiedAt.toLocalDate());
@@ -190,6 +201,15 @@ public class RoutineVerificationCommandService {
 
         memberRoutineStreakCommandService.recordCompletion(
                 memberId, verifiedDate, verifiedAt,
+                SOURCE_TYPE_MEMBER_ROUTINE_VERIFICATION, saved.getId());
+
+        if (routine.getEndTime().isBefore(MorningRoutineStreakCommandService.MORNING_ROUTINE_END_TIME_CUTOFF)) {
+            morningRoutineStreakCommandService.recordCompletion(
+                    memberId, verifiedDate, verifiedAt,
+                    SOURCE_TYPE_MEMBER_ROUTINE_VERIFICATION, saved.getId());
+        }
+        waveRoutineStreakCommandService.recordCompletionIfTracked(
+                memberId, routine.getId(), verifiedDate, verifiedAt,
                 SOURCE_TYPE_MEMBER_ROUTINE_VERIFICATION, saved.getId());
 
         memberActivityDayCommandService.recordWithCompletion(memberId, verifiedDate);
