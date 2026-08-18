@@ -24,6 +24,10 @@ import com.lirouti.global.apiPayload.code.BaseErrorCode;
 import com.lirouti.global.apiPayload.code.GeneralErrorCode;
 import com.lirouti.domain.reward.dto.response.RewardResDTO;
 import com.lirouti.domain.reward.exception.RewardClawbackException;
+import com.lirouti.domain.shop.converter.ShopConverter;
+import com.lirouti.domain.shop.dto.response.ShopResDTO;
+import com.lirouti.domain.shop.exception.ShopInsufficientBalanceException;
+import com.lirouti.domain.shop.exception.ShopItemRejectedException;
 import com.lirouti.global.apiPayload.exception.GeneralException;
 import com.lirouti.global.ratelimit.RateLimitExceededException;
 
@@ -56,6 +60,40 @@ public class GeneralExceptionAdvice {
                         .balance(e.getBalance())
                         .shortfall(e.shortfall())
                         .build()));
+    }
+
+    /**
+     * 구매가 재화 부족으로 거절된 경우. <b>모자란 재화를 전부 싣는다.</b>
+     *
+     * <p>재화가 섞인 구매는 파란 보석과 주황 보석이 동시에 모자랄 수 있다. 먼저 걸린 하나만
+     * 알려주면 사용자가 그것을 채우고 돌아와 <b>또 막힌다</b> — 그래서 서비스가 차감 전에 전부
+     * 검사해 모아 온 것을 그대로 내보낸다.
+     */
+    @ExceptionHandler(ShopInsufficientBalanceException.class)
+    public ResponseEntity<@NonNull ApiResponse<ShopResDTO.PurchaseShortage>> handleShopInsufficientBalance(
+            ShopInsufficientBalanceException e) {
+        log.warn("재화가 모자라 아이템 구매를 거절했습니다. 부족={}", e.getShortages());
+        return ResponseEntity
+                .status(e.getCode().getHttpStatus())
+                .body(ApiResponse.onFailure(e.getCode(),
+                        ShopConverter.toPurchaseShortage(e.getShortages())));
+    }
+
+    /**
+     * 일부 아이템 때문에 구매 전체가 거절된 경우. <b>막힌 아이템 id 를 싣는다.</b>
+     *
+     * <p>사유만 알려주면 화면은 여섯 개 중 무엇을 빼야 할지 알 수 없어 전체를 지우는 수밖에
+     * 없다. 사유는 응답 code 가 가른다.
+     */
+    @ExceptionHandler(ShopItemRejectedException.class)
+    public ResponseEntity<@NonNull ApiResponse<ShopResDTO.RejectedItems>> handleShopItemRejected(
+            ShopItemRejectedException e) {
+        log.warn("살 수 없는 아이템이 있어 구매를 거절했습니다. code={}, itemIds={}",
+                e.getCode().getCode(), e.getItemIds());
+        return ResponseEntity
+                .status(e.getCode().getHttpStatus())
+                .body(ApiResponse.onFailure(e.getCode(),
+                        ShopConverter.toRejectedItems(e.getItemIds())));
     }
 
     // 커스텀 예외 처리

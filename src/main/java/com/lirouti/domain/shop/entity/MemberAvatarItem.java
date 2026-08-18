@@ -45,6 +45,21 @@ public class MemberAvatarItem extends BaseEntity {
     @JoinColumn(name = "avatar_item_id", nullable = false)
     private AvatarItem avatarItem;
 
+    /**
+     * 어느 구매에서 왔는가.
+     *
+     * <p><b>{@code null} 은 "구매 이력을 남기기 전에 산 것" 하나만 뜻한다.</b> 새로 만드는 행은
+     * 반드시 채운다 — 비우면 구매 단위 연결이 다시 끊긴다.
+     *
+     * <p>컬럼이 {@code null} 을 허용하는 것은 기존 행 때문이지 선택이 아니다. 그 행들은
+     * 백필하지 않는다 — 묶을 근거가 {@code purchasedAt} 뿐인데, 그것으로 구매를 가를 수 없다는
+     * 것이 {@link AvatarPurchase} 를 만드는 이유다. 같은 초에 두 구매가 들어왔으면 <b>잘못된
+     * 구매에 아이템이 붙는다.</b>
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "avatar_purchase_id")
+    private AvatarPurchase avatarPurchase;
+
     /** 구매 시점 결제 재화. 마스터가 바뀌어도 이 값은 그대로다. */
     @Enumerated(EnumType.STRING)
     @Column(name = "currency", nullable = false, length = 20)
@@ -58,10 +73,11 @@ public class MemberAvatarItem extends BaseEntity {
     private LocalDateTime purchasedAt;
 
     @Builder
-    private MemberAvatarItem(Member member, AvatarItem avatarItem,
+    private MemberAvatarItem(Member member, AvatarItem avatarItem, AvatarPurchase avatarPurchase,
                              Currency currency, int paidPrice, LocalDateTime purchasedAt) {
         this.member = member;
         this.avatarItem = avatarItem;
+        this.avatarPurchase = avatarPurchase;
         this.currency = currency;
         this.paidPrice = paidPrice;
         this.purchasedAt = purchasedAt;

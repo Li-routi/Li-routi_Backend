@@ -12,6 +12,14 @@ public interface MemberAvatarItemRepository extends JpaRepository<MemberAvatarIt
 
     boolean existsByMemberIdAndAvatarItemId(Long memberId, Long avatarItemId);
 
+    /**
+     * 한 구매에 담겼던 아이템. <b>id 오름차순이 곧 요청 순서다</b> — 저장한 순서가 그대로 남는다.
+     *
+     * <p>같은 멱등 키로 다시 들어온 요청에 앞서 성사된 구매를 돌려줄 때 쓴다. 응답의 아이템
+     * 순서가 처음 응답과 같아야 클라이언트가 대조할 수 있다.
+     */
+    List<MemberAvatarItem> findAllByAvatarPurchaseIdOrderByIdAsc(Long avatarPurchaseId);
+
     @Query("select mi.avatarItem.id from MemberAvatarItem mi where mi.member.id = :memberId")
     List<Long> findOwnedItemIds(@Param("memberId") Long memberId);
 

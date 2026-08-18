@@ -5,6 +5,9 @@ import com.lirouti.domain.shop.dto.response.ShopResDTO;
 import com.lirouti.domain.shop.entity.AvatarItem;
 import com.lirouti.domain.shop.entity.MemberAvatarEquipment;
 import com.lirouti.domain.shop.enums.ShopCategory;
+import com.lirouti.domain.shop.exception.ShopInsufficientBalanceException;
+import com.lirouti.domain.wallet.enums.Currency;
+import com.lirouti.domain.wallet.service.WalletResult;
 
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -109,5 +112,49 @@ public final class ShopConverter {
                 (left, right) -> left,
                 LinkedHashMap::new
         ));
+    }
+
+    /**
+     * 재화 한 종류의 결제 내역.
+     *
+     * <p>잔액은 거래 결과가 들고 있는 <b>차감 직후 값</b>을 쓴다. 화면 상단의 보유 재화를 이
+     * 값으로 갈면 잔액 조회를 한 번 더 부르지 않아도 된다.
+     */
+    public static ShopResDTO.Payment toPayment(Currency currency, int paidAmount,
+                                               WalletResult result) {
+        return ShopResDTO.Payment.builder()
+                .currency(currency)
+                .paidAmount(paidAmount)
+                .balanceAfter(result.totalBalance())
+                .build();
+    }
+
+    /** 구매 결과. 아이템 순서는 요청한 순서 그대로다. */
+    public static ShopResDTO.PurchaseResult toPurchaseResult(List<AvatarItem> items,
+                                                             List<ShopResDTO.Payment> payments) {
+        return ShopResDTO.PurchaseResult.builder()
+                .purchasedItemIds(items.stream().map(AvatarItem::getId).toList())
+                .payments(payments)
+                .build();
+    }
+
+    /** 모자란 재화 안내. 실패 응답의 본문으로 나간다. */
+    public static ShopResDTO.PurchaseShortage toPurchaseShortage(
+            List<ShopInsufficientBalanceException.Shortage> shortages) {
+        return ShopResDTO.PurchaseShortage.builder()
+                .shortages(shortages.stream()
+                        .map(shortage -> ShopResDTO.Shortage.builder()
+                                .currency(shortage.currency())
+                                .required(shortage.required())
+                                .balance(shortage.balance())
+                                .shortfall(shortage.shortfall())
+                                .build())
+                        .toList())
+                .build();
+    }
+
+    /** 살 수 없는 아이템 안내. 사유는 응답 code 가 가른다. */
+    public static ShopResDTO.RejectedItems toRejectedItems(List<Long> itemIds) {
+        return ShopResDTO.RejectedItems.builder().itemIds(itemIds).build();
     }
 }
