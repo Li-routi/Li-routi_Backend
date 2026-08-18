@@ -22,17 +22,20 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * 업적 보상 수령.
  *
- * <p>지갑 지급이 먼저다. WalletService.grant 는 멱등이라 여러 번 불러도 안전하지만,
- * member_achievement.status 를 먼저 CLAIMED 로 바꾸면 그 뒤 지갑 호출이 실패했을 때
- * 재시도가 "이미 CLAIMED"로 보고 지갑 호출을 건너뛰어 보상 없이 상태만 CLAIMED 가 되는
- * 사고가 난다. 순서를 뒤집으면 안 된다.
+ * <p>캐릭터알 지급을 가장 먼저 시도한다. 캐릭터알을 주는 업적(EGG)은 topazReward가
+ * 항상 0이라 지갑을 아예 건드리지 않으므로, 여기서 실패해 claim 전체를 중단시켜도
+ * "이미 성공한 다른 지급"을 되돌리는 문제가 생기지 않는다 — 실패를 조용히 삼키지 않고
+ * 예외를 그대로 전파해 member_achievement.status를 CLAIMED로 바꾸지 않는다. 회원이
+ * 다시 claim을 호출하면 재시도된다(CharacterUnlockService의 지급은 idempotent).
+ *
+ * <p>지갑 지급은 캐릭터알 지급 다음이다. WalletService.grant는 멱등이라 여러 번
+ * 불러도 안전하지만, member_achievement.status를 먼저 CLAIMED로 바꾸면 그 뒤 지갑
+ * 호출이 실패했을 때 재시도가 "이미 CLAIMED"로 보고 지갑 호출을 건너뛰어 보상 없이
+ * 상태만 CLAIMED가 되는 사고가 난다. 상태 전이는 반드시 지갑 지급 뒤에 온다.
  *
  * <p>topazReward가 0인 업적(캐릭터알 시리즈)은 지갑을 호출하지 않는다 -
  * WalletCommandService.grant()가 0원 이하 지급을 INVALID_AMOUNT로 막고 있어서,
- * 0원을 그대로 넘기면 claim 전체가 예외로 실패한다.
- *
- * <p>배지·캐릭터알 지급은 지갑 지급과 별개 관심사로 분리한다 — 둘 중 하나가 실패해도
- * 이미 성공한 지갑 지급/claim 상태를 되돌리지 않는다. 로그만 남기고 넘어간다.
+ * 0원을 그대로 넘기면 예외가 난다.
  *
  * <p>한정 의상 지급은 이번 스코프에서 제외 — 추후 별도 작업으로 연결한다.
  */
@@ -50,10 +53,6 @@ public class AchievementClaimService {
         MemberAchievement memberAchievement = loadAndValidate(memberId, achievementId);
         Achievement achievement = memberAchievement.getAchievement();
 
-        // 캐릭터알 지급을 먼저 시도한다. 캐릭터알을 주는 업적(EGG)은 topazReward가 항상 0이라
-        // 지갑을 건드리지 않으므로, 여기서 실패해 claim 전체를 중단시켜도 "이미 성공한
-        // 코인 지급"을 되돌리는 문제가 생기지 않는다 - 애초에 지갑 호출이 없다.
-        // 실패하면 예외를 그대로 전파해 상태를 CLAIMED로 바꾸지 않는다(재시도 가능하게).
         characterUnlockService.unlockByAchievementClaim(memberId, achievement.getCode());
 
         WalletResult walletResult = grantTopazIfAny(memberId, achievement);
@@ -93,21 +92,6 @@ public class AchievementClaimService {
                 achievement.getId()
         );
         return walletService.grant(command, 0, achievement.getTopazReward());
-    }
-
-    /**
-     * badgeYn/limitedOutfitYn 과 달리 achievement 쪽에 "이 업적이 캐릭터알을 주는지"를
-     * 나타내는 플래그가 없다 - CharacterUnlockCondition 쪽에 이 achievement.code 를
-     * 가리키는 행이 있는지 자체가 판단 기준이다. 그래서 매번 조회를 시도하고, 없으면
-     * CharacterUnlockService 내부에서 빈 리스트로 조용히 끝난다.
-     */
-    private void grantCharacterIfNeeded(Long memberId, Achievement achievement) {
-        try {
-            characterUnlockService.unlockByAchievementClaim(memberId, achievement.getCode());
-        } catch (RuntimeException e) {
-            log.error("캐릭터알 지급 실패 - memberId={}, achievementCode={}",
-                    memberId, achievement.getCode(), e);
-        }
     }
 
     @Transactional(readOnly = true)
