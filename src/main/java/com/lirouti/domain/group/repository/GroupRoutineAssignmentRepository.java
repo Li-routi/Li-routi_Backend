@@ -1,5 +1,6 @@
 package com.lirouti.domain.group.repository;
 
+import com.lirouti.domain.group.dto.projection.DailyAssignmentTotals;
 import com.lirouti.domain.group.dto.projection.DailyScheduleAndCompletion;
 import com.lirouti.domain.group.entity.GroupRoutineAssignment;
 import com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus;
@@ -17,7 +18,7 @@ import java.util.Optional;
 
 public interface GroupRoutineAssignmentRepository
         extends JpaRepository<GroupRoutineAssignment, Long>,
-                GroupRoutineAssignmentRepositoryCustom {
+        GroupRoutineAssignmentRepositoryCustom {
 
     /**
      * 동일 루틴·회원·날짜의 할당을 멱등하게 생성한다.
@@ -99,6 +100,7 @@ public interface GroupRoutineAssignmentRepository
             where assignment.groupRoutine.group.id = :groupId
               and assignment.member.id = :memberId
               and assignment.status in :unfinishedStatuses
+              and assignment.verification is null
             """)
     int deleteUnfinishedAssignmentsForLeaver(
             @Param("groupId") Long groupId,
@@ -119,6 +121,7 @@ public interface GroupRoutineAssignmentRepository
     @Query("""
             select assignment
             from GroupRoutineAssignment assignment
+            join fetch assignment.member
             join fetch assignment.groupRoutine routine
             join fetch routine.group groupEntity
             where routine.id = :groupRoutineId
@@ -145,18 +148,19 @@ public interface GroupRoutineAssignmentRepository
             order by assignment.id
             """)
     List<GroupRoutineAssignment>
-            findAllByGroupIdAndMemberIdAndAssignedDateAndCreatedAtAfterOrEqualForUpdate(
-                    @Param("groupId") Long groupId,
-                    @Param("memberId") Long memberId,
-                    @Param("assignedDate") LocalDate assignedDate,
-                    @Param("joinedAt") java.time.LocalDateTime joinedAt
-            );
+    findAllByGroupIdAndMemberIdAndAssignedDateAndCreatedAtAfterOrEqualForUpdate(
+            @Param("groupId") Long groupId,
+            @Param("memberId") Long memberId,
+            @Param("assignedDate") LocalDate assignedDate,
+            @Param("joinedAt") java.time.LocalDateTime joinedAt
+    );
 
     /** 마감 batch가 잠근 그룹 안에서 실제 MISSED 전이 후보를 ID 순서로 조회한다. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
             select assignment
             from GroupRoutineAssignment assignment
+            left join fetch assignment.verification
             where assignment.groupRoutine.group.id in :groupIds
               and assignment.status in :unfinishedStatuses
               and (
@@ -299,6 +303,21 @@ public interface GroupRoutineAssignmentRepository
             @Param("missedStatus") GroupRoutineAssignmentStatus missedStatus
     );
 
+    /** batch에서 잠근 인증 완료 후보만 COMPLETED로 전이한다. */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+            update GroupRoutineAssignment assignment
+            set assignment.status = :completedStatus,
+                assignment.version = assignment.version + 1
+            where assignment.id in :assignmentIds
+              and assignment.status in :unfinishedStatuses
+            """)
+    int markAssignmentsCompletedByIds(
+            @Param("assignmentIds") List<Long> assignmentIds,
+            @Param("unfinishedStatuses") List<GroupRoutineAssignmentStatus> unfinishedStatuses,
+            @Param("completedStatus") GroupRoutineAssignmentStatus completedStatus
+    );
+
     /**
      * 수행 시간이 시작된 오늘의 대기 할당을 진행 중 상태로 변경한다.
      *
@@ -388,4 +407,32 @@ public interface GroupRoutineAssignmentRepository
             @Param("from") LocalTime from,
             @Param("to") LocalTime to
     );
+
+    /**
+     * 오늘 그 그룹의 현재 가입 회차 ACTIVE 구성원 전원이 각자의 할당을 모두 완료했는지
+     * 판정하기 위한 집계. "총 0건"(오늘 할당된 루틴이 없는 방)은 완료로 치지 않기 위해
+     * 총 건수도 함께 반환한다.
+     *
+     * <p>group by 가 없는 집계이므로 대상 행이 0건이면 count=0, sum=NULL 인 행 1개를
+     * 반환한다. sum(...) 을 coalesce 로 감싸지 않으면 그 NULL 이 원시형 long 인
+     * {@link DailyAssignmentTotals} 생성자로 매핑되지 못해 오늘 할당이 하나도 없는
+     * 그룹을 조회할 때마다 실패한다.
+     */
+    @Query("""
+        select new com.lirouti.domain.group.dto.projection.DailyAssignmentTotals(
+            count(assignment),
+            coalesce(sum(case when assignment.status = com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus.COMPLETED
+                     then 1L else 0L end), 0L)
+        )
+        from GroupRoutineAssignment assignment
+        join GroupMember gm
+             on gm.group.id = assignment.groupRoutine.group.id
+            and gm.member.id = assignment.member.id
+        where assignment.groupRoutine.group.id = :groupId
+          and assignment.assignedDate = :assignedDate
+          and gm.status = com.lirouti.domain.group.enums.GroupMemberStatus.ACTIVE
+          and assignment.createdAt >= gm.joinedAt
+        """)
+    DailyAssignmentTotals countTodayAssignmentTotalsForActiveMembers(
+            @Param("groupId") Long groupId, @Param("assignedDate") LocalDate assignedDate);
 }

@@ -9,6 +9,7 @@ import com.lirouti.domain.chat.entity.ChatRead;
 import com.lirouti.domain.group.entity.Group;
 import com.lirouti.domain.member.entity.Member;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
@@ -25,12 +26,26 @@ public final class ChatConverter {
             Member sender,
             Long emoticonId
     ) {
+        return toEntity(request, group, sender, emoticonId, null);
+    }
+
+    /**
+     * 검증이 끝난 답장 원본을 포함해 메시지 Entity로 변환한다.
+     */
+    public static ChatMessage toEntity(
+            ChatReqDTO.SendMessage request,
+            Group group,
+            Member sender,
+            Long emoticonId,
+            ChatMessage replyToMessage
+    ) {
         return ChatMessage.builder()
                 .group(group)
                 .sender(sender)
                 .messageType(request.type())
                 .content(request.content())
                 .emoticonId(emoticonId)
+                .replyToMessage(replyToMessage)
                 .clientMessageId(request.clientMessageId())
                 .build();
     }
@@ -70,10 +85,39 @@ public final class ChatConverter {
             ChatMessage message,
             ChatResDTO.Emoticon emoticon
     ) {
+        return toMessage(message, emoticon, null);
+    }
+
+    /**
+     * 메시지와 답장 미리보기 정보를 API 응답으로 변환한다.
+     */
+    public static ChatResDTO.Message toMessage(
+            ChatMessage message,
+            ChatResDTO.Emoticon emoticon,
+            ChatResDTO.Reply reply
+    ) {
         return ChatResDTO.Message.builder()
                 .id(message.getId())
                 .clientMessageId(message.getClientMessageId())
                 .groupId(message.getGroup().getId())
+                .sender(toSender(message.getSender()))
+                .type(message.getMessageType())
+                .content(message.getContent())
+                .emoticon(emoticon)
+                .reply(reply)
+                .createdAt(message.getCreatedAt())
+                .build();
+    }
+
+    /**
+     * 답장 원본 메시지에서 미리보기에 필요한 정보만 응답 객체로 옮긴다.
+     */
+    public static ChatResDTO.Reply toReply(
+            ChatMessage message,
+            ChatResDTO.Emoticon emoticon
+    ) {
+        return ChatResDTO.Reply.builder()
+                .id(message.getId())
                 .sender(toSender(message.getSender()))
                 .type(message.getMessageType())
                 .content(message.getContent())
@@ -89,19 +133,31 @@ public final class ChatConverter {
             List<ChatMessage> messages,
             Map<Long, ChatResDTO.Emoticon> emoticons,
             Long nextCursor,
-            boolean hasNext
+            boolean hasNext,
+            LocalDate date,
+            boolean hasChat
     ) {
         List<ChatResDTO.Message> results = messages.stream()
                 .map(message -> toMessage(
                         message,
                         message.getEmoticonId() == null
                                 ? null
-                                : emoticons.get(message.getEmoticonId())))
+                                : emoticons.get(message.getEmoticonId()),
+                        message.getReplyToMessage() == null
+                                ? null
+                                : toReply(
+                                        message.getReplyToMessage(),
+                                        message.getReplyToMessage().getEmoticonId() == null
+                                                ? null
+                                                : emoticons.get(
+                                                        message.getReplyToMessage().getEmoticonId()))))
                 .toList();
         return ChatResDTO.MessageList.builder()
                 .messages(results)
                 .nextCursor(nextCursor)
                 .hasNext(hasNext)
+                .date(date)
+                .hasChat(hasChat)
                 .build();
     }
 

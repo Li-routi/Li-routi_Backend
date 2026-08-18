@@ -55,4 +55,9 @@ public interface GroupRoutineVerificationLikeRepository
             @Param("verificationId") Long verificationId,
             @Param("memberId") Long memberId
     );
+
+    /** 재인증 전 interaction 초기화용. persistence context를 clear하지 않는다. */
+    @Modifying(flushAutomatically = true)
+    @Query("delete from GroupRoutineVerificationLike likeEntity where likeEntity.groupRoutineVerification.id = :verificationId")
+    int deleteAllByVerificationId(@Param("verificationId") Long verificationId);
 }

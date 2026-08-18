@@ -109,6 +109,7 @@ class GroupJoinCommandServiceTest {
                 .joinedAt(JOINED_AT.minusDays(1)).build();
         leftMembership.leave();
         leftMembership.updateStatusMessage("기존 그룹 메시지");
+        leftMembership.increaseTotalDisappointmentCount();
         ReflectionTestUtils.setField(leftMembership, "id", 500L);
         when(groupMemberRepository.findByGroupIdAndMemberId(GROUP_ID, MEMBER_ID))
                 .thenReturn(Optional.of(leftMembership));
@@ -119,6 +120,7 @@ class GroupJoinCommandServiceTest {
         assertThat(leftMembership.getJoinedAt()).isEqualTo(JOINED_AT);
         assertThat(leftMembership.getLeftAt()).isNull();
         assertThat(leftMembership.getTotalPokeCount()).isZero();
+        assertThat(leftMembership.getTotalDisappointmentCount()).isZero();
         assertThat(leftMembership.getStatusMessage()).isEqualTo("기존 그룹 메시지");
         verify(groupMemberRepository).saveAndFlush(leftMembership);
         verify(lockedGroup, never()).addMember(any(GroupMember.class));

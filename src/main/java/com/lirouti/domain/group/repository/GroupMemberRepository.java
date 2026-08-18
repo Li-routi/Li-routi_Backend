@@ -41,9 +41,12 @@ public interface GroupMemberRepository extends JpaRepository<GroupMember, Long> 
                 groupMember.id
             )
             from GroupMember groupMember
+            join groupMember.member member
             where groupMember.group.id = :groupId
               and groupMember.member.id in :memberIds
               and groupMember.status = com.lirouti.domain.group.enums.GroupMemberStatus.ACTIVE
+              and member.isActive = true
+              and member.deletedAt is null
             order by groupMember.id asc
             """)
     List<GroupMemberLockCandidate> findActiveMembershipLockCandidatesByGroupIdAndMemberIds(
@@ -109,6 +112,62 @@ public interface GroupMemberRepository extends JpaRepository<GroupMember, Long> 
             @Param("assignmentId") Long assignmentId
     );
 
+    @Modifying(flushAutomatically = true)
+    @Query(value = """
+            update group_member group_member
+            join group_routine_assignment assignment on assignment.id = :assignmentId
+            join group_routine routine on routine.id = assignment.group_routine_id
+               set group_member.total_disappointment_count = group_member.total_disappointment_count + :count
+             where group_member.id = :groupMemberId
+               and group_member.status = 'ACTIVE'
+               and group_member.member_id = assignment.member_id
+               and group_member.group_id = routine.group_id
+               and assignment.created_at >= group_member.joined_at
+            """, nativeQuery = true)
+    int incrementTotalDisappointmentCountForCurrentActiveMembership(
+            @Param("groupMemberId") Long groupMemberId,
+            @Param("assignmentId") Long assignmentId,
+            @Param("count") long count
+    );
+
+    @Modifying(flushAutomatically = true)
+    @Query(value = """
+            update group_member group_member
+            join group_routine_assignment assignment on assignment.id = :assignmentId
+            join group_routine routine on routine.id = assignment.group_routine_id
+               set group_member.total_disappointment_count = group_member.total_disappointment_count - :count
+             where group_member.id = :groupMemberId
+               and group_member.status = 'ACTIVE'
+               and group_member.member_id = assignment.member_id
+               and group_member.group_id = routine.group_id
+               and assignment.created_at >= group_member.joined_at
+               and group_member.total_disappointment_count >= :count
+            """, nativeQuery = true)
+    int decrementTotalDisappointmentCountForCurrentActiveMembershipIfPositive(
+            @Param("groupMemberId") Long groupMemberId,
+            @Param("assignmentId") Long assignmentId,
+            @Param("count") long count
+    );
+
+    @Modifying(flushAutomatically = true)
+    @Query(value = """
+            update group_member group_member
+            join group_routine_assignment assignment on assignment.id = :assignmentId
+            join group_routine routine on routine.id = assignment.group_routine_id
+               set group_member.total_like_count = group_member.total_like_count - :count
+             where group_member.id = :groupMemberId
+               and group_member.status = 'ACTIVE'
+               and group_member.member_id = assignment.member_id
+               and group_member.group_id = routine.group_id
+               and assignment.created_at >= group_member.joined_at
+               and group_member.total_like_count >= :count
+            """, nativeQuery = true)
+    int decrementTotalLikeCountForCurrentActiveMembershipIfPositive(
+            @Param("groupMemberId") Long groupMemberId,
+            @Param("assignmentId") Long assignmentId,
+            @Param("count") long count
+    );
+
     /** MISSED로 실제 전이된 현재 가입 회차의 ACTIVE 참여 관계만 ID 순서로 잠근다. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
@@ -130,11 +189,10 @@ public interface GroupMemberRepository extends JpaRepository<GroupMember, Long> 
     );
 
     /**
-     * Preview에 표시할 ACTIVE 구성원 수만큼의 요약 항목을 ID 순서대로 만든다.
-     * 캐릭터 저장 모델이 아직 없으므로 Member를 fetch join하지 않고 GroupMember ID만 조회한다.
+     * Preview에 표시할 ACTIVE 구성원의 회원 ID를 가입 순서대로 조회한다.
      */
     @Query("""
-            select groupMember.id
+            select member.id
             from GroupMember groupMember
             join groupMember.member member
             where groupMember.group.id = :groupId
@@ -143,7 +201,7 @@ public interface GroupMemberRepository extends JpaRepository<GroupMember, Long> 
               and member.deletedAt is null
             order by groupMember.joinedAt asc, groupMember.id asc
             """)
-    List<Long> findIdsByGroupIdAndStatusOrderByJoinedAtAscIdAsc(
+    List<Long> findMemberIdsByGroupIdAndStatusOrderByJoinedAtAscIdAsc(
             @Param("groupId") Long groupId,
             @Param("status") GroupMemberStatus status
     );

@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import com.lirouti.domain.media.exception.code.error.MediaErrorCode;
@@ -102,6 +103,18 @@ public class GeneralExceptionAdvice {
         return ResponseEntity
                 .status(MediaErrorCode.FILE_TOO_LARGE.getHttpStatus())
                 .body(ApiResponse.onFailure(MediaErrorCode.FILE_TOO_LARGE));
+    }
+
+    /** multipart 요청에 필수 파일 part가 없을 때 공통 400 응답으로 변환한다. */
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    public ResponseEntity<@NonNull ApiResponse<Void>> handleMissingServletRequestPart(
+            MissingServletRequestPartException e
+    ) {
+        log.warn("multipart 필수 part가 누락되었습니다. partName={}", e.getRequestPartName());
+
+        return ResponseEntity
+                .status(GeneralErrorCode.BAD_REQUEST.getHttpStatus())
+                .body(ApiResponse.onFailure(GeneralErrorCode.BAD_REQUEST));
     }
 
     // @Valid에서 검증 오류가 발생한 예외에 대한 핸들러

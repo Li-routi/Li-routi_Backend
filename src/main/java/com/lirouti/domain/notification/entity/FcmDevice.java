@@ -30,12 +30,15 @@ public class FcmDevice extends BaseEntity {
 
     /** 처음 전달받은 Android 토큰을 활성 상태로 등록한다. */
     public FcmDevice(Member member, String token, LocalDateTime now) {
-        this.member = member; this.token = token; this.active = true; this.lastRegisteredAt = now;
+        this.member = member;
+        this.token = token;
+        this.active = true;
+        this.lastRegisteredAt = now;
     }
-    /** 토큰 갱신 또는 다른 계정 로그인 시 현재 회원에게 안전하게 재귀속한다. */
-    public void activateFor(Member member, LocalDateTime now) {
-        this.member = member; this.active = true; this.lastRegisteredAt = now; this.deactivatedAt = null;
-    }
+
     /** 로그아웃 또는 FCM의 만료 응답을 받은 토큰을 비활성화한다. */
-    public void deactivate(LocalDateTime now) { active = false; deactivatedAt = now; }
+    public void deactivate(LocalDateTime now) {
+        active = false;
+        deactivatedAt = now;
+    }
 }

@@ -125,4 +125,9 @@ public class JwtUtil {
     public String createDevToken(Long memberId) {
         return createToken(memberId, devExpiration, Role.ROLE_USER, "access");
     }
+
+    // 관리자 개발자 전용 임시 토큰 생성
+    public String createDevAdminToken(Long memberId) {
+        return createToken(memberId, devExpiration, Role.ROLE_ADMIN, "access");
+    }
 }

@@ -10,9 +10,8 @@
 |:-----------------------------------------------------------------------:|:-------------------------------------------------------------------------:|:-------------------------------------------------------------------------:|:------------------------------------------------------------------------:|:-------------------------------------------------------------------------:|
 | <img src="https://github.com/KateteDeveloper.png" width="150" height="150"> | <img src="https://github.com/ddo0122.png" width="150" height="150"> | <img src="https://github.com/ochyeon.png" width="150" height="150"> | <img src="https://github.com/yousung1020.png" width="150" height="150"> | <img src="https://github.com/dldnsgkr.png" width="150" height="150"> |
 |          [@KateteDeveloper](https://github.com/KateteDeveloper)          |            [@ddo0122](https://github.com/ddo0122)            |            [@ochyeon](https://github.com/ochyeon)             |         [@yousung1020](https://github.com/yousung1020)          |            [@dldnsgkr](https://github.com/dldnsgkr)             |
-|                              추후 업데이트 예정                              |                              추후 업데이트 예정                              |                              추후 업데이트 예정                              |                             추후 업데이트 예정                             |                              추후 업데이트 예정                              |
+|                              알림, 개인 루틴                              |                              그룹 루틴, 그룹 인증                             |                              홈화면, 마이페이지                              |                              회원가입, 그룹, 채팅                             |                              챌린지, 그룹, 개인 인증                            |
 
-> 담당 업무는 기능별 작업 분배가 확정되는 대로 업데이트합니다.
 
 ---
 

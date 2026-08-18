@@ -40,11 +40,11 @@ public class GroupDetailQueryRepository {
                         group.inviteCode,
                         groupMember.member.id,
                         groupMember.member.nickname,
-                        groupMember.member.profileImageKey,
                         groupMember.statusMessage,
                         groupMember.currentStreak,
                         groupMember.totalLikeCount,
-                        groupMember.totalPokeCount
+                        groupMember.totalPokeCount,
+                        groupMember.totalDisappointmentCount
                 ))
                 .from(groupMember)
                 .join(groupMember.group, group)
@@ -106,11 +106,11 @@ public class GroupDetailQueryRepository {
             String inviteCode,
             Long memberId,
             String name,
-            String profileImageKey,
             String statusMessage,
             int currentStreak,
             long totalLikeCount,
-            long totalPokeCount
+            long totalPokeCount,
+            long totalDisappointmentCount
     ) {
     }
 

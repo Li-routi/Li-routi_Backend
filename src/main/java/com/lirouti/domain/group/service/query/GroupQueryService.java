@@ -2,6 +2,7 @@ package com.lirouti.domain.group.service.query;
 
 import com.lirouti.domain.group.converter.GroupConverter;
 import com.lirouti.domain.group.dto.response.GroupResDTO;
+import com.lirouti.domain.group.entity.GroupMember;
 import com.lirouti.domain.group.entity.GroupRoutineCategory;
 import com.lirouti.domain.group.repository.GroupRoutineCategoryRepository;
 import com.lirouti.domain.group.service.GroupValidationService;
@@ -13,8 +14,16 @@ import com.lirouti.domain.group.repository.GroupListQueryRepository.AssignmentCo
 import com.lirouti.domain.group.repository.GroupListQueryRepository.GroupCountProjection;
 import com.lirouti.domain.group.repository.GroupListQueryRepository.GroupScheduleCountProjection;
 import com.lirouti.domain.group.repository.GroupListQueryRepository.MyGroupProjection;
+import com.lirouti.domain.group.repository.GroupRoutineQueryRepository;
+import com.lirouti.domain.group.repository.GroupRoutineQueryRepository.GroupRoutineProjection;
+import com.lirouti.domain.group.repository.GroupRoutineQueryRepository.RoutineScheduleProjection;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.service.query.MemberQueryService;
+import com.lirouti.domain.shop.repository.MemberAvatarEquipmentRepository;
+import com.lirouti.domain.media.service.MediaService;
+import com.lirouti.domain.character.dto.response.CharacterResDTO;
+import com.lirouti.domain.character.service.query.AvatarLayerAssembler;
+import com.lirouti.domain.shop.entity.MemberAvatarEquipment;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -37,10 +46,15 @@ public class GroupQueryService {
     private final GroupRoutineAssignmentRepository groupRoutineAssignmentRepository;
     private final GroupDetailQueryRepository groupDetailQueryRepository;
     private final GroupListQueryRepository groupListQueryRepository;
+    private final GroupRoutineQueryRepository groupRoutineQueryRepository;
     private final GroupRoutineCategoryRepository groupRoutineCategoryRepository;
+    private final MemberAvatarEquipmentRepository memberAvatarEquipmentRepository;
+    private final MediaService mediaService;
+    private final AvatarLayerAssembler avatarLayerAssembler;
     private final GroupValidationService groupValidationService;
     private final MemberQueryService memberQueryService;
     private final Clock clock;
+
 
     /** 로그인 회원의 ACTIVE 참여 그룹과 오늘·월간 활동 요약을 배치 조회한다. */
     @Transactional(readOnly = true)
@@ -114,17 +128,62 @@ public class GroupQueryService {
     /** ACTIVE 구성원이 그룹방 진입에 필요한 기본 정보와 구성원별 활동 현황을 조회한다. */
     @Transactional(readOnly = true)
     public GroupResDTO.Detail getGroupDetail(Long groupId, Long memberId) {
-        groupValidationService.validateActiveGroupMember(groupId, memberId);
+        GroupMember currentMembership = groupValidationService
+                .validateActiveGroupMember(groupId, memberId);
 
         LocalDate today = LocalDate.now(clock);
         List<GroupDetailQueryRepository.GroupMemberDetailProjection> memberDetails =
                 groupDetailQueryRepository.findActiveMemberDetails(groupId);
         List<GroupDetailQueryRepository.TodayMemberProgressProjection> progresses =
                 groupDetailQueryRepository.findTodayMemberProgress(groupId, today);
+        List<Long> activeMemberIds = memberDetails.stream()
+                .map(GroupDetailQueryRepository.GroupMemberDetailProjection::memberId)
+                .toList();
+        List<MemberAvatarEquipment> equipments = activeMemberIds.isEmpty()
+                ? List.of()
+                : memberAvatarEquipmentRepository
+                        .findAllByMemberIdInWithMemberAndAvatarItem(activeMemberIds);
+        // 구성원마다 따로 조립하면 사람 수만큼 조회가 나간다.
+        Map<Long, List<CharacterResDTO.Layer>> layersByMemberId =
+                avatarLayerAssembler.assembleAllAsResponse(activeMemberIds,
+                        equipments.stream().collect(java.util.stream.Collectors.groupingBy(
+                                equipment -> equipment.getMember().getId())));
+
+        Map<Long, GroupResDTO.Avatar> avatarsByMemberId = GroupConverter.toAvatarsByMemberId(
+                activeMemberIds,
+                equipments,
+                layersByMemberId,
+                mediaService::resolveAvatarAssetUrl
+        );
 
         log.debug("그룹 상세 정보를 조회했습니다. groupId={}, memberId={}, memberCount={}",
                 groupId, memberId, memberDetails.size());
-        return GroupConverter.toGroupDetail(memberDetails, progresses);
+        return GroupConverter.toGroupDetail(
+                memberDetails,
+                progresses,
+                avatarsByMemberId,
+                currentMembership.getRole()
+        );
+    }
+
+    /** ACTIVE OWNER가 관리 중인 ACTIVE 그룹의 활성 루틴과 반복 일정을 조회한다. */
+    @Transactional(readOnly = true)
+    public GroupResDTO.GroupRoutineList getGroupRoutines(Long groupId, Long memberId) {
+        groupValidationService.validateGroupOwner(groupId, memberId);
+
+        List<GroupRoutineProjection> routines = groupRoutineQueryRepository
+                .findActiveRoutinesByGroupId(groupId);
+        if (routines.isEmpty()) {
+            return GroupConverter.toGroupRoutineList(List.of(), List.of());
+        }
+
+        List<Long> routineIds = routines.stream().map(GroupRoutineProjection::routineId).toList();
+        List<RoutineScheduleProjection> schedules = groupRoutineQueryRepository
+                .findSchedulesByRoutineIds(routineIds);
+
+        log.debug("그룹 활성 루틴 목록을 조회했습니다. groupId={}, memberId={}, routineCount={}",
+                groupId, memberId, routines.size());
+        return GroupConverter.toGroupRoutineList(routines, schedules);
     }
 
     /**

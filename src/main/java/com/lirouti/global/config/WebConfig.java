@@ -1,16 +1,12 @@
 package com.lirouti.global.config;
 
-import com.lirouti.global.properties.RateLimitProperties;
-import com.lirouti.global.ratelimit.InMemoryRateLimiter;
+import com.lirouti.global.ratelimit.RateLimitGuard;
 import com.lirouti.global.ratelimit.RateLimitInterceptor;
-import com.lirouti.global.ratelimit.RateLimiter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
-
-import java.time.Clock;
 
 /**
  * Spring MVC 인터셉터 등록.
@@ -22,32 +18,27 @@ import java.time.Clock;
 @Configuration
 @RequiredArgsConstructor
 public class WebConfig implements WebMvcConfigurer {
+
     /**
      * 필수 의존이 아니라 {@link ObjectProvider}인 것은 {@code @WebMvcTest} 때문이다.
      *
      * MVC 슬라이스는 {@code WebMvcConfigurer}인 이 클래스는 올리면서 일반 {@code @Component}인
-     * {@code RateLimiter}·{@code RateLimitProperties}는 제외한다. 필수로 두면 레이트 리밋과
-     * 무관한 컨트롤러 슬라이스 테스트가 전부 컨텍스트 로딩에서 깨진다. 슬라이스마다 목을 등록해
-     * 해결할 수도 있지만, 그러면 앞으로 만드는 모든 MVC 테스트가 이 사정을 알아야 한다.
+     * {@code RateLimitGuard}는 제외한다. 필수로 두면 레이트 리밋과 무관한 컨트롤러 슬라이스
+     * 테스트가 전부 컨텍스트 로딩에서 깨진다. 슬라이스마다 목을 등록해 해결할 수도 있지만,
+     * 그러면 앞으로 만드는 모든 MVC 테스트가 이 사정을 알아야 한다.
      *
-     * 실제 애플리케이션 컨텍스트에는 둘 다 항상 있으므로 운영 동작은 달라지지 않는다.
+     * 실제 애플리케이션 컨텍스트에는 항상 있으므로 운영 동작은 달라지지 않는다.
      */
-    private final ObjectProvider<RateLimiter> rateLimiter;
-    private final ObjectProvider<RateLimitProperties> rateLimitProperties;
+    private final ObjectProvider<RateLimitGuard> rateLimitGuard;
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
-        RateLimiter limiter = rateLimiter.getIfAvailable();
-        RateLimitProperties properties = rateLimitProperties.getIfAvailable();
-        if (limiter == null || properties == null) {
+        RateLimitGuard guard = rateLimitGuard.getIfAvailable();
+        if (guard == null) {
             return;
         }
         // 경로를 제한하지 않는다. @RateLimit이 붙은 핸들러에서만 실제로 동작하므로
         // 여기서 경로를 나열하면 애노테이션과 두 곳에서 관리하게 된다.
-        //
-        // 폴백은 여기서 만들어 인터셉터와 수명을 맞춘다. Redis가 죽었을 때만 쓰이므로
-        // 평소에는 비어 있고, 빈으로 올려 다른 곳이 쓰게 할 이유도 없다.
-        registry.addInterceptor(
-                new RateLimitInterceptor(limiter, new InMemoryRateLimiter(Clock.systemUTC()), properties));
+        registry.addInterceptor(new RateLimitInterceptor(guard));
     }
 }

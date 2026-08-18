@@ -4,6 +4,7 @@ import com.lirouti.domain.media.enums.MediaPurpose;
 import com.lirouti.domain.media.exception.MediaException;
 import com.lirouti.domain.media.exception.code.error.MediaErrorCode;
 import com.lirouti.global.properties.S3Properties;
+import com.lirouti.global.ratelimit.RateLimitGuard;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -55,7 +56,8 @@ class MediaPromotionTest {
         s3Client = Mockito.mock(S3Client.class);
         S3Properties properties = new S3Properties();
         properties.setBucket(BUCKET);
-        mediaService = new MediaService(Mockito.mock(S3Presigner.class), s3Client, properties);
+        mediaService = new MediaService(Mockito.mock(S3Presigner.class), s3Client, properties,
+                Mockito.mock(RateLimitGuard.class));
     }
 
     @Test

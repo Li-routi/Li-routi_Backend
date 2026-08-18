@@ -1,45 +1,37 @@
 package com.lirouti.global.ratelimit;
 
-import com.lirouti.domain.member.enums.Role;
-import com.lirouti.global.auth.CustomUserDetails;
-import com.lirouti.global.properties.RateLimitProperties;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.method.HandlerMethod;
 
 import java.lang.reflect.Method;
-import java.time.Clock;
-import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
+/**
+ * 판정 자체는 {@link RateLimitGuard} 가 하고 여기서는 검증하지 않는다
+ * ({@code RateLimitGuardTest}). 이 테스트가 보는 것은 <b>애노테이션을 읽어 정책 이름을
+ * 넘기는 부분</b>뿐이다.
+ */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("RateLimitInterceptor 테스트")
 class RateLimitInterceptorTest {
-    private static final String POLICY = "media-presign";
-    private static final int LIMIT = 20;
+    private static final String POLICY = "media-presign-verification";
 
     @Mock
-    private RateLimiter rateLimiter;
+    private RateLimitGuard guard;
 
-    private RateLimitProperties properties;
     private RateLimitInterceptor interceptor;
     private MockHttpServletRequest request;
     private MockHttpServletResponse response;
-    private InMemoryRateLimiter fallbackLimiter;
 
     /** {@code @RateLimit}이 붙은 핸들러를 흉내내기 위한 대상. */
     static class AnnotatedController {
@@ -53,23 +45,9 @@ class RateLimitInterceptorTest {
 
     @BeforeEach
     void setUp() {
-        properties = new RateLimitProperties();
-        properties.setEnabled(true);
-        RateLimitProperties.Policy policy = new RateLimitProperties.Policy();
-        policy.setLimit(LIMIT);
-        policy.setWindow(Duration.ofHours(1));
-        properties.getPolicies().put(POLICY, policy);
-
-        fallbackLimiter = new InMemoryRateLimiter(Clock.systemUTC());
-        interceptor = new RateLimitInterceptor(rateLimiter, fallbackLimiter, properties);
+        interceptor = new RateLimitInterceptor(guard);
         request = new MockHttpServletRequest();
-        request.setRemoteAddr("10.0.0.7");
         response = new MockHttpServletResponse();
-    }
-
-    @AfterEach
-    void clearContext() {
-        SecurityContextHolder.clearContext();
     }
 
     private HandlerMethod handler(String methodName) throws NoSuchMethodException {
@@ -77,145 +55,31 @@ class RateLimitInterceptorTest {
         return new HandlerMethod(new AnnotatedController(), method);
     }
 
-    private void authenticateAs(Long memberId) {
-        CustomUserDetails principal = new CustomUserDetails(memberId, Role.ROLE_USER);
-        SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities()));
-    }
-
-    private void mockConsume(boolean allowed, long retryAfter) {
-        when(rateLimiter.consume(anyString(), anyInt(), any(Duration.class)))
-                .thenReturn(new RateLimiter.Result(allowed, 1, retryAfter));
-    }
-
     @Test
-    @DisplayName("애노테이션이 없는 핸들러는 Redis를 아예 건드리지 않는다")
+    @DisplayName("애노테이션이 없는 핸들러는 판정을 부르지 않는다")
     void preHandle_NoAnnotation_SkipsEntirely() throws Exception {
         assertThat(interceptor.preHandle(request, response, handler("unlimited"))).isTrue();
-        verifyNoInteractions(rateLimiter);
+        verifyNoInteractions(guard);
     }
 
     @Test
     @DisplayName("핸들러 메서드가 아니면(정적 리소스 등) 그대로 통과시킨다")
     void preHandle_NotHandlerMethod_Passes() {
         assertThat(interceptor.preHandle(request, response, new Object())).isTrue();
-        verifyNoInteractions(rateLimiter);
+        verifyNoInteractions(guard);
     }
 
     @Test
-    @DisplayName("전체 스위치를 끄면 검사하지 않는다 — 탈출구가 실제로 동작하는지")
-    void preHandle_Disabled_SkipsCheck() throws Exception {
-        properties.setEnabled(false);
-
+    @DisplayName("애노테이션의 정책 이름을 그대로 넘긴다")
+    void preHandle_Annotated_DelegatesPolicyName() throws Exception {
         assertThat(interceptor.preHandle(request, response, handler("limited"))).isTrue();
-        verifyNoInteractions(rateLimiter);
-    }
-
-    @Test
-    @DisplayName("설정에 없는 정책이면 막지 않고 통과시킨다 — 오타로 정상 요청이 막히지 않게")
-    void preHandle_UnknownPolicy_FailsOpen() throws Exception {
-        properties.getPolicies().clear();
-
-        assertThat(interceptor.preHandle(request, response, handler("limited"))).isTrue();
-        verifyNoInteractions(rateLimiter);
-    }
-
-    @Test
-    @DisplayName("한도 안이면 통과한다")
-    void preHandle_UnderLimit_Passes() throws Exception {
-        mockConsume(true, 0);
-
-        assertThat(interceptor.preHandle(request, response, handler("limited"))).isTrue();
-    }
-
-    @Test
-    @DisplayName("한도를 넘으면 429로 던지고 Retry-After를 실어 보낸다")
-    void preHandle_OverLimit_Throws429() throws Exception {
-        mockConsume(false, 42);
-
-        assertThatThrownBy(() -> interceptor.preHandle(request, response, handler("limited")))
-                .isInstanceOf(RateLimitExceededException.class)
-                .hasFieldOrPropertyWithValue("retryAfterSeconds", 42L);
-    }
-
-    @Test
-    @DisplayName("Redis가 죽어도 한도 안이면 통과한다 — 보호 장치가 장애를 만들지 않게")
-    void preHandle_RedisFailure_StillPassesUnderLimit() throws Exception {
-        when(rateLimiter.consume(anyString(), anyInt(), any(Duration.class)))
-                .thenThrow(new IllegalStateException("redis down"));
-
-        assertThat(interceptor.preHandle(request, response, handler("limited"))).isTrue();
-    }
-
-    @Test
-    @DisplayName("첫 degrade 로그는 반드시 남는다 — 예전에는 오버플로로 이것이 빠졌다")
-    void shouldLogDegraded_FirstCall_Logs() {
-        long now = System.currentTimeMillis();
-
-        assertThat(interceptor.shouldLogDegraded(now))
-                .as("한 번도 안 남긴 상태의 첫 호출")
-                .isTrue();
-    }
-
-    @Test
-    @DisplayName("간격 안에는 다시 남기지 않고, 간격이 지나면 다시 남긴다")
-    void shouldLogDegraded_ThrottlesWithinInterval() {
-        long now = System.currentTimeMillis();
-        interceptor.shouldLogDegraded(now);
-
-        assertThat(interceptor.shouldLogDegraded(now + 59_000))
-                .as("장애가 길어져도 요청마다 찍으면 로그가 넘친다")
-                .isFalse();
-        assertThat(interceptor.shouldLogDegraded(now + 60_000))
-                .as("한 번만 찍으면 장애가 계속되는지 알 수 없다")
-                .isTrue();
-    }
-
-    @Test
-    @DisplayName("Redis가 죽어도 한도를 넘으면 막는다 — 예전에는 여기가 무제한이었다")
-    void preHandle_RedisFailure_FallbackStillBlocks() throws Exception {
-        when(rateLimiter.consume(anyString(), anyInt(), any(Duration.class)))
-                .thenThrow(new IllegalStateException("redis down"));
-
-        for (int i = 0; i < LIMIT; i++) {
-            assertThat(interceptor.preHandle(request, response, handler("limited")))
-                    .as("%d번째는 폴백 한도 안이다", i + 1)
-                    .isTrue();
-        }
-
-        assertThatThrownBy(() -> interceptor.preHandle(request, response, handler("limited")))
-                .isInstanceOf(RateLimitExceededException.class);
-    }
-
-    @Test
-    @DisplayName("로그인 사용자는 회원 id로 센다 — 같은 IP의 다른 사용자가 서로 영향을 주지 않게")
-    void preHandle_Authenticated_KeyedByMemberId() throws Exception {
-        authenticateAs(42L);
-        mockConsume(true, 0);
-
-        interceptor.preHandle(request, response, handler("limited"));
-
-        ArgumentCaptor<String> key = ArgumentCaptor.forClass(String.class);
-        verify(rateLimiter).consume(key.capture(), eq(LIMIT), any(Duration.class));
-        assertThat(key.getValue()).isEqualTo("rate-limit:media-presign:member:42");
-    }
-
-    @Test
-    @DisplayName("비로그인 요청은 원격 주소로 센다")
-    void preHandle_Anonymous_KeyedByIp() throws Exception {
-        mockConsume(true, 0);
-
-        interceptor.preHandle(request, response, handler("limited"));
-
-        ArgumentCaptor<String> key = ArgumentCaptor.forClass(String.class);
-        verify(rateLimiter).consume(key.capture(), anyInt(), any(Duration.class));
-        assertThat(key.getValue()).isEqualTo("rate-limit:media-presign:ip:10.0.0.7");
+        verify(guard).enforce(POLICY);
     }
 
     @Test
     @DisplayName("한도를 넘겨 던질 때 응답에 직접 쓰지 않는다 — 본문은 예외 처리기가 만든다")
     void preHandle_OverLimit_DoesNotWriteResponseDirectly() throws Exception {
-        mockConsume(false, 10);
+        doThrow(new RateLimitExceededException(10)).when(guard).enforce(POLICY);
 
         assertThatThrownBy(() -> interceptor.preHandle(request, response, handler("limited")))
                 .isInstanceOf(RateLimitExceededException.class);

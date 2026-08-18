@@ -77,6 +77,8 @@ spring:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}
+      repositories:
+        enabled: false
 
 # jwt 설정 관련
 jwt:
@@ -148,6 +150,24 @@ server:
   forward-headers-strategy: framework
 
 # 인증 사진 AI 심사. 사진이 그 챌린지의 의도에 맞는지 Claude 에게 묻는다.
+# 재화 충전 결제(포트원 V2).
+#
+# PG 사(토스페이먼츠)의 키는 여기 없다 — 포트원 콘솔에만 있고, 서버는 포트원에만 말한다.
+# 그래서 PG 를 바꿔도 이 설정과 코드는 그대로다.
+portone:
+  # 끄면 "새 결제 시작"이 막힌다. 이미 시작된 결제의 지급(완료 요청·웹훅)은 계속 돈다 —
+  # 끄는 순간에도 곧 돈을 낼 사람들이 남아 있고, 그 지급까지 막으면 포트원이 재시도를
+  # 포기한 뒤 돈만 빠져나간 상태로 굳는다.
+  #
+  # AI 심사와 달리 fail-open 이 아니다 — 검증을 건너뛰고 지급하면 재화가 공짜가 된다.
+  enabled: ${PORTONE_ENABLED:true}
+  # 진짜 비밀값이라 기본값을 두지 않는다. 미주입이면 형식 검증에서 부팅이 막힌다.
+  api-secret: ${PORTONE_API_SECRET}
+  store-id: ${PORTONE_STORE_ID}
+  # 클라이언트가 결제창을 열 때 쓴다. 서버가 결제 시작 응답에 실어 내린다.
+  channel-key: ${PORTONE_CHANNEL_KEY}
+  base-url: ${PORTONE_BASE_URL:https://api.portone.io}
+
 ai:
   review:
     # 끄면 자가인증으로 되돌아간다(사진만 올리면 통과). 모델이 오작동해 정상 인증을 무더기로
@@ -185,6 +205,20 @@ challenge:
     # DB 에서 직접 NULL 로 되돌려야 한다.
     hide-threshold: ${CHALLENGE_REPORT_HIDE_THRESHOLD:3}
 
+# 둥지 자산과 레벨 기준. 둥지는 전 캐릭터·전 사용자가 같은 것을 쓰므로 마스터 표가 없다.
+# 레벨 일수는 실사용 데이터가 없어 지금 맞힐 수 없고, 강등이 있어 길수록 실수 한 번이
+# 비싸다 — 코드가 아니라 여기 두는 이유다.
+#
+# 자산 키를 바꾸면 그 오브젝트가 버킷에 있어야 한다. 시드가 참조하는 키가 아니라서
+# 마이그레이션과 함께 옮겨지지 않는다 — 개발 버킷에 없어서 둥지만 깨진 적이 있다.
+avatar:
+  nest:
+    level2-days: ${AVATAR_NEST_LEVEL2_DAYS:15}
+    level1-back-key: ${AVATAR_NEST_LEVEL1_BACK_KEY:avatar/nest/level1-back-v1.png}
+    level1-front-key: ${AVATAR_NEST_LEVEL1_FRONT_KEY:avatar/nest/level1-front-v1.png}
+    level2-back-key: ${AVATAR_NEST_LEVEL2_BACK_KEY:avatar/nest/level2-back-v1.png}
+    level2-front-key: ${AVATAR_NEST_LEVEL2_FRONT_KEY:avatar/nest/level2-front-v1.png}
+
 # 미참조 미디어 정리. 업로드는 됐지만 DB 어디서도 참조하지 않는 오브젝트를 지운다.
 # S3 목록과 DB를 대조하는 방식이라 s3:ListBucket·s3:DeleteObject 권한이 필요하다.
 media:
@@ -207,16 +241,38 @@ media:
     max-deletions-per-run: ${MEDIA_CLEANUP_MAX_DELETIONS_PER_RUN:1000}
 
 # 사용자당 요청 빈도 제한(#23). 한도를 코드가 아니라 여기 두어 재배포 없이 조정한다.
-# 정책 이름은 컨트롤러의 @RateLimit 값과 맞아야 한다 — 없는 이름이면 제한이 안 걸리고 ERROR 로그만 남는다.
+#
+# 정책 이름을 참조하는 곳이 둘이다 — 핸들러에 붙는 @RateLimit 값, 그리고 presigned URL 발급처럼
+# 요청 값에 따라 정책이 갈리는 경우의 MediaPurpose. 없는 이름을 가리키면 제한이 걸리지 않고
+# ERROR 로그만 남으므로, MediaPurpose 쪽은 MediaRateLimitPolicyValidator 가 부팅 때 확인한다.
 rate-limit:
   # 오탐으로 정상 사용자가 막히거나 Redis 문제가 생겼을 때의 탈출구.
   enabled: ${RATE_LIMIT_ENABLED:true}
   policies:
-    # presigned URL 발급. 발급 한 건이 최대 10MB 업로드를 허용하므로 이 값이 곧 시간당 상한이 된다
-    # (20건 × 10MB = 200MB/시간). 실사용은 챌린지 인증 몇 건 + 재시도 정도라 넉넉한 편이다.
-    media-presign:
-      limit: ${RATE_LIMIT_MEDIA_PRESIGN_LIMIT:20}
-      window: ${RATE_LIMIT_MEDIA_PRESIGN_WINDOW:PT1H}
+    # presigned URL 발급. 발급 한 건이 최대 10MB 업로드를 허용하므로 이 값이 곧 용량 상한이 된다.
+    #
+    # 정책을 용도별로 나눈 이유는 예산을 갈라 두기 위해서다. 하나로 두면 프로필 사진을 몇 번
+    # 바꾼 것 때문에 정작 인증이 막힌다. 어느 용도가 어느 정책을 쓰는지는 MediaPurpose 가 들고 있다.
+    #
+    # 창을 1시간이 아니라 10분으로 둔 이유는 회복 시간이다. 고정 창이라 만료는 창의 첫 요청
+    # 시각을 기준으로 걸린다. 창이 길면 한도를 소진한 사용자가 그만큼 오래 잠기는데, 실제로
+    # 1시간 창에서 정상 사용자가 막혀 몇 분을 기다려도 풀리지 않는다는 제보가 있었다.
+    #
+    # 한 번의 인증이 발급 한 건으로 끝나지 않는 점도 값에 반영했다. presigned URL 유효 시간이
+    # 5분이라 사진을 고르다 지체하거나 업로드가 끊기거나 사진을 바꾸면 재발급이 필요하고,
+    # 그때마다 한 건씩 깎인다. 소진 시점은 "인증 성공"이 아니라 "발급"이다.
+    # (형식·용량 검증에서 걸린 요청은 깎지 않는다 — MediaService 가 검증을 통과한 뒤에 센다.)
+
+    # 챌린지·그룹 루틴·개인 루틴 인증이 나눠 쓴다. 셋을 더 쪼개지 않은 것은 한 사람이 아침에
+    # 개인 루틴을 인증하고 그룹 인증도 하는 것이 정상 사용이라 서로 굶길 이유가 없어서다.
+    # 30건 × 10MB = 창당 300MB, 연속으로 채우면 1.8GB/시간.
+    media-presign-verification:
+      limit: ${RATE_LIMIT_MEDIA_PRESIGN_VERIFICATION_LIMIT:30}
+      window: ${RATE_LIMIT_MEDIA_PRESIGN_VERIFICATION_WINDOW:PT10M}
+    # 프로필은 자주 바꾸지 않고 바꿀 때 몰아서 바꾼다. 인증만큼 줄 이유가 없다.
+    media-presign-profile:
+      limit: ${RATE_LIMIT_MEDIA_PRESIGN_PROFILE_LIMIT:5}
+      window: ${RATE_LIMIT_MEDIA_PRESIGN_PROFILE_WINDOW:PT10M}
 
 ---
 # 로컬 개발 전용 오버라이드.

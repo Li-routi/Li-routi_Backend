@@ -20,5 +20,10 @@ public interface GroupRoutineVerificationDisappointmentRepository
     @Query("delete from GroupRoutineVerificationDisappointment d where d.verification.id=:verificationId and d.member.id=:memberId")
     int deleteReaction(@Param("verificationId") Long verificationId, @Param("memberId") Long memberId);
 
+    /** 재인증 전 interaction 초기화용. persistence context를 clear하지 않는다. */
+    @Modifying(flushAutomatically = true)
+    @Query("delete from GroupRoutineVerificationDisappointment d where d.verification.id = :verificationId")
+    int deleteAllByVerificationId(@Param("verificationId") Long verificationId);
+
     long countByVerificationId(Long verificationId);
 }

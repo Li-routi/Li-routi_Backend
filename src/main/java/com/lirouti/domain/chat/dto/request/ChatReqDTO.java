@@ -4,6 +4,7 @@ import com.lirouti.domain.chat.enums.ChatMessageType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 
@@ -23,8 +24,19 @@ public final class ChatReqDTO {
             String content,
 
             @Size(max = 100, message = "이모티콘 코드는 100자 이하여야 합니다.")
-            String emoticonCode
+            String emoticonCode,
+
+            @Positive(message = "답장할 메시지 ID는 양수여야 합니다.")
+            Long replyToMessageId
     ) {
+        public SendMessage(
+                String clientMessageId,
+                ChatMessageType type,
+                String content,
+                String emoticonCode
+        ) {
+            this(clientMessageId, type, content, emoticonCode, null);
+        }
     }
 
     public record UpdateRead(

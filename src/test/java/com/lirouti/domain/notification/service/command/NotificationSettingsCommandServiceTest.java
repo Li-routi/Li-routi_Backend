@@ -21,6 +21,7 @@ import java.time.ZoneOffset;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -88,6 +89,47 @@ class NotificationSettingsCommandServiceTest {
                         NotificationResDTO.Settings::likeEnabled
                 )
                 .containsExactly(true, true, true, true, true, true);
+    }
+
+    @Test
+    @DisplayName("FCM 토큰 등록은 전역 유일 토큰을 원자적으로 활성화한다")
+    void registerDevice_UpsertsActiveToken() {
+        Member member = member();
+        when(memberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
+
+        NotificationResDTO.DeviceRegistration result = commandService.registerDevice(
+                MEMBER_ID,
+                "firebase-token"
+        );
+
+        assertThat(result.active()).isTrue();
+        verify(fcmDeviceRepository).upsertActive(
+                MEMBER_ID,
+                "firebase-token",
+                java.time.LocalDateTime.ofInstant(
+                        Instant.parse("2026-08-11T03:00:00Z"),
+                        ZoneOffset.UTC
+                )
+        );
+    }
+
+    @Test
+    @DisplayName("FCM 토큰 해제는 현재 회원 소유 토큰만 원자적으로 비활성화한다")
+    void unregisterDevice_DeactivatesOnlyOwnedToken() {
+        NotificationResDTO.DeviceRegistration result = commandService.unregisterDevice(
+                MEMBER_ID,
+                "firebase-token"
+        );
+
+        assertThat(result.active()).isFalse();
+        verify(fcmDeviceRepository).deactivateOwnedToken(
+                MEMBER_ID,
+                "firebase-token",
+                java.time.LocalDateTime.ofInstant(
+                        Instant.parse("2026-08-11T03:00:00Z"),
+                        ZoneOffset.UTC
+                )
+        );
     }
 
     private Member member() {

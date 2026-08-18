@@ -221,6 +221,7 @@ public interface RoutineControllerDocs {
                     인증 회원의 활성 개인 루틴을 조회합니다.
                     카테고리 노출 순서대로 정렬하며, 같은 카테고리에서는 기본 제공 루틴을 먼저,
                     사용자가 직접 추가한 루틴을 생성 순서대로 반환합니다.
+                    `completedToday`는 KST 기준 오늘 해당 루틴을 인증했는지 나타냅니다.
                     """
     )
     @ApiResponses({

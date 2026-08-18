@@ -63,11 +63,29 @@ public class Notification extends BaseEntity {
     }
 
     /** 최초 읽음 시각만 기록한다. */
-    public void markRead(LocalDateTime now) { if (readAt == null) readAt = now; }
+    public void markRead(LocalDateTime now) {
+        if (readAt == null) {
+            readAt = now;
+        }
+    }
+
     /** FCM 전송 성공을 기록한다. */
-    public void markSent(LocalDateTime now) { pushAttempts++; lastPushAttemptAt = now; pushStatus = PushStatus.SENT; }
-    /** 재시도 가능한 FCM 전송 실패를 기록한다. */
-    public void markFailed(LocalDateTime now) { pushAttempts++; lastPushAttemptAt = now; pushStatus = PushStatus.FAILED; }
+    public void markSent(LocalDateTime now) {
+        pushAttempts++;
+        lastPushAttemptAt = now;
+        pushStatus = PushStatus.SENT;
+    }
+
+    /** 활성 기기는 있었지만 이번 FCM 전송이 모두 실패했음을 기록한다. */
+    public void markFailed(LocalDateTime now) {
+        pushAttempts++;
+        lastPushAttemptAt = now;
+        pushStatus = PushStatus.FAILED;
+    }
+
     /** 활성 기기가 없는 경우 Push를 생략한다. */
-    public void markSkipped(LocalDateTime now) { lastPushAttemptAt = now; pushStatus = PushStatus.SKIPPED; }
+    public void markSkipped(LocalDateTime now) {
+        lastPushAttemptAt = now;
+        pushStatus = PushStatus.SKIPPED;
+    }
 }

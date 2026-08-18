@@ -9,12 +9,16 @@ import com.lirouti.domain.group.repository.GroupRoutineAssignmentRepository;
 import com.lirouti.domain.group.repository.GroupRoutineCategoryRepository;
 import com.lirouti.domain.group.repository.GroupDetailQueryRepository;
 import com.lirouti.domain.group.repository.GroupListQueryRepository;
+import com.lirouti.domain.group.repository.GroupRoutineQueryRepository;
 import com.lirouti.domain.group.service.GroupValidationService;
 import com.lirouti.domain.member.service.query.MemberQueryService;
+import com.lirouti.domain.shop.repository.MemberAvatarEquipmentRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import com.lirouti.domain.character.service.query.AvatarLayerAssembler;
+import com.lirouti.domain.media.service.MediaService;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -34,7 +38,11 @@ class GroupCategoryQueryServiceTest {
     @Mock private GroupRoutineAssignmentRepository assignmentRepository;
     @Mock private GroupDetailQueryRepository groupDetailQueryRepository;
     @Mock private GroupListQueryRepository groupListQueryRepository;
+    @Mock private GroupRoutineQueryRepository groupRoutineQueryRepository;
     @Mock private GroupRoutineCategoryRepository categoryRepository;
+    @Mock private MemberAvatarEquipmentRepository memberAvatarEquipmentRepository;
+    @Mock private MediaService mediaService;
+    @Mock private AvatarLayerAssembler avatarLayerAssembler;
     @Mock private GroupValidationService validationService;
     @Mock private MemberQueryService memberQueryService;
 
@@ -46,7 +54,11 @@ class GroupCategoryQueryServiceTest {
                 assignmentRepository,
                 groupDetailQueryRepository,
                 groupListQueryRepository,
+                groupRoutineQueryRepository,
                 categoryRepository,
+                memberAvatarEquipmentRepository,
+                mediaService,
+                avatarLayerAssembler,
                 validationService,
                 memberQueryService,
                 Clock.systemUTC()

@@ -9,7 +9,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import java.time.LocalDate;
 
-/** 같은 그룹의 한 회원이 다른 회원을 하루 한 번 찌른 기록이다. */
+/** 같은 그룹의 한 회원이 다른 회원을 찌른 한 번의 이력이다. */
 @Entity @Getter @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @Table(name = "group_poke")
 public class GroupPoke extends BaseEntity {

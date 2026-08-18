@@ -39,6 +39,8 @@ public interface GroupControllerDocs {
             description = """
                     ACTIVE 그룹 구성원이 같은 그룹의 다른 ACTIVE 구성원을 찌릅니다.
                     성공할 때마다 대상의 누적 찔림 수가 1 증가하며, 횟수 제한과 찌르기 이력은 없습니다.
+                    커밋 후 대상에게 `GROUP_MEMBER_POKED` 알림 처리를 비동기로 요청하며,
+                    알림 처리 실패는 찌르기 성공 결과에 영향을 주지 않습니다.
 
                     ### 에러 코드
 
@@ -70,7 +72,7 @@ public interface GroupControllerDocs {
     @Operation(
             summary = "그룹방 상세 조회",
             description = """
-                    ACTIVE 그룹 구성원만 그룹명, 초대코드와 ACTIVE 구성원별 활동 현황을 조회할 수 있습니다.
+                    ACTIVE 그룹 구성원만 그룹명, 초대코드, 로그인 회원의 그룹 내 권한과 ACTIVE 구성원별 활동 현황 및 현재 조합 아바타를 조회할 수 있습니다.
                     금일 진행도는 완료한 그룹 루틴 할당 수와 전체 할당 수이며, 할당이 없는 구성원은 0/0입니다.
                     """
     )
@@ -152,6 +154,29 @@ public interface GroupControllerDocs {
     ApiResponse<GroupResDTO.CategoryList> getCategories(
             @Parameter(hidden = true) CustomUserDetails userDetails,
             @Parameter(description = "그룹 ID", example = "1") Long groupId
+    );
+
+    @Operation(
+            summary = "그룹 활성 루틴 목록 조회",
+            description = """
+                    ACTIVE OWNER만 특정 ACTIVE 그룹의 활성 루틴 전체와 반복 일정을 조회할 수 있습니다.
+                    삭제된 루틴은 제외하며, 루틴은 최신 생성순, 일정은 월요일부터 일요일 순으로 반환합니다.
+                    활성 루틴이 없으면 빈 목록을 반환합니다.
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200", description = "그룹 활성 루틴 목록 조회 성공"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401", description = "유효하지 않거나 만료된 인증 토큰"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "403", description = "비활성 그룹·구성원이거나 ACTIVE OWNER가 아님"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404", description = "그룹 또는 회원을 찾을 수 없음")
+    })
+    ApiResponse<GroupResDTO.GroupRoutineList> getGroupRoutines(
+            @Parameter(hidden = true) CustomUserDetails userDetails,
+            @Parameter(description = "그룹 ID", required = true, example = "1") Long groupId
     );
 
     @Operation(
@@ -382,7 +407,7 @@ public interface GroupControllerDocs {
             description = """
                     인증 회원이 입력한 초대코드로 그룹명, 현재 ACTIVE 인원 및 참여 가능 여부를 조회합니다.
                     Preview는 안내용 읽기 전용 스냅샷으로 가입 관계나 그룹 루틴 할당을 생성하지 않으며,
-                    실제 가입 API는 잠금 후 모든 조건을 다시 검증합니다.
+                    실제 가입 API는 잠금 후 모든 조건을 다시 검증합니다. 구성원 항목은 식별 정보 없이 현재 조합 아바타만 제공합니다.
 
                     잠긴 그룹과 비활성 그룹은 조회할 수 없습니다. ACTIVE 구성원, KICKED 구성원,
                     회원의 ACTIVE 그룹 6개 상한, 그룹 ACTIVE 구성원 6명 상한은 200 응답의

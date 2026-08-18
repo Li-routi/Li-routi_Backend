@@ -14,12 +14,19 @@ import com.lirouti.domain.group.repository.GroupRepository;
 import com.lirouti.domain.group.repository.GroupRoutineRepository;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.service.query.MemberQueryService;
+import com.lirouti.domain.shop.repository.MemberAvatarEquipmentRepository;
+import com.lirouti.domain.media.service.MediaService;
+import com.lirouti.domain.character.dto.response.CharacterResDTO;
+import com.lirouti.domain.character.service.query.AvatarLayerAssembler;
+import com.lirouti.domain.shop.entity.MemberAvatarEquipment;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /** 초대코드 입력 시 보여줄 그룹 참여 Preview를 읽기 전용으로 구성한다. */
 @Slf4j
@@ -29,7 +36,11 @@ public class GroupJoinQueryService {
     private final GroupRepository groupRepository;
     private final GroupMemberRepository groupMemberRepository;
     private final GroupRoutineRepository groupRoutineRepository;
+    private final MemberAvatarEquipmentRepository memberAvatarEquipmentRepository;
+    private final MediaService mediaService;
+    private final AvatarLayerAssembler avatarLayerAssembler;
     private final MemberQueryService memberQueryService;
+
 
     /**
      * Preview는 현재 DB 상태의 안내용 스냅샷이며 잠금·가입 관계·할당을 생성하지 않는다.
@@ -50,9 +61,25 @@ public class GroupJoinQueryService {
 
         long activeMemberCount = groupMemberRepository.countActiveMembersByGroupId(
                 group.getId(), GroupMemberStatus.ACTIVE);
-        var activeMembershipIds = groupMemberRepository
-                .findIdsByGroupIdAndStatusOrderByJoinedAtAscIdAsc(
+        List<Long> activeMemberIds = groupMemberRepository
+                .findMemberIdsByGroupIdAndStatusOrderByJoinedAtAscIdAsc(
                         group.getId(), GroupMemberStatus.ACTIVE);
+        List<MemberAvatarEquipment> equipments = activeMemberIds.isEmpty()
+                ? List.of()
+                : memberAvatarEquipmentRepository
+                        .findAllByMemberIdInWithMemberAndAvatarItem(activeMemberIds);
+        // 구성원마다 따로 조립하면 사람 수만큼 조회가 나간다.
+        Map<Long, List<CharacterResDTO.Layer>> layersByMemberId =
+                avatarLayerAssembler.assembleAllAsResponse(activeMemberIds,
+                        equipments.stream().collect(java.util.stream.Collectors.groupingBy(
+                                equipment -> equipment.getMember().getId())));
+
+        Map<Long, GroupResDTO.Avatar> avatarsByMemberId = GroupConverter.toAvatarsByMemberId(
+                activeMemberIds,
+                equipments,
+                layersByMemberId,
+                mediaService::resolveAvatarAssetUrl
+        );
         long totalRoutineCount = groupRoutineRepository.countByGroupIdAndActiveTrue(group.getId());
         GroupJoinUnavailableReason unavailableReason = findUnavailableReason(
                 group, member, activeMemberCount);
@@ -66,7 +93,8 @@ public class GroupJoinQueryService {
                 group,
                 activeMemberCount,
                 totalRoutineCount,
-                activeMembershipIds,
+                activeMemberIds,
+                avatarsByMemberId,
                 joinable,
                 unavailableReason
         );

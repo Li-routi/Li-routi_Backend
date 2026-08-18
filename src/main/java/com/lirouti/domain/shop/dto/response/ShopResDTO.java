@@ -1,6 +1,9 @@
 package com.lirouti.domain.shop.dto.response;
 
+import com.lirouti.domain.character.dto.response.CharacterResDTO;
 import com.lirouti.domain.shop.enums.AvatarSlot;
+import com.lirouti.domain.shop.enums.ShopCategory;
+import com.lirouti.domain.shop.enums.ShopCategorySource;
 import com.lirouti.domain.wallet.enums.Currency;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
@@ -10,6 +13,31 @@ import java.util.List;
 public final class ShopResDTO {
 
     private ShopResDTO() {
+    }
+
+    @Schema(name = "ShopCategory", description = "상점 화면의 탭 하나")
+    @Builder
+    public record Category(
+            @Schema(description = "탭 식별자", example = "HEAD") ShopCategory key,
+            @Schema(description = "화면에 쓸 이름", example = "머리") String name,
+            @Schema(description = """
+                    이 탭을 눌렀을 때 무엇을 가져오는가. `ITEM` 이면 아이템 목록,
+                    `CHARACTER` 면 캐릭터 목록이다. **`slot` 이 비어 있는 탭이 둘이라
+                    이 값으로 갈라야 한다.**""")
+            ShopCategorySource source,
+            @Schema(description = """
+                    아이템 목록을 요청할 때 넣을 슬롯. **비어 있으면 넣지 않는다** —
+                    `전체` 탭이 곧 필터 없음이다.""")
+            AvatarSlot slot,
+            @Schema(description = "표시 순서. 오름차순으로 이미 정렬돼 있다") int sortOrder
+    ) {
+    }
+
+    @Schema(name = "ShopCategories", description = "상점 탭 목록")
+    @Builder
+    public record Categories(
+            @Schema(description = "탭 목록. 받은 순서대로 그리면 된다") List<Category> categories
+    ) {
     }
 
     @Schema(name = "ShopAvatarItem", description = "상점 아이템 한 건")
@@ -54,8 +82,21 @@ public final class ShopResDTO {
     @Schema(name = "MemberAvatar", description = "내 아바타 착용 상태")
     @Builder
     public record Avatar(
-            @Schema(description = "착용 중인 아이템. 안 입은 자리는 실리지 않는다")
-            List<Equipped> equipped
+            @Schema(description = """
+                    착용 중인 아이템. 안 입은 자리는 실리지 않는다.
+
+                    **그리는 데는 `layers` 를 쓴다.** 이 목록은 순서를 담지 않아 겹쳐 그릴 수
+                    없다 — 무엇을 입었는지 다루는 화면(상점의 보유 표시 등)에만 쓴다.""")
+            List<Equipped> equipped,
+
+            @Schema(description = """
+                    **받은 순서대로 겹쳐 그리면 된다.** 캐릭터와 둥지까지 포함한 전체 그림이다.
+
+                    슬롯 이름으로 깊이를 판단하지 않는다 — 레이어가 늘어도 앱을 고치지 않게
+                    하려는 계약이다. 모르는 `layer` 값이 와도 그대로 그린다.
+
+                    캐릭터를 아직 하나도 못 열었으면 캐릭터·둥지가 빠진다.""")
+            List<CharacterResDTO.Layer> layers
     ) {
     }
 }

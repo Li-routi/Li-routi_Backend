@@ -12,6 +12,7 @@ import com.lirouti.domain.member.event.MemberWithdrawnEvent;
 import com.lirouti.domain.member.exception.MemberException;
 import com.lirouti.domain.member.exception.code.error.MemberErrorCode;
 import com.lirouti.domain.member.repository.MemberRepository;
+import com.lirouti.domain.character.service.command.CharacterUnlockCommandService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -36,6 +37,7 @@ public class MemberCommandService {
     // 닉네임 제공받지 못한 경우 defalut 값
     private static final String DEFAULT_NICKNAME_PREFIX = "user_";
     private final MediaService mediaService;
+    private final CharacterUnlockCommandService characterUnlockCommandService;
 
     // 소셜 회원 조회 또는 생성
     @Transactional
@@ -111,6 +113,13 @@ public class MemberCommandService {
         String initialNickname = resolveInitialNickname(nickname);
         Member member = MemberConverter.toSocialMember(socialProvider, socialId, email, initialNickname);
         Member savedMember = memberRepository.save(member);
+
+        // 기본 캐릭터를 여기서 준다. 조건 행이 하나도 없는 캐릭터가 곧 기본이라, 판정을 한 번
+        // 돌리면 그 자리에서 들어온다 -- "가입 시 지급" 을 따로 구현하지 않아도 된다.
+        // 팝업은 띄우지 않는다: 가입하자마자 "새 친구가 왔어요" 가 뜨면 무엇을 해서 얻었는지
+        // 알 수 없다.
+        characterUnlockCommandService.evaluateAndUnlock(savedMember.getId());
+
         log.info("신규 소셜 회원을 생성했습니다. memberId={}, provider={}",
                 savedMember.getId(), savedMember.getSocialProvider());
         return savedMember;

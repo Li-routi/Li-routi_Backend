@@ -13,18 +13,20 @@ java {
 	}
 }
 
+// Spring Boot 메인 클래스 명시적 지정
+springBoot {
+	mainClass = 'com.lirouti.LiroutiApplication' // 본인의 메인 클래스명에 맞게 변경
+}
+
 repositories {
 	mavenCentral()
 }
 
 dependencies {
-    // jpa
+	// jpa
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
 
 	// db migration (스키마 버전 관리 + 마스터/더미 데이터 시드)
-	// spring-boot-flyway : Spring Boot 4는 자동설정이 기술별 모듈로 쪼개져 있어, 이게 없으면
-	//                      flyway-core를 넣어도 마이그레이션이 아예 실행되지 않는다(조용히 넘어간다).
-	// flyway-mysql       : MySQL 전용 모듈. 없으면 "No database found to handle jdbc:mysql://..."로 죽는다.
 	implementation 'org.springframework.boot:spring-boot-flyway'
 	implementation 'org.flywaydb:flyway-core'
 	implementation 'org.flywaydb:flyway-mysql'
@@ -35,39 +37,39 @@ dependencies {
 	implementation 'org.apache.commons:commons-pool2'
 	implementation 'org.springframework.retry:spring-retry:2.0.13'
 
-    // security & jwt
+	// security & jwt
 	implementation 'org.springframework.boot:spring-boot-starter-security'
 	implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
 	implementation 'io.jsonwebtoken:jjwt-impl:0.12.6'
 	implementation 'io.jsonwebtoken:jjwt-jackson:0.12.6'
-    implementation 'com.google.auth:google-auth-library-oauth2-http:1.46.0'
-    // FCM 푸시 알림 전송용 Firebase Admin SDK
-    implementation 'com.google.firebase:firebase-admin:9.10.0'
-    implementation 'org.springframework.boot:spring-boot-configuration-processor'
+	implementation 'com.google.auth:google-auth-library-oauth2-http:1.46.0'
+	// FCM 푸시 알림 전송용 Firebase Admin SDK
+	implementation 'com.google.firebase:firebase-admin:9.10.0'
+	implementation 'org.springframework.boot:spring-boot-configuration-processor'
 
-    // springdoc
-    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.1")
+	// springdoc
+	implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.1")
 
-    // aws s3 (presigned url)
-    implementation platform('software.amazon.awssdk:bom:2.30.0')
-    implementation 'software.amazon.awssdk:s3'
+	// aws s3 (presigned url)
+	implementation platform('software.amazon.awssdk:bom:2.30.0')
+	implementation 'software.amazon.awssdk:s3'
 
-    // webmvc
+	// webmvc
 	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
 
-    // local performance monitoring
-    implementation 'org.springframework.boot:spring-boot-starter-actuator'
-    runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
+	// local performance monitoring
+	implementation 'org.springframework.boot:spring-boot-starter-actuator'
+	runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
 
-    // websocket / STOMP
+	// websocket / STOMP
 	implementation 'org.springframework.boot:spring-boot-starter-websocket'
 
 	// QueryDSL : OpenFeign
-    implementation "io.github.openfeign.querydsl:querydsl-jpa:7.0"
-    implementation "io.github.openfeign.querydsl:querydsl-core:7.0"
-    annotationProcessor "io.github.openfeign.querydsl:querydsl-apt:7.0:jpa"
-    annotationProcessor "jakarta.persistence:jakarta.persistence-api"
-    annotationProcessor "jakarta.annotation:jakarta.annotation-api"
+	implementation "io.github.openfeign.querydsl:querydsl-jpa:7.0"
+	implementation "io.github.openfeign.querydsl:querydsl-core:7.0"
+	annotationProcessor "io.github.openfeign.querydsl:querydsl-apt:7.0:jpa"
+	annotationProcessor "jakarta.persistence:jakarta.persistence-api"
+	annotationProcessor "jakarta.annotation:jakarta.annotation-api"
 
 	compileOnly 'org.projectlombok:lombok'
 	runtimeOnly 'com.mysql:mysql-connector-j'
@@ -86,60 +88,49 @@ tasks.register('issuePerformanceToken', JavaExec) {
 	description = '활성 로컬 회원의 JMeter 개발 토큰을 users.csv에 저장합니다.'
 	dependsOn tasks.named('testClasses')
 	classpath = sourceSets.test.runtimeClasspath
-	mainClass = 'com.lirouti.support.performance.PerformanceTokenCommand'
+	mainClass.set('com.lirouti.support.performance.PerformanceTokenCommand')
 	workingDir = layout.projectDirectory
 }
 
-// 배포는 bootJar(실행 jar)만 사용한다. 기본 jar 태스크가 만드는 -plain.jar를 꺼서
-// build/libs에 실행 jar 하나만 남게 한다(Dockerfile의 COPY build/libs/*.jar가 단일 파일이 되도록).
 tasks.named('jar') {
 	enabled = false
 }
 
 tasks.named('bootJar') {
-	// 로컬 더미 데이터(db/dummy)는 배포 산출물에 넣지 않는다.
-	// 운영에 더미가 들어가지 않는 근거를 "프로파일이 prod로 주어진다"에만 두면, 설정 하나가
-	// 잘못됐을 때(SPRING_PROFILES_ACTIVE=local) 그대로 운영 DB에 들어간다.
-	// 파일 자체를 이미지에서 빼면 프로파일을 잘못 줘도 넣을 것이 없다.
-	// Flyway는 존재하지 않는 location을 경고만 하고 넘어간다(fail-on-missing-locations 기본 false).
-	// bootRun은 jar가 아니라 build/resources/main을 직접 쓰므로 로컬 개발에는 영향이 없다.
 	exclude 'db/dummy/**'
 }
 
 tasks.named('test') {
 	useJUnitPlatform()
+	// 통합 테스트가 스프링 컨텍스트를 띄운 채 데이터를 쌓아 기본 힙(512MB)으로는 모자란다.
+	// 넘치면 코드와 무관한 자리에서 컨텍스트 로딩이 실패해 원인이 안 보인다.
+	maxHeapSize = "2560m"
+	// 이 앱은 시각을 KST 로 다룬다(TimeUtil.KST, Clock 이 서울). 운영 JVM 도 KST 로 돌지만
+	// CI 러너는 UTC 라, 고정하지 않으면 "그 시간대에 완료했는가" 같은 판정이 아홉 시간 밀린다.
+	// 로컬(KST)에서는 통과하고 CI 에서만 깨져 원인이 늦게 드러난다.
+	systemProperty 'user.timezone', 'Asia/Seoul'
 	systemProperty 'spring.profiles.active', 'test'
-	// application.yaml에서 fail-fast로(기본값 없이) 선언된 필수 값에 테스트용 더미값을 주입한다.
-	// systemProperty는 ${JWT_SECRET} 같은 플레이스홀더를 그대로 채우므로, 로컬·IDE·CI 어디서든
-	// env 주입 없이 @SpringBootTest 컨텍스트가 뜬다. 프로파일은 건드리지 않아(local 유지)
-	// 개인별 DB 오버라이드(application-local.yaml, 예: 포트 3307)도 그대로 적용된다.
-	// 실제 비밀값이 아니라 테스트 컨텍스트 부팅용 값일 뿐이다.
 	systemProperty 'JWT_SECRET', 'test-only-jwt-secret-please-do-not-use-in-production'
-	systemProperty 'KAKAO_APP_ID', '1234567890'  // app-id는 Long 타입이라 숫자여야 한다
+	systemProperty 'KAKAO_APP_ID', '1234567890'
 	systemProperty 'GOOGLE_WEB_CLIENT_ID', 'test-google-web-client-id'
 	systemProperty 'GOOGLE_ALLOWED_ISSUERS', 'https://accounts.google.com'
 	systemProperty 'AWS_S3_BUCKET', 'lirouti-test'
-	// AI 심사 키. 테스트는 실제 호출을 하지 않지만(클라이언트를 mock 하거나 기능을 끈다)
-	// 이 값이 없으면 컨텍스트 부팅 자체가 막힌다.
 	systemProperty 'ANTHROPIC_API_KEY', 'sk-ant-test-only-do-not-use'
-	// AWS_S3_PUBLIC_BASE_URL은 일부러 주입하지 않는다. application.yaml이 버킷·리전으로
-	// 계산하는 기본값(https://lirouti-test.s3.ap-northeast-2.amazonaws.com)이 정상 동작하는지
-	// — 즉 설정 없이도 컨텍스트가 부팅되는지 — 를 테스트가 그대로 검증하게 한다.
+	systemProperty 'PORTONE_API_SECRET', 'portone-test-only-do-not-use-secret'
+	systemProperty 'PORTONE_STORE_ID', 'store-test-only'
+	systemProperty 'PORTONE_CHANNEL_KEY', 'channel-key-test-only'
 }
 
 def querydslDir = layout.buildDirectory.dir("generated/querydsl").get().asFile
 
-// 소스 세트에 생성 경로 추가
 sourceSets {
-    main.java.srcDirs += [querydslDir]
+	main.java.srcDirs += [querydslDir]
 }
 
-// 컴파일 시 생성 경로 지정
 tasks.withType(JavaCompile).configureEach {
-    options.generatedSourceOutputDirectory.set(querydslDir)
+	options.generatedSourceOutputDirectory.set(querydslDir)
 }
 
-// clean 태스크에 생성 폴더 삭제 로직
 clean.doLast {
-    file(querydslDir).deleteDir()
+	file(querydslDir).deleteDir()
 }

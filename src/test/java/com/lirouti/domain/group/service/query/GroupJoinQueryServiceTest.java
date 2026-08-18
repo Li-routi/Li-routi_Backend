@@ -13,11 +13,17 @@ import com.lirouti.domain.group.repository.GroupRepository;
 import com.lirouti.domain.group.repository.GroupRoutineRepository;
 import com.lirouti.domain.member.entity.Member;
 import com.lirouti.domain.member.service.query.MemberQueryService;
+import com.lirouti.domain.shop.entity.AvatarItem;
+import com.lirouti.domain.shop.entity.MemberAvatarEquipment;
+import com.lirouti.domain.shop.enums.AvatarSlot;
+import com.lirouti.domain.shop.repository.MemberAvatarEquipmentRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
+import com.lirouti.domain.character.service.query.AvatarLayerAssembler;
+import com.lirouti.domain.media.service.MediaService;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -31,6 +37,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("GroupJoinQueryService 테스트")
@@ -42,6 +49,9 @@ class GroupJoinQueryServiceTest {
     @Mock private GroupRepository groupRepository;
     @Mock private GroupMemberRepository groupMemberRepository;
     @Mock private GroupRoutineRepository groupRoutineRepository;
+    @Mock private MemberAvatarEquipmentRepository memberAvatarEquipmentRepository;
+    @Mock private MediaService mediaService;
+    @Mock private AvatarLayerAssembler avatarLayerAssembler;
     @Mock private MemberQueryService memberQueryService;
     @Mock private Member member;
     @Mock private Group group;
@@ -63,7 +73,7 @@ class GroupJoinQueryServiceTest {
                 .thenReturn(Optional.empty());
         lenient().when(groupMemberRepository.countByMemberIdAndStatusAndGroupStatus(
                 MEMBER_ID, GroupMemberStatus.ACTIVE, GroupStatus.ACTIVE)).thenReturn(5L);
-        lenient().when(groupMemberRepository.findIdsByGroupIdAndStatusOrderByJoinedAtAscIdAsc(
+        lenient().when(groupMemberRepository.findMemberIdsByGroupIdAndStatusOrderByJoinedAtAscIdAsc(
                 GROUP_ID, GroupMemberStatus.ACTIVE)).thenReturn(List.of(101L, 102L, 103L, 104L, 105L));
         lenient().when(groupRoutineRepository.countByGroupIdAndActiveTrue(GROUP_ID)).thenReturn(2L);
     }
@@ -80,11 +90,11 @@ class GroupJoinQueryServiceTest {
                 6,
                 2,
                 List.of(
-                        new GroupResDTO.JoinPreviewMember(null),
-                        new GroupResDTO.JoinPreviewMember(null),
-                        new GroupResDTO.JoinPreviewMember(null),
-                        new GroupResDTO.JoinPreviewMember(null),
-                        new GroupResDTO.JoinPreviewMember(null)
+                        new GroupResDTO.JoinPreviewMember(new GroupResDTO.Avatar(List.of(), List.of())),
+                        new GroupResDTO.JoinPreviewMember(new GroupResDTO.Avatar(List.of(), List.of())),
+                        new GroupResDTO.JoinPreviewMember(new GroupResDTO.Avatar(List.of(), List.of())),
+                        new GroupResDTO.JoinPreviewMember(new GroupResDTO.Avatar(List.of(), List.of())),
+                        new GroupResDTO.JoinPreviewMember(new GroupResDTO.Avatar(List.of(), List.of()))
                 ),
                 true,
                 null));
@@ -92,25 +102,40 @@ class GroupJoinQueryServiceTest {
     }
 
     @Test
-    @DisplayName("ACTIVE 구성원 수만큼 정렬 조회 결과 순서대로 null 캐릭터 요약을 반환한다")
+    @DisplayName("ACTIVE 구성원 수만큼 정렬 조회 결과 순서대로 아바타 요약을 반환한다")
     void getJoinPreview_ActiveMembers_ReturnsMemberSummariesWithoutIdentifiers() {
         when(groupMemberRepository.countActiveMembersByGroupId(
                 GROUP_ID, GroupMemberStatus.ACTIVE)).thenReturn(3L);
-        when(groupMemberRepository.findIdsByGroupIdAndStatusOrderByJoinedAtAscIdAsc(
+        when(groupMemberRepository.findMemberIdsByGroupIdAndStatusOrderByJoinedAtAscIdAsc(
                 GROUP_ID, GroupMemberStatus.ACTIVE)).thenReturn(List.of(30L, 10L, 20L));
+        Member equipmentOwner = mock(Member.class);
+        AvatarItem avatarItem = mock(AvatarItem.class);
+        MemberAvatarEquipment equipment = mock(MemberAvatarEquipment.class);
+        when(equipmentOwner.getId()).thenReturn(10L);
+        when(avatarItem.getImageKey()).thenReturn("avatar/item/head/hat-v1.png");
+        when(mediaService.resolveAvatarAssetUrl("avatar/item/head/hat-v1.png"))
+                .thenReturn("https://cdn/hat.png");
+        when(equipment.getMember()).thenReturn(equipmentOwner);
+        when(equipment.getAvatarItem()).thenReturn(avatarItem);
+        when(equipment.getSlot()).thenReturn(AvatarSlot.HEAD);
+        when(memberAvatarEquipmentRepository.findAllByMemberIdInWithMemberAndAvatarItem(
+                List.of(30L, 10L, 20L))).thenReturn(List.of(equipment));
 
         GroupResDTO.JoinPreview result = groupJoinQueryService.getJoinPreview(MEMBER_ID, INVITE_CODE);
 
         assertThat(result.members()).containsExactly(
-                new GroupResDTO.JoinPreviewMember(null),
-                new GroupResDTO.JoinPreviewMember(null),
-                new GroupResDTO.JoinPreviewMember(null)
+                new GroupResDTO.JoinPreviewMember(new GroupResDTO.Avatar(List.of(), List.of())),
+                new GroupResDTO.JoinPreviewMember(new GroupResDTO.Avatar(List.of(
+                        new GroupResDTO.Equipped(AvatarSlot.HEAD, "https://cdn/hat.png")), List.of())),
+                new GroupResDTO.JoinPreviewMember(new GroupResDTO.Avatar(List.of(), List.of()))
         );
         assertThat(GroupResDTO.JoinPreviewMember.class.getRecordComponents())
                 .extracting(RecordComponent::getName)
-                .containsExactly("characterImageUrl");
-        verify(groupMemberRepository).findIdsByGroupIdAndStatusOrderByJoinedAtAscIdAsc(
+                .containsExactly("avatar");
+        verify(groupMemberRepository).findMemberIdsByGroupIdAndStatusOrderByJoinedAtAscIdAsc(
                 GROUP_ID, GroupMemberStatus.ACTIVE);
+        verify(memberAvatarEquipmentRepository)
+                .findAllByMemberIdInWithMemberAndAvatarItem(List.of(30L, 10L, 20L));
     }
 
     @Test

@@ -4,7 +4,6 @@ import com.lirouti.domain.member.service.query.MemberQueryService;
 import com.lirouti.domain.routine.cache.RoutineTemplateCacheReader;
 import com.lirouti.domain.routine.cache.RoutineTemplateCacheReader.CachedTemplate;
 import com.lirouti.domain.routine.converter.RoutineConverter;
-import com.lirouti.global.util.TimeUtil;
 import com.lirouti.domain.routine.dto.response.RoutineResDTO;
 import com.lirouti.domain.routine.entity.MemberRoutine;
 import com.lirouti.domain.routine.entity.RoutineCategory;
@@ -12,6 +11,7 @@ import com.lirouti.domain.routine.exception.RoutineException;
 import com.lirouti.domain.routine.exception.code.error.RoutineErrorCode;
 import com.lirouti.domain.routine.repository.MemberRoutineRepository;
 import com.lirouti.domain.routine.repository.RoutineCategoryRepository;
+import com.lirouti.global.util.TimeUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -21,10 +21,7 @@ import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -108,17 +105,18 @@ public class RoutineQueryService {
             return RoutineConverter.toRoutineListResponse(List.of());
         }
 
-        Map<Long, MemberRoutine> routinesWithSchedules = memberRoutineRepository
-                .findAllWithSchedulesByIdIn(ordered.stream().map(MemberRoutine::getId).toList())
-                .stream()
-                .collect(Collectors.toMap(MemberRoutine::getId, Function.identity()));
-        List<MemberRoutine> hydrated = ordered.stream()
-                .map(routine -> routinesWithSchedules.getOrDefault(routine.getId(), routine))
-                .toList();
+        List<Long> routineIds = ordered.stream().map(MemberRoutine::getId).toList();
+
+        // 같은 영속성 컨텍스트에서 fetch join을 실행하면 ordered의 동일 엔티티 인스턴스에
+        // schedules가 초기화된다. 반환 목록을 다시 맵으로 조립할 필요는 없다.
+        memberRoutineRepository.findAllWithSchedulesByIdIn(routineIds);
+
+        LocalDate today = LocalDate.now(TimeUtil.KST);
+        Set<Long> completedRoutineIds = completionSource.findCompletedRoutineIds(routineIds, today);
 
         log.debug("개인 루틴 목록을 조회했습니다. memberId={}, routineCount={}",
-                memberId, hydrated.size());
-        return RoutineConverter.toRoutineListResponse(hydrated);
+                memberId, ordered.size());
+        return RoutineConverter.toRoutineListResponse(ordered, completedRoutineIds);
     }
 
     // 권한 오류가 cache hit 때문에 빈 목록 응답으로 바뀌지 않도록 캐시보다 먼저 검증한다.

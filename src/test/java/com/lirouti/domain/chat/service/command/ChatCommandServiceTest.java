@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -233,6 +234,71 @@ class ChatCommandServiceTest {
     }
 
     @Test
+    @DisplayName("같은 그룹의 원본 메시지에 답장하고 원본 미리보기를 반환한다")
+    void sendMessage_ReplyToMessageInSameGroup_SavesReplyAndReturnsPreview() {
+        ChatReqDTO.SendMessage request = replyTextRequest("답장 메시지", MESSAGE_ID);
+        ChatMessage replyToMessage = replyMessage(MESSAGE_ID, "원본 메시지");
+        givenSavedMessage(request);
+        when(message.getReplyToMessage()).thenReturn(replyToMessage);
+        when(chatMessageRepository.findByGroupIdAndSenderIdAndClientMessageId(
+                GROUP_ID, MEMBER_ID, CLIENT_MESSAGE_ID))
+                .thenReturn(Optional.empty(), Optional.of(message));
+        when(chatMessageRepository.findByIdAndGroupId(MESSAGE_ID, GROUP_ID))
+                .thenReturn(Optional.of(replyToMessage));
+        when(chatMessageRepository.insertIfAbsent(
+                GROUP_ID,
+                MEMBER_ID,
+                CLIENT_MESSAGE_ID,
+                ChatMessageType.TEXT.name(),
+                request.content(),
+                null,
+                MESSAGE_ID
+        )).thenReturn(1);
+
+        ChatSendResult result = chatCommandService.sendMessage(
+                MEMBER_ID, GROUP_ID, request);
+
+        assertThat(result.newlyCreated()).isTrue();
+        assertThat(result.message().reply().id()).isEqualTo(MESSAGE_ID);
+        assertThat(result.message().reply().content()).isEqualTo("원본 메시지");
+        verify(chatMessageRepository).insertIfAbsent(
+                GROUP_ID,
+                MEMBER_ID,
+                CLIENT_MESSAGE_ID,
+                ChatMessageType.TEXT.name(),
+                request.content(),
+                null,
+                MESSAGE_ID
+        );
+    }
+
+    @Test
+    @DisplayName("다른 그룹의 메시지에는 답장할 수 없다")
+    void sendMessage_ReplyToMessageInOtherGroup_ThrowsNotFound() {
+        ChatReqDTO.SendMessage request = replyTextRequest("답장 메시지", MESSAGE_ID);
+        when(chatMessageRepository.findByGroupIdAndSenderIdAndClientMessageId(
+                GROUP_ID, MEMBER_ID, CLIENT_MESSAGE_ID))
+                .thenReturn(Optional.empty());
+        when(chatMessageRepository.findByIdAndGroupId(MESSAGE_ID, GROUP_ID))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> chatCommandService.sendMessage(
+                MEMBER_ID, GROUP_ID, request))
+                .isInstanceOf(ChatException.class)
+                .extracting("code")
+                .isEqualTo(ChatErrorCode.MESSAGE_NOT_FOUND);
+        verify(chatMessageRepository, never()).insertIfAbsent(
+                anyLong(),
+                anyLong(),
+                anyString(),
+                anyString(),
+                anyString(),
+                nullable(Long.class),
+                nullable(Long.class)
+        );
+    }
+
+    @Test
     @DisplayName("동일한 clientMessageId와 payload는 기존 메시지를 반환하고 다시 저장하지 않는다")
     void sendMessage_SameClientMessageIdAndPayload_ReturnsExistingMessage() {
         // given
@@ -298,6 +364,29 @@ class ChatCommandServiceTest {
     }
 
     @Test
+    @DisplayName("같은 clientMessageId에 다른 답장 원본을 보내면 거부한다")
+    void sendMessage_SameClientMessageIdWithDifferentReply_ThrowsInvalidClientMessageId() {
+        ChatReqDTO.SendMessage request = replyTextRequest("같은 본문", 81L);
+        ChatMessage existingReply = replyReference(80L);
+        when(message.getMessageType()).thenReturn(ChatMessageType.TEXT);
+        when(message.getContent()).thenReturn(request.content());
+        when(message.getReplyToMessage()).thenReturn(existingReply);
+        when(chatMessageRepository.findByGroupIdAndSenderIdAndClientMessageId(
+                GROUP_ID, MEMBER_ID, CLIENT_MESSAGE_ID))
+                .thenReturn(Optional.of(message));
+
+        assertThatThrownBy(() -> chatCommandService.sendMessage(
+                MEMBER_ID, GROUP_ID, request))
+                .isInstanceOf(ChatException.class)
+                .extracting("code")
+                .isEqualTo(ChatErrorCode.CLIENT_MESSAGE_ID_INVALID);
+        verify(chatMessageRepository, never()).findByIdAndGroupId(anyLong(), anyLong());
+        verify(chatMessageRepository, never()).insertIfAbsent(
+                anyLong(), anyLong(), anyString(), anyString(), anyString(), nullable(Long.class)
+        );
+    }
+
+    @Test
     @DisplayName("TEXT 메시지에 이모티콘 코드를 함께 보내면 거부한다")
     void sendMessage_TextMessageWithEmoticonCode_ThrowsInvalidMessageType() {
         // given
@@ -325,6 +414,16 @@ class ChatCommandServiceTest {
                 ChatMessageType.TEXT,
                 content,
                 null
+        );
+    }
+
+    private ChatReqDTO.SendMessage replyTextRequest(String content, Long replyToMessageId) {
+        return new ChatReqDTO.SendMessage(
+                CLIENT_MESSAGE_ID,
+                ChatMessageType.TEXT,
+                content,
+                null,
+                replyToMessageId
         );
     }
 
@@ -373,5 +472,25 @@ class ChatCommandServiceTest {
         when(group.getId()).thenReturn(GROUP_ID);
         when(sender.getId()).thenReturn(MEMBER_ID);
         when(sender.getNickname()).thenReturn("채팅 사용자");
+    }
+
+    private ChatMessage replyMessage(Long id, String content) {
+        ChatMessage reply = mock(ChatMessage.class);
+        Member replySender = mock(Member.class);
+        when(reply.getId()).thenReturn(id);
+        when(reply.getSender()).thenReturn(replySender);
+        when(reply.getMessageType()).thenReturn(ChatMessageType.TEXT);
+        when(reply.getContent()).thenReturn(content);
+        when(reply.getEmoticonId()).thenReturn(null);
+        when(reply.getCreatedAt()).thenReturn(LocalDateTime.of(2026, 8, 5, 11, 0));
+        when(replySender.getId()).thenReturn(MEMBER_ID);
+        when(replySender.getNickname()).thenReturn("원본 작성자");
+        return reply;
+    }
+
+    private ChatMessage replyReference(Long id) {
+        ChatMessage reply = mock(ChatMessage.class);
+        when(reply.getId()).thenReturn(id);
+        return reply;
     }
 }

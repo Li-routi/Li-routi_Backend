@@ -14,6 +14,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
+import com.lirouti.domain.character.service.command.CharacterUnlockCommandService;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
@@ -43,6 +44,10 @@ class MemberCommandServiceTest {
 
     @Mock
     private ApplicationEventPublisher eventPublisher;
+
+    // 가입 직후 기본 캐릭터를 주는 판정이 붙었다. 이 단위 테스트의 관심사가 아니라 목으로 둔다.
+    @Mock
+    private CharacterUnlockCommandService characterUnlockCommandService;
 
     @InjectMocks
     private MemberCommandService memberCommandService;
@@ -133,6 +138,9 @@ class MemberCommandServiceTest {
         assertThat(result.getEmail()).isEqualTo(EMAIL);
         assertThat(result.getNickname()).isEqualTo(NICKNAME);
         assertThat(result.getIsActive()).isTrue();
+        // 이 검증이 없으면 가입에서 판정을 지워도 테스트가 통과한다 — 기본 캐릭터가 조용히
+        // 안 들어오고, 그 상태로는 캐릭터를 하나도 못 고른다(선택이 보유를 요구한다).
+        verify(characterUnlockCommandService).evaluateAndUnlock(result.getId());
         assertThat(result.isOnboardingCompleted()).isFalse();
         verify(memberRepository).save(result);
     }

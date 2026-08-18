@@ -47,7 +47,7 @@ class GroupDetailQueryRepositoryTest {
         Group group = Group.builder().name("상세 그룹").inviteCode("DETAIL1").build();
         GroupRoutineCategory category = GroupRoutineCategory.builder()
                 .name("상세 카테고리").active(true).build();
-        Member completedMember = member("완료 회원", "profiles/completed.png");
+        Member completedMember = member("완료 회원", null);
         Member pendingMember = member("대기 회원", null);
         Member noAssignmentMember = member("미할당 회원", null);
         entityManager.persist(group);
@@ -57,6 +57,7 @@ class GroupDetailQueryRepositoryTest {
         completedMembership.updateStatusMessage("완료했습니다");
         completedMembership.increaseTotalPokeCount();
         completedMembership.increaseTotalPokeCount();
+        completedMembership.increaseTotalDisappointmentCount();
         membership(group, pendingMember);
         membership(group, noAssignmentMember);
 
@@ -91,9 +92,9 @@ class GroupDetailQueryRepositoryTest {
         assertThat(members).anySatisfy(member -> {
             assertThat(member.memberId()).isEqualTo(completedMember.getId());
             assertThat(member.name()).isEqualTo("완료 회원");
-            assertThat(member.profileImageKey()).isEqualTo("profiles/completed.png");
             assertThat(member.statusMessage()).isEqualTo("완료했습니다");
             assertThat(member.totalPokeCount()).isEqualTo(2L);
+            assertThat(member.totalDisappointmentCount()).isEqualTo(1L);
         });
         assertThat(progresses).containsExactlyInAnyOrder(
                 new TodayMemberProgressProjection(completedMember.getId(), 2L, 1L),

@@ -7,19 +7,41 @@
 | 위치 | 파일 | 커밋 | 역할 |
 | --- | --- | --- | --- |
 | 레포 | `Dockerfile` | O | 실행 jar를 담는 이미지 정의(빌드 스테이지 없음) |
-| 레포 | `.github/workflows/test.yml` | O | 테스트 (브랜치 push + deploy.yml이 workflow_call로 호출) |
-| 레포 | `.github/workflows/deploy.yml` | O | develop 머지 시 이미지 빌드·배포 |
+| 레포 | `.github/workflows/test.yml` | O | 테스트 + 워크플로 lint (브랜치 push + 배포 워크플로가 workflow_call로 호출) |
+| 레포 | `.github/workflows/build.yml` | O | 이미지 빌드·push (배포 워크플로 둘이 공유하는 재사용 워크플로) |
+| 레포 | `.github/workflows/deploy-prod.yml` | O | **main** 머지 시 운영 배포 |
+| 레포 | `.github/workflows/deploy-dev.yml` | O | **develop** 머지 시 개발 배포 |
 | 레포 | `docker-compose.local.yml` | O | 로컬 개발용 DB·Redis (앱은 IDE/bootRun) |
 | 레포 | `deploy/docker-compose.prod.yml` | O(레퍼런스) | 서버 운영 compose 템플릿 |
 | 레포 | `deploy/.env.example` | O | 서버 `.env` 키 템플릿(실값 없음) |
 | 레포 | `deploy/backup.sh` | O(레퍼런스) | DB 백업 스크립트 |
+| 레포 | `deploy/dev/` | O | **개발 서버** 전용 IAM·버킷 정책과 구축 가이드 — [`deploy/dev/README.md`](./dev/README.md) |
 | **서버** | `/opt/app/docker-compose.yml` | **X** | 위 prod 템플릿을 복사한 실제 파일 |
 | **서버** | `/opt/app/.env` | **X** | **배포 때 자동 생성됨** — GitHub Secret `ENV_FILE` 내용 + `APP_IMAGE_TAG` |
 | **서버** | `/opt/app/backup.sh` | **X** | 위 스크립트 복사 |
 
 > **런타임 설정의 단일 진실 공급원은 GitHub Secret `ENV_FILE`이다.** 배포할 때마다 워크플로가 서버 `/opt/app/.env`를 이 내용으로 새로 쓴다.
 > 따라서 **서버에서 `.env`를 직접 고쳐도 다음 배포에서 원복된다.** 값을 바꾸려면 `ENV_FILE` 시크릿을 수정하고 재배포한다.
-> :warning: 시크릿 변경은 자동 배포 트리거가 아니다(GitHub은 시크릿 변경 이벤트를 제공하지 않는다). 수정 후 develop에 머지하거나 Actions에서 Deploy를 수동 실행해야 반영된다.
+> :warning: 시크릿 변경은 자동 배포 트리거가 아니다(GitHub은 시크릿 변경 이벤트를 제공하지 않는다). 수정 후 해당 브랜치에 머지하거나 Actions에서 배포를 수동 실행해야 반영된다.
+
+> **`ENV_FILE`은 배포 대상마다 따로 있다.** 아래 [배포 대상은 둘이다](#배포-대상은-둘이다) 참고 — 운영은 `ENV_FILE`, 개발은 `DEV_ENV_FILE` 이고 **둘 다 리포지토리 시크릿**이다(GitHub Environments 를 쓰지 않는다).
+
+### 배포 대상은 둘이다
+
+| 대상 | 브랜치 | 워크플로 | 시크릿 | 서버 |
+| --- | --- | --- | --- | --- |
+| 운영 | `main` | `deploy-prod.yml` | `SERVER_HOST` · `SERVER_SSH_KEY` · `ENV_FILE` | 운영 EC2 (도메인·Caddy) |
+| 개발 | `develop` | `deploy-dev.yml` | `DEV_SERVER_HOST` · `DEV_SERVER_SSH_KEY` · `DEV_ENV_FILE` | 개발 EC2 (도메인·Caddy, 구성 동일) |
+
+**두 서버의 구성은 같다.** compose 도 `deploy/docker-compose.prod.yml` 하나를 양쪽에 복사해 쓰고, 차이는 전부 `.env`(도메인·버킷·시크릿)가 흡수한다. 개발만 느슨하게 두면 "운영보다 먼저 깨지는 자리"라는 목적이 사라지기 때문이다.
+
+**둘 다 리포지토리 시크릿이고, 이름으로 갈린다.** GitHub Environments 를 쓰지 않는다.
+
+> **왜 Environments 가 아닌가.** Environment 시크릿은 리포지토리 시크릿을 **덮어쓰는** 구조라, 두 환경에 같은 이름(`SERVER_HOST` 등)을 두면 **환경 설정을 빠뜨렸을 때 덮어쓸 것이 없어 리포지토리 값이 조용히 쓰인다.** 이 저장소의 리포지토리 시크릿은 운영 서버 주소와 키라, 그 실수가 곧 "개발 배포가 운영 서버에 붙는" 사고가 된다.
+>
+> `DEV_` 접두어로 이름을 갈라 두면 그 경로 자체가 없다 — 시크릿을 빠뜨리면 폴백이 아니라 **빈 값**이 되고, `deploy-dev.yml` 의 첫 스텝(`Verify dev target`)이 막는다. 그 스텝은 `DEV_SERVER_HOST` 가 비었는지, 그리고 **운영 주소와 같지 않은지**까지 대조한다.
+>
+> 대신 Environments 가 주는 것(배포 승인자 지정, 환경별 배포 이력)은 포기했다. 필요해지면 그때 옮긴다 — 그때는 위 함정을 알고 옮기게 된다.
 
 ## GitHub 설정 (1회)
 
@@ -45,7 +67,7 @@
 
 > **전제**: EC2(t4g.small)가 떠 있고, 아래 [AWS / 네트워크] 절의 **IAM Role(instance profile)**·**보안그룹**을 먼저 맞춰둔다. 여기부터는 서버에 SSH로 접속(`ssh -i <pem> ubuntu@<서버IP>`)해서 하는 작업이다.
 
-### 1) Docker + compose 플러그인 설치 · swap 2GB
+### 1) Docker + compose 플러그인 설치 · swap 4GB
 
 ```bash
 sudo apt-get update
@@ -53,8 +75,9 @@ sudo apt-get install -y docker.io docker-compose-v2
 sudo usermod -aG docker ubuntu     # 그룹 반영을 위해 로그아웃 후 재접속(또는 `newgrp docker`)
 docker compose version             # v2 플러그인 정상 확인
 
-# swap 2GB — 메모리 예산(≈1.6GB+OS)이 빠듯해 피크 시 OOM killer가 컨테이너를 죽이는 것 방지(완충재).
-sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile
+# swap 4GB — 메모리 예산(≈1.6GB+OS)이 빠듯해 피크 시 OOM killer가 컨테이너를 죽이는 것 방지(완충재).
+# 처음에는 2GB로 잡았다가 늘렸다. 운영이 평상시에도 700MB 안팎을 실제로 쓰고 있어 2GB로는 여유가 없다.
+sudo fallocate -l 4G /swapfile && sudo chmod 600 /swapfile
 sudo mkswap /swapfile && sudo swapon /swapfile
 echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab   # 재부팅에도 유지
 ```
@@ -105,17 +128,19 @@ cd /opt/app && chmod +x backup.sh
 
 ### 5) GHCR 로그인 (B안, 1회)
 
+> **이 자격은 서버마다 따로 필요하다.** 개발 서버를 만든 뒤로는 운영·개발 두 곳에 같은(또는 각각의) PAT 가 저장돼 있다. **교체할 때 두 곳을 함께 갱신한다** — 한쪽만 바꾸면 다른 쪽 배포가 `pull` 에서 실패한다. 옮기는 방법은 [`deploy/dev/README.md`](./dev/README.md) 6단계 참고.
+
 위 [GitHub 설정] 2번과 동일하다. `read:packages` PAT로 한 번 로그인해두면 이후 `docker compose pull`이 계속 동작한다. 자격은 `~/.docker/config.json`에 **평문(base64)으로 저장**되므로(→ 재부팅해도 유지되지만 at-rest 위험 존재), **최소권한·짧은 만료로 만들고 주기적으로 교체**한다.
 
 ```bash
 read -rsp 'GHCR PAT(read:packages): ' PAT && echo "$PAT" | docker login ghcr.io -u <github사용자명> --password-stdin; unset PAT
 ```
 
-### 6) 첫 배포는 develop 머지로 (서버에서 `up app` 수동 실행 안 함)
+### 6) 첫 배포는 머지로 (서버에서 `up app` 수동 실행 안 함)
 
-**develop에 머지**되면 Actions가 이미지 빌드 → GHCR push → 서버 SSH 접속 → `.env` 생성(`ENV_FILE` 시크릿) → `APP_IMAGE_TAG`를 그 커밋 sha로 고정 → `docker compose pull && up -d`까지 자동으로 한다.
+**대상 브랜치에 머지**되면 Actions가 이미지 빌드 → GHCR push → 서버 SSH 접속 → `.env` 생성(`ENV_FILE` 시크릿) → `APP_IMAGE_TAG`를 그 커밋 sha로 고정 → `docker compose pull && up -d`까지 자동으로 한다. 운영은 `main`, 개발은 `develop`이다.
 
-서버를 준비만 해두고 develop에 머지하면 첫 배포가 진행된다. 즉시 한 번 돌리고 싶으면 Actions → Deploy to EC2 → Run workflow(develop)로 수동 실행해도 된다.
+서버를 준비만 해두고 머지하면 첫 배포가 진행된다. 즉시 한 번 돌리고 싶으면 Actions → `Deploy to production`(또는 `Deploy to development`) → Run workflow로 수동 실행해도 된다. **다른 브랜치를 골라 실행하면 `Validate deploy ref`가 막는다.**
 
 워크플로가 배포 후 `http://localhost:8080/health` 응답을 최대 ~90초 확인하고, 안 뜨면 배포 실패로 처리한다. 이 경로를 쓰는 이유는 인증이 필요 없기 때문이다 — 업무 API는 전부 JWT를 요구하므로(#77) 헬스체크에 쓰면 정상 기동한 앱도 403으로 실패 처리된다. 서버에서 직접 로그를 보려면:
 
@@ -194,6 +219,14 @@ sudo chmod 400 /opt/app/secrets/firebase-adminsdk.json   # 그 UID만 읽기 전
 
 `Caddy(80/443) → app(8080)` 구성이다. Caddy 가 Let's Encrypt 인증서를 자동 발급·갱신하므로 인증서 관리 부담은 없다.
 
+**개발 서버도 같은 구성이다.** 도메인만 다르고(`LIROUTI_DOMAIN`), Caddyfile·compose·절차는 아래 그대로다.
+
+> ⚠️ **운영 인증서는 Let's Encrypt 가 아니라 ZeroSSL 이 발급했다.** 운영 도메인 `lirouti.kro.kr` 이 무료 도메인이고, `kro.kr` 이 Public Suffix List 에 없어 Let's Encrypt 가 등록 도메인을 `kro.kr` 전체로 본다. 주 50장 한도를 그 서비스 사용자 전원과 나눠 쓰는데, 발급 시점에 이미 차 있어 429 를 맞았다(운영 Caddy 로그에 남아 있다).
+>
+> Caddy 가 자동으로 ZeroSSL 로 넘어가 받아왔지만, **그 폴백은 우리가 설정한 것이 아니라 Caddy 의 기본 동작이다.** 갱신 때 양쪽 다 실패하면 운영이 https 로 죽는다.
+>
+> **도메인을 옮기지 않기로 했다** — 서비스를 곧 접을 예정이라 감수하는 위험이다. 배경과 진단 방법은 [`deploy/dev/README.md`](./dev/README.md#2-도메인) 에 한데 적었다. 개발 서버 문서에 있지만 운영에 그대로 해당한다.
+
 ### 순서를 지켜야 한다
 
 인증서 발급은 **DNS 와 방화벽이 먼저 맞아 있어야** 성공한다. 순서를 어기면 발급이 실패하는데, Let's Encrypt 는 인증 실패를 **계정·도메인 조합마다 시간당 5회**로 제한한다(12분에 하나씩 회복). 원인을 고치기 전에 재시도를 반복하면 그 한도를 다 써버린다.
@@ -209,7 +242,7 @@ sudo chmod 400 /opt/app/secrets/firebase-adminsdk.json   # 그 UID만 읽기 전
 6. 배포
 ```
 
-4번을 빠뜨리면 배포 워크플로가 **시작 전에 막는다**(`Check LIROUTI_DOMAIN is set`). Caddy 가 뜨지 못한 채 앱만 올라가 80·443 이 먹통이 되는 상태를 피하려는 것이다.
+4번을 빠뜨리면 배포 워크플로가 **시작 전에 막는다**(`Check Caddy env vars are set`). Caddy 가 뜨지 못한 채 앱만 올라가 80·443 이 먹통이 되는 상태를 피하려는 것이다.
 
 ### 환경변수
 
@@ -280,7 +313,14 @@ docker compose logs caddy | tail -20     # certificate obtained 류의 줄
 
 ### 공개 미디어 — 버킷 정책으로 prefix만 연다
 
-[`deploy/bucket-policy-media.json`](./bucket-policy-media.json)을 S3 → 버킷 → 권한 → 버킷 정책에 붙여넣는다. `s3:GetObject`만, `challenge-verifications/*`만 허용한다. 이 정책은 **익명 접근자**에게 적용되며 `ListBucket`을 주지 않으므로 **목록으로 훑는 것은 불가능**하고 key가 UUID라 추측도 안 된다.
+[`deploy/bucket-policy-media.json`](./bucket-policy-media.json)을 S3 → 버킷 → 권한 → 버킷 정책에 붙여넣는다. `s3:GetObject`만, **`challenge-verifications/*` 와 `avatar/*` 두 prefix만** 허용한다. 이 정책은 **익명 접근자**에게 적용되며 `ListBucket`을 주지 않으므로 **목록으로 훑는 것은 불가능**하다.
+
+| prefix | 무엇 | 왜 여는가 |
+| --- | --- | --- |
+| `challenge-verifications/*` | 사용자가 올린 인증 사진 | 피드에 그대로 뜬다. key 가 UUID 라 추측되지 않는다 |
+| `avatar/*` | 운영이 올린 마스터 자산(캐릭터·알·둥지·의상) | 모두에게 같은 그림이라 숨길 것이 없다. **presign 을 쓸 이유가 없다** |
+
+> **`avatar/` 는 최상위 하나로 모았다.** 캐릭터·알·둥지·의상이 전부 이 아래에 있어 **정책 문장이 한 줄로 끝난다.** 자산 종류가 늘어도 정책을 다시 고치지 않는다.
 
 > **주체를 구분할 것.** 위 문장은 버킷 정책(익명 접근자) 이야기다. 앱이 쓰는 IAM 역할은 별개이며, 미참조 이미지 정리를 위해 `challenge-verifications/` 아래에 한해 `ListBucket`을 갖는다(아래 [미참조 미디어 정리] 절). 즉 **URL을 아는 외부인은 여전히 열거할 수 없고, 열거할 수 있는 것은 서버뿐이다.**
 >
@@ -451,9 +491,27 @@ S3 라이프사이클(“N일 지난 객체 자동 삭제”)이 가장 단순�
 | Sid | 액션 | 리소스 | 왜 |
 | --- | --- | --- | --- |
 | `MediaCleanupList` | `s3:ListBucket` | `arn:aws:s3:::lirouti-prod-bucket` (버킷 자체)<br>+ `Condition: s3:prefix = challenge-verifications/* 또는 chat-emoticons/*` | 두 용도의 날짜 prefix 아래 오브젝트 목록을 얻는다 |
-| `MediaCleanupDelete` | `s3:DeleteObject` | `arn:aws:s3:::lirouti-prod-bucket/challenge-verifications/*`<br>`arn:aws:s3:::lirouti-prod-bucket/chat-emoticons/*` | 미참조 오브젝트와 등록 실패 이모티콘을 지운다 |
+| `MediaCleanupDelete` | `s3:DeleteObject` | `arn:aws:s3:::lirouti-prod-bucket/challenge-verifications/*`<br>`arn:aws:s3:::lirouti-prod-bucket/challenge-verifications-staging/*`<br>`arn:aws:s3:::lirouti-prod-bucket/chat-emoticons/*` | 미참조 오브젝트와 등록 실패 이모티콘을 지운다. **대기본은 승격 직후 지운다** |
 
 > `ListBucket`의 리소스는 **버킷 ARN이지 `/*`가 아니다.** 오브젝트 액션과 리소스 형태가 다르다 — `/*`를 붙이면 조용히 권한이 안 먹는다.
+
+> **이 파일과 콘솔은 일치한다**(2026-08-13 확인). 그전까지 두 방향으로 어긋나 있었고, 그 이력을 남겨 둔다.
+>
+> | | 어긋나 있던 상태 | 지금 |
+> | --- | --- | --- |
+> | `challenge-verifications-staging/*` 삭제 | 콘솔에만 있었다 | 파일에 더했다 |
+> | `chat-emoticons/*` 열거·삭제 | 파일에만 있었다 | 콘솔에 적용했다 |
+>
+> **`-staging` 삭제가 파일에서 빠져 있던 것이 위험했다.** 심사를 통과한 사진을 공개 prefix 로 복사한 뒤 대기본을 지우는, **지금 실제로 쓰이는 권한**이다. 파일을 그대로 붙여넣었으면 승격 때마다 대기본이 쌓이기 시작했을 것이다.
+>
+> **`chat-emoticons/*` 삭제는 정리 배치 전용이 아니다.** 이모티콘 등록 중 DB 저장이 실패하면 방금 올린 객체를 그 자리에서 지우는데(`ChatEmoticonAdminService`), 그 경로가 권한이 없어 조용히 실패하고 있었다. 열거 쪽만 배치 전용이라 배치를 켤 때까지 놀지만, 삭제와 갈라 두면 다음에 또 어긋난다.
+
+**열거는 두 prefix 조건 안에서만 동작한다.** 버킷 루트를 훑으면 `AccessDenied` 가 나는 것이 정상이며, 이것으로 정책이 좁게 걸렸는지 확인할 수 있다.
+
+```bash
+aws s3 ls s3://lirouti-prod-bucket/chat-emoticons/   # 된다
+aws s3 ls s3://lirouti-prod-bucket/                  # AccessDenied ← 정상
+```
 
 **둘 다 `challenge-verifications/`와 `chat-emoticons/` 아래로만 좁혀 뒀다.** 앞으로 추가될 다른 비공개 미디어(개인 루틴·그룹 채팅 사진)는 **앱 역할로도 열거·삭제할 수 없다.**
 
@@ -590,7 +648,7 @@ LiRouti는 **umc 계정 하나에만** 있고 다른 계정과 리소스를 공�
 - **SSE-KMS를 고르면** 아래 정책에 `kms:GenerateDataKey`·`kms:Decrypt`가 추가로 필요하다. 특별한 이유가 없으면 기본값을 쓴다.
   - 여기서 **customer-managed 키(CMK)를 쓰면 IAM 정책만으로는 부족하다.** KMS는 키 정책(key policy)이 IAM 위임을 허용해야 IAM 쪽 권한이 효력을 갖는다. 허용 문구가 없으면 권한을 붙여도 S3 PUT에서 `AccessDenied`가 난다. CMK를 쓸 경우 키 정책에 `lirouti-ec2-role`의 ARN을 직접 넣거나, 계정 위임(`arn:aws:iam::<계정>:root` 허용) 문구가 있는지 확인한다.
   - AWS 관리형 키(`aws/s3`)는 키 정책이 이미 계정 위임을 허용하므로 이 문제가 없다.
-- **미디어 버킷은 `challenge-verifications/` prefix만 공개 읽기로 연다**(#66). 나머지 prefix와 백업 버킷은 비공개 그대로다. 근거와 절차는 아래 [미디어 서빙] 절을 볼 것.
+- **미디어 버킷은 `challenge-verifications/`·`avatar/` 두 prefix만 공개 읽기로 연다**(#66, #231). 나머지 prefix와 백업 버킷은 비공개 그대로다. 근거와 절차는 아래 [미디어 서빙] 절을 볼 것.
 - **라이프사이클 규칙은 걸지 않는다.** 라이프사이클은 객체의 나이만 알고 DB가 참조하는지는 모르는데, 미참조 파일과 정상 인증 사진이 같은 날짜 prefix에 섞여 있다. 자동 삭제를 걸면 정상 인증 사진이 지워진다. 고아 파일은 **S3 목록과 DB를 대조**해 지운다 — 아래 [미참조 미디어 정리 (#19)] 절.
 
 ### 2) 정책 생성
@@ -824,14 +882,16 @@ echo "채팅 이모티콘 IAM 권한 OK"
 
 ## 배포 · 롤백
 
-> **develop에 머지되면 배포된다.** 별도 릴리스 절차(태그)는 없다. **배포 워크플로가 `test.yml`을 첫 잡으로 호출해, 배포될 그 커밋의 테스트가 통과해야 빌드·배포가 진행된다.** PR 단계에서도 브랜치 push로 같은 테스트가 돌고, 그 결과(`Build & Test`)가 develop 브랜치 보호의 required status check로 걸려 있다.
-> 수동 배포가 필요하면 Actions → Deploy to EC2 → Run workflow(develop)로 실행한다.
+> **`develop` 머지는 개발 서버로, `main` 머지는 운영 서버로 배포된다.** 별도 릴리스 절차(태그)는 없고, 운영에 내보내려면 `develop` → `main` 릴리스 PR을 연다. **배포 워크플로가 `test.yml`을 첫 잡으로 호출해, 배포될 그 커밋의 테스트가 통과해야 빌드·배포가 진행된다.** PR 단계에서도 브랜치 push로 같은 테스트가 돌고, 그 결과(`Build & Test`)가 브랜치 보호의 required status check로 걸려 있다.
+> 수동 배포가 필요하면 Actions → `Deploy to production` / `Deploy to development` → Run workflow로 실행한다.
 >
-> :information_source: **develop의 테스트는 "Test" 워크플로에 단독으로 뜨지 않는다.** `test.yml`은 develop push를 무시하고(`branches-ignore: [develop]`), 대신 배포 워크플로가 이를 호출한다. 그래서 **develop의 테스트 결과는 Actions의 "Deploy to EC2" 실행 안 `test` 잡에서 확인**한다. 같은 커밋을 두 번 테스트하지 않기 위한 것이다(피처 브랜치·PR은 "Test"에 그대로 단독으로 뜬다).
+> :information_source: **`develop`·`main`의 테스트는 "Test" 워크플로에 단독으로 뜨지 않는다.** `test.yml`은 그 둘의 push를 무시하고(`branches-ignore: [develop, main]`), 대신 배포 워크플로가 이를 호출한다. 그래서 **그 테스트 결과는 해당 배포 실행 안의 `test` 잡에서 확인**한다. 같은 커밋을 두 번 테스트하지 않기 위한 것이다(피처 브랜치·PR은 "Test"에 그대로 단독으로 뜬다).
 
-이미지는 빌드 시 **`:latest` + `:<커밋 sha>`** 두 태그로 GHCR에 올라간다.
+이미지는 빌드 시 **`:<커밋 sha>`** 로 GHCR에 올라가고, **운영 배포에서만 `:latest`가 함께 붙는다.**
 운영 compose는 `${APP_IMAGE_TAG:-latest}`를 참조하고, **배포 워크플로가 그 배포의 커밋 sha를 서버 `.env`의 `APP_IMAGE_TAG`에 고정**한다.
-`latest`·`develop`은 사람이 보기 위한 이동형 태그이고, 서버가 실제로 받는 것은 **커밋 sha 이미지**다 — 그래야 "정확히 그 커밋으로 되돌리기"가 성립한다(결정적 배포).
+`latest`는 사람이 보기 위한 이동형 태그이고, 서버가 실제로 받는 것은 **커밋 sha 이미지**다 — 그래야 "정확히 그 커밋으로 되돌리기"가 성립한다(결정적 배포).
+
+> 개발 배포가 `:latest`를 옮기지 않는 이유는, 그 태그가 **"지금 운영에 나가 있는 것"** 을 가리켜야 하기 때문이다. 개발 배포까지 옮기면 그 뜻이 사라진다.
 
 **롤백**
 
@@ -846,10 +906,10 @@ grep -q '^APP_IMAGE_TAG=' .env \
 docker compose pull && docker compose up -d
 ```
 
-> :warning: (A)는 **다음 배포까지만 유효하다.** 배포할 때마다 `.env`가 `ENV_FILE` 시크릿 기준으로 새로 쓰이고 `APP_IMAGE_TAG`도 그 배포의 커밋으로 덮어써진다. 되돌린 상태를 유지하려면 develop에서 문제 커밋을 revert하고 다시 머지한다(= 정석 경로).
+> :warning: (A)는 **다음 배포까지만 유효하다.** 배포할 때마다 `.env`가 `ENV_FILE` 시크릿 기준으로 새로 쓰이고 `APP_IMAGE_TAG`도 그 배포의 커밋으로 덮어써진다. 되돌린 상태를 유지하려면 해당 브랜치(운영은 `main`)에서 문제 커밋을 revert하고 다시 머지한다(= 정석 경로).
 
 ```bash
-# (B) 정석: 문제 커밋을 revert 해서 develop에 머지 → 자동 재배포
+# (B) 정석: 문제 커밋을 revert 해서 대상 브랜치(운영은 main)에 머지 → 자동 재배포
 git revert <문제_커밋> && git push
 ```
 
@@ -861,7 +921,8 @@ git revert <문제_커밋> && git push
 `.env`는 배포 때 GitHub Secret `ENV_FILE`을 기준으로 새로 생성된다. 값을 바꾸려면:
 
 1. repo → Settings → Secrets and variables → Actions → `ENV_FILE` 수정
-2. develop에 머지하거나 Actions에서 Deploy를 수동 실행 (시크릿 변경만으로는 배포가 트리거되지 않는다)
+2. 대상 브랜치에 머지하거나 Actions에서 해당 배포를 수동 실행 (시크릿 변경만으로는 배포가 트리거되지 않는다)
+   > 환경마다 `ENV_FILE`이 따로 있다. 운영 값을 고쳤으면 `production` 환경의 시크릿인지 확인한다.
 
 > :warning: 서버에서 `.env`를 직접 고치는 것은 **긴급 임시 조치로만** 쓴다. 다음 배포에서 시크릿 내용으로 원복되므로, 반드시 `ENV_FILE`에도 반영해 둘 것.
 > 서버에서 임시로 고쳤을 때 반영하려면 `docker compose up -d`(재생성)를 쓴다. `docker compose restart`는 **기존 컨테이너를 그대로 재시작해 환경변수가 갱신되지 않는다.**
@@ -929,13 +990,15 @@ sudo docker run --rm --network container:$(sudo docker compose ps -q db) \
 
 ### 버전 번호 중복은 CI가 막는다
 
-두 브랜치가 각각 `V4__a.sql`·`V4__b.sql`을 추가하면 **파일명이 달라 git이 충돌로 보지 않는다.** 양쪽 다 조용히 머지되고, develop 배포 후 부팅에서 죽는다 — `Found more than one migration with version 4`.
+두 브랜치가 각각 `V4__a.sql`·`V4__b.sql`을 추가하면 **파일명이 달라 git이 충돌로 보지 않는다.** 양쪽 다 조용히 머지되고, 배포 후 부팅에서 죽는다 — `Found more than one migration with version 4`.
 
 `test.yml`의 **Check migration version duplicates** 스텝이 이걸 잡는다. 로컬에서 미리 보려면 `task db-check-duplicates`.
 
 ### `ddl-auto` 우회를 되돌리기 (#49)
 
-마이그레이션 문제로 부팅이 막혔을 때 `ENV_FILE`에 `JPA_DDL_AUTO=update`를 넣어 한시적으로 넘길 수 있다. **막아두지 않은 것은 의도다** — develop 머지가 곧 배포인 구조에서 긴급 우회 경로가 없는 쪽이 더 위험하다.
+마이그레이션 문제로 부팅이 막혔을 때 `ENV_FILE`에 `JPA_DDL_AUTO=update`를 넣어 한시적으로 넘길 수 있다. **막아두지 않은 것은 의도다** — 머지가 곧 배포인 구조에서 긴급 우회 경로가 없는 쪽이 더 위험하다.
+
+> 개발 서버가 생긴 뒤로는 이 우회를 쓸 일이 줄어야 한다. 마이그레이션 문제는 `develop` 배포에서 먼저 걸리므로, **운영에서 우회를 켜는 상황 자체가 개발 서버를 건너뛰었다는 뜻**이다.
 
 대신 우회가 방치되지 않도록 두 군데서 드러낸다.
 
@@ -950,7 +1013,7 @@ sudo docker run --rm --network container:$(sudo docker compose ps -q db) \
 
 1. 막혔던 마이그레이션을 고친다 (새 `V__` 추가 — 이미 적용된 파일은 수정하지 않는다)
 2. `ENV_FILE` 시크릿에서 `JPA_DDL_AUTO` 줄을 **지운다**
-3. develop 머지 또는 Deploy 수동 실행
+3. 대상 브랜치 머지 또는 해당 배포 수동 실행
 4. Discord 알림에 경고가 사라졌는지, 앱 로그에 WARN이 없는지 확인
 
 ## 메모리 예산 (t4g.small 2GB)

@@ -54,7 +54,16 @@ public class SwaggerConfig {
         return GroupedOpenApi.builder()
                 .group("2. JWT 인증 필요")
                 .pathsToMatch("/api/**")
-                .pathsToExclude("/api/auth/**") // 해당 경로는 이 그룹에서 제외
+                .pathsToExclude("/api/auth/**", "/api/admin/**") // 공개·관리자 경로는 별도 그룹에서 제공
+                .build();
+    }
+
+    @Bean
+    public GroupedOpenApi adminAPI() {
+        // 관리자 전용 API들을 일반 인증 API와 분리
+        return GroupedOpenApi.builder()
+                .group("3. 관리자 전용")
+                .pathsToMatch("/api/admin/**")
                 .build();
     }
 }

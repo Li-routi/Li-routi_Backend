@@ -1,5 +1,6 @@
 package com.lirouti.domain.chat.dto.response;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -18,7 +19,15 @@ public final class ChatResDTO {
     public record MessageList(
             List<Message> messages,
             Long nextCursor,
-            boolean hasNext
+            boolean hasNext,
+            LocalDate date,
+            boolean hasChat
+    ) {
+    }
+
+    @Builder
+    public record ChatDates(
+            List<LocalDate> chatDates
     ) {
     }
 
@@ -30,6 +39,21 @@ public final class ChatResDTO {
             Long id,
             String clientMessageId,
             Long groupId,
+            Sender sender,
+            ChatMessageType type,
+            String content,
+            Emoticon emoticon,
+            Reply reply,
+            LocalDateTime createdAt
+    ) {
+    }
+
+    /**
+     * 답장 미리보기에서 원본 메시지를 식별하고 표시하는 데 필요한 정보다.
+     */
+    @Builder
+    public record Reply(
+            Long id,
             Sender sender,
             ChatMessageType type,
             String content,

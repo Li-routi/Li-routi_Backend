@@ -59,6 +59,14 @@ class GroupPokeControllerIntegrationTest {
         entityManager.clear();
         assertThat(entityManager.find(GroupMember.class, targetMembership.getId()).getTotalPokeCount())
                 .isEqualTo(2L);
+        assertThat(entityManager.createNativeQuery("""
+                        select count(*) from group_poke
+                        where group_id = :groupId and sender_id = :senderId and recipient_id = :recipientId
+                        """)
+                .setParameter("groupId", group.getId())
+                .setParameter("senderId", requester.getId())
+                .setParameter("recipientId", target.getId())
+                .getSingleResult()).isEqualTo(2L);
     }
 
     @Test
@@ -67,7 +75,7 @@ class GroupPokeControllerIntegrationTest {
         Group group = group();
         Member requester = member("요청자");
         Member target = member("대상");
-        membership(group, requester);
+        membership(group, requester, GroupMemberRole.OWNER);
         GroupMember targetMembership = membership(group, target);
         targetMembership.increaseTotalPokeCount();
         targetMembership.increaseTotalPokeCount();
@@ -77,6 +85,7 @@ class GroupPokeControllerIntegrationTest {
         mockMvc.perform(get("/api/groups/{groupId}", group.getId())
                         .with(user(principal(requester))))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.myRole").value("OWNER"))
                 .andExpect(jsonPath("$.result.members[1].memberId").value(target.getId()))
                 .andExpect(jsonPath("$.result.members[1].totalPokeCount").value(2));
     }
@@ -164,8 +173,12 @@ class GroupPokeControllerIntegrationTest {
     }
 
     private GroupMember membership(Group group, Member member) {
+        return membership(group, member, GroupMemberRole.MEMBER);
+    }
+
+    private GroupMember membership(Group group, Member member, GroupMemberRole role) {
         GroupMember membership = GroupMember.builder()
-                .group(group).member(member).role(GroupMemberRole.MEMBER).build();
+                .group(group).member(member).role(role).build();
         entityManager.persist(membership);
         return membership;
     }

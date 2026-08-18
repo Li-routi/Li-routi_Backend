@@ -2,6 +2,7 @@ package com.lirouti.domain.routine.repository;
 
 import com.lirouti.domain.routine.entity.MemberRoutineSchedule;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -9,6 +10,22 @@ import java.time.DayOfWeek;
 import java.util.List;
 
 public interface MemberRoutineScheduleRepository extends JpaRepository<MemberRoutineSchedule, Long> {
+
+    /**
+     * 개인 루틴 수정 전에 기존 반복 일정을 물리 삭제한다.
+     *
+     * <p>같은 요일을 다시 추가할 때 Hibernate가 INSERT를 orphan DELETE보다 먼저 실행하면
+     * UNIQUE 제약이 충돌한다. 벌크 DELETE를 먼저 flush하고 영속성 컨텍스트를 비워, 호출부가
+     * 루틴을 다시 조회한 뒤 새 일정만 추가하도록 한다.
+     *
+     * @param memberRoutineId 일정을 모두 삭제할 개인 루틴 ID
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+            delete from MemberRoutineSchedule schedule
+            where schedule.memberRoutine.id = :memberRoutineId
+            """)
+    void deleteAllByMemberRoutineId(@Param("memberRoutineId") Long memberRoutineId);
 
     /**
      * 리포트 집계용. 그 회원의 <b>활성</b> 개인 루틴이 가진 반복 요일을 전부 가져온다.

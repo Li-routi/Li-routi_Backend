@@ -3,6 +3,7 @@ package com.lirouti.domain.verification.exception.code.error;
 import com.lirouti.global.apiPayload.code.BaseErrorCode;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import com.lirouti.domain.challenge.enums.RoutineCycle;
 import org.springframework.http.HttpStatus;
 
 /**
@@ -79,4 +80,15 @@ public enum ChallengeVerificationErrorCode implements BaseErrorCode {
     private final HttpStatus httpStatus;
     private final String message;
     private final String code;
+
+    /**
+     * 주기에 맞는 "이미 인증함" 코드를 고른다.
+     *
+     * <p>선검사(심사 전)와 최종 판정(저장 시)이 <b>같은 코드를 내야</b> 한다. 두 곳에서 따로
+     * 고르면 한쪽만 고쳤을 때 같은 상황에 다른 코드가 나가고, 그 어긋남은 테스트가 아니라
+     * 사용자 화면에서 드러난다.
+     */
+    public static ChallengeVerificationErrorCode alreadyVerified(RoutineCycle cycle) {
+        return cycle == RoutineCycle.DAILY ? ALREADY_VERIFIED_TODAY : ALREADY_VERIFIED_IN_PERIOD;
+    }
 }

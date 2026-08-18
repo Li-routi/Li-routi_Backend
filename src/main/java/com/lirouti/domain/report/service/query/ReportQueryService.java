@@ -1,5 +1,6 @@
 package com.lirouti.domain.report.service.query;
 
+import com.lirouti.domain.achievement.event.AchievementProgressEvent;
 import com.lirouti.domain.group.dto.projection.DailyScheduleAndCompletion;
 import com.lirouti.domain.group.repository.GroupRoutineAssignmentRepository;
 import com.lirouti.domain.report.dto.response.ReportResDTO;
@@ -11,6 +12,7 @@ import com.lirouti.domain.verification.repository.ChallengeVerificationRepositor
 import com.lirouti.domain.verification.repository.MemberRoutineVerificationRepository;
 import com.lirouti.global.util.TimeUtil;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,8 +34,18 @@ public class ReportQueryService {
     private final MemberRoutineVerificationRepository memberRoutineVerificationRepository;
     private final GroupRoutineAssignmentRepository groupRoutineAssignmentRepository;
     private final ChallengeVerificationRepository challengeVerificationRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     private static final int PLACEHOLDER_EARNED_COIN = 0; // 상점 및 코인 기능 개발 전 임시로 0
+
+    /**
+     * ACH-ST-005(첫 리포트 확인)의 conditionKey. 조회 자체는 저장되는 엔티티가 없어서
+     * sourceId 로 삼을 자연스러운 레코드 PK가 없다 - 대신 memberId 를 그대로 sourceId 로
+     * 써서, 같은 회원이 여러 번 열어도 (sourceType, sourceId, conditionKey, memberId)
+     * unique 제약이 첫 조회 이후를 자동으로 걸러내게 한다.
+     */
+    private static final String REPORT_VIEW_CONDITION_KEY = "REPORT_VIEW_COUNT";
+    private static final String REPORT_VIEW_SOURCE_TYPE = "REPORT_VIEW";
 
     @Transactional(readOnly = true)
     public ReportResDTO.Weekly getWeeklyReport(Long memberId, LocalDate anyDateInWeek) {
@@ -86,6 +98,14 @@ public class ReportQueryService {
                             .build();
                 })
                 .toList();
+
+        eventPublisher.publishEvent(new AchievementProgressEvent(
+                memberId,
+                REPORT_VIEW_CONDITION_KEY,
+                1,
+                REPORT_VIEW_SOURCE_TYPE,
+                memberId
+        ));
 
         return ReportResDTO.Monthly.builder()
                 .yearMonth(yearMonth)

@@ -30,9 +30,14 @@ public class SecurityConfig {
             "/api/auth/**",
             "/swagger-ui/**",
             "/v3/api-docs/**",
-            "/health"
+            "/health",
+            // 포트원이 부르는 자리라 JWT 를 붙일 수 없다. 대신 본문을 믿지 않는다 —
+            // 거기 실린 결제 식별자로 포트원에 다시 물어보고, 그 답으로만 지급한다.
+            // 위조한 본문을 보내도 포트원이 모르는 결제면 아무 일도 일어나지 않는다.
+            "/api/shop/charges/webhook"
     };
     private static final String ADMIN_CHAT_EMOTICON_URI = "/api/admin/chat/emoticons/**";
+    private static final String ADMIN_ACHIEVEMENT_URI = "/api/admin/achievements/**";
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -49,6 +54,7 @@ public class SecurityConfig {
                         // 로그인하지 않으면 내부 기능에 닿지 못하는 것이 정상이다.
                         auth.requestMatchers(PUBLIC_URIS).permitAll()
                                 .requestMatchers(ADMIN_CHAT_EMOTICON_URI).hasAuthority(Role.ROLE_ADMIN.name())
+                                .requestMatchers(ADMIN_ACHIEVEMENT_URI).hasAuthority(Role.ROLE_ADMIN.name())
                                 .anyRequest().authenticated()
                 )
                 // 인증·인가 실패를 ApiResponse 형태로 내보낸다. 등록하지 않으면 스프링 기본
