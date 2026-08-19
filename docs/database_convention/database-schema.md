@@ -1758,11 +1758,15 @@ WHERE member_id = :memberId
 
 유니크: `uk_avatar_character_code` (`code`)
 
-**등급 컬럼은 두지 않는다.** 기획에 등급 넷(기본·레어·에픽·특별)이 언급돼 있으나 화면에서 쓰는 곳이 정해지지 않았고, 캐릭터는 파는 것이 아니라 조건으로 여는 것이라 **난이도를 이미 해금 조건이 표현한다.** 필요해지면 그때 컬럼 하나를 더한다.
+**등급 컬럼은 두지 않는다.** 기획에 등급 넷(기본·레어·에픽·특별)이 언급돼 있으나 화면에서 쓰는 곳이 정해지지 않았고, 캐릭터는 파는 것이 아니라 조건으로 여는 것이라 **난이도를 이미 그 조건이 표현한다.** 필요해지면 그때 컬럼 하나를 더한다.
 
-**수집 속도를 정하는 것은 오직 해금 조건이다.** 기다리는 구간이 없으므로 조건 하나하나가 곧 난이도다. 첫 캐릭터를 이른 시점에 열어 주는 것이 중요하다 — 그전까지 목록이 알로만 차 있으면 **이 시스템이 무엇인지 알려 주는 순간이 오지 않는다.**
+**수집 속도를 정하는 것은 오직 해금 난이도다.** 기다리는 구간이 없으므로 조건 하나하나가 곧 난이도다. 첫 캐릭터를 이른 시점에 열어 주는 것이 중요하다 — 그전까지 목록이 알로만 차 있으면 **이 시스템이 무엇인지 알려 주는 순간이 오지 않는다.**
 
-조건 수치는 데이터에 있어 **시드 한 줄을 고치고 배포하면 조정된다.** 실사용 데이터가 없어 지금 그 값을 맞힐 방법이 없으므로, 코드가 아니라 데이터에 두는 것이 중요하다. 다만 그 수치가 사는 곳이 바뀌었다 — 아래 [해금은 업적 하나로만 일어난다] 를 볼 것.
+**그 난이도를 정하는 것은 `achievement` 다.** 캐릭터 열둘이 전부 업적 보상이므로, 얼마나 걸리는지는 그 업적의 `condition_key` 와 `target_count` 가 정한다 — 아래 [해금은 업적 하나로만 일어난다] 를 볼 것.
+
+> ⚠️ **수집 속도를 조정하려면 `achievement.target_count` 를 고친다.** `character_unlock_condition.target_count` 가 아니다 — 그쪽은 지금 전부 `1` 이고, `ACHIEVEMENT_CLAIMED` 는 애초에 `target_count` 를 보지 않는다("그 업적을 받았다"는 사실 자체가 조건 충족이다). 여기를 고치면 아무 일도 일어나지 않는다.
+
+수치가 코드가 아니라 **데이터에 있다는 점은 그대로다** — 시드 한 줄을 고치고 배포하면 조정된다. 실사용 데이터가 없어 지금 그 값을 맞힐 방법이 없으므로 그것이 중요하다.
 
 ### `character_unlock_condition`
 
@@ -1772,7 +1776,7 @@ WHERE member_id = :memberId
 | character_id | BIGINT | N | `avatar_character.id` FK |
 | condition_key | VARCHAR(30) | N | 판정기 종류(아래) |
 | condition_param | VARCHAR(255) | Y | 키마다 뜻이 다르다. 없으면 `NULL` |
-| target_count | INT | N | 목표 수치 |
+| target_count | INT | N | 목표 수치. **`ACHIEVEMENT_CLAIMED` 는 이 값을 보지 않는다** — 업적을 받았다는 사실 자체가 조건 충족이라 세지 않는다 |
 | sort_order | INT | N | 진행도를 조건별로 표시하기 위한 순서 |
 
 **한 캐릭터에 조건 행이 여럿이면 AND 다.** 그래서 "운동 **또는** 건강"을 조건 둘로 나누면 안 된다 — 둘 다 채워야 하는 뜻이 되어 버린다. 합집합은 한 행의 `condition_param` 에 쉼표로 나열해 표현한다.
@@ -1783,7 +1787,7 @@ WHERE member_id = :memberId
 
 **캐릭터 열둘은 저마다 `EGG` 업적 하나의 보상이다.** 시드(`R__seed_character_unlock_condition.sql`)의 조건 행은 전부 `ACHIEVEMENT_CLAIMED` 하나이고, `condition_param` 에 업적 코드(`ACH-EG-001` …)가 들어간다.
 
-```
+```text
 업적 조건 달성  →  member_achievement.status = ACHIEVED  →  사용자가 "받기"
                                                               ↓
                               AchievementClaimService → CharacterUnlockService.unlockByAchievementClaim
