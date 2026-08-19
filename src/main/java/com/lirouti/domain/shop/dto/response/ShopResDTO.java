@@ -21,9 +21,9 @@ public final class ShopResDTO {
             @Schema(description = "탭 식별자", example = "HEAD") ShopCategory key,
             @Schema(description = "화면에 쓸 이름", example = "머리") String name,
             @Schema(description = """
-                    이 탭을 눌렀을 때 무엇을 가져오는가. `ITEM` 이면 아이템 목록,
-                    `CHARACTER` 면 캐릭터 목록이다. **`slot` 이 비어 있는 탭이 둘이라
-                    이 값으로 갈라야 한다.**""")
+                    이 탭을 눌렀을 때 무엇을 가져오는가. 지금은 `ITEM` 하나뿐이다 —
+                    **그래도 이 값으로 분기해 둘 것.** 아이템이 아닌 탭이 생길 때
+                    앱을 고치지 않아도 된다.""")
             ShopCategorySource source,
             @Schema(description = """
                     아이템 목록을 요청할 때 넣을 슬롯. **비어 있으면 넣지 않는다** —
