@@ -8,6 +8,7 @@ import com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus;
 import com.lirouti.domain.routine.enums.RoutineCategoryColor;
 import com.lirouti.domain.character.dto.response.CharacterResDTO;
 import com.lirouti.domain.shop.enums.AvatarSlot;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 
@@ -44,7 +45,10 @@ public final class GroupResDTO {
             long todayGroupVerificationCount,
             @Schema(description = "그룹 루틴 인증이 마지막으로 새로 등록된 시각. 인증 이력이 없으면 null", nullable = true)
             LocalDateTime lastVerificationAt,
-            @Schema(description = "ACTIVE 그룹 구성원의 가입순 프로필 이미지 키 목록. null 원소는 기본 프로필을 뜻한다")
+            @ArraySchema(
+                    arraySchema = @Schema(description = "ACTIVE 그룹 구성원의 가입순 프로필 이미지 키 목록. null 원소는 기본 프로필을 뜻한다"),
+                    schema = @Schema(types = {"string", "null"})
+            )
             List<String> profileImageKeys
         ) {
     }

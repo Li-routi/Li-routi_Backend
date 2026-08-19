@@ -125,7 +125,13 @@ class GroupControllerTest {
                 .andExpect(jsonPath("$.components.schemas.MyGroup.properties.lastVerificationAt.type").value("string"))
                 .andExpect(jsonPath("$.components.schemas.MyGroup.properties.lastVerificationAt.format").value("date-time"))
                 .andExpect(jsonPath("$.components.schemas.MyGroup.properties.profileImageKeys").exists())
-                .andExpect(jsonPath("$.components.schemas.MyGroup.properties.profileImageKeys.type").value("array"));
+                .andExpect(jsonPath("$.components.schemas.MyGroup.properties.profileImageKeys.type").value("array"))
+                .andExpect(jsonPath("$.components.schemas.MyGroup.properties.profileImageKeys.items.type")
+                        .isArray())
+                .andExpect(jsonPath("$.components.schemas.MyGroup.properties.profileImageKeys.items.type[0]")
+                        .value("string"))
+                .andExpect(jsonPath("$.components.schemas.MyGroup.properties.profileImageKeys.items.type[1]")
+                        .value("null"));
     }
 
     @Test
