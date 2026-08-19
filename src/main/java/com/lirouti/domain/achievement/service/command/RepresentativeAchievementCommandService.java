@@ -2,7 +2,6 @@ package com.lirouti.domain.achievement.service.command;
 
 import com.lirouti.domain.achievement.entity.Achievement;
 import com.lirouti.domain.achievement.entity.MemberAchievement;
-import com.lirouti.domain.achievement.enums.AchievementCategory;
 import com.lirouti.domain.achievement.enums.MemberAchievementStatus;
 import com.lirouti.domain.achievement.exception.AchievementException;
 import com.lirouti.domain.achievement.exception.code.error.AchievementErrorCode;
@@ -16,10 +15,12 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * 홈 화면·그룹 프로필에 노출할 "대표 업적"을 선택한다.
  *
- * <p>배지 이미지가 있는(badge_image_key not null) 업적 중, 본인이 실제로 CLAIMED한
- * 것만 고를 수 있다. EGG 업적은 배지 이미지가 없는 게 정상 데이터라 이 조건만으로도
- * 걸러지지만, 데이터 오류로 EGG에 badge_image_key가 잘못 채워지는 경우까지 대비해
- * 카테고리로 한 번 더 명시적으로 막는다.
+ * <p><b>배찌로 등록된({@code badge_yn}) 업적 중 본인이 CLAIMED 한 것만</b> 고를 수 있다.
+ * 후보 목록({@code findClaimedWithBadgeByMemberId})과 같은 기준이어야 한다 — 목록에 없는
+ * 것을 요청으로 밀어 넣을 수 있으면 막은 의미가 없다.
+ *
+ * <p>캐릭터알(EGG)은 배찌가 아니라 {@code badge_yn = 0} 이므로 여기서 걸린다. 이미지까지
+ * 보는 것은 <b>그릴 수 없는 것을 대표로 세우지 않기 위해서</b>다.
  */
 @Service
 @RequiredArgsConstructor
@@ -42,8 +43,7 @@ public class RepresentativeAchievementCommandService {
         }
 
         Achievement achievement = memberAchievement.getAchievement();
-        if (achievement.getCategory() == AchievementCategory.EGG
-                || achievement.getBadgeImageKey() == null) {
+        if (!achievement.isBadgeYn() || achievement.getBadgeImageKey() == null) {
             throw new AchievementException(AchievementErrorCode.BADGE_IMAGE_NOT_AVAILABLE);
         }
 

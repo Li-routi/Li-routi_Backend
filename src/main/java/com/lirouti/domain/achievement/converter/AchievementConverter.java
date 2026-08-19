@@ -21,6 +21,11 @@ public final class AchievementConverter {
      * 전체 업적 정의와 회원 진행도, 업적별 이미지 URL을 회원용 응답으로 조합한다.
      * 회원이 아직 진행 중이지 않은 업적도 목록에 포함하며, 이미지 key가 없는 업적은
      * URL map에 포함하지 않아 응답에서 {@code null}로 유지한다.
+     *
+     * <p><b>아직 달성하지 않은 히든 업적은 목록에서 뺀다.</b> 이름을 "숨겨진 업적"으로 가려
+     * 자리만 남기지 않는다 — 자리가 보이면 몇 개가 숨어 있는지, 어느 카테고리에 있는지가
+     * 드러나고, 그만큼 숨긴 뜻이 사라진다. 달성한 뒤에는 보통 업적처럼 나온다(그래야 받을 수
+     * 있다).
      */
     public static AchievementResDTO.Achievements toAchievements(
             List<Achievement> allAchievements,
@@ -28,15 +33,33 @@ public final class AchievementConverter {
             Map<Long, List<MemberAchievementCondition>> conditionProgressByMemberAchievementId,
             Map<Long, String> badgeImageUrlByAchievementId
     ) {
+        List<Achievement> visibleAchievements = allAchievements.stream()
+                .filter(a -> !isUndiscoveredHidden(a, memberAchievementByAchievementId.get(a.getId())))
+                .toList();
+
+        // 항목을 한 번만 만들어 평평한 목록과 카테고리 묶음이 같은 객체를 나눠 쓰게 한다.
+        // 삽입 순서를 지키는 map 이라 값의 순서가 곧 조회 순서(카테고리·정렬순서)다.
+        Map<Long, AchievementResDTO.AchievementItem> itemByAchievementId = new LinkedHashMap<>();
+        for (Achievement achievement : visibleAchievements) {
+            itemByAchievementId.put(achievement.getId(), toItem(
+                    achievement,
+                    memberAchievementByAchievementId.get(achievement.getId()),
+                    conditionProgressByMemberAchievementId,
+                    badgeImageUrlByAchievementId));
+        }
+
+        // 전체·진행중 탭이 쓰는 목록. 카테고리를 가로질러 한 줄로 세운다 — 묶음 안에서만 세우면
+        // 앱이 묶음을 이어 붙이는 순간 순서가 흩어진다(EGG 의 받기 가능이 EPIC 전부보다 앞선다).
+        List<AchievementResDTO.AchievementItem> achievements =
+                byRemainingWork(List.copyOf(itemByAchievementId.values()));
+
         Map<com.lirouti.domain.achievement.enums.AchievementCategory, List<AchievementResDTO.AchievementItem>> grouped =
-                allAchievements.stream()
+                visibleAchievements.stream()
                         .collect(Collectors.groupingBy(
                                 Achievement::getCategory,
                                 LinkedHashMap::new,
                                 Collectors.mapping(
-                                        a -> toItem(a, memberAchievementByAchievementId.get(a.getId()),
-                                                conditionProgressByMemberAchievementId,
-                                                badgeImageUrlByAchievementId),
+                                        a -> itemByAchievementId.get(a.getId()),
                                         Collectors.toList()
                                 )
                         ));
@@ -44,17 +67,65 @@ public final class AchievementConverter {
         List<AchievementResDTO.CategoryGroup> categories = grouped.entrySet().stream()
                 .map(e -> AchievementResDTO.CategoryGroup.builder()
                         .category(e.getKey())
-                        .achievements(e.getValue())
+                        .achievements(byRemainingWork(e.getValue()))
                         .build())
                 .toList();
 
+        // 요약도 보이는 것만 센다. 뺀 업적을 분모에 남기면 "8/36" 인데 목록에는 33개만 있어,
+        // 사용자가 찾을 수 없는 셋을 찾게 된다.
         AchievementResDTO.Summary summary =
-                toSummary(allAchievements, memberAchievementByAchievementId);
+                toSummary(visibleAchievements, memberAchievementByAchievementId);
 
         return AchievementResDTO.Achievements.builder()
                 .summary(summary)
+                .achievements(achievements)
                 .categories(categories)
                 .build();
+    }
+
+    /**
+     * <b>할 일이 남은 순서로 세운다.</b>
+     *
+     * <pre>
+     * ACHIEVED     받기 가능   → 맨 위    지금 누르면 보상이 들어온다
+     * IN_PROGRESS  진행 중     → 가운데   앞으로 할 것
+     * CLAIMED      받기 완료   → 맨 아래  더 할 일이 없다
+     * </pre>
+     *
+     * <p>받기 버튼이 아래에 묻히면 사용자가 지금 할 수 있는 일을 못 찾고, 다 끝난 업적이 위에
+     * 쌓이면 목록을 스크롤할수록 할 일에서 멀어진다.
+     *
+     * <p>정렬은 <b>안정 정렬</b>이라 같은 칸 안에서는 원래 순서(sort_order)를 그대로 지킨다 —
+     * 여기서 다시 흔들면 목록이 조회할 때마다 달라 보인다.
+     *
+     * <p>평평한 목록({@code achievements})과 카테고리 묶음 양쪽에 같은 기준으로 적용한다.
+     * 묶음 안에서만 세우면 앱이 묶음을 이어 붙이는 순간 순서가 흩어진다.
+     */
+    private static List<AchievementResDTO.AchievementItem> byRemainingWork(
+            List<AchievementResDTO.AchievementItem> items
+    ) {
+        return items.stream()
+                .sorted(Comparator.comparingInt(
+                        (AchievementResDTO.AchievementItem item) -> switch (item.status()) {
+                            case ACHIEVED -> 0;
+                            case IN_PROGRESS -> 1;
+                            case CLAIMED -> 2;
+                        }))
+                .toList();
+    }
+
+    /**
+     * 히든 업적인데 아직 달성 전인가. 그렇다면 그 회원에게는 <b>존재하지 않는 것으로 다룬다</b>.
+     *
+     * <p>달성 판정 자체는 그대로 돈다 — 목록에 없다고 진행도가 안 쌓이면 영영 달성할 수 없다.
+     * 여기서 정하는 것은 "보여 주는가" 하나뿐이다.
+     */
+    private static boolean isUndiscoveredHidden(Achievement achievement, MemberAchievement memberAchievement) {
+        if (!achievement.isHiddenYn()) {
+            return false;
+        }
+        return memberAchievement == null
+                || memberAchievement.getStatus() == MemberAchievementStatus.IN_PROGRESS;
     }
 
     /**
@@ -114,44 +185,40 @@ public final class AchievementConverter {
                 ? memberAchievement.getStatus()
                 : MemberAchievementStatus.IN_PROGRESS;
 
-        // 히든 업적인데 아직 달성 전이면 이름·조건·진행도·배지 이미지를 가린다.
-        boolean isMaskedHidden = achievement.isHiddenYn()
-                && status == MemberAchievementStatus.IN_PROGRESS;
-
+        // 히든 가리기(이름을 "숨겨진 업적" 으로 바꾸고 진행도를 지우던 처리)는 없앴다.
+        // 아직 달성 전인 히든은 toAchievements 가 목록에서 통째로 빼므로 여기 도달하지 않는다.
         AchievementResDTO.Progress progress = null;
         List<AchievementResDTO.ConditionProgress> conditionProgresses = List.of();
 
-        if (!isMaskedHidden) {
-            if (achievement.getProgressType() == AchievementProgressType.COMPOSITE) {
-                List<MemberAchievementCondition> progresses = memberAchievement != null
-                        ? conditionProgressByMemberAchievementId.getOrDefault(memberAchievement.getId(), List.of())
-                        : List.of();
-                Map<String, Integer> currentByKey = progresses.stream()
-                        .collect(Collectors.toMap(MemberAchievementCondition::getConditionKey,
-                                MemberAchievementCondition::getCurrentValue));
+        if (achievement.getProgressType() == AchievementProgressType.COMPOSITE) {
+            List<MemberAchievementCondition> progresses = memberAchievement != null
+                    ? conditionProgressByMemberAchievementId.getOrDefault(memberAchievement.getId(), List.of())
+                    : List.of();
+            Map<String, Integer> currentByKey = progresses.stream()
+                    .collect(Collectors.toMap(MemberAchievementCondition::getConditionKey,
+                            MemberAchievementCondition::getCurrentValue));
 
-                conditionProgresses = achievement.getConditions().stream()
-                        .sorted(Comparator.comparingInt(AchievementCondition::getSortOrder))
-                        .map(c -> AchievementResDTO.ConditionProgress.builder()
-                                .conditionKey(c.getConditionKey())
-                                .current(currentByKey.getOrDefault(c.getConditionKey(), 0))
-                                .target(c.getTargetCount())
-                                .build())
-                        .toList();
-            } else if (achievement.getProgressType() != AchievementProgressType.NONE) {
-                int current = memberAchievement != null ? memberAchievement.getCurrentProgress() : 0;
-                progress = AchievementResDTO.Progress.builder()
-                        .current(current)
-                        .target(achievement.getTargetCount())
-                        .build();
-            }
+            conditionProgresses = achievement.getConditions().stream()
+                    .sorted(Comparator.comparingInt(AchievementCondition::getSortOrder))
+                    .map(c -> AchievementResDTO.ConditionProgress.builder()
+                            .conditionKey(c.getConditionKey())
+                            .current(currentByKey.getOrDefault(c.getConditionKey(), 0))
+                            .target(c.getTargetCount())
+                            .build())
+                    .toList();
+        } else if (achievement.getProgressType() != AchievementProgressType.NONE) {
+            int current = memberAchievement != null ? memberAchievement.getCurrentProgress() : 0;
+            progress = AchievementResDTO.Progress.builder()
+                    .current(current)
+                    .target(achievement.getTargetCount())
+                    .build();
         }
 
         return AchievementResDTO.AchievementItem.builder()
                 .achievementId(achievement.getId())
                 .code(achievement.getCode())
-                .name(isMaskedHidden ? "숨겨진 업적" : achievement.getName())
-                .conditionDesc(isMaskedHidden ? null : achievement.getConditionDesc())
+                .name(achievement.getName())
+                .conditionDesc(achievement.getConditionDesc())
                 .status(status)
                 .progress(progress)
                 .conditionProgresses(conditionProgresses)
@@ -159,7 +226,7 @@ public final class AchievementConverter {
                 .badgeYn(achievement.isBadgeYn())
                 .limitedOutfitYn(achievement.isLimitedOutfitYn())
                 .hiddenYn(achievement.isHiddenYn())
-                .badgeImageUrl(isMaskedHidden ? null : badgeImageUrlByAchievementId.get(achievement.getId()))
+                .badgeImageUrl(badgeImageUrlByAchievementId.get(achievement.getId()))
                 .achievedAt(memberAchievement != null ? memberAchievement.getAchievedAt() : null)
                 .claimedAt(memberAchievement != null ? memberAchievement.getClaimedAt() : null)
                 .build();
