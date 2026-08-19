@@ -1,5 +1,6 @@
 package com.lirouti.domain.charge.service.command;
 
+import com.lirouti.domain.achievement.event.AchievementProgressEvent;
 import com.lirouti.domain.charge.client.PortOneClient;
 import com.lirouti.domain.charge.converter.ChargeConverter;
 import com.lirouti.domain.charge.dto.response.ChargeResDTO;
@@ -16,6 +17,7 @@ import com.lirouti.domain.wallet.service.command.WalletCommandService.WalletComm
 import com.lirouti.global.util.TimeUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,9 +37,17 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class ChargeSettlementCommandService {
 
+    /**
+     * ACH-SP-005(특별 후원자) conditionKey. progress_type=NONE이라 이 이벤트가 한 번만
+     * 발행돼도 achieveImmediately()로 즉시 달성 처리된다("금액과 관계없이 처음 한 번 결제").
+     */
+    private static final String CONDITION_KEY_PAID_PURCHASE_COUNT = "PAID_PURCHASE_COUNT";
+    private static final String SOURCE_TYPE_CHARGE_PAYMENT = "CHARGE_PAYMENT";
+
     private final ChargePaymentRepository chargePaymentRepository;
     private final WalletService walletService;
     private final MemberWalletRepository memberWalletRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * <b>내 결제가 맞는지</b>만 본다. 포트원을 부르기 전에 걸러 남의 결제로 조회를 만들지 않는다.
@@ -109,37 +119,30 @@ public class ChargeSettlementCommandService {
     public ChargeResDTO.Settled apply(String paymentId, PortOneClient.PortOnePayment actual) {
         ChargePayment payment = chargePaymentRepository.findByPaymentIdForUpdate(paymentId)
                 .orElseThrow(() -> new ChargeException(ChargeErrorCode.PAYMENT_NOT_FOUND));
-
         if (payment.isPaid()) {
             return toSettled(payment);
         }
-        // 우리가 물어본 결제가 맞는지 확인한다. 조회에 우리 식별자를 넘기므로 어긋날 일이
-        // 거의 없지만, 어긋났다면 그 답으로 지급해서는 안 된다.
         if (!paymentId.equals(actual.id())) {
             throw new ChargeException(ChargeErrorCode.PAYMENT_NOT_FOUND);
         }
         if (actual.totalAmount() != payment.getExpectedAmount()) {
-            // 여기서 기록하지 않는다. 이 예외가 트랜잭션을 되돌리므로 기록이 함께 사라진다 —
-            // 실측으로 확인했다. 실패 확정은 호출부가 별도 트랜잭션으로 남긴다.
             log.error("결제 금액이 다릅니다. paymentId={}, 기대={}, 실제={}",
                     paymentId, payment.getExpectedAmount(), actual.totalAmount());
             throw new ChargeException(ChargeErrorCode.AMOUNT_MISMATCH);
         }
-
         if (!payment.markPaid(actual.transactionId(), actual.totalAmount(),
                 LocalDateTime.now(TimeUtil.KST))) {
-            // 잠금을 기다리는 사이 남이 처리했다.
             return toSettled(payment);
         }
 
-        // 지급은 결제 시작 때 굳힌 값으로 한다. 상품을 다시 읽으면 그 사이 바뀐 값이 나온다.
         WalletResult granted = walletService.grant(new WalletCommand(
                         payment.getMember().getId(), payment.getRewardCurrency(),
                         WalletTransactionType.TOPUP,
                         "charge:" + payment.getId(), "CHARGE_PAYMENT", payment.getId()),
                 payment.getRewardAmount(), payment.getBonusAmount());
 
-        // 지급 결과에 잔액이 실려 온다. 지갑을 다시 읽지 않는다.
+        publishAchievementProgressIfNeeded(payment);
+
         return ChargeConverter.toSettled(
                 payment, granted.paidBalance(), granted.freeBalance());
     }
@@ -154,5 +157,27 @@ public class ChargeSettlementCommandService {
     public void markFailed(String paymentId, String reason) {
         chargePaymentRepository.findByPaymentIdForUpdate(paymentId)
                 .ifPresent(p -> p.markFailed(reason, LocalDateTime.now(TimeUtil.KST)));
+    }
+
+    /**
+     * 실제로 결제 지급이 방금 확정된 이 트랜잭션 안에서만 발행한다 - 이미 PAID였던 결제를
+     * 재조회하는 경로(위쪽 isPaid() 분기)에서는 호출되지 않으므로, 웹훅과 완료 요청이
+     * 둘 다 들어와도 실제 지급은 한 번뿐이라 이벤트도 정확히 한 번만 나간다.
+     *
+     * <p>sourceId로 payment.getId()를 쓴다 - 결제 한 건당 유일한 값이라
+     * achievement_progress_event_log의 유니크 제약이 이 결제에 대해 이벤트가 두 번
+     * 반영되는 걸 막아준다(트랜잭션 커밋 후 리스너가 도는 구조라 추가 보호막).
+     */
+    private void publishAchievementProgressIfNeeded(ChargePayment payment) {
+        if (eventPublisher == null) {
+            return;
+        }
+        eventPublisher.publishEvent(new AchievementProgressEvent(
+                payment.getMember().getId(),
+                CONDITION_KEY_PAID_PURCHASE_COUNT,
+                1,
+                SOURCE_TYPE_CHARGE_PAYMENT,
+                payment.getId()
+        ));
     }
 }
