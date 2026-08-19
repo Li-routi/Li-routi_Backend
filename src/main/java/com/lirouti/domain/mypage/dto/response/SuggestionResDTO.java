@@ -36,6 +36,7 @@ public final class SuggestionResDTO {
                     보낼 때 고른 분류. **내려간 분류여도 그대로 나간다** — 분류가 내려갔다고
                     이미 보낸 건의의 분류명이 사라지면 안 된다.""")
             Category category,
+            @Schema(description = "제목") String title,
             @Schema(description = "본문") String content,
             @Schema(description = """
                     처리 상태. **지금은 전부 `RECEIVED` 다** — 상태를 바꾸는 관리자 화면이
@@ -55,7 +56,7 @@ public final class SuggestionResDTO {
     @Schema(name = "SuggestionListing", description = "내 건의 목록")
     @Builder
     public record Listing(
-            @Schema(description = "최신순") List<Suggestion> suggestions,
+            @Schema(description = "최신순. 검색어를 보냈다면 제목이 걸린 것만") List<Suggestion> suggestions,
             @Schema(description = "다음 요청에 넘길 커서. 없으면 마지막 쪽이다") Long nextCursor,
             @Schema(description = "다음 쪽이 있는가") boolean hasNext
     ) {

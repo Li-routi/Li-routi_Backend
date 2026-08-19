@@ -55,7 +55,7 @@ public class SuggestionController implements SuggestionControllerDocs {
             @AuthenticationPrincipal CustomUserDetails userDetails
     ) {
         SuggestionResDTO.Suggestion result = suggestionCommandService.create(
-                userDetails.getMemberId(), request.categoryId(), request.content());
+                userDetails.getMemberId(), request.categoryId(), request.title(), request.content());
         return ApiResponse.onSuccess(SuggestionSuccessCode.SUGGESTION_CREATE_SUCCESS, result);
     }
 
@@ -64,11 +64,12 @@ public class SuggestionController implements SuggestionControllerDocs {
     public ApiResponse<SuggestionResDTO.Listing> getMySuggestions(
             @RequestParam(required = false) Long cursor,
             @RequestParam(required = false) Integer size,
+            @RequestParam(required = false) String keyword,
             @AuthenticationPrincipal CustomUserDetails userDetails
     ) {
         // 회원 식별자를 요청에서 받지 않는다. 인증 주체에서만 꺼낸다.
         SuggestionResDTO.Listing result = suggestionQueryService.getMySuggestions(
-                userDetails.getMemberId(), cursor, size == null ? DEFAULT_PAGE_SIZE : size);
+                userDetails.getMemberId(), cursor, size == null ? DEFAULT_PAGE_SIZE : size, keyword);
         return ApiResponse.onSuccess(SuggestionSuccessCode.SUGGESTION_LIST_FETCH_SUCCESS, result);
     }
 }

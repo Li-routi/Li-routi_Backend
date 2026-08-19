@@ -81,11 +81,12 @@ class SuggestionTest {
     @DisplayName("건의를 등록하면 접수 상태로 남는다")
     void create_StartsAsReceived() {
         SuggestionResDTO.Suggestion created =
-                suggestionCommandService.create(me.getId(), MAIN, "홈 화면 알림이 두 번 옵니다");
+                suggestionCommandService.create(me.getId(), MAIN, "제목", "홈 화면 알림이 두 번 옵니다");
 
         assertAll(
                 () -> assertThat(created.id()).isNotNull(),
                 () -> assertThat(created.category().code()).isEqualTo("MAIN"),
+                () -> assertThat(created.title()).isEqualTo("제목"),
                 () -> assertThat(created.content()).isEqualTo("홈 화면 알림이 두 번 옵니다"),
                 () -> assertThat(created.status())
                         .as("등록은 언제나 접수에서 시작한다")
@@ -95,7 +96,7 @@ class SuggestionTest {
     @Test
     @DisplayName("없는 분류로는 등록할 수 없다")
     void create_RejectsMissingCategory() {
-        assertThatThrownBy(() -> suggestionCommandService.create(me.getId(), 9_999L, "내용"))
+        assertThatThrownBy(() -> suggestionCommandService.create(me.getId(), 9_999L, "제목", "내용"))
                 .isInstanceOf(SuggestionException.class)
                 .satisfies(e -> assertThat(((SuggestionException) e).getCode())
                         .isEqualTo(SuggestionErrorCode.CATEGORY_NOT_FOUND));
@@ -107,7 +108,7 @@ class SuggestionTest {
     void create_RejectsInactiveCategory() {
         deactivate(ETC);
 
-        assertThatThrownBy(() -> suggestionCommandService.create(me.getId(), ETC, "내용"))
+        assertThatThrownBy(() -> suggestionCommandService.create(me.getId(), ETC, "제목", "내용"))
                 .isInstanceOf(SuggestionException.class)
                 .satisfies(e -> assertThat(((SuggestionException) e).getCode())
                         .isEqualTo(SuggestionErrorCode.CATEGORY_NOT_ACTIVE));
@@ -123,16 +124,111 @@ class SuggestionTest {
         String tooLong = "가".repeat(2001);
 
         assertAll(
-                () -> assertThatThrownBy(() -> suggestionCommandService.create(me.getId(), MAIN, "  "))
+                () -> assertThatThrownBy(() -> suggestionCommandService.create(me.getId(), MAIN, "제목", "  "))
                         .isInstanceOf(SuggestionException.class)
                         .satisfies(e -> assertThat(((SuggestionException) e).getCode())
                                 .isEqualTo(SuggestionErrorCode.INVALID_CONTENT)),
-                () -> assertThatThrownBy(() -> suggestionCommandService.create(me.getId(), MAIN, tooLong))
+                () -> assertThatThrownBy(() -> suggestionCommandService.create(me.getId(), MAIN, "제목", tooLong))
                         .isInstanceOf(SuggestionException.class)
                         .satisfies(e -> assertThat(((SuggestionException) e).getCode())
                                 .isEqualTo(SuggestionErrorCode.INVALID_CONTENT)),
-                () -> assertThatThrownBy(() -> suggestionCommandService.create(me.getId(), null, "내용"))
+                () -> assertThatThrownBy(() -> suggestionCommandService.create(me.getId(), null, "제목", "내용"))
                         .isInstanceOf(GeneralException.class));
+    }
+
+    @Test
+    @DisplayName("서비스를 직접 불러도 빈 제목과 상한 초과는 거절한다")
+    void create_ValidatesTitleAtServiceEntry() {
+        String tooLong = "가".repeat(101);
+
+        assertAll(
+                () -> assertThatThrownBy(() -> suggestionCommandService.create(me.getId(), MAIN, "   ", "내용"))
+                        .as("공백만 있는 제목은 빈 제목과 같다")
+                        .isInstanceOf(SuggestionException.class)
+                        .satisfies(e -> assertThat(((SuggestionException) e).getCode())
+                                .isEqualTo(SuggestionErrorCode.INVALID_TITLE)),
+                () -> assertThatThrownBy(() -> suggestionCommandService.create(me.getId(), MAIN, null, "내용"))
+                        .isInstanceOf(SuggestionException.class)
+                        .satisfies(e -> assertThat(((SuggestionException) e).getCode())
+                                .isEqualTo(SuggestionErrorCode.INVALID_TITLE)),
+                () -> assertThatThrownBy(() -> suggestionCommandService.create(me.getId(), MAIN, tooLong, "내용"))
+                        .isInstanceOf(SuggestionException.class)
+                        .satisfies(e -> assertThat(((SuggestionException) e).getCode())
+                                .isEqualTo(SuggestionErrorCode.INVALID_TITLE)));
+    }
+
+    /** 검색이 제목을 그대로 맞춰 보므로, 눈에 안 보이는 공백이 붙으면 화면대로 검색해도 안 걸린다. */
+    @Test
+    @DisplayName("제목의 앞뒤 공백은 떼고 저장한다")
+    void create_StripsTitle() {
+        SuggestionResDTO.Suggestion created =
+                suggestionCommandService.create(me.getId(), MAIN, "  알림 문제  ", "내용");
+
+        assertThat(created.title()).isEqualTo("알림 문제");
+    }
+
+    // ── 검색 ──
+
+    @Test
+    @DisplayName("제목으로 검색한다 — 본문은 걸리지 않는다")
+    void search_MatchesTitleOnly() {
+        suggestionCommandService.create(me.getId(), MAIN, "알림이 두 번 와요", "본문");
+        suggestionCommandService.create(me.getId(), MAIN, "다른 제목", "여기에도 알림 이라는 말이 있다");
+
+        SuggestionResDTO.Listing found =
+                suggestionQueryService.getMySuggestions(me.getId(), null, 20, "알림");
+
+        assertThat(found.suggestions())
+                .extracting(SuggestionResDTO.Suggestion::title)
+                .as("본문에만 있는 말은 걸리지 않는다")
+                .containsExactly("알림이 두 번 와요");
+    }
+
+    /**
+     * 검색어를 그대로 이어 붙이면 {@code %} 가 와일드카드로 동작해 전부 걸린다 — 그러면
+     * "찾은 것" 과 "안 거른 것" 을 구별할 수 없다.
+     */
+    @Test
+    @DisplayName("검색어의 % 와 _ 는 와일드카드가 아니라 글자다")
+    void search_EscapesLikeWildcards() {
+        suggestionCommandService.create(me.getId(), MAIN, "할인 50% 적용", "본문");
+        suggestionCommandService.create(me.getId(), MAIN, "상관없는 제목", "본문");
+
+        assertAll(
+                () -> assertThat(suggestionQueryService
+                        .getMySuggestions(me.getId(), null, 20, "%").suggestions())
+                        .as("% 는 전부를 뜻하지 않는다")
+                        .extracting(SuggestionResDTO.Suggestion::title)
+                        .containsExactly("할인 50% 적용"),
+                () -> assertThat(suggestionQueryService
+                        .getMySuggestions(me.getId(), null, 20, "_").suggestions())
+                        .as("_ 는 아무 글자 하나를 뜻하지 않는다")
+                        .isEmpty());
+    }
+
+    @Test
+    @DisplayName("검색어가 비거나 공백뿐이면 검색하지 않은 것과 같다")
+    void search_BlankKeywordReturnsAll() {
+        suggestionCommandService.create(me.getId(), MAIN, "첫째", "본문");
+        suggestionCommandService.create(me.getId(), MAIN, "둘째", "본문");
+
+        assertAll(
+                () -> assertThat(suggestionQueryService
+                        .getMySuggestions(me.getId(), null, 20, "   ").suggestions()).hasSize(2),
+                () -> assertThat(suggestionQueryService
+                        .getMySuggestions(me.getId(), null, 20, null).suggestions()).hasSize(2));
+    }
+
+    /** 검색해도 남의 것이 섞이면 안 된다 — 조건이 하나 늘 때 격리가 풀리는 자리다. */
+    @Test
+    @DisplayName("검색해도 남의 건의는 걸리지 않는다")
+    void search_KeepsMemberIsolation() {
+        suggestionCommandService.create(other.getId(), MAIN, "알림 문제", "본문");
+
+        SuggestionResDTO.Listing found =
+                suggestionQueryService.getMySuggestions(me.getId(), null, 20, "알림");
+
+        assertThat(found.suggestions()).isEmpty();
     }
 
     // ── 목록 ──
@@ -144,13 +240,13 @@ class SuggestionTest {
     @Test
     @DisplayName("남이 보낸 건의는 내 목록에 섞이지 않는다")
     void list_IsIsolatedPerMember() {
-        suggestionCommandService.create(me.getId(), MAIN, "내 건의");
-        suggestionCommandService.create(other.getId(), MAIN, "남의 건의");
+        suggestionCommandService.create(me.getId(), MAIN, "제목", "내 건의");
+        suggestionCommandService.create(other.getId(), MAIN, "제목", "남의 건의");
         em.flush();
         em.clear();
 
         SuggestionResDTO.Listing mine =
-                suggestionQueryService.getMySuggestions(me.getId(), null, 20);
+                suggestionQueryService.getMySuggestions(me.getId(), null, 20, null);
 
         assertThat(mine.suggestions()).extracting(SuggestionResDTO.Suggestion::content)
                 .containsExactly("내 건의");
@@ -160,15 +256,15 @@ class SuggestionTest {
     @DisplayName("최신순으로 나가고 커서로 이어 받는다")
     void list_IsNewestFirstAndPaged() {
         for (int i = 1; i <= 5; i++) {
-            suggestionCommandService.create(me.getId(), MAIN, "건의 " + i);
+            suggestionCommandService.create(me.getId(), MAIN, "제목", "건의 " + i);
         }
         em.flush();
         em.clear();
 
         SuggestionResDTO.Listing first =
-                suggestionQueryService.getMySuggestions(me.getId(), null, 2);
+                suggestionQueryService.getMySuggestions(me.getId(), null, 2, null);
         SuggestionResDTO.Listing second =
-                suggestionQueryService.getMySuggestions(me.getId(), first.nextCursor(), 2);
+                suggestionQueryService.getMySuggestions(me.getId(), first.nextCursor(), 2, null);
 
         assertAll(
                 () -> assertThat(first.suggestions())
@@ -187,7 +283,7 @@ class SuggestionTest {
     @Test
     @DisplayName("memberId 없이 부르면 빈 목록이 아니라 거절이다")
     void list_RejectsMissingMember() {
-        assertThatThrownBy(() -> suggestionQueryService.getMySuggestions(null, null, 20))
+        assertThatThrownBy(() -> suggestionQueryService.getMySuggestions(null, null, 20, null))
                 .isInstanceOf(GeneralException.class);
     }
 
@@ -196,22 +292,22 @@ class SuggestionTest {
     void list_RejectsOutOfRangeSize() {
         assertAll(
                 () -> assertThatThrownBy(
-                        () -> suggestionQueryService.getMySuggestions(me.getId(), null, 0))
+                        () -> suggestionQueryService.getMySuggestions(me.getId(), null, 0, null))
                         .isInstanceOf(SuggestionException.class),
                 () -> assertThatThrownBy(
-                        () -> suggestionQueryService.getMySuggestions(me.getId(), null, 51))
+                        () -> suggestionQueryService.getMySuggestions(me.getId(), null, 51, null))
                         .isInstanceOf(SuggestionException.class));
     }
 
     @Test
     @DisplayName("마지막 쪽에서는 커서가 비고 다음이 없다고 알린다")
     void list_LastPageHasNoCursor() {
-        suggestionCommandService.create(me.getId(), MAIN, "하나뿐");
+        suggestionCommandService.create(me.getId(), MAIN, "제목", "하나뿐");
         em.flush();
         em.clear();
 
         SuggestionResDTO.Listing listing =
-                suggestionQueryService.getMySuggestions(me.getId(), null, 20);
+                suggestionQueryService.getMySuggestions(me.getId(), null, 20, null);
 
         assertAll(
                 () -> assertThat(listing.hasNext()).isFalse(),
@@ -222,13 +318,13 @@ class SuggestionTest {
     @Test
     @DisplayName("분류가 내려가도 그 분류로 보낸 건의는 계속 보인다")
     void list_KeepsSuggestionsOfInactiveCategory() {
-        suggestionCommandService.create(me.getId(), ETC, "기타 건의");
+        suggestionCommandService.create(me.getId(), ETC, "제목", "기타 건의");
         em.flush();
         deactivate(ETC);
         em.clear();
 
         SuggestionResDTO.Listing listing =
-                suggestionQueryService.getMySuggestions(me.getId(), null, 20);
+                suggestionQueryService.getMySuggestions(me.getId(), null, 20, null);
 
         assertAll(
                 () -> assertThat(listing.suggestions()).hasSize(1),

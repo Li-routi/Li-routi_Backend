@@ -27,13 +27,16 @@ public interface SuggestionControllerDocs {
     @Operation(
             summary = "건의 등록",
             description = """
-                    분류와 본문을 보낸다. **제목은 받지 않는다** — 분류가 그 자리를 대신한다.
+                    분류와 제목, 본문을 보낸다. 제목은 **100자**, 본문은 **2000자**까지다.
 
-                    본문은 2000자까지다.
+                    제목은 앞뒤 공백을 떼고 저장된다. 공백만 보내면 빈 제목으로 보고 거절한다 —
+                    목록에 빈 줄이 뜨는 것을 막는다.
 
                     등록된 건의는 **수정·삭제할 수 없다.** 운영이 읽은 뒤에 내용이 바뀌면 무엇을
                     보고 처리했는지 알 수 없기 때문이다.
 
+                    - `SUGGESTION400_2` 본문이 비었거나 2000자 초과
+                    - `SUGGESTION400_3` 제목이 비었거나 100자 초과
                     - `SUGGESTION404_1` 없는 분류
                     - `SUGGESTION409_1` 내려간 분류 → 목록을 다시 받아 고른다
                     """
@@ -57,10 +60,25 @@ public interface SuggestionControllerDocs {
                     감추는 것은 다르다.
 
                     상태는 지금 **전부 `RECEIVED`** 다. 바꾸는 관리자 화면이 아직 없다.
+
+                    ### 검색
+
+                    `keyword` 를 주면 **제목**으로 거른다. 부분 일치이고 대소문자를 구별하지 않는다.
+                    본문은 검색하지 않는다 — 긴 글 안의 아무 단어나 걸리면 목록이 뭉개진다.
+
+                    `%` 나 `_` 를 넣어도 와일드카드로 동작하지 않는다. 제목에 그 글자가 들어간
+                    건의를 찾는다.
+
+                    비우거나 공백만 보내면 **검색하지 않은 것과 같다** — 전체가 나온다.
+
+                    검색해도 커서 방식은 그대로다. **같은 `keyword` 를 유지한 채** `nextCursor` 를
+                    넘겨야 다음 쪽이 이어진다. 검색어를 바꾸면 커서를 버리고 처음부터 받는다.
                     """
     )
     ApiResponse<SuggestionResDTO.Listing> getMySuggestions(
             @Parameter(description = "이전 응답의 nextCursor. 첫 요청이면 비운다") Long cursor,
             @Parameter(description = "한 번에 받을 개수. 기본 20, 1~50") Integer size,
+            @Parameter(description = "제목 검색어. 부분 일치. 비우면 전체")
+            String keyword,
             CustomUserDetails userDetails);
 }
