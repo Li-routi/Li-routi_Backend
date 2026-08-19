@@ -53,7 +53,7 @@ public final class AchievementConverter {
         List<AchievementResDTO.CategoryGroup> categories = grouped.entrySet().stream()
                 .map(e -> AchievementResDTO.CategoryGroup.builder()
                         .category(e.getKey())
-                        .achievements(claimableFirst(e.getValue()))
+                        .achievements(byRemainingWork(e.getValue()))
                         .build())
                 .toList();
 
@@ -69,22 +69,33 @@ public final class AchievementConverter {
     }
 
     /**
-     * <b>받기 가능한 업적을 맨 위로 올린다.</b> 조건을 채웠는데 아직 안 받은 것
-     * ({@code ACHIEVED}) 이 여기 해당한다 — 사용자가 지금 할 수 있는 일이라 목록 아래에 묻히면
-     * 안 된다.
+     * <b>할 일이 남은 순서로 세운다.</b>
      *
-     * <p>정렬은 <b>안정 정렬</b>이라 나머지는 원래 순서(sort_order)를 그대로 지킨다. 받기 가능한
-     * 것끼리도 마찬가지다 — 여기서 다시 흔들면 목록이 조회할 때마다 달라 보인다.
+     * <pre>
+     * ACHIEVED     받기 가능   → 맨 위    지금 누르면 보상이 들어온다
+     * IN_PROGRESS  진행 중     → 가운데   앞으로 할 것
+     * CLAIMED      받기 완료   → 맨 아래  더 할 일이 없다
+     * </pre>
      *
-     * <p>카테고리 <b>안에서만</b> 올린다. 응답이 카테고리별로 묶여 나가는 구조라 전체 목록의
-     * 맨 위라는 자리가 없다. 앱이 카테고리를 합쳐 그린다면 그쪽에서 한 번 더 올려야 한다.
+     * <p>받기 버튼이 아래에 묻히면 사용자가 지금 할 수 있는 일을 못 찾고, 다 끝난 업적이 위에
+     * 쌓이면 목록을 스크롤할수록 할 일에서 멀어진다.
+     *
+     * <p>정렬은 <b>안정 정렬</b>이라 같은 칸 안에서는 원래 순서(sort_order)를 그대로 지킨다 —
+     * 여기서 다시 흔들면 목록이 조회할 때마다 달라 보인다.
+     *
+     * <p>카테고리 <b>안에서만</b> 세운다. 응답이 카테고리별로 묶여 나가는 구조라 전체 목록의
+     * 맨 위·맨 아래라는 자리가 없다. 앱이 카테고리를 합쳐 그린다면 그쪽에서 한 번 더 세워야 한다.
      */
-    private static List<AchievementResDTO.AchievementItem> claimableFirst(
+    private static List<AchievementResDTO.AchievementItem> byRemainingWork(
             List<AchievementResDTO.AchievementItem> items
     ) {
         return items.stream()
-                .sorted(Comparator.comparingInt((AchievementResDTO.AchievementItem item) ->
-                        item.status() == MemberAchievementStatus.ACHIEVED ? 0 : 1))
+                .sorted(Comparator.comparingInt(
+                        (AchievementResDTO.AchievementItem item) -> switch (item.status()) {
+                            case ACHIEVED -> 0;
+                            case IN_PROGRESS -> 1;
+                            case CLAIMED -> 2;
+                        }))
                 .toList();
     }
 

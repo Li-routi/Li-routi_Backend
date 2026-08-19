@@ -102,25 +102,31 @@ class AchievementQueryServiceTest {
                 .isEqualTo(1);
     }
 
-    /** 받기 버튼이 목록 아래에 묻히면 사용자가 지금 할 수 있는 일을 못 찾는다. */
+    /**
+     * 받기 버튼이 아래에 묻히면 지금 할 수 있는 일을 못 찾고, 다 끝난 업적이 위에 쌓이면
+     * 스크롤할수록 할 일에서 멀어진다.
+     */
     @Test
-    @DisplayName("받기 가능한 업적이 맨 위로 올라가고 나머지 순서는 그대로다")
-    void getMyAchievements_PutsClaimableFirst() {
-        Achievement first = achievement(21L, "ACH-001", null, true);
-        Achievement second = achievement(22L, "ACH-002", null, true);
-        Achievement third = achievement(23L, "ACH-003", null, true);
+    @DisplayName("받기 가능 → 진행 중 → 받기 완료 순으로 세우고 같은 칸 안에서는 원래 순서다")
+    void getMyAchievements_OrdersByRemainingWork() {
+        Achievement claimed = achievement(21L, "ACH-001", null, true);
+        Achievement inProgressFirst = achievement(22L, "ACH-002", null, true);
+        Achievement claimable = achievement(23L, "ACH-003", null, true);
+        Achievement inProgressSecond = achievement(24L, "ACH-004", null, true);
+        Achievement anotherClaimed = achievement(25L, "ACH-005", null, true);
         when(achievementRepository.findAllByActiveTrueOrderByCategoryAscSortOrderAsc())
-                .thenReturn(List.of(first, second, third));
+                .thenReturn(List.of(claimed, inProgressFirst, claimable, inProgressSecond, anotherClaimed));
         when(memberAchievementRepository.findAllByMemberId(MEMBER_ID)).thenReturn(List.of(
-                memberAchievement(third, MemberAchievementStatus.ACHIEVED),
-                memberAchievement(first, MemberAchievementStatus.CLAIMED)));
+                memberAchievement(claimed, MemberAchievementStatus.CLAIMED),
+                memberAchievement(claimable, MemberAchievementStatus.ACHIEVED),
+                memberAchievement(anotherClaimed, MemberAchievementStatus.CLAIMED)));
 
         AchievementResDTO.Achievements result = achievementQueryService.getMyAchievements(MEMBER_ID);
 
         assertThat(result.categories().get(0).achievements())
                 .extracting(AchievementResDTO.AchievementItem::code)
-                .as("받기 가능한 ACH-003 이 먼저, 나머지는 원래 순서")
-                .containsExactly("ACH-003", "ACH-001", "ACH-002");
+                .as("받기 가능이 맨 위, 받기 완료가 맨 아래, 같은 칸끼리는 sort_order 유지")
+                .containsExactly("ACH-003", "ACH-002", "ACH-004", "ACH-001", "ACH-005");
     }
 
     /** id 를 채우는 것은 조회 서비스가 진행도를 id 로 묶기 때문이다 — 비면 거기서 NPE 가 난다. */
