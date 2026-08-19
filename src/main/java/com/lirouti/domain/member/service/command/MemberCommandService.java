@@ -1,6 +1,14 @@
 package com.lirouti.domain.member.service.command;
 
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.lirouti.domain.auth.service.TokenService;
+import com.lirouti.domain.character.service.command.CharacterUnlockCommandService;
 import com.lirouti.domain.media.enums.MediaPurpose;
 import com.lirouti.domain.media.service.MediaService;
 import com.lirouti.domain.member.converter.MemberConverter;
@@ -12,15 +20,9 @@ import com.lirouti.domain.member.event.MemberWithdrawnEvent;
 import com.lirouti.domain.member.exception.MemberException;
 import com.lirouti.domain.member.exception.code.error.MemberErrorCode;
 import com.lirouti.domain.member.repository.MemberRepository;
-import com.lirouti.domain.character.service.command.CharacterUnlockCommandService;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.time.LocalDateTime;
-import java.util.UUID;
 
 @Slf4j
 @Service
@@ -59,16 +61,7 @@ public class MemberCommandService {
         validateWithdrawalConfirmation(request);
         tokenService.validateAccessTokenOwner(accessToken, memberId);
 
-        Member member = memberRepository.findByIdForUpdate(memberId)
-                .orElseThrow(() -> {
-                    log.warn("존재하지 않는 회원의 탈퇴를 시도했습니다. memberId={}", memberId);
-                    return new MemberException(MemberErrorCode.MEMBER_NOT_FOUND);
-                });
-
-        if (!member.isActiveMember()) {
-            log.warn("이미 탈퇴하거나 비활성화된 회원의 탈퇴를 시도했습니다. memberId={}", memberId);
-            throw new MemberException(MemberErrorCode.WITHDRAWN_MEMBER);
-        }
+        Member member = findActiveMemberForUpdate(memberId);
 
         String tombstoneId = UUID.randomUUID().toString();
 
@@ -86,6 +79,40 @@ public class MemberCommandService {
     public void logout(String accessToken) {
         Long memberId = tokenService.logout(accessToken);
         log.info("회원 로그아웃 처리를 완료했습니다. memberId={}", memberId);
+    }
+
+    // 프로필 수정
+    @Transactional
+    public MemberResDTO.MemberInfo updateProfile(Long memberId, MemberReqDTO.UpdateProfile request) {
+        validateProfileUpdateRequest(request);
+        Member member = findActiveMemberForUpdate(memberId);
+
+        member.updateProfile(request.nickname(), request.profileImageKey());
+        Member savedMember = memberRepository.save(member);
+        log.info("회원 프로필 수정을 완료했습니다.");
+
+        String profileImageUrl = savedMember.getProfileImageKey() != null
+                ? mediaService.resolveViewUrl(savedMember.getProfileImageKey(), MediaPurpose.PROFILE)
+                : null;
+        return MemberConverter.toMemberInfo(savedMember, profileImageUrl);
+    }
+
+    // 프로필 이미지를 삭제하고 기본 이미지 상태로 되돌린다.
+    @Transactional
+    public MemberResDTO.MemberInfo deleteProfileImage(Long memberId) {
+        Member member = findActiveMemberForUpdate(memberId);
+
+        member.clearProfileImage();
+        Member savedMember = memberRepository.save(member);
+        log.info("회원 프로필 이미지 삭제를 완료했습니다.");
+        return MemberConverter.toMemberInfo(savedMember, null);
+    }
+
+    private void validateProfileUpdateRequest(MemberReqDTO.UpdateProfile request) {
+        if (request == null || request.nickname() == null || request.nickname().isBlank()) {
+            log.warn("유효하지 않은 프로필 수정 요청입니다.");
+            throw new MemberException(MemberErrorCode.INVALID_PROFILE_UPDATE_REQUEST);
+        }
     }
 
     private Member getActiveMember(Member member) {
@@ -116,8 +143,7 @@ public class MemberCommandService {
 
         // 기본 캐릭터를 여기서 준다. 조건 행이 하나도 없는 캐릭터가 곧 기본이라, 판정을 한 번
         // 돌리면 그 자리에서 들어온다 -- "가입 시 지급" 을 따로 구현하지 않아도 된다.
-        // 팝업은 띄우지 않는다: 가입하자마자 "새 친구가 왔어요" 가 뜨면 무엇을 해서 얻었는지
-        // 알 수 없다.
+        // 팝업은 띄우지 않는다: 가입하자마자 "새 친구가 왔어요" 가 뜨면 무엇을 해서 얻었는지 알 수 없다.
         characterUnlockCommandService.evaluateAndUnlock(savedMember.getId());
 
         log.info("신규 소셜 회원을 생성했습니다. memberId={}, provider={}",
@@ -148,26 +174,16 @@ public class MemberCommandService {
         return DEFAULT_NICKNAME_PREFIX + UUID.randomUUID().toString().substring(0, 8);
     }
 
-    // 프로필 수정
-    @Transactional
-    public MemberResDTO.MemberInfo updateProfile(Long memberId, MemberReqDTO.UpdateProfile request) {
+    private Member findActiveMemberForUpdate(Long memberId) {
         Member member = memberRepository.findByIdForUpdate(memberId)
                 .orElseThrow(() -> {
-                    log.warn("존재하지 않는 회원입니다.");
+                    log.warn("존재하지 않는 회원입니다. memberId={}", memberId);
                     return new MemberException(MemberErrorCode.MEMBER_NOT_FOUND);
                 });
         if (!member.isActiveMember()) {
-            log.warn("탈퇴하거나 비활성화된 회원입니다");
+            log.warn("탈퇴하거나 비활성화된 회원입니다. memberId={}", memberId);
             throw new MemberException(MemberErrorCode.WITHDRAWN_MEMBER);
         }
-
-        member.updateProfile(request.nickname(), request.profileImageKey());
-        Member savedMember = memberRepository.save(member);
-        log.info("회원 프로필 수정을 완료했습니다.");
-
-        String profileImageUrl = savedMember.getProfileImageKey() != null
-                ? mediaService.resolveViewUrl(savedMember.getProfileImageKey(), MediaPurpose.PROFILE)
-                : null;
-        return MemberConverter.toMemberInfo(savedMember, profileImageUrl);
+        return member;
     }
 }

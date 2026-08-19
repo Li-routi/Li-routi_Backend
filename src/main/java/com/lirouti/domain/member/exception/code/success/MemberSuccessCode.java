@@ -28,6 +28,11 @@ public enum MemberSuccessCode implements BaseSuccessCode {
         "로그아웃에 성공했습니다.",
         "MEMBER200_4"
     ),
+    MEMBER_PROFILE_IMAGE_DELETE_SUCCESS(
+        HttpStatus.OK,
+        "프로필 이미지 삭제에 성공했습니다.",
+        "MEMBER200_5"
+    ),
     ;
 
     private final HttpStatus httpStatus;

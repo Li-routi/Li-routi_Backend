@@ -4,7 +4,7 @@ import com.lirouti.domain.notification.enums.NotificationCategory;
 import com.lirouti.domain.notification.enums.NotificationType;
 import io.swagger.v3.oas.annotations.media.Schema;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.List;
 
 /** Android 알림센터와 토큰 등록 API 응답 DTO 모음이다. */
@@ -59,8 +59,9 @@ public final class NotificationResDTO {
             String referenceType,
             @Schema(description = "읽음 여부", example = "false")
             boolean read,
-            @Schema(description = "알림 생성 시각")
-            LocalDateTime createdAt
+            @Schema(description = "한국 시간대 오프셋(+09:00)을 포함한 알림 생성 시각",
+                    example = "2026-08-19T08:43:00+09:00")
+            OffsetDateTime createdAt
     ) {}
 
     /** 무한 스크롤 한 페이지다. nextCursor가 null이면 마지막 페이지다. */

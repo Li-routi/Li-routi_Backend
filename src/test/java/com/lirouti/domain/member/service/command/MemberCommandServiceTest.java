@@ -3,8 +3,12 @@ package com.lirouti.domain.member.service.command;
 import com.lirouti.domain.auth.exception.AuthException;
 import com.lirouti.domain.auth.exception.code.error.AuthErrorCode;
 import com.lirouti.domain.auth.service.TokenService;
+import com.lirouti.domain.media.enums.MediaPurpose;
+import com.lirouti.domain.media.service.MediaService;
 import com.lirouti.domain.member.dto.request.MemberReqDTO;
+import com.lirouti.domain.member.dto.response.MemberResDTO;
 import com.lirouti.domain.member.entity.Member;
+import com.lirouti.domain.member.enums.Role;
 import com.lirouti.domain.member.enums.SocialProvider;
 import com.lirouti.domain.member.event.MemberWithdrawnEvent;
 import com.lirouti.domain.member.exception.MemberException;
@@ -35,6 +39,8 @@ class MemberCommandServiceTest {
     private static final String SOCIAL_ID = "google-subject";
     private static final String EMAIL = "member@example.com";
     private static final String NICKNAME = "member";
+    private static final String PROFILE_IMAGE_KEY = "profiles/2026/08/18/profile.png";
+    private static final String PROFILE_IMAGE_URL = "https://example.com/profile.png";
 
     @Mock
     private MemberRepository memberRepository;
@@ -44,6 +50,9 @@ class MemberCommandServiceTest {
 
     @Mock
     private ApplicationEventPublisher eventPublisher;
+
+    @Mock
+    private MediaService mediaService;
 
     // 가입 직후 기본 캐릭터를 주는 판정이 붙었다. 이 단위 테스트의 관심사가 아니라 목으로 둔다.
     @Mock
@@ -146,6 +155,98 @@ class MemberCommandServiceTest {
     }
 
     @Test
+    @DisplayName("프로필 수정 시 이미지 key가 null이면 기존 이미지를 유지한다")
+    void updateProfile_NullProfileImageKey_PreservesExistingImage() {
+        // given
+        Member member = Member.builder()
+                .email(EMAIL)
+                .nickname("기존 닉네임")
+                .socialProvider(PROVIDER)
+                .socialId(SOCIAL_ID)
+                .role(Role.ROLE_USER)
+                .build();
+        member.updateProfile("기존 닉네임", PROFILE_IMAGE_KEY);
+        when(memberRepository.findByIdForUpdate(MEMBER_ID)).thenReturn(Optional.of(member));
+        when(memberRepository.save(member)).thenReturn(member);
+        when(mediaService.resolveViewUrl(PROFILE_IMAGE_KEY, MediaPurpose.PROFILE))
+                .thenReturn(PROFILE_IMAGE_URL);
+
+        // when
+        MemberReqDTO.UpdateProfile request = new MemberReqDTO.UpdateProfile("새 닉네임", null);
+        var result = memberCommandService.updateProfile(MEMBER_ID, request);
+
+        // then
+        assertThat(member.getNickname()).isEqualTo("새 닉네임");
+        assertThat(member.getProfileImageKey()).isEqualTo(PROFILE_IMAGE_KEY);
+        assertThat(result.profileImageUrl()).isEqualTo(PROFILE_IMAGE_URL);
+        verify(memberRepository).save(member);
+    }
+
+    @Test
+    @DisplayName("프로필 이미지 삭제 시 기존 이미지 key를 제거한다")
+    void deleteProfileImage_ExistingImage_ClearsImage() {
+        // given
+        Member member = memberWithProfileImage(PROFILE_IMAGE_KEY);
+        when(memberRepository.findByIdForUpdate(MEMBER_ID)).thenReturn(Optional.of(member));
+        when(memberRepository.save(member)).thenReturn(member);
+
+        // when
+        MemberResDTO.MemberInfo result = memberCommandService.deleteProfileImage(MEMBER_ID);
+
+        // then
+        assertThat(member.getProfileImageKey()).isNull();
+        assertThat(result.profileImageUrl()).isNull();
+        verify(memberRepository).save(member);
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 회원의 프로필 이미지 삭제는 회원 없음 예외를 던진다")
+    void deleteProfileImage_MemberNotFound_ThrowsMemberNotFound() {
+        // given
+        when(memberRepository.findByIdForUpdate(MEMBER_ID)).thenReturn(Optional.empty());
+
+        // when & then
+        assertThatThrownBy(() -> memberCommandService.deleteProfileImage(MEMBER_ID))
+                .isInstanceOf(MemberException.class)
+                .extracting("code")
+                .isEqualTo(MemberErrorCode.MEMBER_NOT_FOUND);
+        verify(memberRepository, never()).save(any(Member.class));
+    }
+
+    @Test
+    @DisplayName("비활성 회원의 프로필 이미지 삭제는 탈퇴 회원 예외를 던진다")
+    void deleteProfileImage_InactiveMember_ThrowsWithdrawnMember() {
+        // given
+        Member member = mock(Member.class);
+        when(member.isActiveMember()).thenReturn(false);
+        when(memberRepository.findByIdForUpdate(MEMBER_ID)).thenReturn(Optional.of(member));
+
+        // when & then
+        assertThatThrownBy(() -> memberCommandService.deleteProfileImage(MEMBER_ID))
+                .isInstanceOf(MemberException.class)
+                .extracting("code")
+                .isEqualTo(MemberErrorCode.WITHDRAWN_MEMBER);
+        verify(memberRepository, never()).save(any(Member.class));
+    }
+
+    @Test
+    @DisplayName("프로필 이미지가 없어도 이미지 삭제를 다시 요청할 수 있다")
+    void deleteProfileImage_WithoutImage_IsIdempotent() {
+        // given
+        Member member = memberWithProfileImage(null);
+        when(memberRepository.findByIdForUpdate(MEMBER_ID)).thenReturn(Optional.of(member));
+        when(memberRepository.save(member)).thenReturn(member);
+
+        // when
+        MemberResDTO.MemberInfo result = memberCommandService.deleteProfileImage(MEMBER_ID);
+
+        // then
+        assertThat(member.getProfileImageKey()).isNull();
+        assertThat(result.profileImageUrl()).isNull();
+        verify(memberRepository).save(member);
+    }
+
+    @Test
     @DisplayName("정확한 탈퇴 확인 문구면 회원 탈퇴를 진행한다")
     void withdraw_ExactText_DoesNotThrow() {
         // given
@@ -233,5 +334,19 @@ class MemberCommandServiceTest {
         assertThat(((MemberException) thrown).getCode())
                 .isEqualTo(MemberErrorCode.INVALID_WITHDRAWAL_CONFIRMATION);
         verifyNoInteractions(memberRepository, tokenService, eventPublisher);
+    }
+
+    private Member memberWithProfileImage(String profileImageKey) {
+        Member member = Member.builder()
+                .email(EMAIL)
+                .nickname("기존 닉네임")
+                .socialProvider(PROVIDER)
+                .socialId(SOCIAL_ID)
+                .role(Role.ROLE_USER)
+                .build();
+        if (profileImageKey != null) {
+            member.updateProfile("기존 닉네임", profileImageKey);
+        }
+        return member;
     }
 }

@@ -10,6 +10,7 @@ import com.lirouti.domain.challenge.entity.MemberChallenge;
 import com.lirouti.domain.challenge.enums.RoutineCycle;
 import com.lirouti.domain.challenge.exception.ChallengeException;
 import com.lirouti.domain.challenge.exception.code.error.ChallengeErrorCode;
+import com.lirouti.domain.verification.repository.ChallengeVerificationLikeRepository;
 import com.lirouti.domain.verification.repository.ChallengeVerificationRepository;
 import com.lirouti.domain.challenge.repository.MemberChallengeRepository;
 import com.lirouti.domain.media.service.MediaService;
@@ -53,6 +54,7 @@ import com.lirouti.domain.verification.exception.code.error.ChallengeVerificatio
 public class ChallengeVerificationCommandService {
     private final MemberChallengeRepository memberChallengeRepository;
     private final ChallengeVerificationRepository challengeVerificationRepository;
+    private final ChallengeVerificationLikeRepository challengeVerificationLikeRepository;
     // 저장된 key를 공개 URL로 조립하는 데만 쓴다. DB를 다루지 않는 유틸성 서비스다.
     private final MediaService mediaService;
     private final RewardCommandService rewardCommandService;
@@ -324,7 +326,20 @@ public class ChallengeVerificationCommandService {
         // 것이 없다. 두 번 걷히지 않는다.
         rewardCommandService.clawbackForVerification(memberId, verificationId);
 
-        return new DeleteResult(locked.softDelete(LocalDateTime.now(TimeUtil.KST)), imageKey);
+        boolean deletedNow = locked.softDelete(LocalDateTime.now(TimeUtil.KST));
+
+        // 좋아요를 함께 지운다. 소프트 삭제라 행이 남고 다시 올리면 같은 행이 되살아나는데,
+        // 좋아요는 그 행을 가리키므로 여기서 지우지 않으면 새 사진이 지운 사진의 좋아요를
+        // 그대로 물려받는다. 바로 아래 reverify 가 같은 이유로 심사 결과를 갈아끼운다.
+        //
+        // 이미 내려가 있던 글이면 첫 삭제 때 지웠으므로 다시 지울 것이 없다.
+        //
+        // 신고는 이렇게 다루지 않는다 — 지워서 신고 누적을 회피하는 길이 된다.
+        if (deletedNow) {
+            challengeVerificationLikeRepository.deleteAllByVerificationId(verificationId);
+        }
+
+        return new DeleteResult(deletedNow, imageKey);
     }
 
     /**

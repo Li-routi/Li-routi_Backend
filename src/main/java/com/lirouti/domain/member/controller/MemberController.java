@@ -45,6 +45,14 @@ public class MemberController implements MemberControllerDocs {
         return ApiResponse.onSuccess(MemberSuccessCode.MEMBER_PROFILE_UPDATE_SUCCESS, response);
     }
 
+    @DeleteMapping("/me/profile-image")
+    public ApiResponse<MemberResDTO.MemberInfo> deleteProfileImage(
+            @AuthenticationPrincipal CustomUserDetails userDetails
+    ) {
+        MemberResDTO.MemberInfo response = memberCommandService.deleteProfileImage(userDetails.getMemberId());
+        return ApiResponse.onSuccess(MemberSuccessCode.MEMBER_PROFILE_IMAGE_DELETE_SUCCESS, response);
+    }
+
     @Override
     @PostMapping("/logout")
     public ApiResponse<Void> logout(

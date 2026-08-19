@@ -1,10 +1,13 @@
 package com.lirouti.domain.member.controller;
 
 import com.lirouti.domain.auth.exception.code.error.AuthErrorCode;
+import com.lirouti.domain.member.dto.response.MemberResDTO;
 import com.lirouti.domain.member.exception.code.success.MemberSuccessCode;
 import com.lirouti.domain.member.service.MemberProfileService;
 import com.lirouti.domain.member.service.command.MemberCommandService;
 import com.lirouti.domain.member.service.query.MemberQueryService;
+import com.lirouti.domain.member.enums.Role;
+import com.lirouti.global.auth.CustomUserDetails;
 import com.lirouti.global.auth.filter.JwtAuthFilter;
 import com.lirouti.global.auth.filter.JwtExceptionFilter;
 import org.junit.jupiter.api.DisplayName;
@@ -14,12 +17,16 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.data.jpa.mapping.JpaMetamodelMappingContext;
 import org.springframework.http.HttpHeaders;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -29,6 +36,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @DisplayName("MemberController HTTP 계약 테스트")
 class MemberControllerTest {
     private static final String ACCESS_TOKEN = "access-token";
+    private static final Long MEMBER_ID = 1L;
 
     @Autowired
     private MockMvc mockMvc;
@@ -50,6 +58,41 @@ class MemberControllerTest {
 
     @MockitoBean
     private MemberProfileService memberProfileService;
+
+    @Test
+    @DisplayName("프로필 이미지 삭제 요청은 현재 회원의 이미지를 삭제하고 성공 응답을 반환한다")
+    void deleteProfileImage_AuthenticatedMember_ReturnsSuccessResponse() throws Exception {
+        // given
+        MemberResDTO.MemberInfo response = MemberResDTO.MemberInfo.builder()
+                .memberId(MEMBER_ID)
+                .nickname("member")
+                .profileImageUrl(null)
+                .onboardingCompleted(true)
+                .build();
+        when(memberCommandService.deleteProfileImage(MEMBER_ID)).thenReturn(response);
+        CustomUserDetails userDetails = new CustomUserDetails(MEMBER_ID, Role.ROLE_USER);
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities()));
+
+        // when
+        ResultActions result;
+        try {
+            result = mockMvc.perform(delete("/api/members/me/profile-image"));
+        } finally {
+            SecurityContextHolder.clearContext();
+        }
+
+        // then
+        result.andExpect(status().isOk())
+                .andExpect(jsonPath("$.isSuccess").value(true))
+                .andExpect(jsonPath("$.code")
+                        .value(MemberSuccessCode.MEMBER_PROFILE_IMAGE_DELETE_SUCCESS.getCode()))
+                .andExpect(jsonPath("$.message")
+                        .value(MemberSuccessCode.MEMBER_PROFILE_IMAGE_DELETE_SUCCESS.getMessage()))
+                .andExpect(jsonPath("$.result.memberId").value(MEMBER_ID))
+                .andExpect(jsonPath("$.result.profileImageUrl").value(org.hamcrest.Matchers.nullValue()));
+        verify(memberCommandService).deleteProfileImage(MEMBER_ID);
+    }
 
     @Test
     @DisplayName("유효한 Bearer 토큰으로 로그아웃하면 성공 응답을 반환한다")
