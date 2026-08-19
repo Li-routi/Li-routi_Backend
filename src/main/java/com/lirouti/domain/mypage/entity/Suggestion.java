@@ -22,8 +22,6 @@ import lombok.NoArgsConstructor;
 /**
  * 사용자가 보낸 건의.
  *
- * <p><b>제목이 없다.</b> 분류가 제목 노릇을 하고, 칸이 하나 늘면 건의 자체가 줄어든다.
- *
  * <p>수정·삭제를 두지 않는다. 보낸 것을 되돌리는 화면이 없고, 운영이 읽은 뒤에 내용이 바뀌면
  * 무엇을 보고 처리했는지 알 수 없다.
  */
@@ -45,6 +43,16 @@ public class Suggestion extends BaseEntity {
     @JoinColumn(name = "suggestion_category_id", nullable = false)
     private SuggestionCategory category;
 
+    /**
+     * 제목. <b>목록에서 이것 하나로 무슨 건의인지 알아볼 수 있어야 한다</b> — 본문 앞부분을
+     * 잘라 보여주면 "안녕하세요" 로 시작하는 건의가 전부 같아 보인다.
+     *
+     * <p>검색이 이 컬럼을 본다. 본문까지 뒤지지 않는 것은, 본문 검색은 긴 글 안의 아무 단어나
+     * 걸려 목록이 뭉개지기 때문이다 — 제목은 사용자가 그 건의를 부르려고 지은 이름이다.
+     */
+    @Column(nullable = false, length = 100)
+    private String title;
+
     @Column(nullable = false, length = 2000)
     private String content;
 
@@ -59,9 +67,10 @@ public class Suggestion extends BaseEntity {
     private SuggestionStatus status;
 
     @Builder
-    private Suggestion(Member member, SuggestionCategory category, String content) {
+    private Suggestion(Member member, SuggestionCategory category, String title, String content) {
         this.member = member;
         this.category = category;
+        this.title = title;
         this.content = content;
         // 상태를 밖에서 받지 않는다. 등록은 언제나 접수에서 시작한다.
         this.status = SuggestionStatus.RECEIVED;
