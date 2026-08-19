@@ -4,14 +4,13 @@ import com.lirouti.domain.achievement.entity.AchievementRewardItem;
 import com.lirouti.domain.achievement.repository.AchievementRewardItemRepository;
 import com.lirouti.domain.member.repository.MemberRepository;
 import com.lirouti.domain.shop.entity.AvatarItem;
-import com.lirouti.domain.shop.entity.MemberAvatarItem;
 import com.lirouti.domain.shop.repository.AvatarItemRepository;
 import com.lirouti.domain.shop.repository.MemberAvatarItemRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -32,6 +31,13 @@ public class OutfitGrantService {
 
     @Transactional
     public void grant(Long memberId, String achievementCode) {
+        if (memberId == null || memberId <= 0) {
+            throw new IllegalArgumentException("memberId가 유효하지 않습니다. memberId=" + memberId);
+        }
+        if (!StringUtils.hasText(achievementCode)) {
+            throw new IllegalArgumentException("achievementCode가 유효하지 않습니다.");
+        }
+
         List<AchievementRewardItem> outfitItems = achievementRewardItemRepository
                 .findOutfitItemsByAchievementCode(achievementCode);
 
@@ -43,24 +49,23 @@ public class OutfitGrantService {
         }
     }
 
+    /**
+     * exists 확인 후 save 하는 대신 INSERT IGNORE 로 한 번에 처리한다. 동시 요청 두 개가
+     * 나란히 "안 가지고 있음"을 확인하고 둘 다 저장을 시도하면, exists+save 방식에서는
+     * 하나가 uk_member_avatar_item_member_item 위반으로 실패해 트랜잭션이 rollback-only가
+     * 된다. INSERT IGNORE 는 그 경합을 DB 단에서 흡수한다 - 이미 있으면 0행, 처음이면 1행,
+     * 어느 쪽이든 멱등하게 성공으로 끝난다.
+     */
     private void grantOne(Long memberId, Long avatarItemId) {
-        if (memberAvatarItemRepository.existsByMemberIdAndAvatarItemId(memberId, avatarItemId)) {
-            return; // 이미 보유 - 멱등 (이미 이 의상을 상점에서 샀거나 다른 경로로 받은 경우도 포함)
-        }
         AvatarItem item = avatarItemRepository.findById(avatarItemId)
                 .orElseThrow(() -> new IllegalStateException(
                         "achievement_reward_item이 가리키는 avatar_item이 없습니다. id=" + avatarItemId));
 
-        memberAvatarItemRepository.save(
-                MemberAvatarItem.builder()
-                        .member(memberRepository.getReferenceById(memberId))
-                        .avatarItem(item)
-                        .avatarPurchase(null)
-                        .currency(item.getCurrency())
-                        .paidPrice(0)
-                        .purchasedAt(LocalDateTime.now())
-                        .grantReason(GRANT_REASON_ACHIEVEMENT_REWARD)
-                        .build()
+        memberAvatarItemRepository.insertIfAbsent(
+                memberId,
+                avatarItemId,
+                item.getCurrency().name(),
+                GRANT_REASON_ACHIEVEMENT_REWARD
         );
     }
 }
