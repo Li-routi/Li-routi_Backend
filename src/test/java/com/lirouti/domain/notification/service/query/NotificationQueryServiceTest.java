@@ -5,6 +5,7 @@ import com.lirouti.domain.member.enums.Role;
 import com.lirouti.domain.member.enums.SocialProvider;
 import com.lirouti.domain.member.repository.MemberRepository;
 import com.lirouti.domain.notification.dto.response.NotificationResDTO;
+import com.lirouti.domain.notification.entity.Notification;
 import com.lirouti.domain.notification.enums.NotificationCategory;
 import com.lirouti.domain.notification.repository.NotificationRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -18,11 +19,13 @@ import org.springframework.data.domain.PageRequest;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -89,6 +92,23 @@ class NotificationQueryServiceTest {
                 since,
                 PageRequest.of(0, 21)
         );
+    }
+
+    @Test
+    @DisplayName("알림 생성 시각에 한국 시간대 오프셋을 포함한다")
+    void getNotifications_CreatedAt_IncludesKoreanOffset() {
+        LocalDateTime createdAt = LocalDateTime.of(2026, 8, 19, 8, 43);
+        Notification notification = mock(Notification.class);
+        when(notification.getCreatedAt()).thenReturn(createdAt);
+        when(notificationRepository.findPage(
+                MEMBER_ID, null, null, LocalDateTime.of(2026, 8, 4, 3, 0), PageRequest.of(0, 21)
+        )).thenReturn(List.of(notification));
+
+        NotificationResDTO.Page result = queryService.getNotifications(MEMBER_ID, null, null, 20);
+
+        assertThat(result.notifications()).singleElement()
+                .extracting(NotificationResDTO.Item::createdAt)
+                .isEqualTo(OffsetDateTime.parse("2026-08-19T08:43:00+09:00"));
     }
 
     private Member member() {

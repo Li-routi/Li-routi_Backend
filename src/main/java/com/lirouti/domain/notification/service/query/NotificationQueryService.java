@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 
 /** 최근 7일 알림을 ID 커서 기반으로 안정적으로 조회한다. */
@@ -25,6 +26,7 @@ import java.util.List;
 public class NotificationQueryService {
     public static final int DEFAULT_SIZE = 20;
     public static final int MAX_SIZE = 50;
+    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
     private final NotificationRepository notificationRepository;
     private final MemberRepository memberRepository;
     private final Clock clock;
@@ -53,6 +55,7 @@ public class NotificationQueryService {
         return new NotificationResDTO.Item(notification.getId(), notification.getCategory(),
                 notification.getType(), notification.getTitle(), notification.getBody(),
                 notification.getGroupId(), notification.getReferenceId(), notification.getReferenceType(),
-                notification.getReadAt() != null, notification.getCreatedAt());
+                notification.getReadAt() != null,
+                notification.getCreatedAt().atZone(KST).toOffsetDateTime());
     }
 }
