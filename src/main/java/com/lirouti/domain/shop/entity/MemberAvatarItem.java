@@ -72,6 +72,22 @@ public class MemberAvatarItem extends BaseEntity {
     @Column(name = "purchased_at", nullable = false)
     private LocalDateTime purchasedAt;
 
+    // MemberAvatarItem.java
+    @Column(name = "grant_reason", length = 30)
+    private String grantReason;
+
+    @Builder
+    private MemberAvatarItem(Member member, AvatarItem avatarItem, AvatarPurchase avatarPurchase,
+                             Currency currency, int paidPrice, LocalDateTime purchasedAt, String grantReason) {
+        this.member = member;
+        this.avatarItem = avatarItem;
+        this.avatarPurchase = avatarPurchase;
+        this.currency = currency;
+        this.paidPrice = paidPrice;
+        this.purchasedAt = purchasedAt;
+        this.grantReason = grantReason;
+    }
+
     @Builder
     private MemberAvatarItem(Member member, AvatarItem avatarItem, AvatarPurchase avatarPurchase,
                              Currency currency, int paidPrice, LocalDateTime purchasedAt) {

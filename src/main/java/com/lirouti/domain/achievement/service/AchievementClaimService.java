@@ -8,6 +8,7 @@ import com.lirouti.domain.achievement.exception.AchievementException;
 import com.lirouti.domain.achievement.exception.code.error.AchievementErrorCode;
 import com.lirouti.domain.achievement.repository.MemberAchievementRepository;
 import com.lirouti.domain.character.service.CharacterUnlockService;
+import com.lirouti.domain.shop.service.command.OutfitGrantService;
 import com.lirouti.domain.wallet.entity.MemberWallet;
 import com.lirouti.domain.wallet.enums.Currency;
 import com.lirouti.domain.wallet.enums.WalletTransactionType;
@@ -45,6 +46,7 @@ public class AchievementClaimService {
     private final WalletService walletService;
     private final MemberWalletRepository memberWalletRepository;
     private final CharacterUnlockService characterUnlockService;
+    private final OutfitGrantService outfitGrantService;
 
     /** self-injection: @Transactional이 실제로 걸리도록 프록시를 통해 자기 자신을 호출하기 위함. */
     private final AchievementClaimService self;
@@ -54,12 +56,14 @@ public class AchievementClaimService {
             WalletService walletService,
             MemberWalletRepository memberWalletRepository,
             CharacterUnlockService characterUnlockService,
+            OutfitGrantService outfitGrantService,
             @Lazy AchievementClaimService self
     ) {
         this.memberAchievementRepository = memberAchievementRepository;
         this.walletService = walletService;
         this.memberWalletRepository = memberWalletRepository;
         this.characterUnlockService = characterUnlockService;
+        this.outfitGrantService = outfitGrantService;
         this.self = self;
     }
 
@@ -71,6 +75,7 @@ public class AchievementClaimService {
         Achievement achievement = memberAchievement.getAchievement();
 
         self.grantCharacterIfNeeded(memberId, achievement);
+        self.grantOutfitIfNeeded(memberId, achievement.getCode());
 
         WalletResult walletResult = grantTopazIfAny(memberId, achievement);
 
@@ -143,6 +148,11 @@ public class AchievementClaimService {
     }
 
     public record ClaimResult(Long achievementId, int freeBalanceAfter, boolean rewardApplied) {
+    }
+
+    @Transactional
+    protected void grantOutfitIfNeeded(Long memberId, String achievementCode) {
+        outfitGrantService.grant(memberId, achievementCode);
     }
 
     /**
