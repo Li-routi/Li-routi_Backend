@@ -72,7 +72,7 @@ class SuggestionControllerTest {
     @Test
     @DisplayName("size 를 안 주면 기본값 20 으로 조회한다")
     void list_UsesDefaultSize() throws Exception {
-        when(suggestionQueryService.getMySuggestions(eq(MEMBER_ID), any(), anyInt()))
+        when(suggestionQueryService.getMySuggestions(eq(MEMBER_ID), any(), anyInt(), any(), any()))
                 .thenReturn(SuggestionResDTO.Listing.builder()
                         .suggestions(List.of()).hasNext(false).build());
 
@@ -80,7 +80,7 @@ class SuggestionControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("SUGGESTION200_2"));
 
-        verify(suggestionQueryService).getMySuggestions(eq(MEMBER_ID), eq(null), eq(20));
+        verify(suggestionQueryService).getMySuggestions(eq(MEMBER_ID), eq(null), eq(20), eq(null), eq(null));
     }
 
     /**
@@ -90,7 +90,7 @@ class SuggestionControllerTest {
     @Test
     @DisplayName("size 가 범위를 벗어나면 400 과 SUGGESTION400_1 이 나간다")
     void list_RejectsOutOfRangeSize() throws Exception {
-        when(suggestionQueryService.getMySuggestions(eq(MEMBER_ID), any(), eq(51)))
+        when(suggestionQueryService.getMySuggestions(eq(MEMBER_ID), any(), eq(51), any(), any()))
                 .thenThrow(new SuggestionException(SuggestionErrorCode.INVALID_PAGE_SIZE));
 
         mockMvc.perform(get(PATH).param("size", "51")
@@ -106,7 +106,7 @@ class SuggestionControllerTest {
                         .with(user(new CustomUserDetails(MEMBER_ID, Role.ROLE_USER))))
                 .andExpect(status().isBadRequest());
 
-        verify(suggestionQueryService, never()).getMySuggestions(anyLong(), any(), anyInt());
+        verify(suggestionQueryService, never()).getMySuggestions(anyLong(), any(), anyInt(), any(), any());
     }
 
     /** 회원 식별자를 요청에서 받지 않는다는 것이 이 API 의 격리 규칙이다. */
@@ -115,7 +115,7 @@ class SuggestionControllerTest {
     void list_RequiresAuthentication() throws Exception {
         mockMvc.perform(get(PATH)).andExpect(status().isUnauthorized());
 
-        verify(suggestionQueryService, never()).getMySuggestions(anyLong(), any(), anyInt());
+        verify(suggestionQueryService, never()).getMySuggestions(anyLong(), any(), anyInt(), any(), any());
     }
 
     // ── 등록 ──
@@ -123,12 +123,12 @@ class SuggestionControllerTest {
     @Test
     @DisplayName("등록에 성공하면 201 과 등록 성공 코드가 나간다")
     void create_ReturnsCreated() throws Exception {
-        when(suggestionCommandService.create(eq(MEMBER_ID), eq(1L), eq("내용")))
-                .thenReturn(SuggestionResDTO.Suggestion.builder().id(10L).content("내용").build());
+        when(suggestionCommandService.create(eq(MEMBER_ID), eq(1L), eq("제목"), eq("내용")))
+                .thenReturn(SuggestionResDTO.Suggestion.builder().id(10L).title("제목").content("내용").build());
 
         mockMvc.perform(post(PATH)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"categoryId\":1,\"content\":\"내용\"}")
+                        .content("{\"categoryId\":1,\"title\":\"제목\",\"content\":\"내용\"}")
                         .with(user(new CustomUserDetails(MEMBER_ID, Role.ROLE_USER))))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.code").value("SUGGESTION201_1"));
@@ -139,22 +139,22 @@ class SuggestionControllerTest {
     void create_RejectsBlankContent() throws Exception {
         mockMvc.perform(post(PATH)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"categoryId\":1,\"content\":\"  \"}")
+                        .content("{\"categoryId\":1,\"title\":\"제목\",\"content\":\"  \"}")
                         .with(user(new CustomUserDetails(MEMBER_ID, Role.ROLE_USER))))
                 .andExpect(status().isBadRequest());
 
-        verify(suggestionCommandService, never()).create(anyLong(), anyLong(), any());
+        verify(suggestionCommandService, never()).create(anyLong(), anyLong(), any(), any());
     }
 
     @Test
     @DisplayName("내려간 분류로 등록하면 409 와 SUGGESTION409_1 이 나간다")
     void create_RejectsInactiveCategory() throws Exception {
-        when(suggestionCommandService.create(eq(MEMBER_ID), eq(4L), any()))
+        when(suggestionCommandService.create(eq(MEMBER_ID), eq(4L), any(), any()))
                 .thenThrow(new SuggestionException(SuggestionErrorCode.CATEGORY_NOT_ACTIVE));
 
         mockMvc.perform(post(PATH)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"categoryId\":4,\"content\":\"내용\"}")
+                        .content("{\"categoryId\":4,\"title\":\"제목\",\"content\":\"내용\"}")
                         .with(user(new CustomUserDetails(MEMBER_ID, Role.ROLE_USER))))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("SUGGESTION409_1"));

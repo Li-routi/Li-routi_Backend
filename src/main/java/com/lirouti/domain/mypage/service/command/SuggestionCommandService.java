@@ -23,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class SuggestionCommandService {
 
     /** 요청 DTO 의 {@code @Size} 와 컬럼 길이에 맞춘다. 셋이 어긋나면 안 된다. */
+    private static final int MAX_TITLE_LENGTH = 100;
     private static final int MAX_CONTENT_LENGTH = 2000;
 
     private final SuggestionRepository suggestionRepository;
@@ -39,11 +40,19 @@ public class SuggestionCommandService {
      * 분류는 전원에게 같은 목록이라, 없는 id 를 넣어 봐도 새로 알게 되는 것이 없다.
      */
     @Transactional
-    public SuggestionResDTO.Suggestion create(Long memberId, Long categoryId, String content) {
+    public SuggestionResDTO.Suggestion create(Long memberId, Long categoryId,
+                                              String title, String content) {
         // 요청 DTO 의 검증은 컨트롤러를 거칠 때만 있다. 서비스를 직접 부르는 경로가 생기면
         // 빈 본문이 그대로 저장되거나 상한 초과가 도메인 오류가 아닌 DB 오류로 나간다.
         if (memberId == null || categoryId == null) {
             throw new GeneralException(GeneralErrorCode.BAD_REQUEST);
+        }
+
+        // 앞뒤 공백을 떼고 저장한다. 검색이 제목을 그대로 맞춰 보므로, 눈에 안 보이는 공백이
+        // 붙어 있으면 사용자가 화면에 보이는 대로 검색해도 안 걸린다.
+        String trimmedTitle = title == null ? null : title.strip();
+        if (trimmedTitle == null || trimmedTitle.isEmpty() || trimmedTitle.length() > MAX_TITLE_LENGTH) {
+            throw new SuggestionException(SuggestionErrorCode.INVALID_TITLE);
         }
         if (content == null || content.isBlank() || content.length() > MAX_CONTENT_LENGTH) {
             throw new SuggestionException(SuggestionErrorCode.INVALID_CONTENT);
@@ -59,7 +68,7 @@ public class SuggestionCommandService {
         }
 
         Suggestion saved = suggestionRepository.save(
-                SuggestionConverter.toEntity(member, category, content));
+                SuggestionConverter.toEntity(member, category, trimmedTitle, content));
         return SuggestionConverter.toSuggestion(saved);
     }
 }

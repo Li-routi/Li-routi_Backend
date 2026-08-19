@@ -12,10 +12,12 @@ public final class SuggestionConverter {
     private SuggestionConverter() {
     }
 
-    public static Suggestion toEntity(Member member, SuggestionCategory category, String content) {
+    public static Suggestion toEntity(Member member, SuggestionCategory category,
+                                      String title, String content) {
         return Suggestion.builder()
                 .member(member)
                 .category(category)
+                .title(title)
                 .content(content)
                 .build();
     }
@@ -38,6 +40,7 @@ public final class SuggestionConverter {
         return SuggestionResDTO.Suggestion.builder()
                 .id(suggestion.getId())
                 .category(toCategory(suggestion.getCategory()))
+                .title(suggestion.getTitle())
                 .content(suggestion.getContent())
                 .status(suggestion.getStatus())
                 .createdAt(suggestion.getCreatedAt())

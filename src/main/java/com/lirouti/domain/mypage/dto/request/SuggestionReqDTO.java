@@ -17,9 +17,14 @@ public final class SuggestionReqDTO {
                     분류 id. **목록 조회로 받은 것만 보낼 수 있다** — 내려간 분류를 보내면 거절된다.""")
             Long categoryId,
 
+            @NotBlank(message = "제목은 필수입니다.")
+            @Size(max = 100, message = "제목은 100자를 넘을 수 없습니다.")
+            @Schema(description = "제목. 목록과 검색이 이 값을 쓴다", example = "루틴 알림 시간을 고르게 해주세요")
+            String title,
+
             @NotBlank(message = "건의 내용은 필수입니다.")
             @Size(max = 2000, message = "건의 내용은 2000자를 넘을 수 없습니다.")
-            @Schema(description = "본문. 제목은 받지 않는다 — 분류가 그 자리를 대신한다")
+            @Schema(description = "본문")
             String content
     ) {
     }

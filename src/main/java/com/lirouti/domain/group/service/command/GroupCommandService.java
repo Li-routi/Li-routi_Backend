@@ -97,7 +97,8 @@ public class GroupCommandService {
         groupValidationService.validateGroupOwner(group, memberId);
         // Poke는 GroupMember ID 오름차순으로 잠근다. cascade delete도 같은 순서로 먼저 잠근다.
         groupMemberRepository.findAllByGroupIdForUpdate(groupId);
-        // 읽음 행은 Group 애그리거트의 JPA cascade 대상이 아니다. 먼저 지워 FK 삭제를 열어 둔다.
+        // 읽음 행은 Group 애그리거트의 JPA cascade 대상이 아니다. 먼저 지워 FK 삭제를 연다.
+        // 재조회 marker는 인증 삭제를 따르는 DB FK cascade로 함께 정리된다.
         groupRoutineVerificationReadRepository.deleteAllByGroupId(groupId);
         groupRepository.delete(group);
     }
