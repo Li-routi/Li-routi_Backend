@@ -42,6 +42,32 @@ public interface AchievementControllerDocs {
             @Parameter(hidden = true) CustomUserDetails userDetails
     );
 
+    @Operation(
+            summary = "업적 보상 수령",
+            description = """
+                ACHIEVED 상태인 업적의 보상(토파즈, 배지, 캐릭터알)을 수령합니다.
+                이미 CLAIMED인 업적을 다시 호출해도 안전합니다(멱등) — 지갑 지급이
+                이전에 실패했던 경우를 복구하는 용도로도 쓸 수 있습니다.
+                """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "업적 보상 수령 성공"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401",
+                    description = "유효하지 않거나 만료된 인증 토큰"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404",
+                    description = "존재하지 않는 업적이거나 회원의 진행 기록이 없음"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "409",
+                    description = "아직 달성(ACHIEVED)하지 않은 업적을 수령 시도"
+            )
+    })
     @PostMapping("/{achievementId}/claim")
     ApiResponse<AchievementResDTO.Claim> claim(
             @AuthenticationPrincipal CustomUserDetails userDetails,
@@ -126,5 +152,57 @@ public interface AchievementControllerDocs {
     })
     ApiResponse<AchievementResDTO.ClaimedBadgeAchievements> getSelectableRepresentative(
             @Parameter(hidden = true) CustomUserDetails userDetails
+    );
+
+    @Operation(
+            summary = "파도 업적 추적 루틴 조회",
+            description = """
+                지금 파도(ACH-EG-013) 업적을 위해 추적 중인 루틴과 현재 연속 완료
+                일수를 조회합니다. 아직 추적 루틴을 선택한 적 없으면 404를 반환합니다.
+                """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "파도 업적 추적 상태 조회 성공"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401",
+                    description = "유효하지 않거나 만료된 인증 토큰"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404",
+                    description = "아직 추적 루틴을 선택하지 않음"
+            )
+    })
+    ApiResponse<AchievementResDTO.WaveRoutineStatus> getWaveRoutineStatus(
+            @Parameter(hidden = true) CustomUserDetails userDetails
+    );
+
+    @Operation(
+            summary = "파도 업적 추적 루틴 선택",
+            description = """
+                파도(ACH-EG-013) 업적의 연속 완료 진행도를 추적할 개인 루틴 하나를
+                선택합니다. 이미 다른 루틴을 추적 중이었다면 이번 선택으로 교체되고,
+                지금까지 쌓인 연속 완료 기록은 0으로 초기화됩니다.
+                """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "파도 업적 추적 루틴 선택 성공"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401",
+                    description = "유효하지 않거나 만료된 인증 토큰"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "404",
+                    description = "존재하지 않거나 본인 소유가 아닌 루틴"
+            )
+    })
+    ApiResponse<Void> selectWaveRoutine(
+            @Parameter(hidden = true) CustomUserDetails userDetails,
+            AchievementReqDTO.SelectWaveRoutine request
     );
 }
