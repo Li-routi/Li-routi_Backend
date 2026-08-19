@@ -27,12 +27,24 @@ public interface ChallengeVerificationLikeRepository
      * 영속 엔티티를 낡게 만들지 않고, 이어지는 집계도 영속성 컨텍스트가 아닌 DB 쿼리라 영향이 없다.
      * 켜면 호출자가 들고 있던 엔티티까지 detach되어 그 뒤 변경이 조용히 사라진다.
      */
+    //
+    // 내려간 인증에는 들어가지 않는다. VALUES 대신 SELECT 로 쓴 이유가 그것이다.
+    //
+    // 외래 키는 소프트 삭제된 행에도 유효해서, 조건이 없으면 "삭제 직전에 읽고 삭제 직후에
+    // 넣는" 순서로 지워진 인증에 좋아요가 남는다. 그 인증을 나중에 되살리면 새 사진이 그
+    // 좋아요를 물려받는다 — 삭제 시점 정리만으로는 이 창이 닫히지 않는다.
+    //
+    // 서비스도 앞서 deletedAt 을 보지만 그 조회는 잠그지 않아, 확인과 삽입 사이가 벌어진다.
+    // 여기서 같은 문장 안에 두면 그 틈이 없어진다.
     @Modifying(flushAutomatically = true)
     @Query(value = """
             INSERT INTO challenge_verification_like
                 (challenge_verification_id, member_id, created_at, updated_at)
-            VALUES (:verificationId, :memberId, NOW(6), NOW(6))
-            ON DUPLICATE KEY UPDATE id = id
+            SELECT cv.id, :memberId, NOW(6), NOW(6)
+              FROM challenge_verification cv
+             WHERE cv.id = :verificationId
+               AND cv.deleted_at IS NULL
+            ON DUPLICATE KEY UPDATE challenge_verification_like.id = challenge_verification_like.id
             """, nativeQuery = true)
     int insertIfAbsent(
             @Param("verificationId") Long verificationId,

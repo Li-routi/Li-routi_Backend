@@ -392,11 +392,37 @@ class VerificationDeleteTest {
                 new ChallengeVerificationReqDTO.Verify(NEW_STAGING_KEY, "다시 올림"));
         em.flush();
 
-        // then
+        // then — likeCount 가 컨텍스트를 비우므로 v 는 준영속이다. 되살아났는지는 다시 읽어 본다.
+        em.clear();
+        ChallengeVerification revived = challengeVerificationRepository
+                .findById(v.getId()).orElseThrow();
+
         assertAll(
-                () -> assertThat(v.isDeleted()).as("되살아났다").isFalse(),
+                () -> assertThat(revived.isDeleted()).as("되살아났다").isFalse(),
                 () -> assertThat(likeCount(v))
                         .as("새 사진이 옛 좋아요를 물려받지 않는다").isZero());
+    }
+
+    /**
+     * <b>삭제 시점 정리만으로는 창이 닫히지 않는다.</b> 좋아요 등록이 {@code deletedAt} 을 본
+     * 뒤 잠그지 않고 넣기 때문에, 확인과 삽입 사이에 삭제가 끼면 지워진 인증에 좋아요가 남는다.
+     * 그 인증을 되살리면 새 사진이 그것을 물려받는다.
+     */
+    @Test
+    @DisplayName("이미 내려간 인증에는 좋아요가 들어가지 않는다")
+    void like_OnDeletedVerification_DoesNotInsert() {
+        ChallengeVerification v = verificationOn(today());
+        participation.applyVerification(today(), RoutineCycle.DAILY);
+        em.flush();
+
+        challengeVerificationService.deleteVerification(me.getId(), challenge.getId(), v.getId());
+        em.flush();
+
+        Member liker = liker();
+        // 서비스 조회를 통과하더라도 삽입 자체가 막혀야 한다.
+        challengeVerificationLikeRepository.insertIfAbsent(v.getId(), liker.getId());
+
+        assertThat(likeCount(v)).as("내려간 글에는 남지 않는다").isZero();
     }
 
     private long likeCount(ChallengeVerification verification) {
