@@ -24,8 +24,10 @@ import com.lirouti.domain.routine.repository.MemberRoutineRepository;
 import com.lirouti.domain.routine.repository.RoutineCategoryRepository;
 import com.lirouti.domain.verification.entity.GroupRoutineVerification;
 import com.lirouti.domain.verification.entity.GroupRoutineVerificationRead;
+import com.lirouti.domain.verification.entity.GroupRoutineVerificationReread;
 import com.lirouti.domain.verification.repository.GroupRoutineVerificationRepository;
 import com.lirouti.domain.verification.repository.GroupRoutineVerificationReadRepository;
+import com.lirouti.domain.verification.repository.GroupRoutineVerificationRereadRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.DisplayName;
@@ -79,6 +81,8 @@ class GroupHardDeleteIntegrationTest {
     private GroupRoutineVerificationRepository groupRoutineVerificationRepository;
     @Autowired
     private GroupRoutineVerificationReadRepository groupRoutineVerificationReadRepository;
+    @Autowired
+    private GroupRoutineVerificationRereadRepository groupRoutineVerificationRereadRepository;
     @Autowired
     private RoutineCategoryRepository routineCategoryRepository;
     @Autowired
@@ -148,6 +152,12 @@ class GroupHardDeleteIntegrationTest {
                 .build();
         entityManager.persist(targetRead);
         entityManager.persist(otherRead);
+        GroupRoutineVerificationReread targetReread = GroupRoutineVerificationReread.builder()
+                .group(targetGroup).member(member).verificationId(targetVerification.getId()).build();
+        GroupRoutineVerificationReread otherReread = GroupRoutineVerificationReread.builder()
+                .group(otherGroup).member(member).verificationId(otherVerification.getId()).build();
+        entityManager.persist(targetReread);
+        entityManager.persist(otherReread);
 
         RoutineCategory personalCategory = personalCategory(owner);
         MemberRoutine personalRoutine = MemberRoutine.builder()
@@ -202,6 +212,7 @@ class GroupHardDeleteIntegrationTest {
         assertThat(groupRoutineVerificationRepository.existsById(ids.targetVerificationId())).isFalse();
         assertThat(groupRoutineVerificationReadRepository
                 .existsByGroupIdAndMemberId(ids.targetGroupId(), ids.memberId())).isFalse();
+        assertThat(groupRoutineVerificationRereadRepository.findById(targetReread.getId())).isEmpty();
 
         // then: 다른 그룹과 그 하위 데이터
         assertThat(groupRepository.existsById(ids.otherGroupId())).isTrue();
@@ -215,6 +226,7 @@ class GroupHardDeleteIntegrationTest {
         assertThat(groupRoutineVerificationRepository.existsById(ids.otherVerificationId())).isTrue();
         assertThat(groupRoutineVerificationReadRepository
                 .existsByGroupIdAndMemberId(ids.otherGroupId(), ids.memberId())).isTrue();
+        assertThat(groupRoutineVerificationRereadRepository.findById(otherReread.getId())).isPresent();
 
         // then: Member 계정, 공용 기본 그룹 카테고리, 개인 루틴과 개인 카테고리
         assertThat(entityManager.find(Member.class, ids.ownerId())).isNotNull();

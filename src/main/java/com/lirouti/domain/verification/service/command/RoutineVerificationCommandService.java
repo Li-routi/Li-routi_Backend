@@ -30,6 +30,7 @@ import com.lirouti.domain.verification.exception.code.error.VerificationErrorCod
 import com.lirouti.domain.verification.repository.GroupRoutineVerificationRepository;
 import com.lirouti.domain.verification.repository.GroupRoutineVerificationLikeRepository;
 import com.lirouti.domain.verification.repository.GroupRoutineVerificationDisappointmentRepository;
+import com.lirouti.domain.verification.repository.GroupRoutineVerificationRereadRepository;
 import com.lirouti.domain.verification.repository.MemberRoutineVerificationRepository;
 
 import com.lirouti.domain.activity.service.command.MemberActivityDayCommandService;
@@ -69,6 +70,7 @@ public class RoutineVerificationCommandService {
     private final GroupValidationService groupValidationService;
     private final GroupRoutineVerificationLikeRepository groupRoutineVerificationLikeRepository;
     private final GroupRoutineVerificationDisappointmentRepository disappointmentRepository;
+    private final GroupRoutineVerificationRereadRepository groupRoutineVerificationRereadRepository;
     private final GroupMemberRepository groupMemberRepository;
     private final MemberRoutineVerificationRepository memberRoutineVerificationRepository;
     private final MemberRoutineStreakCommandService memberRoutineStreakCommandService;
@@ -167,6 +169,11 @@ public class RoutineVerificationCommandService {
             }
         }
         verification.reverify(mediaKey, content, verifiedAt);
+        groupRoutineVerificationRereadRepository.createForPreviouslyReadActiveMembers(
+                groupId,
+                memberId,
+                verification.getId(),
+                verification.getCreatedAt());
 
         // 재인증은 히든 업적 조건도 다시 반영하지 않는다. 새로운 완료가 아니라 사진 교체이므로,
         // 재인증 때마다 "오전 7시 이전"·"마감 임박" 진행도가 중복으로 오르면 원래 인증 시점과

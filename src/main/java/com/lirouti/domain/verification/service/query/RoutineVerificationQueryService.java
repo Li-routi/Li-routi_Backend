@@ -5,6 +5,7 @@ import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -117,14 +118,24 @@ public class RoutineVerificationQueryService {
                 .findLastReadVerificationIdByGroupIdAndMemberId(groupId, memberId)
                 .orElse(null);
         int appliedSize = clampSize(size);
-        List<UnreadVerificationProjection> rows = groupUnreadVerificationQueryRepository.findUnreadByCursor(
+        Limit pageLimit = Limit.of(appliedSize + 1);
+        List<UnreadVerificationProjection> newRows = groupUnreadVerificationQueryRepository.findUnreadByCursor(
                 groupId,
                 memberId,
                 membershipStartOfDay(membership),
                 lastReadVerificationId,
                 cursor,
-                Limit.of(appliedSize + 1)
+                pageLimit
         );
+        List<UnreadVerificationProjection> rereadRows = groupUnreadVerificationQueryRepository.findRereadByCursor(
+                groupId,
+                memberId,
+                membershipStartOfDay(membership),
+                lastReadVerificationId,
+                cursor,
+                pageLimit
+        );
+        List<UnreadVerificationProjection> rows = mergeUnreadRows(newRows, rereadRows);
         CursorPage<UnreadVerificationProjection> page = sliceByCursor(
                 rows, appliedSize, UnreadVerificationProjection::verificationId);
         return VerificationResDTO.UnreadGroupRoutineVerificationList.builder()
@@ -138,6 +149,17 @@ public class RoutineVerificationQueryService {
                 .nextCursor(page.nextCursor())
                 .hasNext(page.hasNext())
                 .build();
+    }
+
+    /** 두 ID 오름차순 미조회 소스를 하나로 합친 뒤 기존 페이지 규약을 적용한다. */
+    private static List<UnreadVerificationProjection> mergeUnreadRows(
+            List<UnreadVerificationProjection> newRows,
+            List<UnreadVerificationProjection> rereadRows
+    ) {
+        Map<Long, UnreadVerificationProjection> byVerificationId = new TreeMap<>();
+        newRows.forEach(row -> byVerificationId.put(row.verificationId(), row));
+        rereadRows.forEach(row -> byVerificationId.putIfAbsent(row.verificationId(), row));
+        return List.copyOf(byVerificationId.values());
     }
 
     private static LocalDateTime membershipStartOfDay(GroupMember membership) {
