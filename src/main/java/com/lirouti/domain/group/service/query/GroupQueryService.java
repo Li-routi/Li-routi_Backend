@@ -14,6 +14,7 @@ import com.lirouti.domain.group.repository.GroupListQueryRepository;
 import com.lirouti.domain.group.repository.GroupListQueryRepository.AssignmentCountProjection;
 import com.lirouti.domain.group.repository.GroupListQueryRepository.GroupCountProjection;
 import com.lirouti.domain.group.repository.GroupListQueryRepository.GroupScheduleCountProjection;
+import com.lirouti.domain.group.repository.GroupListQueryRepository.GroupProfileImageProjection;
 import com.lirouti.domain.group.repository.GroupListQueryRepository.MyGroupProjection;
 import com.lirouti.domain.group.repository.GroupRoutineQueryRepository;
 import com.lirouti.domain.group.repository.GroupRoutineQueryRepository.GroupRoutineProjection;
@@ -70,10 +71,20 @@ public class GroupQueryService {
 
         if (groups.isEmpty()) {
             return GroupConverter.toMyGroupList(
-                    List.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of());
+                    List.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of());
         }
 
         List<Long> groupIds = groups.stream().map(MyGroupProjection::groupId).toList();
+        Map<Long, List<String>> profileImageKeysByGroupId = groupListQueryRepository
+                .findActiveMemberProfileImageKeysByGroupIds(groupIds)
+                .stream()
+                .collect(Collectors.groupingBy(
+                        GroupProfileImageProjection::groupId,
+                        Collectors.mapping(
+                                GroupProfileImageProjection::profileImageKey,
+                                Collectors.toList()
+                        )
+                ));
         Map<Long, Long> activeMemberCounts = toCountMap(
                 groupListQueryRepository.countActiveMembersByGroupIds(groupIds));
         Map<Long, Long> activeRoutineCounts = toCountMap(
@@ -105,7 +116,8 @@ public class GroupQueryService {
                 todayAssignedCounts,
                 todayCompletedCounts,
                 monthlyAchievementRates,
-                todayVerificationCounts
+                todayVerificationCounts,
+                profileImageKeysByGroupId
         );
     }
 

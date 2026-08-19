@@ -9,6 +9,7 @@ import com.lirouti.domain.group.enums.GroupMemberRole;
 import com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus;
 import com.lirouti.domain.group.repository.GroupListQueryRepository.AssignmentCountProjection;
 import com.lirouti.domain.group.repository.GroupListQueryRepository.GroupCountProjection;
+import com.lirouti.domain.group.repository.GroupListQueryRepository.GroupProfileImageProjection;
 import com.lirouti.domain.group.repository.GroupListQueryRepository.GroupScheduleCountProjection;
 import com.lirouti.domain.group.repository.GroupListQueryRepository.MyGroupProjection;
 import com.lirouti.domain.member.entity.Member;
@@ -161,6 +162,50 @@ class GroupListQueryRepositoryTest {
     }
 
     @Test
+    @DisplayName("여러 그룹의 ACTIVE 구성원 프로필 키를 null 포함 가입순으로 한 번에 조회한다")
+    void findActiveMemberProfileImageKeysByGroupIds_BatchesActiveMembersInJoinOrder() {
+        Group firstGroup = group("PROF001");
+        Group secondGroup = group("PROF002");
+        LocalDateTime sameJoinedAt = TODAY.atTime(9, 0);
+
+        Member leftMember = member("탈퇴 구성원", "profiles/left.png");
+        Member secondGroupMember = member("두번째 그룹 구성원", "profiles/second.png");
+        Member firstGroupFirstMember = member("첫번째 그룹 구성원", "profiles/first.png");
+        Member firstGroupDefaultProfileMember = member("기본 프로필 구성원", null);
+        Member withdrawnButActiveMember = member("탈퇴 계정 구성원", "profiles/withdrawn.png");
+        Member kickedMember = member("강퇴 구성원", "profiles/kicked.png");
+
+        GroupMember leftMembership = membership(leftMember, firstGroup, TODAY.atTime(7, 0));
+        membership(secondGroupMember, secondGroup, TODAY.atTime(8, 0));
+        GroupMember firstMembership = membership(firstGroupFirstMember, firstGroup, sameJoinedAt);
+        GroupMember defaultProfileMembership = membership(
+                firstGroupDefaultProfileMember, firstGroup, sameJoinedAt);
+        membership(withdrawnButActiveMember, secondGroup, TODAY.atTime(10, 0));
+        GroupMember kickedMembership = membership(kickedMember, firstGroup, TODAY.atTime(11, 0));
+        leftMembership.leave();
+        kickedMembership.kick();
+        withdrawnButActiveMember.withdraw(
+                "withdrawn-" + UUID.randomUUID() + "@example.com",
+                "withdrawn-" + UUID.randomUUID(),
+                TODAY.atTime(12, 0)
+        );
+        entityManager.flush();
+        entityManager.clear();
+
+        List<GroupProfileImageProjection> result = groupListQueryRepository
+                .findActiveMemberProfileImageKeysByGroupIds(
+                        List.of(firstGroup.getId(), secondGroup.getId()));
+
+        assertThat(result).containsExactly(
+                new GroupProfileImageProjection(secondGroup.getId(), "profiles/second.png"),
+                new GroupProfileImageProjection(firstGroup.getId(), "profiles/first.png"),
+                new GroupProfileImageProjection(firstGroup.getId(), null),
+                new GroupProfileImageProjection(secondGroup.getId(), "profiles/withdrawn.png")
+        );
+        assertThat(defaultProfileMembership.getId()).isGreaterThan(firstMembership.getId());
+    }
+
+    @Test
     @DisplayName("비활성 루틴의 오늘·월간 Assignment와 인증은 모든 목록 집계에서 제외한다")
     void aggregates_InactiveRoutine_ExcludesAssignmentsCompletionsAndVerifications() {
         Member requester = member("비활성 루틴 회원");
@@ -267,6 +312,10 @@ class GroupListQueryRepositoryTest {
     }
 
     private Member member(String nickname) {
+        return member(nickname, null);
+    }
+
+    private Member member(String nickname, String profileImageKey) {
         String identifier = UUID.randomUUID().toString();
         Member member = Member.builder()
                 .email(identifier + "@example.com")
@@ -275,6 +324,7 @@ class GroupListQueryRepositoryTest {
                 .role(Role.ROLE_USER)
                 .socialId(identifier)
                 .build();
+        member.updateProfile(nickname, profileImageKey);
         entityManager.persist(member);
         return member;
     }

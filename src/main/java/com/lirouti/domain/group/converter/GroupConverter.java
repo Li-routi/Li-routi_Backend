@@ -40,7 +40,8 @@ public final class GroupConverter {
             Map<Long, Long> todayAssignedCounts,
             Map<Long, Long> todayCompletedCounts,
             Map<Long, Integer> monthlyAchievementRates,
-            Map<Long, Long> todayVerificationCounts
+            Map<Long, Long> todayVerificationCounts,
+            Map<Long, List<String>> profileImageKeysByGroupId
     ) {
         return new GroupResDTO.MyGroupList(groups.stream()
                 .map(group -> new GroupResDTO.MyGroup(
@@ -53,7 +54,8 @@ public final class GroupConverter {
                         group.currentStreak(),
                         monthlyAchievementRates.getOrDefault(group.groupId(), 0),
                         todayVerificationCounts.getOrDefault(group.groupId(), 0L),
-                        group.lastVerificationAt()
+                        group.lastVerificationAt(),
+                        profileImageKeysByGroupId.getOrDefault(group.groupId(), List.of())
                 ))
                 .toList());
     }

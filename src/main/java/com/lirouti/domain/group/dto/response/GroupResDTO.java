@@ -43,7 +43,9 @@ public final class GroupResDTO {
             int monthlyAchievementRate,
             long todayGroupVerificationCount,
             @Schema(description = "그룹 루틴 인증이 마지막으로 새로 등록된 시각. 인증 이력이 없으면 null", nullable = true)
-            LocalDateTime lastVerificationAt
+            LocalDateTime lastVerificationAt,
+            @Schema(description = "ACTIVE 그룹 구성원의 가입순 프로필 이미지 키 목록. null 원소는 기본 프로필을 뜻한다")
+            List<String> profileImageKeys
         ) {
     }
 

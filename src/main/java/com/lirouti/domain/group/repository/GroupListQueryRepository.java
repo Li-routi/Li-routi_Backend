@@ -8,6 +8,7 @@ import com.lirouti.domain.group.entity.QGroupRoutineSchedule;
 import com.lirouti.domain.group.enums.GroupMemberStatus;
 import com.lirouti.domain.group.enums.GroupRoutineAssignmentStatus;
 import com.lirouti.domain.group.enums.GroupStatus;
+import com.lirouti.domain.member.entity.QMember;
 import com.lirouti.domain.verification.entity.QGroupRoutineVerification;
 import com.querydsl.core.types.Projections;
 import com.querydsl.core.types.dsl.CaseBuilder;
@@ -28,6 +29,7 @@ import java.util.List;
 public class GroupListQueryRepository {
     private static final QGroup group = QGroup.group;
     private static final QGroupMember groupMember = QGroupMember.groupMember;
+    private static final QMember member = QMember.member;
     private static final QGroupRoutine routine = QGroupRoutine.groupRoutine;
     private static final QGroupRoutineAssignment assignment =
             QGroupRoutineAssignment.groupRoutineAssignment;
@@ -56,6 +58,26 @@ public class GroupListQueryRepository {
                         group.status.eq(GroupStatus.ACTIVE)
                 )
                 .orderBy(groupMember.joinedAt.desc(), groupMember.id.desc())
+                .fetch();
+    }
+
+    /** 목록의 모든 그룹에서 ACTIVE 참여 관계의 프로필 이미지 키를 가입순으로 한 번에 조회한다. */
+    public List<GroupProfileImageProjection> findActiveMemberProfileImageKeysByGroupIds(
+            List<Long> groupIds
+    ) {
+        return queryFactory
+                .select(Projections.constructor(
+                        GroupProfileImageProjection.class,
+                        groupMember.group.id,
+                        member.profileImageKey
+                ))
+                .from(groupMember)
+                .join(groupMember.member, member)
+                .where(
+                        groupMember.group.id.in(groupIds),
+                        groupMember.status.eq(GroupMemberStatus.ACTIVE)
+                )
+                .orderBy(groupMember.joinedAt.asc(), groupMember.id.asc())
                 .fetch();
     }
 
@@ -212,6 +234,9 @@ public class GroupListQueryRepository {
             int currentStreak,
             LocalDateTime lastVerificationAt
     ) {
+    }
+
+    public record GroupProfileImageProjection(Long groupId, String profileImageKey) {
     }
 
     public record GroupCountProjection(Long groupId, long count) {
