@@ -53,4 +53,27 @@ public interface ChallengeVerificationLikeRepository
             @Param("verificationId") Long verificationId,
             @Param("memberId") Long memberId
     );
+
+    /**
+     * 그 인증에 달린 좋아요를 <b>전부</b> 지운다. 인증을 내릴 때 함께 부른다.
+     *
+     * <p>인증 삭제는 소프트 삭제라 행이 남고, <b>다시 올리면 같은 행이 되살아난다</b>
+     * ({@code deletedAt = null}). 좋아요는 그 행을 가리키므로, 여기서 지우지 않으면 새로 올린
+     * 사진이 <b>지운 사진에 달렸던 좋아요를 그대로 물려받는다.</b>
+     *
+     * <p>같은 자리에서 심사 결과와 시도 횟수는 이미 초기화한다 — "사진이 바뀌었으니 지난 심사
+     * 결과는 이 사진의 것이 아니다"가 이유다. 좋아요도 같은 이유로 남으면 안 된다.
+     *
+     * <p><b>신고는 이렇게 다루지 않는다.</b> 지워서 신고 누적을 회피하는 길이 되므로 그대로 둔다.
+     */
+    //
+    // clearAutomatically 를 켜지 않는다. 이 경로는 인증을 내리는 흐름 한가운데에서 불리는데,
+    // 컨텍스트를 통째로 비우면 방금 softDelete 한 인증 엔티티까지 준영속이 되어 호출부가
+    // 낡은 상태를 들고 남는다. 여기서 지우는 좋아요는 그 흐름이 들고 있지 않아 비울 이유가 없다.
+    @Modifying(flushAutomatically = true)
+    @Query("""
+            delete from ChallengeVerificationLike l
+             where l.challengeVerification.id = :verificationId
+            """)
+    int deleteAllByVerificationId(@Param("verificationId") Long verificationId);
 }

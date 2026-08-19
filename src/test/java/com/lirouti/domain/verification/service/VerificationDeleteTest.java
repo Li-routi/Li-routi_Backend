@@ -13,6 +13,7 @@ import com.lirouti.domain.member.enums.Role;
 import com.lirouti.domain.member.enums.SocialProvider;
 import com.lirouti.domain.verification.dto.request.ChallengeVerificationReqDTO;
 import com.lirouti.domain.verification.entity.ChallengeVerification;
+import com.lirouti.domain.verification.repository.ChallengeVerificationLikeRepository;
 import com.lirouti.domain.verification.repository.ChallengeVerificationRepository;
 import com.lirouti.domain.verification.exception.VerificationException;
 import com.lirouti.domain.verification.exception.code.error.ChallengeVerificationErrorCode;
@@ -33,6 +34,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -70,6 +72,9 @@ class VerificationDeleteTest {
 
     @Autowired
     private ChallengeVerificationRepository challengeVerificationRepository;
+
+    @Autowired
+    private ChallengeVerificationLikeRepository challengeVerificationLikeRepository;
 
     @PersistenceContext
     private EntityManager em;
@@ -354,4 +359,65 @@ class VerificationDeleteTest {
         assertThat(v.getImageUrl()).as("사진도 그대로다").isEqualTo(PUBLIC_KEY);
     }
 
+
+    /**
+     * <b>인증 삭제는 소프트 삭제라 행이 남고, 다시 올리면 같은 행이 되살아난다.</b> 좋아요는 그
+     * 행을 가리키므로 함께 지우지 않으면 <b>새로 올린 사진이 지운 사진의 좋아요를 물려받는다.</b>
+     *
+     * <p>같은 자리에서 심사 결과와 시도 횟수는 이미 초기화한다 — "사진이 바뀌었으니 지난 심사
+     * 결과는 이 사진의 것이 아니다" 가 이유다. 좋아요도 같은 이유로 남으면 안 된다.
+     */
+    @Test
+    @DisplayName("지우면 좋아요도 사라진다 — 다시 올려도 옛 좋아요가 따라오지 않는다")
+    void delete_RemovesLikes_AndTheyDoNotComeBackOnReverify() {
+        // given: 남이 내 인증에 좋아요를 눌렀다
+        ChallengeVerification v = verificationOn(today());
+        participation.applyVerification(today(), RoutineCycle.DAILY);
+        em.flush();
+
+        Member liker = liker();
+        challengeVerificationService.like(liker.getId(), challenge.getId(), v.getId());
+        em.flush();
+        assertThat(likeCount(v)).as("눌린 상태로 시작한다").isEqualTo(1);
+
+        // when: 인증을 지운다
+        challengeVerificationService.deleteVerification(me.getId(), challenge.getId(), v.getId());
+        em.flush();
+
+        // then
+        assertThat(likeCount(v)).as("지우면 좋아요도 함께 사라진다").isZero();
+
+        // when: 같은 회차에 다시 올린다 — 같은 행이 되살아나는 경로다
+        challengeVerificationService.verify(me.getId(), challenge.getId(),
+                new ChallengeVerificationReqDTO.Verify(NEW_STAGING_KEY, "다시 올림"));
+        em.flush();
+
+        // then
+        assertAll(
+                () -> assertThat(v.isDeleted()).as("되살아났다").isFalse(),
+                () -> assertThat(likeCount(v))
+                        .as("새 사진이 옛 좋아요를 물려받지 않는다").isZero());
+    }
+
+    private long likeCount(ChallengeVerification verification) {
+        em.flush();
+        em.clear();
+        return em.createQuery("""
+                        select count(l) from ChallengeVerificationLike l
+                         where l.challengeVerification.id = :id
+                        """, Long.class)
+                .setParameter("id", verification.getId())
+                .getSingleResult();
+    }
+
+    private Member liker() {
+        int n = seq.incrementAndGet();
+        Member member = Member.builder()
+                .email("liker" + n + "@ex.com").nickname("liker" + n)
+                .socialProvider(me.getSocialProvider()).role(me.getRole())
+                .socialId("liker-sid-" + n).build();
+        em.persist(member);
+        em.flush();
+        return member;
+    }
 }
