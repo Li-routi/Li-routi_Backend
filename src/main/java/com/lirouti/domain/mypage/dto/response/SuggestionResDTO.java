@@ -16,8 +16,8 @@ public final class SuggestionResDTO {
     @Builder
     public record Category(
             @Schema(description = "분류 id. 등록할 때 이 값을 보낸다") Long id,
-            @Schema(description = "논리 키", example = "BUG") String code,
-            @Schema(description = "화면에 쓸 이름", example = "버그 신고") String name
+            @Schema(description = "논리 키", example = "MAIN") String code,
+            @Schema(description = "화면에 쓸 이름", example = "메인") String name
     ) {
     }
 
