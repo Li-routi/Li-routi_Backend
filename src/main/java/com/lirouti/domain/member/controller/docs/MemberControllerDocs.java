@@ -70,6 +70,32 @@ public interface MemberControllerDocs {
     );
 
     @Operation(
+            summary = "프로필 이미지 삭제",
+            description = "로그인한 회원의 프로필 이미지를 삭제하고 기본 이미지 상태로 되돌립니다."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "프로필 이미지 삭제 성공"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401",
+                    description = "유효하지 않은 토큰"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "403",
+                    description = "탈퇴했거나 비활성화된 회원"
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "500",
+                    description = "서버 내부 오류"
+            )
+    })
+    ApiResponse<MemberResDTO.MemberInfo> deleteProfileImage(
+            @Parameter(hidden = true) CustomUserDetails userDetails
+    );
+
+    @Operation(
             summary = "로그아웃",
             description = "현재 access token을 블랙리스트에 등록하고 refresh token 세션을 삭제합니다."
     )

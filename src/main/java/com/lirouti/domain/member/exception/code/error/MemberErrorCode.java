@@ -53,6 +53,11 @@ public enum MemberErrorCode implements BaseErrorCode {
         "탈퇴 확인 문구가 일치하지 않습니다.",
         "MEMBER400_3"
     ),
+    INVALID_PROFILE_UPDATE_REQUEST(
+        HttpStatus.BAD_REQUEST,
+        "프로필 수정 요청이 올바르지 않습니다.",
+        "MEMBER400_4"
+    ),
     ;
 
     private final HttpStatus httpStatus;

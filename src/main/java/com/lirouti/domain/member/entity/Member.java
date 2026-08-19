@@ -124,11 +124,18 @@ public class Member extends BaseEntity {
         this.deletedAt = withdrawnAt;
     }
 
-    // 프로필 내 닉네임 & 이미지 수정 및 온보딩 완료 처리
+    // 이미지 key가 null인 수정 요청은 기존 이미지를 유지한다.
     public void updateProfile(String nickname, String profileImageKey) {
         this.nickname = nickname;
-        this.profileImageKey = profileImageKey;
+        if (profileImageKey != null) {
+            this.profileImageKey = profileImageKey;
+        }
         this.onboardingCompleted = true;
+    }
+
+    // 프로필 이미지를 기본 이미지 상태로 되돌린다.
+    public void clearProfileImage() {
+        this.profileImageKey = null;
     }
 
     /**
