@@ -123,10 +123,54 @@ class AchievementQueryServiceTest {
 
         AchievementResDTO.Achievements result = achievementQueryService.getMyAchievements(MEMBER_ID);
 
-        assertThat(result.categories().get(0).achievements())
+        assertThat(result.achievements())
                 .extracting(AchievementResDTO.AchievementItem::code)
                 .as("받기 가능이 맨 위, 받기 완료가 맨 아래, 같은 칸끼리는 sort_order 유지")
                 .containsExactly("ACH-003", "ACH-002", "ACH-004", "ACH-001", "ACH-005");
+        assertThat(result.categories().get(0).achievements())
+                .extracting(AchievementResDTO.AchievementItem::code)
+                .as("카테고리 묶음도 같은 기준으로 세운다")
+                .containsExactly("ACH-003", "ACH-002", "ACH-004", "ACH-001", "ACH-005");
+    }
+
+    /**
+     * 카테고리 묶음 안에서만 세우면, 앱이 묶음을 이어 붙이는 순간 순서가 흩어진다 —
+     * 앞 카테고리의 받기 완료가 뒤 카테고리의 받기 가능보다 위에 온다.
+     */
+    @Test
+    @DisplayName("평평한 목록은 카테고리를 가로질러 세운다")
+    void getMyAchievements_FlatListOrdersAcrossCategories() {
+        Achievement rareClaimed = achievement(21L, "RARE-CLAIMED", null, true);
+        Achievement epicClaimable = categorized(22L, "EPIC-CLAIMABLE", AchievementCategory.EPIC);
+        when(achievementRepository.findAllByActiveTrueOrderByCategoryAscSortOrderAsc())
+                .thenReturn(List.of(rareClaimed, epicClaimable));
+        when(memberAchievementRepository.findAllByMemberId(MEMBER_ID)).thenReturn(List.of(
+                memberAchievement(rareClaimed, MemberAchievementStatus.CLAIMED),
+                memberAchievement(epicClaimable, MemberAchievementStatus.ACHIEVED)));
+
+        AchievementResDTO.Achievements result = achievementQueryService.getMyAchievements(MEMBER_ID);
+
+        assertThat(result.achievements())
+                .extracting(AchievementResDTO.AchievementItem::code)
+                .as("다른 카테고리의 받기 가능이 받기 완료보다 위여야 한다")
+                .containsExactly("EPIC-CLAIMABLE", "RARE-CLAIMED");
+    }
+
+    private Achievement categorized(Long id, String code, AchievementCategory category) {
+        Achievement achievement = Achievement.builder()
+                .code(code)
+                .category(category)
+                .name(code)
+                .conditionDesc("condition")
+                .progressType(AchievementProgressType.NONE)
+                .topazReward(10)
+                .badgeYn(true)
+                .limitedOutfitYn(false)
+                .sortOrder(id.intValue())
+                .active(true)
+                .build();
+        ReflectionTestUtils.setField(achievement, "id", id);
+        return achievement;
     }
 
     /** id 를 채우는 것은 조회 서비스가 진행도를 id 로 묶기 때문이다 — 비면 거기서 NPE 가 난다. */
