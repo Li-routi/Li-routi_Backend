@@ -37,7 +37,7 @@ import static org.junit.jupiter.api.Assertions.assertAll;
 @DisplayName("건의")
 class SuggestionTest {
 
-    private static final long BUG = 1L;
+    private static final long MAIN = 5L;
     private static final long ETC = 4L;
 
     @Autowired private SuggestionQueryService suggestionQueryService;
@@ -70,7 +70,7 @@ class SuggestionTest {
                 () -> assertThat(categories.categories())
                         .extracting(SuggestionResDTO.Category::code)
                         .as("시드 순서 그대로, 내려간 ETC 는 빠진다")
-                        .containsExactly("BUG", "FEATURE", "INCONVENIENCE"),
+                        .containsExactly("MAIN", "GROUP", "GROUP_CHAT", "CHALLENGE"),
                 () -> assertThat(categories.categories())
                         .allSatisfy(category -> assertThat(category.name()).isNotBlank()));
     }
@@ -81,12 +81,12 @@ class SuggestionTest {
     @DisplayName("건의를 등록하면 접수 상태로 남는다")
     void create_StartsAsReceived() {
         SuggestionResDTO.Suggestion created =
-                suggestionCommandService.create(me.getId(), BUG, "루틴 알림이 두 번 옵니다");
+                suggestionCommandService.create(me.getId(), MAIN, "홈 화면 알림이 두 번 옵니다");
 
         assertAll(
                 () -> assertThat(created.id()).isNotNull(),
-                () -> assertThat(created.category().code()).isEqualTo("BUG"),
-                () -> assertThat(created.content()).isEqualTo("루틴 알림이 두 번 옵니다"),
+                () -> assertThat(created.category().code()).isEqualTo("MAIN"),
+                () -> assertThat(created.content()).isEqualTo("홈 화면 알림이 두 번 옵니다"),
                 () -> assertThat(created.status())
                         .as("등록은 언제나 접수에서 시작한다")
                         .isEqualTo(SuggestionStatus.RECEIVED));
@@ -123,11 +123,11 @@ class SuggestionTest {
         String tooLong = "가".repeat(2001);
 
         assertAll(
-                () -> assertThatThrownBy(() -> suggestionCommandService.create(me.getId(), BUG, "  "))
+                () -> assertThatThrownBy(() -> suggestionCommandService.create(me.getId(), MAIN, "  "))
                         .isInstanceOf(SuggestionException.class)
                         .satisfies(e -> assertThat(((SuggestionException) e).getCode())
                                 .isEqualTo(SuggestionErrorCode.INVALID_CONTENT)),
-                () -> assertThatThrownBy(() -> suggestionCommandService.create(me.getId(), BUG, tooLong))
+                () -> assertThatThrownBy(() -> suggestionCommandService.create(me.getId(), MAIN, tooLong))
                         .isInstanceOf(SuggestionException.class)
                         .satisfies(e -> assertThat(((SuggestionException) e).getCode())
                                 .isEqualTo(SuggestionErrorCode.INVALID_CONTENT)),
@@ -144,8 +144,8 @@ class SuggestionTest {
     @Test
     @DisplayName("남이 보낸 건의는 내 목록에 섞이지 않는다")
     void list_IsIsolatedPerMember() {
-        suggestionCommandService.create(me.getId(), BUG, "내 건의");
-        suggestionCommandService.create(other.getId(), BUG, "남의 건의");
+        suggestionCommandService.create(me.getId(), MAIN, "내 건의");
+        suggestionCommandService.create(other.getId(), MAIN, "남의 건의");
         em.flush();
         em.clear();
 
@@ -160,7 +160,7 @@ class SuggestionTest {
     @DisplayName("최신순으로 나가고 커서로 이어 받는다")
     void list_IsNewestFirstAndPaged() {
         for (int i = 1; i <= 5; i++) {
-            suggestionCommandService.create(me.getId(), BUG, "건의 " + i);
+            suggestionCommandService.create(me.getId(), MAIN, "건의 " + i);
         }
         em.flush();
         em.clear();
@@ -206,7 +206,7 @@ class SuggestionTest {
     @Test
     @DisplayName("마지막 쪽에서는 커서가 비고 다음이 없다고 알린다")
     void list_LastPageHasNoCursor() {
-        suggestionCommandService.create(me.getId(), BUG, "하나뿐");
+        suggestionCommandService.create(me.getId(), MAIN, "하나뿐");
         em.flush();
         em.clear();
 
