@@ -10,6 +10,9 @@ import static org.mockito.Mockito.when;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -36,6 +39,9 @@ import com.lirouti.domain.member.enums.Role;
 import com.lirouti.domain.member.enums.SocialProvider;
 import com.lirouti.domain.verification.dto.request.VerificationReqDTO;
 import com.lirouti.domain.verification.dto.response.VerificationResDTO;
+import com.lirouti.domain.verification.entity.GroupRoutineVerificationReread;
+import com.lirouti.domain.verification.repository.GroupRoutineVerificationReadRepository;
+import com.lirouti.domain.verification.service.command.GroupRoutineVerificationReadCommandService;
 import com.lirouti.domain.verification.service.RoutineVerificationService;
 import com.lirouti.domain.verification.service.command.GroupRoutineVerificationLikeCommandService;
 import com.lirouti.global.util.TimeUtil;
@@ -68,6 +74,10 @@ class RoutineVerificationQueryTest {
     private RoutineVerificationService verificationService;
     @Autowired
     private GroupRoutineVerificationLikeCommandService likeCommandService;
+    @Autowired
+    private GroupRoutineVerificationReadCommandService readCommandService;
+    @Autowired
+    private GroupRoutineVerificationReadRepository readRepository;
 
     @MockitoBean
     private MediaService mediaService;
@@ -133,12 +143,12 @@ class RoutineVerificationQueryTest {
         return assignment;
     }
 
-    private void verifyGroup(Member member, GroupRoutineAssignment assignment) {
-        verificationService.verifyGroupRoutine(
+    private Long verifyGroup(Member member, GroupRoutineAssignment assignment) {
+        return verificationService.verifyGroupRoutine(
                 member.getId(),
                 assignment.getGroupRoutine().getGroup().getId(),
                 assignment.getGroupRoutine().getId(),
-                new VerificationReqDTO.Verify(GROUP_KEY, "청소 완료"));
+                new VerificationReqDTO.Verify(GROUP_KEY, "청소 완료")).verificationId();
     }
 
     // ── 그룹 루틴 ──
@@ -295,5 +305,73 @@ class RoutineVerificationQueryTest {
                 () -> assertThat(next.verifications().get(0).memberId()).isEqualTo(first.getId()),
                 () -> assertThat(next.hasNext()).isFalse()
         );
+    }
+
+    @Test
+    @DisplayName("과거 재인증 marker와 신규 미조회 인증을 ID 오름차순으로 한 번씩 페이지 조회한다")
+    void getUnreadGroupRoutineVerifications_MergesRereadsAndNewRowsAcrossPages() {
+        Member firstAuthor = member();
+        Member secondAuthor = member();
+        Member cursorAuthor = member();
+        Member newFirstAuthor = member();
+        Member newSecondAuthor = member();
+        Group group = group(firstAuthor, secondAuthor, cursorAuthor, newFirstAuthor, newSecondAuthor, owner);
+        GroupRoutineAssignment first = assignment(group, firstAuthor);
+        GroupRoutineAssignment second = assignment(group, secondAuthor);
+        GroupRoutineAssignment cursorRow = assignment(group, cursorAuthor);
+        GroupRoutineAssignment newFirst = assignment(group, newFirstAuthor);
+        GroupRoutineAssignment newSecond = assignment(group, newSecondAuthor);
+
+        Long firstId = verifyGroup(firstAuthor, first);
+        Long secondId = verifyGroup(secondAuthor, second);
+        Long cursorId = verifyGroup(cursorAuthor, cursorRow);
+        readRepository.upsertIfAhead(group.getId(), owner.getId(), cursorId, LocalDateTime.now());
+        Long newFirstId = verifyGroup(newFirstAuthor, newFirst);
+        Long newSecondId = verifyGroup(newSecondAuthor, newSecond);
+        em.persist(GroupRoutineVerificationReread.builder()
+                .group(em.getReference(Group.class, group.getId()))
+                .member(em.getReference(Member.class, owner.getId()))
+                .verificationId(firstId).build());
+        em.persist(GroupRoutineVerificationReread.builder()
+                .group(em.getReference(Group.class, group.getId()))
+                .member(em.getReference(Member.class, owner.getId()))
+                .verificationId(secondId).build());
+        em.flush();
+        em.clear();
+
+        List<Long> ids = unreadIdsByPage(group.getId(), 1);
+        assertThat(ids).containsExactly(firstId, secondId, newFirstId, newSecondId);
+        assertThat(unreadIdsByPage(group.getId(), 2))
+                .containsExactly(firstId, secondId, newFirstId, newSecondId);
+
+        // marker 한 건만 읽으면 커서는 그대로지만 해당 재인증 글만 미조회에서 빠진다.
+        readCommandService.markRead(owner.getId(), group.getId(), firstId);
+        assertThat(unreadIdsByPage(group.getId(), 20))
+                .containsExactly(secondId, newFirstId, newSecondId);
+
+        // 같은 과거 인증을 다시 재인증하면 기존 커서가 이미 지나 있어 marker가 다시 만들어진다.
+        verificationService.reverifyGroupRoutine(
+                firstAuthor.getId(), group.getId(), first.getGroupRoutine().getId(), firstId,
+                new VerificationReqDTO.Verify(GROUP_KEY, "재인증"));
+        em.flush();
+        em.clear();
+        assertThat(unreadIdsByPage(group.getId(), 20))
+                .containsExactly(firstId, secondId, newFirstId, newSecondId);
+    }
+
+    private List<Long> unreadIdsByPage(Long groupId, int size) {
+        List<Long> ids = new ArrayList<>();
+        Long cursor = null;
+        boolean hasNext;
+        do {
+            VerificationResDTO.UnreadGroupRoutineVerificationList page =
+                    queryService.getUnreadGroupRoutineVerifications(owner.getId(), groupId, cursor, size);
+            ids.addAll(page.verifications().stream()
+                    .map(VerificationResDTO.UnreadGroupRoutineVerification::verificationId)
+                    .toList());
+            cursor = page.nextCursor();
+            hasNext = page.hasNext();
+        } while (hasNext);
+        return ids;
     }
 }

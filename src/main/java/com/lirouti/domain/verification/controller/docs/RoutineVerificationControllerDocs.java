@@ -17,8 +17,9 @@ public interface RoutineVerificationControllerDocs {
     @Operation(
             summary = "미조회 그룹 루틴 인증 조회",
             description = """
-                    ACTIVE 그룹 구성원이 현재 가입 회차의 가입일 KST 00:00 이후 작성된 타인 인증을
-                    오래된 순으로 조회합니다. 조회 자체는 읽음 위치를 바꾸지 않습니다.
+                    ACTIVE 그룹 구성원이 현재 가입 회차의 가입일 KST 00:00 이후 작성된 타인 인증과,
+                    이미 확인한 뒤 재인증되어 다시 확인해야 하는 타인 인증을 오래된 순으로 조회합니다.
+                    조회 자체는 읽음 위치나 재인증 확인 marker를 바꾸지 않습니다.
                     cursor와 size는 기존 그룹 인증 목록의 커서 규약을 따릅니다.
                     """
     )
@@ -36,7 +37,7 @@ public interface RoutineVerificationControllerDocs {
 
     @Operation(
             summary = "그룹 루틴 인증 읽음 처리",
-            description = "실제로 순차 확인한 마지막 타인 인증 ID까지 읽음 커서를 전진시킵니다. 커서는 뒤로 이동하지 않습니다."
+            description = "실제로 순차 확인한 마지막 타인 인증 ID까지 읽음 커서를 전진시킵니다. 커서는 뒤로 이동하지 않으며, 재인증 확인 marker는 요청한 인증 한 건만 제거합니다."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "읽음 처리 성공"),

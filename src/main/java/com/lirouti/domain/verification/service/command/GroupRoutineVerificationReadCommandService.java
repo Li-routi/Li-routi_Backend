@@ -6,6 +6,7 @@ import com.lirouti.domain.verification.dto.response.VerificationResDTO;
 import com.lirouti.domain.verification.exception.VerificationException;
 import com.lirouti.domain.verification.exception.code.error.VerificationErrorCode;
 import com.lirouti.domain.verification.repository.GroupRoutineVerificationReadRepository;
+import com.lirouti.domain.verification.repository.GroupRoutineVerificationRereadRepository;
 import com.lirouti.domain.verification.repository.GroupRoutineVerificationRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -23,6 +24,7 @@ public class GroupRoutineVerificationReadCommandService {
     private final GroupValidationService groupValidationService;
     private final GroupRoutineVerificationRepository groupRoutineVerificationRepository;
     private final GroupRoutineVerificationReadRepository groupRoutineVerificationReadRepository;
+    private final GroupRoutineVerificationRereadRepository groupRoutineVerificationRereadRepository;
     private final Clock clock;
 
     @Transactional
@@ -42,6 +44,10 @@ public class GroupRoutineVerificationReadCommandService {
 
         groupRoutineVerificationReadRepository.upsertIfAhead(
                 groupId, memberId, verificationId, LocalDateTime.now(clock));
+        // 기존 커서는 "마지막 순차 확인 위치"라 더 큰 ID 요청이면 전진한다. 반면 재인증 marker는
+        // 실제로 요청한 글 한 건만 닫아 다른 과거 재인증 글을 함께 읽음 처리하지 않는다.
+        groupRoutineVerificationRereadRepository.deleteByGroupIdAndMemberIdAndVerificationId(
+                groupId, memberId, verificationId);
         Long lastReadVerificationId = groupRoutineVerificationReadRepository
                 .findLastReadVerificationIdByGroupIdAndMemberId(groupId, memberId)
                 .orElseThrow(() -> new IllegalStateException("그룹 루틴 인증 읽음 위치 저장에 실패했습니다."));

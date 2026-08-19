@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doNothing;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -36,6 +37,8 @@ import com.lirouti.domain.verification.exception.code.error.VerificationErrorCod
 import com.lirouti.domain.verification.repository.GroupRoutineVerificationRepository;
 import com.lirouti.domain.verification.repository.GroupRoutineVerificationLikeRepository;
 import com.lirouti.domain.verification.repository.GroupRoutineVerificationDisappointmentRepository;
+import com.lirouti.domain.verification.repository.GroupRoutineVerificationReadRepository;
+import com.lirouti.domain.verification.repository.GroupRoutineVerificationRereadRepository;
 import com.lirouti.domain.group.repository.GroupMemberRepository;
 import com.lirouti.domain.verification.service.command.GroupRoutineVerificationLikeCommandService;
 import com.lirouti.domain.group.service.command.GroupInteractionCommandService;
@@ -70,6 +73,10 @@ class GroupRoutineVerificationTest {
     private GroupRoutineVerificationLikeRepository likeRepository;
     @Autowired
     private GroupRoutineVerificationDisappointmentRepository disappointmentRepository;
+    @Autowired
+    private GroupRoutineVerificationReadRepository readRepository;
+    @Autowired
+    private GroupRoutineVerificationRereadRepository rereadRepository;
     @Autowired
     private GroupRoutineVerificationLikeCommandService likeCommandService;
     @Autowired
@@ -322,5 +329,108 @@ class GroupRoutineVerificationTest {
                 .orElseThrow();
         assertThat(em.find(Group.class, groupId).getLastVerificationAt())
                 .isEqualTo(persistedVerification.getCreatedAt());
+    }
+
+    @Test
+    @DisplayName("재인증은 이미 읽은 ACTIVE 타인에게만 재조회 marker를 만들고 나머지는 제외한다")
+    void reverify_CreatesRereadMarkerOnlyForPreviouslyReadActiveMembers() {
+        Member author = member();
+        GroupRoutineAssignment assignment = assignment(author, GroupRoutineAssignmentStatus.IN_PROGRESS);
+        Group group = assignment.getGroupRoutine().getGroup();
+        Member reader = member();
+        Member unreadMember = member();
+        Member leftMember = member();
+        Member kickedMember = member();
+        em.persist(GroupMember.builder().group(group).member(reader).role(GroupMemberRole.MEMBER).build());
+        em.persist(GroupMember.builder().group(group).member(unreadMember).role(GroupMemberRole.MEMBER).build());
+        GroupMember leftMembership = GroupMember.builder()
+                .group(group).member(leftMember).role(GroupMemberRole.MEMBER).build();
+        GroupMember kickedMembership = GroupMember.builder()
+                .group(group).member(kickedMember).role(GroupMemberRole.MEMBER).build();
+        em.persist(leftMembership);
+        em.persist(kickedMembership);
+        em.flush();
+        Long leftMembershipId = leftMembership.getId();
+        Long kickedMembershipId = kickedMembership.getId();
+
+        VerificationResDTO.GroupRoutine verified = verificationService.verifyGroupRoutine(
+                author.getId(), group.getId(), assignment.getGroupRoutine().getId(), request());
+        readRepository.upsertIfAhead(group.getId(), reader.getId(), verified.verificationId(), LocalDateTime.now());
+        readRepository.upsertIfAhead(group.getId(), leftMember.getId(), verified.verificationId(), LocalDateTime.now());
+        readRepository.upsertIfAhead(group.getId(), kickedMember.getId(), verified.verificationId(), LocalDateTime.now());
+        em.find(GroupMember.class, leftMembershipId).leave();
+        em.find(GroupMember.class, kickedMembershipId).kick();
+
+        verificationService.reverifyGroupRoutine(
+                author.getId(), group.getId(), assignment.getGroupRoutine().getId(), verified.verificationId(),
+                new VerificationReqDTO.Verify(REVERIFIED_KEY, "다시 확인"));
+        em.flush();
+        em.clear();
+
+        Long readerMarkerCount = em.createQuery("""
+                        select count(reread) from GroupRoutineVerificationReread reread
+                        where reread.group.id = :groupId
+                          and reread.member.id = :memberId
+                          and reread.verificationId = :verificationId
+                        """, Long.class)
+                .setParameter("groupId", group.getId())
+                .setParameter("memberId", reader.getId())
+                .setParameter("verificationId", verified.verificationId())
+                .getSingleResult();
+        Long excludedMarkerCount = em.createQuery("""
+                        select count(reread) from GroupRoutineVerificationReread reread
+                        where reread.group.id = :groupId
+                          and reread.member.id in :memberIds
+                        """, Long.class)
+                .setParameter("groupId", group.getId())
+                .setParameter("memberIds", java.util.List.of(
+                        author.getId(), unreadMember.getId(), leftMember.getId(), kickedMember.getId()))
+                .getSingleResult();
+
+        assertThat(readerMarkerCount).isOne();
+        assertThat(excludedMarkerCount).isZero();
+        assertThat(rereadRepository.count()).isEqualTo(1L);
+    }
+
+    @Test
+    @DisplayName("인증글을 삭제하면 해당 재조회 marker도 FK cascade로 제거한다")
+    void deleteVerification_CascadesRereadMarker() {
+        Member author = member();
+        GroupRoutineAssignment assignment = assignment(author, GroupRoutineAssignmentStatus.IN_PROGRESS);
+        Group group = assignment.getGroupRoutine().getGroup();
+        Member reader = member();
+        em.persist(GroupMember.builder().group(group).member(reader).role(GroupMemberRole.MEMBER).build());
+        em.flush();
+
+        VerificationResDTO.GroupRoutine verified = verificationService.verifyGroupRoutine(
+                author.getId(), group.getId(), assignment.getGroupRoutine().getId(), request());
+        readRepository.upsertIfAhead(group.getId(), reader.getId(), verified.verificationId(), LocalDateTime.now());
+        verificationService.reverifyGroupRoutine(
+                author.getId(), group.getId(), assignment.getGroupRoutine().getId(), verified.verificationId(),
+                new VerificationReqDTO.Verify(REVERIFIED_KEY, "재인증"));
+        em.flush();
+        em.clear();
+
+        assertThat(rereadCount(group.getId(), reader.getId(), verified.verificationId())).isOne();
+
+        verificationRepository.deleteById(verified.verificationId());
+        em.flush();
+        em.clear();
+
+        assertThat(verificationRepository.findById(verified.verificationId())).isEmpty();
+        assertThat(rereadCount(group.getId(), reader.getId(), verified.verificationId())).isZero();
+    }
+
+    private Long rereadCount(Long groupId, Long memberId, Long verificationId) {
+        return em.createQuery("""
+                        select count(reread) from GroupRoutineVerificationReread reread
+                        where reread.group.id = :groupId
+                          and reread.member.id = :memberId
+                          and reread.verificationId = :verificationId
+                        """, Long.class)
+                .setParameter("groupId", groupId)
+                .setParameter("memberId", memberId)
+                .setParameter("verificationId", verificationId)
+                .getSingleResult();
     }
 }

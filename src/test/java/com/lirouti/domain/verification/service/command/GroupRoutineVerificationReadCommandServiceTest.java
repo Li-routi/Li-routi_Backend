@@ -6,6 +6,7 @@ import com.lirouti.domain.group.exception.code.error.GroupErrorCode;
 import com.lirouti.domain.group.service.GroupValidationService;
 import com.lirouti.domain.verification.dto.response.VerificationResDTO;
 import com.lirouti.domain.verification.repository.GroupRoutineVerificationReadRepository;
+import com.lirouti.domain.verification.repository.GroupRoutineVerificationRereadRepository;
 import com.lirouti.domain.verification.repository.GroupRoutineVerificationRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -34,13 +35,14 @@ class GroupRoutineVerificationReadCommandServiceTest {
     @Mock private GroupValidationService groupValidationService;
     @Mock private GroupRoutineVerificationRepository verificationRepository;
     @Mock private GroupRoutineVerificationReadRepository readRepository;
+    @Mock private GroupRoutineVerificationRereadRepository rereadRepository;
     @Mock private GroupMember membership;
     private GroupRoutineVerificationReadCommandService service;
 
     @BeforeEach
     void setUp() {
         service = new GroupRoutineVerificationReadCommandService(
-                groupValidationService, verificationRepository, readRepository,
+                groupValidationService, verificationRepository, readRepository, rereadRepository,
                 Clock.fixed(Instant.parse("2026-08-08T03:00:00Z"), ZoneId.of("Asia/Seoul")));
     }
 
@@ -57,6 +59,8 @@ class GroupRoutineVerificationReadCommandServiceTest {
                 service.markRead(MEMBER_ID, GROUP_ID, VERIFICATION_ID);
 
         verify(readRepository).upsertIfAhead(eq(GROUP_ID), eq(MEMBER_ID), eq(VERIFICATION_ID), any());
+        verify(rereadRepository).deleteByGroupIdAndMemberIdAndVerificationId(
+                GROUP_ID, MEMBER_ID, VERIFICATION_ID);
         assertThat(result.lastReadVerificationId()).isEqualTo(VERIFICATION_ID);
     }
 
@@ -67,6 +71,6 @@ class GroupRoutineVerificationReadCommandServiceTest {
 
         assertThatThrownBy(() -> service.markRead(MEMBER_ID, GROUP_ID, VERIFICATION_ID))
                 .isInstanceOf(GroupException.class);
-        verifyNoInteractions(verificationRepository, readRepository);
+        verifyNoInteractions(verificationRepository, readRepository, rereadRepository);
     }
 }
