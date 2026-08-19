@@ -176,7 +176,7 @@ class SuggestionTest {
         suggestionCommandService.create(me.getId(), MAIN, "다른 제목", "여기에도 알림 이라는 말이 있다");
 
         SuggestionResDTO.Listing found =
-                suggestionQueryService.getMySuggestions(me.getId(), null, 20, "알림");
+                suggestionQueryService.getMySuggestions(me.getId(), null, 20, "알림", null);
 
         assertThat(found.suggestions())
                 .extracting(SuggestionResDTO.Suggestion::title)
@@ -196,12 +196,12 @@ class SuggestionTest {
 
         assertAll(
                 () -> assertThat(suggestionQueryService
-                        .getMySuggestions(me.getId(), null, 20, "%").suggestions())
+                        .getMySuggestions(me.getId(), null, 20, "%", null).suggestions())
                         .as("% 는 전부를 뜻하지 않는다")
                         .extracting(SuggestionResDTO.Suggestion::title)
                         .containsExactly("할인 50% 적용"),
                 () -> assertThat(suggestionQueryService
-                        .getMySuggestions(me.getId(), null, 20, "_").suggestions())
+                        .getMySuggestions(me.getId(), null, 20, "_", null).suggestions())
                         .as("_ 는 아무 글자 하나를 뜻하지 않는다")
                         .isEmpty());
     }
@@ -214,9 +214,70 @@ class SuggestionTest {
 
         assertAll(
                 () -> assertThat(suggestionQueryService
-                        .getMySuggestions(me.getId(), null, 20, "   ").suggestions()).hasSize(2),
+                        .getMySuggestions(me.getId(), null, 20, "   ", null).suggestions()).hasSize(2),
                 () -> assertThat(suggestionQueryService
-                        .getMySuggestions(me.getId(), null, 20, null).suggestions()).hasSize(2));
+                        .getMySuggestions(me.getId(), null, 20, null, null).suggestions()).hasSize(2));
+    }
+
+    @Test
+    @DisplayName("분류로 거른다")
+    void search_FiltersByCategory() {
+        suggestionCommandService.create(me.getId(), MAIN, "메인 건의", "본문");
+        suggestionCommandService.create(me.getId(), ETC, "기타 건의", "본문");
+
+        SuggestionResDTO.Listing found =
+                suggestionQueryService.getMySuggestions(me.getId(), null, 20, null, MAIN);
+
+        assertThat(found.suggestions())
+                .extracting(SuggestionResDTO.Suggestion::title)
+                .containsExactly("메인 건의");
+    }
+
+    @Test
+    @DisplayName("제목과 분류를 함께 주면 둘 다 만족하는 것만 나온다")
+    void search_CombinesKeywordAndCategory() {
+        suggestionCommandService.create(me.getId(), MAIN, "알림 문제", "본문");
+        suggestionCommandService.create(me.getId(), ETC, "알림 문제", "본문");
+        suggestionCommandService.create(me.getId(), MAIN, "다른 문제", "본문");
+
+        SuggestionResDTO.Listing found =
+                suggestionQueryService.getMySuggestions(me.getId(), null, 20, "알림", MAIN);
+
+        assertThat(found.suggestions())
+                .as("분류만 맞거나 제목만 맞는 것은 빠진다")
+                .hasSize(1)
+                .allSatisfy(suggestion -> assertAll(
+                        () -> assertThat(suggestion.title()).isEqualTo("알림 문제"),
+                        () -> assertThat(suggestion.category().code()).isEqualTo("MAIN")));
+    }
+
+    /** 고를 수 없게 하는 것과 찾을 수 없게 하는 것은 다르다. */
+    @Test
+    @DisplayName("내려간 분류로도 거를 수 있다")
+    void search_AllowsInactiveCategory() {
+        suggestionCommandService.create(me.getId(), ETC, "기타 건의", "본문");
+        deactivate(ETC);
+
+        SuggestionResDTO.Listing found =
+                suggestionQueryService.getMySuggestions(me.getId(), null, 20, null, ETC);
+
+        assertThat(found.suggestions())
+                .extracting(SuggestionResDTO.Suggestion::title)
+                .containsExactly("기타 건의");
+    }
+
+    /**
+     * 조용히 빈 목록을 주면 "이 분류에는 건의가 없다" 로 읽혀, 앱이 잘못된 id 를 보내고 있다는
+     * 것을 알아챌 기회가 사라진다.
+     */
+    @Test
+    @DisplayName("없는 분류로 거르면 빈 목록이 아니라 거절이다")
+    void search_RejectsMissingCategory() {
+        assertThatThrownBy(() ->
+                suggestionQueryService.getMySuggestions(me.getId(), null, 20, null, 9_999L))
+                .isInstanceOf(SuggestionException.class)
+                .satisfies(e -> assertThat(((SuggestionException) e).getCode())
+                        .isEqualTo(SuggestionErrorCode.CATEGORY_NOT_FOUND));
     }
 
     /** 검색해도 남의 것이 섞이면 안 된다 — 조건이 하나 늘 때 격리가 풀리는 자리다. */
@@ -226,7 +287,7 @@ class SuggestionTest {
         suggestionCommandService.create(other.getId(), MAIN, "알림 문제", "본문");
 
         SuggestionResDTO.Listing found =
-                suggestionQueryService.getMySuggestions(me.getId(), null, 20, "알림");
+                suggestionQueryService.getMySuggestions(me.getId(), null, 20, "알림", null);
 
         assertThat(found.suggestions()).isEmpty();
     }
@@ -246,7 +307,7 @@ class SuggestionTest {
         em.clear();
 
         SuggestionResDTO.Listing mine =
-                suggestionQueryService.getMySuggestions(me.getId(), null, 20, null);
+                suggestionQueryService.getMySuggestions(me.getId(), null, 20, null, null);
 
         assertThat(mine.suggestions()).extracting(SuggestionResDTO.Suggestion::content)
                 .containsExactly("내 건의");
@@ -262,9 +323,9 @@ class SuggestionTest {
         em.clear();
 
         SuggestionResDTO.Listing first =
-                suggestionQueryService.getMySuggestions(me.getId(), null, 2, null);
+                suggestionQueryService.getMySuggestions(me.getId(), null, 2, null, null);
         SuggestionResDTO.Listing second =
-                suggestionQueryService.getMySuggestions(me.getId(), first.nextCursor(), 2, null);
+                suggestionQueryService.getMySuggestions(me.getId(), first.nextCursor(), 2, null, null);
 
         assertAll(
                 () -> assertThat(first.suggestions())
@@ -283,7 +344,7 @@ class SuggestionTest {
     @Test
     @DisplayName("memberId 없이 부르면 빈 목록이 아니라 거절이다")
     void list_RejectsMissingMember() {
-        assertThatThrownBy(() -> suggestionQueryService.getMySuggestions(null, null, 20, null))
+        assertThatThrownBy(() -> suggestionQueryService.getMySuggestions(null, null, 20, null, null))
                 .isInstanceOf(GeneralException.class);
     }
 
@@ -292,10 +353,10 @@ class SuggestionTest {
     void list_RejectsOutOfRangeSize() {
         assertAll(
                 () -> assertThatThrownBy(
-                        () -> suggestionQueryService.getMySuggestions(me.getId(), null, 0, null))
+                        () -> suggestionQueryService.getMySuggestions(me.getId(), null, 0, null, null))
                         .isInstanceOf(SuggestionException.class),
                 () -> assertThatThrownBy(
-                        () -> suggestionQueryService.getMySuggestions(me.getId(), null, 51, null))
+                        () -> suggestionQueryService.getMySuggestions(me.getId(), null, 51, null, null))
                         .isInstanceOf(SuggestionException.class));
     }
 
@@ -307,7 +368,7 @@ class SuggestionTest {
         em.clear();
 
         SuggestionResDTO.Listing listing =
-                suggestionQueryService.getMySuggestions(me.getId(), null, 20, null);
+                suggestionQueryService.getMySuggestions(me.getId(), null, 20, null, null);
 
         assertAll(
                 () -> assertThat(listing.hasNext()).isFalse(),
@@ -324,7 +385,7 @@ class SuggestionTest {
         em.clear();
 
         SuggestionResDTO.Listing listing =
-                suggestionQueryService.getMySuggestions(me.getId(), null, 20, null);
+                suggestionQueryService.getMySuggestions(me.getId(), null, 20, null, null);
 
         assertAll(
                 () -> assertThat(listing.suggestions()).hasSize(1),

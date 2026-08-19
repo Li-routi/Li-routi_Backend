@@ -72,7 +72,7 @@ class SuggestionControllerTest {
     @Test
     @DisplayName("size 를 안 주면 기본값 20 으로 조회한다")
     void list_UsesDefaultSize() throws Exception {
-        when(suggestionQueryService.getMySuggestions(eq(MEMBER_ID), any(), anyInt(), any()))
+        when(suggestionQueryService.getMySuggestions(eq(MEMBER_ID), any(), anyInt(), any(), any()))
                 .thenReturn(SuggestionResDTO.Listing.builder()
                         .suggestions(List.of()).hasNext(false).build());
 
@@ -80,7 +80,7 @@ class SuggestionControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("SUGGESTION200_2"));
 
-        verify(suggestionQueryService).getMySuggestions(eq(MEMBER_ID), eq(null), eq(20), eq(null));
+        verify(suggestionQueryService).getMySuggestions(eq(MEMBER_ID), eq(null), eq(20), eq(null), eq(null));
     }
 
     /**
@@ -90,7 +90,7 @@ class SuggestionControllerTest {
     @Test
     @DisplayName("size 가 범위를 벗어나면 400 과 SUGGESTION400_1 이 나간다")
     void list_RejectsOutOfRangeSize() throws Exception {
-        when(suggestionQueryService.getMySuggestions(eq(MEMBER_ID), any(), eq(51), any()))
+        when(suggestionQueryService.getMySuggestions(eq(MEMBER_ID), any(), eq(51), any(), any()))
                 .thenThrow(new SuggestionException(SuggestionErrorCode.INVALID_PAGE_SIZE));
 
         mockMvc.perform(get(PATH).param("size", "51")
@@ -106,7 +106,7 @@ class SuggestionControllerTest {
                         .with(user(new CustomUserDetails(MEMBER_ID, Role.ROLE_USER))))
                 .andExpect(status().isBadRequest());
 
-        verify(suggestionQueryService, never()).getMySuggestions(anyLong(), any(), anyInt(), any());
+        verify(suggestionQueryService, never()).getMySuggestions(anyLong(), any(), anyInt(), any(), any());
     }
 
     /** 회원 식별자를 요청에서 받지 않는다는 것이 이 API 의 격리 규칙이다. */
@@ -115,7 +115,7 @@ class SuggestionControllerTest {
     void list_RequiresAuthentication() throws Exception {
         mockMvc.perform(get(PATH)).andExpect(status().isUnauthorized());
 
-        verify(suggestionQueryService, never()).getMySuggestions(anyLong(), any(), anyInt(), any());
+        verify(suggestionQueryService, never()).getMySuggestions(anyLong(), any(), anyInt(), any(), any());
     }
 
     // ── 등록 ──

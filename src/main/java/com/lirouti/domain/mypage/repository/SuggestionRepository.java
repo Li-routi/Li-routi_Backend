@@ -32,8 +32,14 @@ public interface SuggestionRepository extends JpaRepository<Suggestion, Long> {
      * 와일드카드로 동작해 전부 걸리고, {@code _} 는 아무 글자 하나와 맞는다 — 검색어를 그대로
      * 이어 붙이면 "찾은 것" 과 "안 거른 것" 을 구별할 수 없다.
      *
-     * @param cursor      이 id 보다 작은 것만. 첫 요청이면 {@code null}
-     * @param titlePattern 이스케이프까지 끝난 {@code like} 패턴. 검색하지 않으면 {@code null}
+     * <p><b>분류 조건은 {@code active} 를 보지 않는다.</b> 내려간 분류로 이미 보낸 건의도 그
+     * 분류로 찾을 수 있어야 한다 — 고를 수 없게 하는 것과 찾을 수 없게 하는 것은 다르다.
+     *
+     * <p>제목과 분류를 함께 주면 <b>둘 다 만족하는 것만</b> 나온다.
+     *
+     * @param cursor       이 id 보다 작은 것만. 첫 요청이면 {@code null}
+     * @param titlePattern 이스케이프까지 끝난 {@code like} 패턴. 제목으로 거르지 않으면 {@code null}
+     * @param categoryId   이 분류의 것만. 분류로 거르지 않으면 {@code null}
      */
     @Query("""
             select suggestion
@@ -42,10 +48,12 @@ public interface SuggestionRepository extends JpaRepository<Suggestion, Long> {
             where suggestion.member.id = :memberId
               and (:cursor is null or suggestion.id < :cursor)
               and (:titlePattern is null or suggestion.title like :titlePattern escape '!')
+              and (:categoryId is null or suggestion.category.id = :categoryId)
             order by suggestion.id desc
             """)
     List<Suggestion> findMine(@Param("memberId") Long memberId,
                               @Param("cursor") Long cursor,
                               @Param("titlePattern") String titlePattern,
+                              @Param("categoryId") Long categoryId,
                               Limit limit);
 }

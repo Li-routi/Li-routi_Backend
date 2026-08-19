@@ -63,7 +63,10 @@ public interface SuggestionControllerDocs {
 
                     ### 검색
 
-                    `keyword` 를 주면 **제목**으로 거른다. 부분 일치이고 대소문자를 구별하지 않는다.
+                    `keyword` 는 **제목**, `categoryId` 는 **분류**로 거른다. 둘 다 주면 **둘 다
+                    만족하는 것만** 나온다. 둘 다 비우면 전체다.
+
+                    `keyword` 는 부분 일치이고 대소문자를 구별하지 않는다.
                     본문은 검색하지 않는다 — 긴 글 안의 아무 단어나 걸리면 목록이 뭉개진다.
 
                     `%` 나 `_` 를 넣어도 와일드카드로 동작하지 않는다. 제목에 그 글자가 들어간
@@ -71,8 +74,13 @@ public interface SuggestionControllerDocs {
 
                     비우거나 공백만 보내면 **검색하지 않은 것과 같다** — 전체가 나온다.
 
-                    검색해도 커서 방식은 그대로다. **같은 `keyword` 를 유지한 채** `nextCursor` 를
-                    넘겨야 다음 쪽이 이어진다. 검색어를 바꾸면 커서를 버리고 처음부터 받는다.
+                    `categoryId` 는 **내려간 분류도 받는다.** 그 분류로 이미 보낸 건의를 찾을 수
+                    있어야 하기 때문이다 — 고를 수 없게 하는 것과 찾을 수 없게 하는 것은 다르다.
+                    다만 **없는 분류 id 는 거절한다**(`SUGGESTION404_1`). 조용히 빈 목록을 주면
+                    "이 분류에는 건의가 없다" 로 읽혀, 잘못된 id 를 보내고 있다는 것을 모른다.
+
+                    걸러도 커서 방식은 그대로다. **같은 조건을 유지한 채** `nextCursor` 를 넘겨야
+                    다음 쪽이 이어진다. 조건을 바꾸면 커서를 버리고 처음부터 받는다.
                     """
     )
     ApiResponse<SuggestionResDTO.Listing> getMySuggestions(
@@ -80,5 +88,7 @@ public interface SuggestionControllerDocs {
             @Parameter(description = "한 번에 받을 개수. 기본 20, 1~50") Integer size,
             @Parameter(description = "제목 검색어. 부분 일치. 비우면 전체")
             String keyword,
+            @Parameter(description = "분류 id 로 거른다. 비우면 전체. 내려간 분류도 받는다")
+            Long categoryId,
             CustomUserDetails userDetails);
 }

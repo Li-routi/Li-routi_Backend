@@ -65,11 +65,13 @@ public class SuggestionController implements SuggestionControllerDocs {
             @RequestParam(required = false) Long cursor,
             @RequestParam(required = false) Integer size,
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Long categoryId,
             @AuthenticationPrincipal CustomUserDetails userDetails
     ) {
         // 회원 식별자를 요청에서 받지 않는다. 인증 주체에서만 꺼낸다.
         SuggestionResDTO.Listing result = suggestionQueryService.getMySuggestions(
-                userDetails.getMemberId(), cursor, size == null ? DEFAULT_PAGE_SIZE : size, keyword);
+                userDetails.getMemberId(), cursor, size == null ? DEFAULT_PAGE_SIZE : size,
+                keyword, categoryId);
         return ApiResponse.onSuccess(SuggestionSuccessCode.SUGGESTION_LIST_FETCH_SUCCESS, result);
     }
 }

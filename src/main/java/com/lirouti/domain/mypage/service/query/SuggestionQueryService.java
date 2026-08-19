@@ -35,7 +35,8 @@ public class SuggestionQueryService {
     }
 
     /**
-     * 내 건의 목록. <b>{@code keyword} 를 주면 제목으로 거른다.</b>
+     * 내 건의 목록. <b>{@code keyword} 는 제목으로, {@code categoryId} 는 분류로 거른다.</b>
+     * 둘 다 주면 둘 다 만족하는 것만 나온다.
      *
      * <p><b>{@code memberId} 는 인증 주체에서만 온다.</b> 컨트롤러가
      * {@code @AuthenticationPrincipal} 로 꺼내 넘기고, 요청 경로·쿼리·본문에서는 받지 않는다 —
@@ -44,12 +45,12 @@ public class SuggestionQueryService {
      * <p><b>한 건을 더 읽어 다음 쪽이 있는지 본다.</b> 별도의 count 조회를 두면 목록과 개수가
      * 서로 다른 시점을 보게 되고, 그 사이에 하나가 들어오면 어긋난다.
      *
-     * <p><b>검색해도 커서 방식은 그대로다.</b> 같은 검색어를 유지한 채 {@code nextCursor} 를
-     * 넘기면 다음 쪽이 온다 — 검색어를 바꾸면 커서를 버리고 처음부터 받아야 한다.
+     * <p><b>걸러도 커서 방식은 그대로다.</b> 같은 조건을 유지한 채 {@code nextCursor} 를 넘기면
+     * 다음 쪽이 온다 — 조건을 바꾸면 커서를 버리고 처음부터 받아야 한다.
      */
     @Transactional(readOnly = true)
     public SuggestionResDTO.Listing getMySuggestions(Long memberId, Long cursor, int size,
-                                                     String keyword) {
+                                                     String keyword, Long categoryId) {
         // memberId 가 비면 조건이 아무것도 못 걸러 빈 목록이 정상처럼 나간다. 그것을 "건의가
         // 없다" 로 읽으면 격리가 깨진 것을 알아챌 기회가 사라진다.
         if (memberId == null) {
@@ -62,8 +63,17 @@ public class SuggestionQueryService {
             throw new SuggestionException(SuggestionErrorCode.INVALID_PAGE_SIZE);
         }
 
+        // 없는 분류로 거르면 빈 목록이 나가는데, 그것을 "이 분류에는 건의가 없다" 로 읽으면
+        // 앱이 잘못된 id 를 보내고 있다는 사실을 알아챌 기회가 사라진다. 조용히 비우지 않는다.
+        //
+        // active 는 보지 않는다. 내려간 분류로 이미 보낸 건의도 그 분류로 찾을 수 있어야 한다 —
+        // 등록을 막는 것과 조회를 막는 것은 다르다.
+        if (categoryId != null && !suggestionCategoryRepository.existsById(categoryId)) {
+            throw new SuggestionException(SuggestionErrorCode.CATEGORY_NOT_FOUND);
+        }
+
         List<Suggestion> found = new ArrayList<>(suggestionRepository.findMine(
-                memberId, cursor, toTitlePattern(keyword), Limit.of(size + 1)));
+                memberId, cursor, toTitlePattern(keyword), categoryId, Limit.of(size + 1)));
 
         boolean hasNext = found.size() > size;
         if (hasNext) {
