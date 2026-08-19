@@ -84,7 +84,7 @@ class GroupControllerUnitTest {
         CustomUserDetails principal = new CustomUserDetails(MEMBER_ID, Role.ROLE_USER);
         GroupResDTO.MyGroupList result = new GroupResDTO.MyGroupList(List.of(
                 new GroupResDTO.MyGroup(GROUP_ID, "아침 모임", 3L, 2L, 2L, 1L, 4, 50, 3L,
-                        LocalDateTime.of(2026, 8, 18, 19, 45))
+                        LocalDateTime.of(2026, 8, 18, 19, 45), List.of("profiles/member.png"))
         ));
         when(groupQueryService.getMyGroups(MEMBER_ID)).thenReturn(result);
 

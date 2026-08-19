@@ -54,7 +54,10 @@ class GroupControllerTest {
     void getMyGroups_AuthenticatedMember_ReturnsSummary() throws Exception {
         Group group = group("GQ19901");
         Member member = member();
+        member.updateProfile(member.getNickname(), "profiles/requester.png");
         membership(member, group, GroupMemberRole.MEMBER);
+        Member memberWithoutProfile = member();
+        membership(memberWithoutProfile, group, GroupMemberRole.MEMBER);
         GroupRoutineCategory category = category(true);
         GroupRoutine routine = routine(group, category, "목록 루틴");
         assignment(routine, member, LocalTime.of(9, 0), LocalTime.of(10, 0),
@@ -69,13 +72,17 @@ class GroupControllerTest {
                 .andExpect(jsonPath("$.result.groups.length()").value(1))
                 .andExpect(jsonPath("$.result.groups[0].groupId").value(group.getId()))
                 .andExpect(jsonPath("$.result.groups[0].groupName").value(group.getName()))
-                .andExpect(jsonPath("$.result.groups[0].activeMemberCount").value(1))
+                .andExpect(jsonPath("$.result.groups[0].activeMemberCount").value(2))
                 .andExpect(jsonPath("$.result.groups[0].activeRoutineCount").value(1))
                 .andExpect(jsonPath("$.result.groups[0].todayAssignedRoutineCount").value(1))
                 .andExpect(jsonPath("$.result.groups[0].todayCompletedRoutineCount").value(1))
                 .andExpect(jsonPath("$.result.groups[0].monthlyAchievementRate").value(100))
                 .andExpect(jsonPath("$.result.groups[0].todayGroupVerificationCount").value(0))
-                .andExpect(jsonPath("$.result.groups[0].lastVerificationAt").value(nullValue()));
+                .andExpect(jsonPath("$.result.groups[0].lastVerificationAt").value(nullValue()))
+                .andExpect(jsonPath("$.result.groups[0].profileImageKeys.length()").value(2))
+                .andExpect(jsonPath("$.result.groups[0].profileImageKeys[0]")
+                        .value("profiles/requester.png"))
+                .andExpect(jsonPath("$.result.groups[0].profileImageKeys[1]").value(nullValue()));
     }
 
     @Test
@@ -116,7 +123,15 @@ class GroupControllerTest {
                 .andExpect(jsonPath("$.components.schemas.MyGroup.properties.todayGroupVerificationCount").exists())
                 .andExpect(jsonPath("$.components.schemas.MyGroup.properties.lastVerificationAt").exists())
                 .andExpect(jsonPath("$.components.schemas.MyGroup.properties.lastVerificationAt.type").value("string"))
-                .andExpect(jsonPath("$.components.schemas.MyGroup.properties.lastVerificationAt.format").value("date-time"));
+                .andExpect(jsonPath("$.components.schemas.MyGroup.properties.lastVerificationAt.format").value("date-time"))
+                .andExpect(jsonPath("$.components.schemas.MyGroup.properties.profileImageKeys").exists())
+                .andExpect(jsonPath("$.components.schemas.MyGroup.properties.profileImageKeys.type").value("array"))
+                .andExpect(jsonPath("$.components.schemas.MyGroup.properties.profileImageKeys.items.type")
+                        .isArray())
+                .andExpect(jsonPath("$.components.schemas.MyGroup.properties.profileImageKeys.items.type[0]")
+                        .value("string"))
+                .andExpect(jsonPath("$.components.schemas.MyGroup.properties.profileImageKeys.items.type[1]")
+                        .value("null"));
     }
 
     @Test

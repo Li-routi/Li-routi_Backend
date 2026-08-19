@@ -14,6 +14,7 @@ import com.lirouti.domain.group.repository.GroupDetailQueryRepository;
 import com.lirouti.domain.group.repository.GroupListQueryRepository;
 import com.lirouti.domain.group.repository.GroupListQueryRepository.AssignmentCountProjection;
 import com.lirouti.domain.group.repository.GroupListQueryRepository.GroupCountProjection;
+import com.lirouti.domain.group.repository.GroupListQueryRepository.GroupProfileImageProjection;
 import com.lirouti.domain.group.repository.GroupListQueryRepository.GroupScheduleCountProjection;
 import com.lirouti.domain.group.repository.GroupListQueryRepository.MyGroupProjection;
 import com.lirouti.domain.group.repository.GroupRoutineQueryRepository;
@@ -39,6 +40,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.*;
+import java.util.Arrays;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -342,6 +344,12 @@ class GroupQueryServiceTest {
                 new GroupCountProjection(firstGroupId, 4L),
                 new GroupCountProjection(secondGroupId, 2L)
         ));
+        when(groupListQueryRepository.findActiveMemberProfileImageKeysByGroupIds(groupIds))
+                .thenReturn(List.of(
+                        new GroupProfileImageProjection(firstGroupId, "profiles/first.png"),
+                        new GroupProfileImageProjection(secondGroupId, "profiles/second.png"),
+                        new GroupProfileImageProjection(firstGroupId, null)
+                ));
         when(groupListQueryRepository.countActiveRoutinesByGroupIds(groupIds)).thenReturn(List.of(
                 new GroupCountProjection(firstGroupId, 6L)
         ));
@@ -367,10 +375,13 @@ class GroupQueryServiceTest {
         // then
         assertThat(result.groups()).containsExactly(
                 new GroupResDTO.MyGroup(firstGroupId, "아침 모임", 4L, 6L, 3L, 2L, 4, 20, 8L,
-                        LocalDateTime.of(2026, 7, 24, 9, 30)),
-                new GroupResDTO.MyGroup(secondGroupId, "저녁 모임", 2L, 0L, 0L, 0L, 1, 0, 0L, null)
+                        LocalDateTime.of(2026, 7, 24, 9, 30),
+                        Arrays.asList("profiles/first.png", null)),
+                new GroupResDTO.MyGroup(secondGroupId, "저녁 모임", 2L, 0L, 0L, 0L, 1, 0, 0L, null,
+                        List.of("profiles/second.png"))
         );
         verify(groupListQueryRepository).findActiveGroupsByMemberId(MEMBER_ID);
+        verify(groupListQueryRepository).findActiveMemberProfileImageKeysByGroupIds(groupIds);
         verify(groupListQueryRepository).countActiveMembersByGroupIds(groupIds);
         verify(groupListQueryRepository).countActiveRoutinesByGroupIds(groupIds);
         verify(groupListQueryRepository).findTodayAssignmentCounts(MEMBER_ID, groupIds, TODAY);
