@@ -84,6 +84,7 @@ public class MemberCommandService {
     // 프로필 수정
     @Transactional
     public MemberResDTO.MemberInfo updateProfile(Long memberId, MemberReqDTO.UpdateProfile request) {
+        validateProfileUpdateRequest(request);
         Member member = findActiveMemberForUpdate(memberId);
 
         member.updateProfile(request.nickname(), request.profileImageKey());
@@ -105,6 +106,13 @@ public class MemberCommandService {
         Member savedMember = memberRepository.save(member);
         log.info("회원 프로필 이미지 삭제를 완료했습니다.");
         return MemberConverter.toMemberInfo(savedMember, null);
+    }
+
+    private void validateProfileUpdateRequest(MemberReqDTO.UpdateProfile request) {
+        if (request == null || request.nickname() == null || request.nickname().isBlank()) {
+            log.warn("유효하지 않은 프로필 수정 요청입니다.");
+            throw new MemberException(MemberErrorCode.INVALID_PROFILE_UPDATE_REQUEST);
+        }
     }
 
     private Member getActiveMember(Member member) {
