@@ -6,60 +6,54 @@
 -- id 는 시드가 직접 지정한다. 이 표에는 자연 키가 없어서(같은 캐릭터에 같은 키를 여러 번 걸
 -- 수도 있다) id 로 걸지 않으면 매 배포마다 행이 쌓인다.
 --
+-- 해금은 업적으로만 한다.
+--
+-- 캐릭터 열둘은 저마다 EGG 업적 하나의 보상이다. 사용자가 그 업적을 달성하고 "받기" 를 누르면
+-- AchievementClaimService 가 CharacterUnlockService.unlockByAchievementClaim 을 부르고, 그것이
+-- 여기 ACHIEVEMENT_CLAIMED 행을 찾아 캐릭터를 넣는다. condition_param 이 업적 코드다.
+--
+-- ⚠️ 예전에는 캐릭터마다 직접 조건(ACTIVE_DAYS · CATEGORY_DAYS · TIME_WINDOW_DAYS …)을 걸었다.
+--    그 결과 한 캐릭터를 여는 길이 둘이 되었고, 조건 쪽이 먼저 열어 업적의 "받기" 가 눌러도
+--    아무 일도 일어나지 않는 상태가 됐다. 실제로 민트가 ACTIVE_DAYS=1 이라 인증 한 번이면
+--    열려서, 회원 전원이 업적을 받기도 전에 민트를 갖고 있었다.
+--
+--    업적 조건이 기획의 단일 진실 공급원이므로 직접 조건을 전부 걷어내고 업적에 붙인다.
+--    난이도는 achievement.condition_key / target_count 가 정한다 — 여기서 다시 정하지 않는다.
+--
 -- ⚠️ 루티(1)에는 조건이 없다. 행이 하나도 없으면 "항상 열려 있는 기본 캐릭터" 라는 뜻이고,
 --    가입 시 기본 지급이 그 규칙으로 표현된다. 여기에 루티를 넣으면 안 된다.
-
--- 판정기 여덟. condition_param 의 뜻이 키마다 다르다.
 --
---   ACTIVE_DAYS       활동한 날 수.                       param 없음
---   CATEGORY_DAYS     그 카테고리를 한 날 수.               param = 논리 키(쉼표면 합집합)
---   TIME_WINDOW_DAYS  그 시간대에 완료한 날 수.             param = "HH:MM-HH:MM" (KST)
---   ALL_KINDS_DAYS    하루에 개인·모임·챌린지를 모두 한 날 수. param 없음
---   ROUTINE_STREAK    한 개인 루틴을 예정일마다 연속 완료.    param 없음
---   STREAK_DAYS       활동일 연속.                        param 없음
---   LIKE_GIVEN        지금 좋아요를 눌러 둔 서로 다른 인증 수. param 없음
---   DEADLINE_RUSH     마감까지 남은 시간 안에 완료.          param = 초
---
--- 카테고리 논리 키는 세 체계에 이렇게 붙는다. id 를 직접 쓰지 않는 이유는 개인·그룹·챌린지가
--- 서로 다른 체계라서다.
---
---   EXERCISE 운동    개인·그룹 id 1   챌린지 EXERCISE
---   HEALTH   건강    개인·그룹 id 2   챌린지 HEALTH
---   SELF_DEV 자기계발 개인·그룹 id 3   챌린지 STUDY
---   LIFE     생활정리 개인·그룹 id 4   챌린지 LIFE
---   MIND     마음관리 개인·그룹 id 5   챌린지 MIND
---
--- ⚠️ 원안에서 둘을 바꿨다. 모리(자정에 앱 접속 중)와 까루(알림 눌러 접속)는 서버가 알 수 없다 —
---    클라이언트가 새 이벤트를 쏘고 그것을 받는 표가 있어야 하고, 조건 하나가 프론트 일정을
---    물고 들어온다. 성격을 살려 모리는 "한밤중에 완료", 까루는 "하루에 셋 다 완료" 로 옮겼다.
+-- 판정기 여덟(ACTIVE_DAYS · CATEGORY_DAYS · TIME_WINDOW_DAYS · ALL_KINDS_DAYS · ROUTINE_STREAK ·
+-- STREAK_DAYS · LIKE_GIVEN · DEADLINE_RUSH)은 코드에 남아 있지만 캐릭터 해금에서는 쓰이지
+-- 않는다. 지우지 않은 것은 조건을 다시 데이터로 걸고 싶어질 때를 위해서다.
 
 INSERT INTO `character_unlock_condition` (`id`, `character_id`, `condition_key`, `condition_param`,
                                           `target_count`, `sort_order`, `created_at`, `updated_at`)
 VALUES
-    -- 노아 — 오전 5:00~7:59 에 완료한 날 5일. 기획서 세부에 "기상·아침 성격 루틴" 이 있었으나
-    -- 루틴의 성격은 서버가 알 수 없어 시간대로 읽었다.
-    (1, 2, 'TIME_WINDOW_DAYS', '05:00-07:59', 5, 1, NOW(6), NOW(6)),
-    -- 모리 — 한밤중(00:00~00:59) 완료 3일. 히든 성격을 살린 대체안이다.
-    (2, 3, 'TIME_WINDOW_DAYS', '00:00-00:59', 3, 1, NOW(6), NOW(6)),
-    -- 코코 — 운동 "또는" 건강. 행을 둘로 나누면 AND 가 되므로 한 행에 쉼표로 나열한다.
-    (3, 4, 'CATEGORY_DAYS', 'EXERCISE,HEALTH', 20, 1, NOW(6), NOW(6)),
-    (4, 5, 'CATEGORY_DAYS', 'MIND', 20, 1, NOW(6), NOW(6)),
-    -- 민트 — 종류와 관계없이 처음 완료.
-    (5, 6, 'ACTIVE_DAYS', NULL, 1, 1, NOW(6), NOW(6)),
-    -- 솔라 — 연속이다. 하루라도 비면 0 으로 돌아간다. 활동일 기록이 지금 없어 표를 만든 날부터
-    -- 세기 시작하므로, 첫 획득자는 그로부터 100일 뒤에 나온다.
-    (6, 7, 'STREAK_DAYS', NULL, 100, 1, NOW(6), NOW(6)),
-    -- 파도 — 개인 루틴 하나를 예정일마다 10회 연속. 고르는 화면이 없어 "하나라도" 로 읽었다.
-    (7, 8, 'ROUTINE_STREAK', NULL, 10, 1, NOW(6), NOW(6)),
-    -- 까루 — 하루에 개인·모임·챌린지를 모두 완료한 날 10일. 알림 클릭의 대체안이다.
-    (8, 9, 'ALL_KINDS_DAYS', NULL, 10, 1, NOW(6), NOW(6)),
-    (9, 10, 'CATEGORY_DAYS', 'SELF_DEV', 20, 1, NOW(6), NOW(6)),
-    -- 삐아 — 지금 좋아요를 눌러 둔 서로 다른 인증 100 건. 취소가 하드 삭제라 누적은 셀 수 없어
-    -- 뜻을 바꿨다. 100 건에 닿는 순간 해금되고, 그 뒤 취소해도 해금은 되돌리지 않는다.
-    (10, 11, 'LIKE_GIVEN', NULL, 100, 1, NOW(6), NOW(6)),
-    -- 호롱 — 마감까지 60 초 이하가 남았을 때 완료. 한 번이면 된다.
-    (11, 12, 'DEADLINE_RUSH', '60', 1, 1, NOW(6), NOW(6)),
-    (12, 13, 'CATEGORY_DAYS', 'LIFE', 20, 1, NOW(6), NOW(6)) AS new_row
+    -- 노아 — 일찍 일어난 새
+    (1, 2, 'ACHIEVEMENT_CLAIMED', 'ACH-EG-003', 1, 1, NOW(6), NOW(6)),
+    -- 모리 — 자정의 방문자
+    (2, 3, 'ACHIEVEMENT_CLAIMED', 'ACH-EG-009', 1, 1, NOW(6), NOW(6)),
+    -- 코코 — 건강한 땀방울
+    (3, 4, 'ACHIEVEMENT_CLAIMED', 'ACH-EG-004', 1, 1, NOW(6), NOW(6)),
+    -- 유키 — 마음에 쉼표
+    (4, 5, 'ACHIEVEMENT_CLAIMED', 'ACH-EG-005', 1, 1, NOW(6), NOW(6)),
+    -- 민트 — 첫 루틴의 새싹
+    (5, 6, 'ACHIEVEMENT_CLAIMED', 'ACH-EG-001', 1, 1, NOW(6), NOW(6)),
+    -- 솔라 — 100일의 태양
+    (6, 7, 'ACHIEVEMENT_CLAIMED', 'ACH-EG-012', 1, 1, NOW(6), NOW(6)),
+    -- 파도 — 취미의 물결
+    (7, 8, 'ACHIEVEMENT_CLAIMED', 'ACH-EG-006', 1, 1, NOW(6), NOW(6)),
+    -- 까루 — 알림 보고 왔어요
+    (8, 9, 'ACHIEVEMENT_CLAIMED', 'ACH-EG-007', 1, 1, NOW(6), NOW(6)),
+    -- 동글 — 배움이 차곡차곡
+    (9, 10, 'ACHIEVEMENT_CLAIMED', 'ACH-EG-002', 1, 1, NOW(6), NOW(6)),
+    -- 삐아 — 좋아요 요정
+    (10, 11, 'ACHIEVEMENT_CLAIMED', 'ACH-EG-010', 1, 1, NOW(6), NOW(6)),
+    -- 호롱 — 딱 1분 남았어!
+    (11, 12, 'ACHIEVEMENT_CLAIMED', 'ACH-EG-011', 1, 1, NOW(6), NOW(6)),
+    -- 다미 — 정리하면 다미
+    (12, 13, 'ACHIEVEMENT_CLAIMED', 'ACH-EG-008', 1, 1, NOW(6), NOW(6)) AS new_row
 ON DUPLICATE KEY UPDATE `character_id`    = new_row.`character_id`,
                         `condition_key`   = new_row.`condition_key`,
                         `condition_param` = new_row.`condition_param`,

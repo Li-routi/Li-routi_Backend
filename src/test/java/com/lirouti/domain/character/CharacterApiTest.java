@@ -4,6 +4,7 @@ import com.lirouti.domain.activity.repository.MemberActivityDayRepository;
 import com.lirouti.domain.character.dto.response.CharacterResDTO;
 import com.lirouti.domain.character.enums.AvatarLayer;
 import com.lirouti.domain.character.exception.CharacterException;
+import com.lirouti.domain.character.repository.MemberCharacterRepository;
 import com.lirouti.domain.character.service.command.CharacterSelectionCommandService;
 import com.lirouti.domain.character.service.command.CharacterUnlockCommandService;
 import com.lirouti.domain.character.service.query.AvatarLayerAssembler;
@@ -58,6 +59,8 @@ class CharacterApiTest {
     private AvatarLayerAssembler avatarLayerAssembler;
     @Autowired
     private MemberActivityDayRepository memberActivityDayRepository;
+    @Autowired
+    private MemberCharacterRepository memberCharacterRepository;
 
     @PersistenceContext
     private EntityManager em;
@@ -119,8 +122,12 @@ class CharacterApiTest {
     @Test
     @DisplayName("보유한 캐릭터로 바꿀 수 있다")
     void select_ChangesToOwnedCharacter() {
-        memberActivityDayRepository.record(me.getId(), LocalDate.of(2026, 8, 13), false);
         unlock();
+        // 보유를 직접 넣는다. 여기서 보는 것은 "가진 것으로 바꿀 수 있는가" 이지 어떻게 얻었는가가
+        // 아니다. 민트는 업적 보상이라 해금 판정을 돌려서는 들어오지 않는다.
+        memberCharacterRepository.insertIfAbsent(me.getId(), MINT, LocalDate.of(2026, 8, 13));
+        em.flush();
+        em.clear();
 
         characterSelectionCommandService.select(me.getId(), MINT);
         em.flush();
