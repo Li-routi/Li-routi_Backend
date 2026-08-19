@@ -1,3 +1,12 @@
+-- 업적 보상으로만 지급되는 비매품 의상은 price=0 을 허용한다.
+-- 판매 중(active=TRUE)인 아이템은 여전히 유료여야 한다는 원래 의도는 유지한다.
+ALTER TABLE `avatar_item`
+DROP CHECK `ck_avatar_item_price_positive`;
+
+ALTER TABLE `avatar_item`
+    ADD CONSTRAINT `ck_avatar_item_price_positive`
+        CHECK (`price` > 0 OR `active` = FALSE);
+
 INSERT INTO avatar_item (slot, currency, price, name, image_url, sort_order, active, created_at, updated_at)
 VALUES
 -- ACH-SP-001 모두의 응원단장 (손)
