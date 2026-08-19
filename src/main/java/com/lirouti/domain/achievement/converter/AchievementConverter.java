@@ -37,15 +37,29 @@ public final class AchievementConverter {
                 .filter(a -> !isUndiscoveredHidden(a, memberAchievementByAchievementId.get(a.getId())))
                 .toList();
 
+        // 항목을 한 번만 만들어 평평한 목록과 카테고리 묶음이 같은 객체를 나눠 쓰게 한다.
+        // 삽입 순서를 지키는 map 이라 값의 순서가 곧 조회 순서(카테고리·정렬순서)다.
+        Map<Long, AchievementResDTO.AchievementItem> itemByAchievementId = new LinkedHashMap<>();
+        for (Achievement achievement : visibleAchievements) {
+            itemByAchievementId.put(achievement.getId(), toItem(
+                    achievement,
+                    memberAchievementByAchievementId.get(achievement.getId()),
+                    conditionProgressByMemberAchievementId,
+                    badgeImageUrlByAchievementId));
+        }
+
+        // 전체·진행중 탭이 쓰는 목록. 카테고리를 가로질러 한 줄로 세운다 — 묶음 안에서만 세우면
+        // 앱이 묶음을 이어 붙이는 순간 순서가 흩어진다(EGG 의 받기 가능이 EPIC 전부보다 앞선다).
+        List<AchievementResDTO.AchievementItem> achievements =
+                byRemainingWork(List.copyOf(itemByAchievementId.values()));
+
         Map<com.lirouti.domain.achievement.enums.AchievementCategory, List<AchievementResDTO.AchievementItem>> grouped =
                 visibleAchievements.stream()
                         .collect(Collectors.groupingBy(
                                 Achievement::getCategory,
                                 LinkedHashMap::new,
                                 Collectors.mapping(
-                                        a -> toItem(a, memberAchievementByAchievementId.get(a.getId()),
-                                                conditionProgressByMemberAchievementId,
-                                                badgeImageUrlByAchievementId),
+                                        a -> itemByAchievementId.get(a.getId()),
                                         Collectors.toList()
                                 )
                         ));
@@ -64,6 +78,7 @@ public final class AchievementConverter {
 
         return AchievementResDTO.Achievements.builder()
                 .summary(summary)
+                .achievements(achievements)
                 .categories(categories)
                 .build();
     }
@@ -83,8 +98,8 @@ public final class AchievementConverter {
      * <p>정렬은 <b>안정 정렬</b>이라 같은 칸 안에서는 원래 순서(sort_order)를 그대로 지킨다 —
      * 여기서 다시 흔들면 목록이 조회할 때마다 달라 보인다.
      *
-     * <p>카테고리 <b>안에서만</b> 세운다. 응답이 카테고리별로 묶여 나가는 구조라 전체 목록의
-     * 맨 위·맨 아래라는 자리가 없다. 앱이 카테고리를 합쳐 그린다면 그쪽에서 한 번 더 세워야 한다.
+     * <p>평평한 목록({@code achievements})과 카테고리 묶음 양쪽에 같은 기준으로 적용한다.
+     * 묶음 안에서만 세우면 앱이 묶음을 이어 붙이는 순간 순서가 흩어진다.
      */
     private static List<AchievementResDTO.AchievementItem> byRemainingWork(
             List<AchievementResDTO.AchievementItem> items

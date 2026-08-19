@@ -12,9 +12,19 @@ public final class AchievementResDTO {
     private AchievementResDTO() {
     }
 
+    /**
+     * 업적 화면 한 벌.
+     *
+     * @param achievements 카테고리를 <b>가로질러</b> 한 줄로 세운 전체 목록. 받기 가능 → 진행 중
+     *                     → 받기 완료 순이고, 같은 칸 안에서는 카테고리·정렬순서를 지킨다.
+     *                     <b>전체·진행중 탭은 이것을 쓴다.</b>
+     * @param categories   카테고리별로 묶은 목록. 각 묶음 안에서도 같은 기준으로 세워져 있다.
+     *                     카테고리를 구분해 보여 주는 화면이 쓴다.
+     */
     @Builder
     public record Achievements(
             Summary summary,
+            List<AchievementItem> achievements,
             List<CategoryGroup> categories
     ) {
     }
