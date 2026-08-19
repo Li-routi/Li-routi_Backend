@@ -64,6 +64,9 @@ public class AchievementClaimService {
     }
 
     public ClaimResult claim(Long memberId, Long achievementId) {
+        validateId(memberId, "memberId");
+        validateId(achievementId, "achievementId");
+
         MemberAchievement memberAchievement = self.loadAndValidate(memberId, achievementId);
         Achievement achievement = memberAchievement.getAchievement();
 
@@ -140,5 +143,16 @@ public class AchievementClaimService {
     }
 
     public record ClaimResult(Long achievementId, int freeBalanceAfter, boolean rewardApplied) {
+    }
+
+    /**
+     * 컨트롤러의 Bean Validation(@Positive 등)을 우회해 이 서비스가 직접 호출되는
+     * 경로(배치, 테스트, 다른 서비스 조합 등)에서도 null이나 잘못된 id가 조용히
+     * repository까지 흘러가지 않도록 진입점에서 한 번 더 막는다.
+     */
+    private void validateId(Long id, String fieldName) {
+        if (id == null || id <= 0) {
+            throw new AchievementException(AchievementErrorCode.ACHIEVEMENT_ID_REQUIRED);
+        }
     }
 }
