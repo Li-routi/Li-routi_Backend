@@ -1,4 +1,4 @@
-INSERT INTO avatar_item (slot, currency, price, name, image_key, sort_order, active, created_at, updated_at)
+INSERT INTO avatar_item (slot, currency, price, name, image_url, sort_order, active, created_at, updated_at)
 VALUES
 -- ACH-SP-001 모두의 응원단장 (손)
 ('HAND', 'TOPAZ', 0, '응원 폼폼', 'avatar/item/hand/achievement-cheer-pompom-v1.png', 100, FALSE, NOW(6), NOW(6)),
