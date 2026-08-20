@@ -73,7 +73,11 @@ public class MemberRoutine extends BaseEntity {
     @Column(nullable = false, length = 20)
     private String name;
 
-    /** 그날의 마감 시각. 시작 시각은 두지 않는다 — 개인 루틴은 마감만 정한다. */
+    /** 그날의 수행 시작 시각. {@code null}이면 시작 시각 제한이 없다. */
+    @Column(name = "start_time")
+    private LocalTime startTime;
+
+    /** 그날의 마감 시각. */
     @Column(name = "end_time", nullable = false)
     private LocalTime endTime;
 
@@ -95,6 +99,7 @@ public class MemberRoutine extends BaseEntity {
      * @param category 루틴이 소속될 카테고리
      * @param template 선택한 기본 제공 루틴. 직접 추가한 루틴이면 {@code null}
      * @param name 앞뒤 공백을 제거한 1~{@value #MAX_NAME_LENGTH}자의 루틴 이름
+     * @param startTime 수행 시작 시각. 설정하지 않았으면 {@code null}
      * @param endTime 마감 시각. 미지정 시 {@link #DEFAULT_END_TIME}
      * @param alarmTime 알람 시각. 선택하지 않았으면 {@code null}
      * @param active 활성 여부. 미지정 시 {@code true}
@@ -106,6 +111,7 @@ public class MemberRoutine extends BaseEntity {
             RoutineCategory category,
             RoutineTemplate template,
             String name,
+            LocalTime startTime,
             LocalTime endTime,
             LocalTime alarmTime,
             Boolean active
@@ -118,6 +124,7 @@ public class MemberRoutine extends BaseEntity {
         this.category = category;
         this.template = keepsTemplateName(template, name) ? template : null;
         this.name = name;
+        this.startTime = startTime;
         this.endTime = endTime != null ? endTime : DEFAULT_END_TIME;
         this.alarmTime = alarmTime;
         this.active = active != null ? active : true;
@@ -146,6 +153,7 @@ public class MemberRoutine extends BaseEntity {
      */
     public void update(
             String name,
+            LocalTime startTime,
             LocalTime endTime,
             LocalTime alarmTime,
             List<DayOfWeek> repeatDays
@@ -163,6 +171,7 @@ public class MemberRoutine extends BaseEntity {
 
         this.template = keepsTemplateName(this.template, name) ? this.template : null;
         this.name = name;
+        this.startTime = startTime;
         this.endTime = endTime;
         this.alarmTime = alarmTime;
         this.schedules.clear();

@@ -221,6 +221,8 @@ public interface RoutineControllerDocs {
                     인증 회원의 활성 개인 루틴을 조회합니다.
                     카테고리 노출 순서대로 정렬하며, 같은 카테고리에서는 기본 제공 루틴을 먼저,
                     사용자가 직접 추가한 루틴을 생성 순서대로 반환합니다.
+                    `startTime`은 수행 시작 시각이며, 설정하지 않은 기존 루틴에서는 생략될 수 있습니다.
+                    시간 값은 `HH:mm` 형식입니다.
                     `completedToday`는 KST 기준 오늘 해당 루틴을 인증했는지 나타냅니다.
                     """
     )
@@ -252,6 +254,8 @@ public interface RoutineControllerDocs {
                     인증 회원이 소유한 활성 개인 루틴의 설정을 수정합니다.
                     설정 화면의 전체 폼을 받으므로 name, endTime, repeatDays는 필수이고
                     alarmTime은 null이면 알람 없음으로 저장됩니다.
+                    startTime은 생략하거나 null이면 시작 시각 제한을 해제합니다.
+                    startTime을 지정하는 경우 endTime보다 빨라야 하며, 시간은 `HH:mm` 형식입니다.
                     기본 제공 루틴의 이름을 바꾸면 templateId 참조가 해제되며,
                     이름을 유지하고 시간·요일·알람만 바꾸면 참조를 유지합니다.
                     카테고리 이동은 지원하지 않습니다.
@@ -262,6 +266,7 @@ public interface RoutineControllerDocs {
                     | `COMMON400_1` | 400 | 요청 형식 또는 필수값 검증 실패 |
                     | `ROUTINE400_1` | 400 | 이름 규칙 위반 |
                     | `ROUTINE400_4` | 400 | 마감 시각·반복 요일 규칙 위반 |
+                    | `ROUTINE400_5` | 400 | 시작 시각이 마감 시각보다 늦거나 같은 경우 |
                     | `ROUTINE404_3` | 404 | 없거나 비활성인 루틴 또는 다른 회원의 루틴 |
                     """
     )
@@ -321,6 +326,8 @@ public interface RoutineControllerDocs {
                       사용자 루틴끼리는 같은 이름을 허용합니다.
                     - 같은 기본 루틴을 두 번 등록할 수 없습니다(요청 안에서도, 기존 루틴과도).
                     - 반복 요일을 생략하면 매일, 마감 시각을 생략하면 23:59이 적용됩니다.
+                    - startTime은 생략하거나 null이면 시작 시각 제한이 없고, 지정하면 endTime보다 빨라야 합니다.
+                      시간은 `HH:mm` 형식이며 startTime과 endTime이 같아도 거부됩니다.
 
                     ### categoryId / templateId 값
 
@@ -346,6 +353,7 @@ public interface RoutineControllerDocs {
                     | `COMMON400_1` | 400 | 요청 형식 검증 실패 — 이름이 비었거나 20자 초과·줄바꿈 포함, 루틴 0개 또는 31개 이상, 한 요청에 같은 templateId 두 번, 요일 중복 | 입력값 문제이므로 서버 메시지를 그대로 노출하지 않고 해당 입력 필드에 안내 |
                     | `ROUTINE400_1` | 400 | 이름이 앞뒤 공백 제거 후 1~20자를 벗어남 | 이름 입력란에 안내 |
                     | `ROUTINE400_3` | 400 | templateId가 요청한 categoryId에 속하지 않음 | 클라이언트 조합 오류. 목록을 다시 조회 |
+                    | `ROUTINE400_5` | 400 | startTime이 endTime보다 늦거나 같음 | 시간 범위를 다시 입력 |
                     | `ROUTINE403_1` | 403 | 다른 회원이 만든 카테고리를 지정 | 카테고리 목록을 다시 조회 |
                     | `MEMBER403_1` | 403 | 탈퇴·비활성 회원 | 로그아웃 처리 |
                     | `MEMBER404_1` | 404 | 토큰이 가리키는 회원이 없음 | 로그아웃 처리 |

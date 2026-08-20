@@ -28,6 +28,11 @@ public enum RoutineErrorCode implements BaseErrorCode {
             "마감 시각과 하나 이상의 중복되지 않은 반복 요일이 필요합니다.",
             "ROUTINE400_4"
     ),
+    INVALID_ROUTINE_TIME_RANGE(
+            HttpStatus.BAD_REQUEST,
+            "시작 시각은 마감 시각보다 빨라야 합니다.",
+            "ROUTINE400_5"
+    ),
     ROUTINE_CATEGORY_ACCESS_DENIED(
             HttpStatus.FORBIDDEN,
             "다른 회원이 만든 카테고리는 사용할 수 없습니다.",

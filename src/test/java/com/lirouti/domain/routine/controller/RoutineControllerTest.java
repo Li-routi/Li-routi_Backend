@@ -124,7 +124,8 @@ class RoutineControllerTest {
         MemberRoutine exerciseCustom = routine(
                 member, exerciseTemplate.getCategory(), null, "저녁 산책");
         MemberRoutine healthTemplate = routine(
-                member, waterTemplate.getCategory(), waterTemplate, waterTemplate.getName());
+                member, waterTemplate.getCategory(), waterTemplate, waterTemplate.getName(),
+                LocalTime.of(7, 0));
         healthTemplate.addSchedule(DayOfWeek.FRIDAY);
         healthTemplate.addSchedule(DayOfWeek.WEDNESDAY);
 
@@ -146,6 +147,7 @@ class RoutineControllerTest {
                 .andExpect(jsonPath("$.result.routines[1].routineId")
                         .value(healthTemplate.getId()))
                 .andExpect(jsonPath("$.result.routines[1].templateId").value(201))
+                .andExpect(jsonPath("$.result.routines[1].startTime").value("07:00"))
                 .andExpect(jsonPath("$.result.routines[1].repeatDays")
                         .value(org.hamcrest.Matchers.contains(
                                 "MONDAY", "WEDNESDAY", "FRIDAY")))
@@ -165,6 +167,7 @@ class RoutineControllerTest {
         String body = """
                 {
                   "name": "물 챙겨 마시기",
+                  "startTime": "07:00",
                   "endTime": "21:30",
                   "repeatDays": ["WEDNESDAY", "FRIDAY"],
                   "alarmTime": "20:30"
@@ -178,6 +181,7 @@ class RoutineControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("ROUTINE200_4"))
                 .andExpect(jsonPath("$.result.templateId").value(201))
+                .andExpect(jsonPath("$.result.startTime").value("07:00"))
                 .andExpect(jsonPath("$.result.endTime").value("21:30"))
                 .andExpect(jsonPath("$.result.alarmTime").value("20:30"))
                 .andExpect(jsonPath("$.result.repeatDays")
@@ -209,7 +213,46 @@ class RoutineControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.name").value("물 2L 마시기"))
                 .andExpect(jsonPath("$.result.templateId").doesNotExist())
+                .andExpect(jsonPath("$.result.startTime").doesNotExist())
                 .andExpect(jsonPath("$.result.alarmTime").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("startTime을 생략한 수정은 기존 startTime을 해제한다")
+    void updateRoutine_MissingStartTime_ClearsExistingValue() throws Exception {
+        Member member = member();
+        RoutineCategory category = em.find(RoutineCategory.class, 2L);
+        MemberRoutine routine = routine(member, category, null, "기상 루틴", LocalTime.of(7, 0));
+        em.flush();
+        em.clear();
+
+        mockMvc.perform(patch("/api/routines/{routineId}", routine.getId())
+                        .with(user(principal(member)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"기상 루틴","endTime":"09:00","repeatDays":["MONDAY"]}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.startTime").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("startTime null 수정은 기존 startTime을 해제한다")
+    void updateRoutine_NullStartTime_ClearsExistingValue() throws Exception {
+        Member member = member();
+        RoutineCategory category = em.find(RoutineCategory.class, 2L);
+        MemberRoutine routine = routine(member, category, null, "기상 루틴", LocalTime.of(7, 0));
+        em.flush();
+        em.clear();
+
+        mockMvc.perform(patch("/api/routines/{routineId}", routine.getId())
+                        .with(user(principal(member)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"기상 루틴","startTime":null,"endTime":"09:00","repeatDays":["MONDAY"]}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.startTime").doesNotExist());
     }
 
     @Test
@@ -294,6 +337,7 @@ class RoutineControllerTest {
                   "routines": [
                     { "categoryId": 2, "templateId": 201, "name": "물 챙겨 마시기" },
                     { "categoryId": 2, "name": "영양제 먹기", "endTime": "21:00",
+                      "startTime": "07:00",
                       "repeatDays": ["MONDAY", "FRIDAY"], "alarmTime": "20:30" }
                   ]
                 }
@@ -311,10 +355,98 @@ class RoutineControllerTest {
                 .andExpect(jsonPath("$.result.routines[0].endTime").value("23:59"))
                 .andExpect(jsonPath("$.result.routines[0].repeatDays.length()").value(7))
                 .andExpect(jsonPath("$.result.routines[1].templateId").doesNotExist())
+                .andExpect(jsonPath("$.result.routines[1].startTime").value("07:00"))
                 .andExpect(jsonPath("$.result.routines[1].endTime").value("21:00"))
                 .andExpect(jsonPath("$.result.routines[1].alarmTime").value("20:30"))
                 .andExpect(jsonPath("$.result.routines[1].repeatDays")
                         .value(org.hamcrest.Matchers.contains("MONDAY", "FRIDAY")));
+    }
+
+    @Test
+    @DisplayName("startTime이 endTime과 같으면 생성할 수 없다")
+    void createRoutines_EqualTime_Returns400() throws Exception {
+        Member member = member();
+
+        mockMvc.perform(post("/api/routines")
+                        .with(user(principal(member)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"routines":[{"categoryId":2,"name":"시간 오류","startTime":"09:00","endTime":"09:00"}]}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("ROUTINE400_5"));
+    }
+
+    @Test
+    @DisplayName("startTime이 endTime보다 늦으면 수정할 수 없다")
+    void updateRoutine_LaterStartTime_Returns400() throws Exception {
+        Member member = member();
+        RoutineCategory category = em.find(RoutineCategory.class, 2L);
+        MemberRoutine routine = routine(member, category, null, "시간 오류");
+        em.flush();
+
+        mockMvc.perform(patch("/api/routines/{routineId}", routine.getId())
+                        .with(user(principal(member)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"시간 오류","startTime":"10:00","endTime":"09:00","repeatDays":["MONDAY"]}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("ROUTINE400_5"));
+    }
+
+    @Test
+    @DisplayName("endTime을 생략하면 23:59를 기준으로 startTime을 검증한다")
+    void createRoutines_DefaultEndTime_ValidatesStartTimeAgainst2359() throws Exception {
+        Member member = member();
+
+        mockMvc.perform(post("/api/routines")
+                        .with(user(principal(member)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"routines":[{"categoryId":2,"name":"자정 직전","startTime":"23:59"}]}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("ROUTINE400_5"));
+    }
+
+    @Test
+    @DisplayName("잘못된 startTime 문자열은 400을 반환한다")
+    void createRoutines_InvalidStartTimeFormat_Returns400() throws Exception {
+        Member member = member();
+
+        mockMvc.perform(post("/api/routines")
+                        .with(user(principal(member)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"routines":[{"categoryId":2,"name":"잘못된 시간","startTime":"09:xx","endTime":"10:00"}]}
+                                """))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("bulk 생성 중 하나가 실패하면 전체가 저장되지 않는다")
+    void createRoutines_OneInvalidItem_RollsBackAllItems() throws Exception {
+        Member member = member();
+
+        mockMvc.perform(post("/api/routines")
+                        .with(user(principal(member)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"routines":[
+                                  {"categoryId":2,"name":"정상 루틴","startTime":"07:00","endTime":"08:00"},
+                                  {"categoryId":2,"name":"잘못된 루틴","startTime":"10:00","endTime":"09:00"}
+                                ]}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("ROUTINE400_5"));
+
+        long count = em.createQuery(
+                        "select count(r) from MemberRoutine r where r.member.id = :memberId",
+                        Long.class)
+                .setParameter("memberId", member.getId())
+                .getSingleResult();
+        assertThat(count).isZero();
     }
 
     @Test
@@ -610,11 +742,22 @@ class RoutineControllerTest {
             RoutineTemplate template,
             String name
     ) {
+        return routine(member, category, template, name, null);
+    }
+
+    private MemberRoutine routine(
+            Member member,
+            RoutineCategory category,
+            RoutineTemplate template,
+            String name,
+            LocalTime startTime
+    ) {
         MemberRoutine routine = MemberRoutine.builder()
                 .member(member)
                 .category(category)
                 .template(template)
                 .name(name)
+                .startTime(startTime)
                 .build();
         routine.addSchedule(DayOfWeek.MONDAY);
         em.persist(routine);

@@ -884,6 +884,16 @@ class GroupControllerTest {
                         .value("#/components/schemas/PersonalRoutineCreateItem"))
                 .andExpect(jsonPath("$.components.schemas.PersonalRoutineCreateItem.properties.templateId")
                         .exists())
+                .andExpect(jsonPath("$.components.schemas.PersonalRoutineCreateItem.properties.startTime")
+                        .exists())
+                .andExpect(jsonPath("$.components.schemas.PersonalRoutineCreateItem.properties.startTime.type")
+                        .value("string"))
+                .andExpect(jsonPath("$.components.schemas.PersonalRoutineUpdateRequest.properties.startTime")
+                        .exists())
+                .andExpect(jsonPath("$.components.schemas.PersonalRoutine.properties.startTime")
+                        .exists())
+                .andExpect(jsonPath("$.components.schemas.PersonalRoutine.properties.startTime.type")
+                        .value("string"))
                 .andExpect(jsonPath("$.components.schemas.PersonalRoutineCreateResult"
                         + ".properties.activeRoutineCount").exists());
     }

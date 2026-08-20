@@ -153,6 +153,7 @@ public final class RoutineResDTO {
      * @param categoryName 소속 카테고리 이름
      * @param templateId 원본 기본 제공 루틴 ID. 직접 추가했거나 이름을 바꾼 루틴은 {@code null}
      * @param name 루틴 이름
+     * @param startTime 수행 시작 시각. 설정하지 않았으면 {@code null}
      * @param endTime 마감 시각
      * @param repeatDays 반복 요일. 월요일부터의 요일 순서로 정렬된다
      * @param alarmTime 알람 시각. 설정하지 않았으면 {@code null}
@@ -175,6 +176,11 @@ public final class RoutineResDTO {
 
             @Schema(description = "루틴 이름", example = "물 챙겨 마시기")
             String name,
+
+            @Schema(type = "string", description = "수행 시작 시각(HH:mm). 설정하지 않았으면 null",
+                    example = "07:00", nullable = true)
+            @JsonFormat(pattern = "HH:mm")
+            LocalTime startTime,
 
             @Schema(type = "string", description = "마감 시각(HH:mm)", example = "23:59")
             @JsonFormat(pattern = "HH:mm")
