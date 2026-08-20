@@ -21,6 +21,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalTime;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -59,6 +60,7 @@ public class RoutineCommandService {
             RoutineReqDTO.CreateRoutines request
     ) {
         validateRequest(request);
+        validateCreateTimeRanges(request.routines(), memberId);
 
         lockMember(memberId);
         Member member = memberQueryService.getActiveMember(memberId);
@@ -196,7 +198,13 @@ public class RoutineCommandService {
         // 영속성 컨텍스트를 비우므로, 루틴을 다시 조회해 새 일정만 연결한다.
         memberRoutineScheduleRepository.deleteAllByMemberRoutineId(routineId);
         routine = findOwnedActiveRoutine(memberId, routineId);
-        routine.update(name, request.endTime(), request.alarmTime(), request.repeatDays());
+        routine.update(
+                name,
+                request.startTime(),
+                request.endTime(),
+                request.alarmTime(),
+                request.repeatDays()
+        );
 
         memberRoutineRepository.flush();
         log.info("개인 루틴을 수정했습니다. memberId={}, routineId={}", memberId, routineId);
@@ -283,6 +291,19 @@ public class RoutineCommandService {
                 || request.routines().stream().anyMatch(Objects::isNull)) {
             log.warn("개인 루틴 생성 요청 검증에 실패했습니다.");
             throw new IllegalArgumentException("유효하지 않은 루틴 생성 요청입니다.");
+        }
+    }
+
+    /** 생성 요청의 모든 시간 범위를 저장 전에 검증한다. endTime 생략 시 기본값을 먼저 적용한다. */
+    private void validateCreateTimeRanges(
+            List<RoutineReqDTO.CreateRoutine> requests,
+            Long memberId
+    ) {
+        for (RoutineReqDTO.CreateRoutine request : requests) {
+            LocalTime effectiveEndTime = request.endTime() != null
+                    ? request.endTime()
+                    : MemberRoutine.DEFAULT_END_TIME;
+            validateTimeRange(memberId, null, request.startTime(), effectiveEndTime);
         }
     }
 
@@ -485,6 +506,22 @@ public class RoutineCommandService {
                     memberId, routineId);
             throw new RoutineException(RoutineErrorCode.INVALID_ROUTINE_UPDATE);
         }
+        validateTimeRange(memberId, routineId, request.startTime(), request.endTime());
+    }
+
+    /** 시작 시각이 설정된 경우 마감 시각보다 이른지 검증한다. */
+    private void validateTimeRange(
+            Long memberId,
+            Long routineId,
+            LocalTime startTime,
+            LocalTime endTime
+    ) {
+        if (startTime == null || startTime.isBefore(endTime)) {
+            return;
+        }
+        log.warn("개인 루틴 시간 범위 검증에 실패했습니다. memberId={}, routineId={}, startTime={}, endTime={}",
+                memberId, routineId, startTime, endTime);
+        throw new RoutineException(RoutineErrorCode.INVALID_ROUTINE_TIME_RANGE);
     }
 
     /**

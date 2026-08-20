@@ -46,6 +46,7 @@ public final class RoutineReqDTO {
                           "categoryId": 2,
                           "templateId": 203,
                           "name": "아침 한 끼",
+                          "startTime": "07:00",
                           "endTime": "09:30",
                           "repeatDays": ["MONDAY", "WEDNESDAY", "FRIDAY"],
                           "alarmTime": "08:00"
@@ -97,6 +98,7 @@ public final class RoutineReqDTO {
      * @param templateId 선택한 기본 제공 루틴 ID. 직접 추가한 루틴이면 {@code null}
      * @param name 루틴 이름. 기본 루틴을 골랐고 이름을 그대로 두면 원본 선택이 유지되고,
      *             이름을 바꾸면 원본 선택이 해제되어 사용자 루틴으로 등록된다
+     * @param startTime 수행 시작 시각. 미지정 시 시작 시각 제한 없음
      * @param endTime 마감 시각. 미지정 시 23:59
      * @param repeatDays 반복 요일. 미지정 시 매일
      * @param alarmTime 알람 시각. 선택하지 않았으면 {@code null}
@@ -131,6 +133,15 @@ public final class RoutineReqDTO {
                     message = "루틴 이름은 20자 이하여야 합니다."
             )
             String name,
+
+            @Schema(
+                    type = "string",
+                    description = "수행 시작 시각(HH:mm). 생략하거나 null이면 시작 시각 제한 없음",
+                    example = "07:00",
+                    nullable = true
+            )
+            @JsonFormat(pattern = "HH:mm")
+            LocalTime startTime,
 
             @Schema(
                     type = "string",
@@ -193,6 +204,7 @@ public final class RoutineReqDTO {
      *
      * <p>설정 바텀시트가 전체 폼을 제출하므로 알람을 제외한 필드는 모두 필수다.
      * {@code alarmTime}은 {@code null}이면 알람을 사용하지 않는다는 뜻이다.
+     * {@code startTime}은 생략하거나 {@code null}이면 시작 시각을 해제한다.
      * 카테고리 이동은 기본 루틴 원본과의 관계가 정해지지 않아 이 요청에서 다루지 않는다.
      */
     @Schema(name = "PersonalRoutineUpdateRequest", description = "개인 루틴 설정 수정 요청")
@@ -204,6 +216,15 @@ public final class RoutineReqDTO {
                     message = "루틴 이름은 20자 이하여야 합니다."
             )
             String name,
+
+            @Schema(
+                    type = "string",
+                    description = "수행 시작 시각(HH:mm). 생략하거나 null이면 시작 시각 해제",
+                    example = "07:00",
+                    nullable = true
+            )
+            @JsonFormat(pattern = "HH:mm")
+            LocalTime startTime,
 
             @Schema(type = "string", description = "마감 시각(HH:mm)", example = "21:00")
             @NotNull(message = "마감 시각은 필수입니다.")

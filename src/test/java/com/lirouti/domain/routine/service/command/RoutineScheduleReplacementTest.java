@@ -64,6 +64,7 @@ class RoutineScheduleReplacementTest {
                 routine.getId(),
                 new RoutineReqDTO.UpdateRoutine(
                         "스트레칭",
+                        null,
                         LocalTime.of(21, 30),
                         List.of(DayOfWeek.MONDAY, DayOfWeek.WEDNESDAY),
                         null

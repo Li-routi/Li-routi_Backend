@@ -116,6 +116,47 @@ class RoutineCommandServiceTest {
     }
 
     @Test
+    @DisplayName("startTime을 포함한 개인 루틴을 생성하고 endTime과 함께 반환한다")
+    void createRoutines_WithStartTime_MapsStartTime() {
+        givenActiveMember();
+        givenExistingRoutines(0, List.of());
+        givenCategories(health);
+        RoutineReqDTO.CreateRoutines request = new RoutineReqDTO.CreateRoutines(List.of(
+                new RoutineReqDTO.CreateRoutine(
+                        HEALTH_CATEGORY_ID,
+                        null,
+                        "아침 루틴",
+                        LocalTime.of(7, 0),
+                        LocalTime.of(8, 0),
+                        List.of(DayOfWeek.MONDAY),
+                        null
+                )
+        ));
+
+        RoutineResDTO.RoutineCreateResult result =
+                routineCommandService.createRoutines(MEMBER_ID, request);
+
+        assertThat(result.routines().getFirst().startTime()).isEqualTo(LocalTime.of(7, 0));
+        assertThat(result.routines().getFirst().endTime()).isEqualTo(LocalTime.of(8, 0));
+    }
+
+    @Test
+    @DisplayName("bulk 생성은 저장 전에 모든 startTime 범위를 검증한다")
+    void createRoutines_InvalidTimeRange_DoesNotSaveAnyItem() {
+        RoutineReqDTO.CreateRoutines request = new RoutineReqDTO.CreateRoutines(List.of(
+                new RoutineReqDTO.CreateRoutine(
+                        HEALTH_CATEGORY_ID, null, "잘못된 루틴", LocalTime.of(10, 0),
+                        LocalTime.of(9, 0), List.of(DayOfWeek.MONDAY), null)
+        ));
+
+        assertThatThrownBy(() -> routineCommandService.createRoutines(MEMBER_ID, request))
+                .isInstanceOf(RoutineException.class)
+                .extracting("code")
+                .isEqualTo(RoutineErrorCode.INVALID_ROUTINE_TIME_RANGE);
+        verifyNoInteractions(memberRepository, memberQueryService, memberRoutineRepository);
+    }
+
+    @Test
     @DisplayName("개인 루틴 수정은 설정을 교체하고 변경된 기본 루틴 이름의 원본 참조를 해제한다")
     void updateRoutine_ChangedTemplateName_UpdatesAndDetachesTemplate() {
         givenActiveMember();
@@ -131,6 +172,7 @@ class RoutineCommandServiceTest {
                 .thenReturn(Optional.of(routine));
         RoutineReqDTO.UpdateRoutine request = new RoutineReqDTO.UpdateRoutine(
                 "  물 2L 마시기  ",
+                LocalTime.of(7, 0),
                 LocalTime.of(21, 0),
                 List.of(DayOfWeek.WEDNESDAY, DayOfWeek.FRIDAY),
                 LocalTime.of(20, 30)
@@ -142,6 +184,7 @@ class RoutineCommandServiceTest {
         assertAll(
                 () -> assertThat(result.templateId()).isNull(),
                 () -> assertThat(result.name()).isEqualTo("물 2L 마시기"),
+                () -> assertThat(result.startTime()).isEqualTo(LocalTime.of(7, 0)),
                 () -> assertThat(result.endTime()).isEqualTo(LocalTime.of(21, 0)),
                 () -> assertThat(result.repeatDays())
                         .containsExactly(DayOfWeek.WEDNESDAY, DayOfWeek.FRIDAY)
@@ -166,6 +209,7 @@ class RoutineCommandServiceTest {
                 .thenReturn(Optional.of(routine));
         RoutineReqDTO.UpdateRoutine request = new RoutineReqDTO.UpdateRoutine(
                 "물 마시기",
+                null,
                 LocalTime.of(21, 0),
                 List.of(DayOfWeek.MONDAY, DayOfWeek.MONDAY),
                 null
@@ -178,6 +222,33 @@ class RoutineCommandServiceTest {
         assertThat(routine.getSchedules())
                 .extracting("repeatDay")
                 .containsExactly(DayOfWeek.MONDAY);
+        verify(memberRoutineScheduleRepository, never()).deleteAllByMemberRoutineId(anyLong());
+    }
+
+    @Test
+    @DisplayName("개인 루틴 수정은 startTime이 endTime과 같으면 일정 삭제 전에 거부한다")
+    void updateRoutine_EqualTime_RejectsBeforeDeletingSchedules() {
+        givenActiveMember();
+        MemberRoutine routine = MemberRoutine.builder()
+                .member(member)
+                .category(health)
+                .name("시간 루틴")
+                .build();
+        routine.addSchedule(DayOfWeek.MONDAY);
+        when(memberRoutineRepository.findByIdAndMemberIdAndActiveTrue(10L, MEMBER_ID))
+                .thenReturn(Optional.of(routine));
+        RoutineReqDTO.UpdateRoutine request = new RoutineReqDTO.UpdateRoutine(
+                "시간 루틴",
+                LocalTime.of(9, 0),
+                LocalTime.of(9, 0),
+                List.of(DayOfWeek.MONDAY),
+                null
+        );
+
+        assertThatThrownBy(() -> routineCommandService.updateRoutine(MEMBER_ID, 10L, request))
+                .isInstanceOf(RoutineException.class)
+                .extracting("code")
+                .isEqualTo(RoutineErrorCode.INVALID_ROUTINE_TIME_RANGE);
         verify(memberRoutineScheduleRepository, never()).deleteAllByMemberRoutineId(anyLong());
     }
 
@@ -211,6 +282,7 @@ class RoutineCommandServiceTest {
                 .thenReturn(Optional.empty());
         RoutineReqDTO.UpdateRoutine request = new RoutineReqDTO.UpdateRoutine(
                 "물 챙겨 마시기",
+                null,
                 LocalTime.of(21, 0),
                 List.of(DayOfWeek.MONDAY),
                 null
@@ -620,7 +692,7 @@ class RoutineCommandServiceTest {
             List<DayOfWeek> repeatDays
     ) {
         return new RoutineReqDTO.CreateRoutine(
-                categoryId, templateId, name, endTime, repeatDays, null);
+                categoryId, templateId, name, null, endTime, repeatDays, null);
     }
 
     private Member member(Long id) {

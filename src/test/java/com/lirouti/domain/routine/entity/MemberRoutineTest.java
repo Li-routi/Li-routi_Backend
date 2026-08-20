@@ -147,6 +147,7 @@ class MemberRoutineTest {
 
         routine.update(
                 TEMPLATE_NAME,
+                null,
                 LocalTime.of(21, 30),
                 LocalTime.of(20, 30),
                 List.of(DayOfWeek.WEDNESDAY, DayOfWeek.FRIDAY)
@@ -154,6 +155,7 @@ class MemberRoutineTest {
 
         assertAll(
                 () -> assertThat(routine.getTemplate()).isSameAs(template),
+                () -> assertThat(routine.getStartTime()).isNull(),
                 () -> assertThat(routine.getEndTime()).isEqualTo(LocalTime.of(21, 30)),
                 () -> assertThat(routine.getAlarmTime()).isEqualTo(LocalTime.of(20, 30)),
                 () -> assertThat(routine.getSchedules())
@@ -169,6 +171,7 @@ class MemberRoutineTest {
 
         routine.update(
                 "물 2L 마시기",
+                null,
                 LocalTime.of(22, 0),
                 null,
                 List.of(DayOfWeek.MONDAY)
@@ -177,6 +180,7 @@ class MemberRoutineTest {
         assertAll(
                 () -> assertThat(routine.getTemplate()).isNull(),
                 () -> assertThat(routine.getName()).isEqualTo("물 2L 마시기"),
+                () -> assertThat(routine.getStartTime()).isNull(),
                 () -> assertThat(routine.getAlarmTime()).isNull()
         );
     }

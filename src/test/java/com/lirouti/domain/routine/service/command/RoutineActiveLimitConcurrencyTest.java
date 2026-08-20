@@ -134,6 +134,6 @@ class RoutineActiveLimitConcurrencyTest {
     /** 기본 루틴을 고르지 않은 직접 추가 항목이다. 사용자 루틴끼리는 같은 이름도 허용된다. */
     private RoutineReqDTO.CreateRoutine item(String name) {
         return new RoutineReqDTO.CreateRoutine(
-                HEALTH_CATEGORY_ID, null, name, null, null, null);
+                HEALTH_CATEGORY_ID, null, name, null, null, null, null);
     }
 }
