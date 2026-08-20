@@ -1,8 +1,11 @@
 package com.lirouti.domain.verification.service;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.ZonedDateTime;
+import java.time.temporal.ChronoUnit;
 
 import org.springframework.stereotype.Service;
 import org.springframework.context.ApplicationEventPublisher;
@@ -25,8 +28,6 @@ import com.lirouti.domain.verification.exception.VerificationException;
 import com.lirouti.domain.verification.exception.code.error.VerificationErrorCode;
 import com.lirouti.domain.verification.repository.MemberRoutineVerificationRepository;
 import com.lirouti.domain.verification.service.command.RoutineVerificationCommandService;
-import com.lirouti.global.util.TimeUtil;
-
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -52,6 +53,7 @@ public class RoutineVerificationService {
     private final RoutineVerificationCommandService commandService;
     private final GroupMemberRepository groupMemberRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final Clock clock;
 
     /**
      * 그룹 루틴 인증.
@@ -69,7 +71,7 @@ public class RoutineVerificationService {
         mediaService.validateMediaKey(request.mediaKey(), MediaPurpose.GROUP_ROUTINE_VERIFICATION);
         mediaService.validateUploadedBytes(request.mediaKey(), MediaPurpose.GROUP_ROUTINE_VERIFICATION);
 
-        ZonedDateTime now = ZonedDateTime.now(TimeUtil.KST);
+        ZonedDateTime now = ZonedDateTime.now(clock);
         LocalDate today = now.toLocalDate();
         LocalDateTime verifiedAt = now.toLocalDateTime();
 
@@ -101,7 +103,7 @@ public class RoutineVerificationService {
     ) {
         mediaService.validateMediaKey(request.mediaKey(), MediaPurpose.GROUP_ROUTINE_VERIFICATION);
         mediaService.validateUploadedBytes(request.mediaKey(), MediaPurpose.GROUP_ROUTINE_VERIFICATION);
-        ZonedDateTime now = ZonedDateTime.now(TimeUtil.KST);
+        ZonedDateTime now = ZonedDateTime.now(clock);
         GroupRoutineVerification saved = commandService.reverifyGroupRoutine(
                 memberId, groupId, routineId, verificationId, now.toLocalDate(), request.mediaKey(),
                 request.content(), now.toLocalDateTime());
@@ -155,7 +157,7 @@ public class RoutineVerificationService {
         mediaService.validateMediaKey(request.mediaKey(), MediaPurpose.MEMBER_ROUTINE_VERIFICATION);
         mediaService.validateUploadedBytes(request.mediaKey(), MediaPurpose.MEMBER_ROUTINE_VERIFICATION);
 
-        ZonedDateTime now = ZonedDateTime.now(TimeUtil.KST);
+        ZonedDateTime now = ZonedDateTime.now(clock);
         LocalDate today = now.toLocalDate();
 
         // 소유자와 활성 여부를 조회 조건에 넣는다. id로 찾아 뒤에서 비교하면
@@ -176,6 +178,8 @@ public class RoutineVerificationService {
             throw new VerificationException(VerificationErrorCode.NOT_SCHEDULED_TODAY);
         }
 
+        validateMemberRoutineTimeRange(routine, now.toLocalTime());
+
         if (memberRoutineVerificationRepository
                 .findByMemberRoutineIdAndVerifiedDate(routineId, today).isPresent()) {
             throw new VerificationException(VerificationErrorCode.ALREADY_VERIFIED);
@@ -187,5 +191,33 @@ public class RoutineVerificationService {
         return new VerificationResDTO.MemberRoutine(
                 saved.getId(), routineId, saved.getImageUrl(),
                 saved.getContent(), saved.getVerifiedDate(), saved.getVerifiedAt());
+    }
+
+    /**
+     * 현재 시각이 개인 루틴의 수행 가능 구간에 포함되는지 검증한다.
+     *
+     * <p>개인 루틴 시간은 API에서 {@code HH:mm} 단위로 받으므로 현재 시각도 분 단위로
+     * 맞춘 뒤 시작·종료 시각을 모두 포함한다. 시작 시각이 없는 기존 루틴은 시작 제한만
+     * 생략하며, 종료 시각이 속한 분까지 인증할 수 있다.
+     *
+     * @param routine 인증할 개인 루틴
+     * @param currentTime KST 기준 현재 시각
+     * @throws VerificationException 시작 전이거나 종료 시각 이후인 경우
+     */
+    private void validateMemberRoutineTimeRange(MemberRoutine routine, LocalTime currentTime) {
+        LocalTime startTime = routine.getStartTime();
+        LocalTime endTime = routine.getEndTime();
+        LocalTime currentMinute = currentTime.truncatedTo(ChronoUnit.MINUTES);
+        boolean beforeStart = startTime != null && currentMinute.isBefore(startTime);
+        boolean afterEnd = currentMinute.isAfter(endTime);
+
+        if (!beforeStart && !afterEnd) {
+            return;
+        }
+
+        log.warn("개인 루틴 수행 시간 밖의 인증을 차단했습니다. "
+                        + "routineId={}, currentTime={}, startTime={}, endTime={}",
+                routine.getId(), currentMinute, startTime, endTime);
+        throw new VerificationException(VerificationErrorCode.NOT_IN_ROUTINE_TIME_RANGE);
     }
 }

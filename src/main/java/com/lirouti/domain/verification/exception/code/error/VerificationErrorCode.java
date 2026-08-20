@@ -42,6 +42,13 @@ public enum VerificationErrorCode implements BaseErrorCode {
             "인증 처리 중 중복 요청이 감지되었습니다. 잠시 후 다시 시도해 주세요.",
             "VERIFICATION409_3"
     ),
+    // 개인 루틴 인증은 HH:mm 기준으로 시작 시각과 종료 시각을 모두 포함한다.
+    // 시작 시각이 없는 기존 루틴도 종료 시각 제한은 적용한다.
+    NOT_IN_ROUTINE_TIME_RANGE(
+            HttpStatus.CONFLICT,
+            "현재는 루틴을 인증할 수 있는 시간이 아닙니다.",
+            "VERIFICATION409_4"
+    ),
     GROUP_ROUTINE_VERIFICATION_NOT_FOUND(
             HttpStatus.NOT_FOUND,
             "그룹 루틴 인증 게시물을 찾을 수 없습니다.",
