@@ -109,6 +109,10 @@ public interface RoutineVerificationControllerDocs {
                     **등록할 때 정한 요일에만 인증할 수 있습니다.** 오늘이 그 루틴의 수행 요일이
                     아니면 409입니다.
 
+                    **개인 루틴 수행 시간에만 인증할 수 있습니다.** HH:mm 기준으로 시작 시각과
+                    종료 시각을 모두 포함합니다. startTime이 없는 기존 루틴은 시작 제한 없이
+                    endTime이 속한 분까지 인증할 수 있습니다. 시간 밖이면 `VERIFICATION409_4`입니다.
+
                     **하루에 한 번입니다.** 이미 오늘 인증했으면 409이며, 사진 교체는 허용하지
                     않습니다.
 
@@ -123,7 +127,7 @@ public interface RoutineVerificationControllerDocs {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "발급 규칙에 맞지 않는 미디어 key"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "인증 필요(미인증)"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "내 루틴이 아니거나 없는 루틴"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "수행 요일이 아님 / 이미 인증함 / 동시 중복 요청")
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "수행 요일·시간이 아님 / 이미 인증함 / 동시 중복 요청")
     })
     ApiResponse<VerificationResDTO.MemberRoutine> verifyMemberRoutine(
             @AuthenticationPrincipal CustomUserDetails userDetails,
