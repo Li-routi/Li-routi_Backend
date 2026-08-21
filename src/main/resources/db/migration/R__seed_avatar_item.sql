@@ -46,13 +46,22 @@ VALUES
 (16, 'BODY', 'TOPAZ', 300, '주황 앞치마', 'avatar/item/body/apron-orange-v1.png', 5, 1, NOW(6), NOW(6)),
 (17, 'BODY', 'TOPAZ', 300, '검정 앞치마', 'avatar/item/body/apron-black-v1.png', 6, 1, NOW(6), NOW(6)),
 (18, 'BODY', 'TOPAZ', 300, '분홍 앞치마', 'avatar/item/body/apron-pink-v1.png', 7, 1, NOW(6), NOW(6)),
+-- 카디건 넷(무료). 앞치마가 300 인데 이쪽을 200 으로 둔 것은 기획이 정한 값이다.
+(26, 'BODY', 'TOPAZ', 200, '코랄 카디건', 'avatar/item/body/cardigan-coral-v1.png', 8, 1, NOW(6), NOW(6)),
+(27, 'BODY', 'TOPAZ', 200, '남색 카디건', 'avatar/item/body/cardigan-navy-v1.png', 9, 1, NOW(6), NOW(6)),
+(28, 'BODY', 'TOPAZ', 200, '민트 카디건', 'avatar/item/body/cardigan-mint-v1.png', 10, 1, NOW(6), NOW(6)),
+(29, 'BODY', 'TOPAZ', 200, '하늘 카디건', 'avatar/item/body/cardigan-sky-v1.png', 11, 1, NOW(6), NOW(6)),
 
--- 손 — 베개 셋(유료) + 소품 둘(무료)
+-- 손 — 베개 셋(유료) + 소품 둘 + 요술봉 넷(무료)
 (7, 'HAND', 'GEM', 200, '회색 베개', 'avatar/item/hand/pillow-gray-v1.png', 1, 1, NOW(6), NOW(6)),
 (8, 'HAND', 'GEM', 200, '보라 베개', 'avatar/item/hand/pillow-purple-v1.png', 2, 1, NOW(6), NOW(6)),
 (19, 'HAND', 'GEM', 200, '하늘 베개', 'avatar/item/hand/pillow-sky-v1.png', 3, 1, NOW(6), NOW(6)),
 (20, 'HAND', 'TOPAZ', 150, '수박', 'avatar/item/hand/watermelon-v1.png', 4, 1, NOW(6), NOW(6)),
-(21, 'HAND', 'TOPAZ', 150, '비치볼', 'avatar/item/hand/beach-ball-v1.png', 5, 1, NOW(6), NOW(6)) AS new_row
+(21, 'HAND', 'TOPAZ', 150, '비치볼', 'avatar/item/hand/beach-ball-v1.png', 5, 1, NOW(6), NOW(6)),
+(22, 'HAND', 'TOPAZ', 150, '민트 요술봉', 'avatar/item/hand/wand-mint-v1.png', 6, 1, NOW(6), NOW(6)),
+(23, 'HAND', 'TOPAZ', 150, '보라 요술봉', 'avatar/item/hand/wand-purple-v1.png', 7, 1, NOW(6), NOW(6)),
+(24, 'HAND', 'TOPAZ', 150, '분홍 요술봉', 'avatar/item/hand/wand-pink-v1.png', 8, 1, NOW(6), NOW(6)),
+(25, 'HAND', 'TOPAZ', 150, '검정 요술봉', 'avatar/item/hand/wand-black-v1.png', 9, 1, NOW(6), NOW(6)) AS new_row
 ON DUPLICATE KEY UPDATE `currency`   = new_row.`currency`,
                         `price`      = new_row.`price`,
                         `name`       = new_row.`name`,
