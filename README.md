@@ -1,14 +1,24 @@
 # LiRouti Backend
 
-> :pushpin: 프로젝트 소개는 추후 기획 확정 후 업데이트할 예정입니다.
+> :pushpin: 혼자라서 미뤘던 루틴, 친구와 함께 끝까지 루틴 형성을 도와주는 에플리케이션 입니다☺️
 
 ---
+
+### 💙 팀 소개
+
+<p align="center">
+  <img width="3072" height="1835" alt="KakaoTalk_20260821_180408864_02 1" src="https://github.com/user-attachments/assets/c8606156-44a1-4445-9582-7fc9bed4ab6c" />
+</p>
+
+<p align="center">
+  <em>10th UMC DEMODAY · 10th Busan NE(O)RDINARY FESTIVAL</em>
+</p>
 
 ### 💙 팀원 소개
 
 |                                채윤지 (팀장)                                |                                  김준혁                                   |                                  오채현                                   |                                 최유성                                  |                                  이운학                                   |
 |:-----------------------------------------------------------------------:|:-------------------------------------------------------------------------:|:-------------------------------------------------------------------------:|:------------------------------------------------------------------------:|:-------------------------------------------------------------------------:|
-| <img src="https://github.com/KateteDeveloper.png" width="150" height="150"> | <img src="https://github.com/ddo0122.png" width="150" height="150"> | <img src="https://github.com/ochyeon.png" width="150" height="150"> | <img src="https://github.com/yousung1020.png" width="150" height="150"> | <img src="https://github.com/dldnsgkr.png" width="150" height="150"> |
+| <img src="https://github.com/KateteDeveloper.png" width="150" height="150"> | <img src="https://github.com/user-attachments/assets/50dbfbac-8951-43e7-8780-82e60bccd38c" width="150" height="150"> | <img src="https://github.com/ochyeon.png" width="150" height="150"> | <img src="https://github.com/yousung1020.png" width="150" height="150"> | <img src="https://github.com/user-attachments/assets/c5293e75-4e88-43a9-8dcd-1d3eb1ad5731" width="150" height="150"> |
 |          [@KateteDeveloper](https://github.com/KateteDeveloper)          |            [@ddo0122](https://github.com/ddo0122)            |            [@ochyeon](https://github.com/ochyeon)             |         [@yousung1020](https://github.com/yousung1020)          |            [@dldnsgkr](https://github.com/dldnsgkr)             |
 |                              알림, 개인 루틴                              |                              그룹 루틴, 그룹 인증                             |                              홈화면, 마이페이지                              |                              회원가입, 그룹, 채팅                             |                              챌린지, 그룹, 개인 인증                            |
 
