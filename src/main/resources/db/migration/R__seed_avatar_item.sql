@@ -9,6 +9,18 @@
 --    다른 아이템에 다시 쓰지 않는다. 재사용하면 지워진 아이템을 참조하던 기록이 있는 환경에서
 --    엉뚱한 물건을 가리키게 된다. 새 아이템은 9 부터 붙인다.
 --
+-- ⚠️ 22~26 도 비어 있다. 이 파일에는 없지만 DB 에는 있는 자리다 — V20260819235546 이 업적
+--    보상 전용 아이템 다섯을 AUTO_INCREMENT 로 넣었고, 그것들이 그 번호를 가져갔다.
+--
+--    실제로 이 파일에서 22 부터 붙였다가 사고가 났다. INSERT 가 중복 키에 걸려 UPDATE 로
+--    넘어가면서 비매품(price=0, active=FALSE) 다섯이 판매 아이템으로 덮어써졌고, 업적 보상이
+--    엉뚱한 옷을 지급하는 상태가 됐다. 슬롯은 갱신 대상이 아니라 옛 값으로 남아 "손 아이템
+--    이름을 단 머리 아이템" 이 생겼다. 복구는 V20260821113000 이 했다.
+--
+--    ⚠️ 그래서 새 id 는 이 파일의 최대값 다음이 아니다. avatar_item 전체의 최대값 다음이다.
+--       이 표에 넣는 것이 이 파일만이 아니므로, 번호를 고르기 전에 마이그레이션까지 본다.
+--       (grep -l "INSERT INTO .avatar_item" src/main/resources/db/migration/)
+--
 -- ⚠️ slot 은 갱신하지 않는다. member_avatar_equipment 의 복합 외래 키 (avatar_item_id, slot)
 --    가 이미 착용된 아이템의 슬롯 변경을 막는데, 이 파일은 매 배포마다 돌기 때문에 여기서
 --    slot 을 바꾸면 그 순간 외래 키 오류로 부팅이 멈춘다. 자리를 옮겨야 하면 새 아이템을
@@ -47,7 +59,8 @@ VALUES
 (17, 'BODY', 'TOPAZ', 300, '검정 앞치마', 'avatar/item/body/apron-black-v1.png', 6, 1, NOW(6), NOW(6)),
 (18, 'BODY', 'TOPAZ', 300, '분홍 앞치마', 'avatar/item/body/apron-pink-v1.png', 7, 1, NOW(6), NOW(6)),
 -- 카디건 넷(무료). 앞치마가 300 인데 이쪽을 200 으로 둔 것은 기획이 정한 값이다.
-(26, 'BODY', 'TOPAZ', 200, '코랄 카디건', 'avatar/item/body/cardigan-coral-v1.png', 8, 1, NOW(6), NOW(6)),
+-- 코랄만 34 인 것은 처음에 26 으로 넣었다가 옮겼기 때문이다 — 아래 id 주석 참고.
+(34, 'BODY', 'TOPAZ', 200, '코랄 카디건', 'avatar/item/body/cardigan-coral-v1.png', 8, 1, NOW(6), NOW(6)),
 (27, 'BODY', 'TOPAZ', 200, '남색 카디건', 'avatar/item/body/cardigan-navy-v1.png', 9, 1, NOW(6), NOW(6)),
 (28, 'BODY', 'TOPAZ', 200, '민트 카디건', 'avatar/item/body/cardigan-mint-v1.png', 10, 1, NOW(6), NOW(6)),
 (29, 'BODY', 'TOPAZ', 200, '하늘 카디건', 'avatar/item/body/cardigan-sky-v1.png', 11, 1, NOW(6), NOW(6)),
@@ -58,10 +71,10 @@ VALUES
 (19, 'HAND', 'GEM', 200, '하늘 베개', 'avatar/item/hand/pillow-sky-v1.png', 3, 1, NOW(6), NOW(6)),
 (20, 'HAND', 'TOPAZ', 150, '수박', 'avatar/item/hand/watermelon-v1.png', 4, 1, NOW(6), NOW(6)),
 (21, 'HAND', 'TOPAZ', 150, '비치볼', 'avatar/item/hand/beach-ball-v1.png', 5, 1, NOW(6), NOW(6)),
-(22, 'HAND', 'TOPAZ', 150, '민트 요술봉', 'avatar/item/hand/wand-mint-v1.png', 6, 1, NOW(6), NOW(6)),
-(23, 'HAND', 'TOPAZ', 150, '보라 요술봉', 'avatar/item/hand/wand-purple-v1.png', 7, 1, NOW(6), NOW(6)),
-(24, 'HAND', 'TOPAZ', 150, '분홍 요술봉', 'avatar/item/hand/wand-pink-v1.png', 8, 1, NOW(6), NOW(6)),
-(25, 'HAND', 'TOPAZ', 150, '검정 요술봉', 'avatar/item/hand/wand-black-v1.png', 9, 1, NOW(6), NOW(6)) AS new_row
+(30, 'HAND', 'TOPAZ', 150, '민트 요술봉', 'avatar/item/hand/wand-mint-v1.png', 6, 1, NOW(6), NOW(6)),
+(31, 'HAND', 'TOPAZ', 150, '보라 요술봉', 'avatar/item/hand/wand-purple-v1.png', 7, 1, NOW(6), NOW(6)),
+(32, 'HAND', 'TOPAZ', 150, '분홍 요술봉', 'avatar/item/hand/wand-pink-v1.png', 8, 1, NOW(6), NOW(6)),
+(33, 'HAND', 'TOPAZ', 150, '검정 요술봉', 'avatar/item/hand/wand-black-v1.png', 9, 1, NOW(6), NOW(6)) AS new_row
 ON DUPLICATE KEY UPDATE `currency`   = new_row.`currency`,
                         `price`      = new_row.`price`,
                         `name`       = new_row.`name`,
